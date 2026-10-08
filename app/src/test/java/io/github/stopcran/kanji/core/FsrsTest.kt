@@ -68,4 +68,15 @@ class FsrsTest {
         repeat(30) { s = fsrs.review(s, Grade.Easy, s.due) }
         assertTrue(s.difficulty in 1.0..10.0)
     }
+
+    @Test
+    fun lapseStabilityNeverExceedsReferenceCap() {
+        val w = Fsrs.DEFAULT_WEIGHTS
+        var s = fsrs.review(SrsState(), Grade.Good, t0)
+        repeat(3) { s = fsrs.review(s, Grade.Good, s.due) }
+        val before = s.stability
+        val lapsed = fsrs.review(s, Grade.Again, s.due)
+        assertTrue(lapsed.stability <= before / Math.exp(w[17] * w[18]) + 1e-9)
+        assertEquals(1, lapsed.lapses)
+    }
 }

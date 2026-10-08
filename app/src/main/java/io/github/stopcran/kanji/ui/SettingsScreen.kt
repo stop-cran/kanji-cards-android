@@ -90,6 +90,25 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit) {
             "Off by default. When on, each checked drawing (strokes, kanji, result) is stored in the app's private storage only. Nothing is uploaded.",
             style = MaterialTheme.typography.bodySmall,
         )
+        val context = androidx.compose.ui.platform.LocalContext.current
+        var saved by remember { mutableStateOf(io.github.stopcran.kanji.data.DrawingLog.count(context)) }
+        var exportStatus by rememberSaveable { mutableStateOf("") }
+        val exporter = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+            if (uri != null) {
+                exportStatus = runCatching {
+                    val n = context.contentResolver.openOutputStream(uri)!!.use { io.github.stopcran.kanji.data.DrawingLog.exportZip(context, it) }
+                    "Exported $n drawings"
+                }.getOrElse { "Export failed: ${it.message}" }
+            }
+        }
+        OutlinedButton(onClick = { saved = io.github.stopcran.kanji.data.DrawingLog.count(context); exporter.launch("kanji-drawings.zip") }, enabled = saved > 0 || exportStatus.isEmpty()) {
+            Text("Export saved drawings ($saved)")
+        }
+        Text(
+            "Drawings are also included in Android's automatic backup, but uninstalling the app deletes them, so export a copy first.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        if (exportStatus.isNotEmpty()) Text(exportStatus, style = MaterialTheme.typography.bodySmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = ::saveAndSync) { Text("Save & sync") }
             OutlinedButton(onClick = { url = Defaults.CONTENT_REPO_URL; branch = Defaults.CONTENT_BRANCH }) { Text("Use default repo") }

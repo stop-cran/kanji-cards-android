@@ -43,4 +43,20 @@ object DrawingLog {
             File(d, "${rec.savedAt}-$kanji.json").writeText(json.encodeToString(rec))
         }
     }
+
+    fun count(context: Context): Int = dir(context).listFiles { f -> f.extension == "json" }?.size ?: 0
+
+    /** Writes every saved drawing into a zip so the data can be kept off the device (the app's private storage is wiped on uninstall). */
+    fun exportZip(context: Context, out: java.io.OutputStream): Int {
+        var n = 0
+        java.util.zip.ZipOutputStream(out).use { zip ->
+            dir(context).listFiles { f -> f.extension == "json" }?.sortedBy { it.name }?.forEach { f ->
+                zip.putNextEntry(java.util.zip.ZipEntry(f.name))
+                f.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+                n++
+            }
+        }
+        return n
+    }
 }

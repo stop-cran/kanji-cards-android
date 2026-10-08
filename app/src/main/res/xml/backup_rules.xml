@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and older Auto Backup: review progress, settings and saved drawings. -->
+<full-backup-content>
+    <include domain="database" path="kanji.db" />
+    <include domain="database" path="kanji.db-wal" />
+    <include domain="sharedpref" path="settings.xml" />
+    <include domain="file" path="drawings" />
+</full-backup-content>

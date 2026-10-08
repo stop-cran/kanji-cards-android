@@ -23,7 +23,7 @@ data class SrsState(
 )
 
 /**
- * FSRS-5 scheduler with the published default parameters. Sub-day steps are used only after a lapse
+ * FSRS-5 scheduler with the published default parameters (checked against open-spaced-repetition/srs-benchmark models/fsrs_v5.py). Sub-day steps are used only after a lapse
  * ("Again"); everything else is scheduled in whole days.
  */
 class Fsrs(
@@ -88,7 +88,7 @@ class Fsrs(
 
     private fun forgetStability(d: Double, s: Double, r: Double): Double {
         val raw = w[11] * d.pow(-w[12]) * ((s + 1).pow(w[13]) - 1) * exp(w[14] * (1 - r))
-        return min(raw, s)
+        return min(raw, s / exp(w[17] * w[18]))
     }
 
     private fun shortTermStability(s: Double, g: Int): Double {
