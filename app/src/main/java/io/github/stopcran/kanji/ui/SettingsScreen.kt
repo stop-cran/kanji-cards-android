@@ -72,6 +72,15 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit) {
             Text("Vary kanji fonts as cards mature", modifier = Modifier.weight(1f))
             Switch(vary, { app.settings.setVaryFonts(it) })
         }
+        Text("Brush for drawing", style = MaterialTheme.typography.titleMedium)
+        val brush by app.settings.brush.collectAsState()
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            BrushStyle.entries.forEach { b ->
+                androidx.compose.material3.FilterChip(brush == b, { app.settings.setBrush(b) }, label = { Text(b.label, maxLines = 2) }, modifier = Modifier.weight(1f))
+            }
+        }
+        Text(brush.hint, style = MaterialTheme.typography.bodySmall)
+        BrushPreview(brush)
         val save by app.settings.saveDrawings.collectAsState()
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Save my drawings on this device to help tune handwriting checks", modifier = Modifier.weight(1f))

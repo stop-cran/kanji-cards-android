@@ -23,6 +23,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.platform.LocalContext
+import io.github.stopcran.kanji.KanjiApp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -60,6 +63,9 @@ fun DrawScreen(
     vm: DrawViewModel = viewModel(key = sessionKey),
 ) {
     LaunchedEffect(sessionKey) { vm.ensureStarted(sessionKey.endsWith(":extra")) }
+    val app = LocalContext.current.applicationContext as KanjiApp
+    val brush by app.settings.brush.collectAsState()
+    androidx.compose.runtime.CompositionLocalProvider(LocalBrush provides brush) {
     Page("Drawing", onBack) {
         when (val s = vm.ui) {
             DrawUi.Loading -> Text("Loading…")
@@ -74,6 +80,7 @@ fun DrawScreen(
             is DrawUi.Checking -> Text("Checking…")
             is DrawUi.Answer -> AnswerState(s, vm, onOpenDoc)
         }
+    }
     }
 }
 
@@ -131,6 +138,7 @@ private fun Overlay(modifier: Modifier, draw: @Composable () -> Unit) {
 @Composable
 private fun DrawingPad(strokes: List<List<TimedPt>>, onStroke: (List<TimedPt>) -> Unit, onSize: (Float) -> Unit, modifier: Modifier) {
     val current = remember { mutableStateListOf<TimedPt>() }
+    val brush = LocalBrush.current
     Canvas(
         modifier
             .border(2.dp, MaterialTheme.colorScheme.outline)
@@ -154,31 +162,19 @@ private fun DrawingPad(strokes: List<List<TimedPt>>, onStroke: (List<TimedPt>) -
         val guide = Color(0xFFE0E0E0)
         drawLine(guide, Offset(size.width / 2, 0f), Offset(size.width / 2, size.height), 2f)
         drawLine(guide, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 2f)
-        (strokes + listOf(current.toList())).forEach { s -> drawPolyline(s.map { Offset(it.x, it.y) }, Ink, 10f) }
+        (strokes + listOf(current.toList())).forEach { s -> drawBrushStroke(s.map { Offset(it.x, it.y) }, Ink, brush) }
     }
-}
-
-private fun DrawScope.drawPolyline(points: List<Offset>, color: Color, width: Float) {
-    if (points.isEmpty()) return
-    if (points.size == 1) {
-        drawCircle(color, width / 2, points[0])
-        return
-    }
-    val path = Path().apply {
-        moveTo(points[0].x, points[0].y)
-        for (i in 1 until points.size) lineTo(points[i].x, points[i].y)
-    }
-    drawPath(path, color, style = DrawStroke(width, cap = StrokeCap.Round, join = StrokeJoin.Round))
 }
 
 @Composable
 private fun YourDrawing(drawn: List<List<TimedPt>>, canvasPx: Float, flagged: Set<Int>) {
     // Show the slightly regularised strokes: kinks too small to matter in writing are dropped.
     val tidy = remember(drawn) { regularize(drawn.map { s -> s.map { Pt(it.x.toDouble(), it.y.toDouble()) } }, 0.02, 24) }
+    val brush = LocalBrush.current
     Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
         val k = size.width / canvasPx
         tidy.forEachIndexed { i, s ->
-            drawPolyline(s.map { Offset(it.x.toFloat() * k, it.y.toFloat() * k) }, if (i in flagged) Bad else Ink, 5f)
+            drawBrushStroke(s.map { Offset(it.x.toFloat() * k, it.y.toFloat() * k) }, if (i in flagged) Bad else Ink, brush)
         }
     }
 }
@@ -187,11 +183,12 @@ private fun YourDrawing(drawn: List<List<TimedPt>>, canvasPx: Float, flagged: Se
 private fun Reference(source: List<Stroke>, flagged: Set<Int>, numbers: Boolean) {
     val reference = remember(source) { varyReference(source, kotlin.random.Random.nextInt()) }
     val measurer = rememberTextMeasurer()
+    val brush = LocalBrush.current
     Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
         val k = size.width / 109f
         reference.forEachIndexed { i, s ->
             val c = if (i in flagged) Bad else Good
-            drawPolyline(s.map { Offset(it.x.toFloat() * k, it.y.toFloat() * k) }, c, 5f)
+            drawBrushStroke(s.map { Offset(it.x.toFloat() * k, it.y.toFloat() * k) }, c, brush)
             if (numbers) {
                 val p = s.first()
                 drawText(measurer, "${i + 1}", Offset(p.x.toFloat() * k - 12f, p.y.toFloat() * k - 26f), style = TextStyle(color = c, fontSize = 11.sp))

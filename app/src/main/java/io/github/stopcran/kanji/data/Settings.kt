@@ -23,6 +23,14 @@ class Settings(context: Context) {
         _varyFonts.value = v
     }
 
+    private val _brush = MutableStateFlow(io.github.stopcran.kanji.ui.BrushStyle.parse(prefs.getString(KEY_BRUSH, null)))
+    val brush: StateFlow<io.github.stopcran.kanji.ui.BrushStyle> = _brush
+
+    fun setBrush(b: io.github.stopcran.kanji.ui.BrushStyle) {
+        prefs.edit().putString(KEY_BRUSH, b.name).apply()
+        _brush.value = b
+    }
+
     private val _saveDrawings = MutableStateFlow(prefs.getBoolean(KEY_SAVE_DRAWINGS, false))
     val saveDrawings: StateFlow<Boolean> = _saveDrawings
 
@@ -58,5 +66,6 @@ class Settings(context: Context) {
         const val KEY_NEW = "dailyNewCards"
         const val KEY_FONTS = "varyFonts"
         const val KEY_SAVE_DRAWINGS = "saveDrawings"
+        const val KEY_BRUSH = "brush"
     }
 }
