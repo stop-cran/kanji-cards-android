@@ -15,9 +15,9 @@ class RepoAndQueueTest {
         val now = Instant.parse("2025-01-10T00:00:00Z")
         fun st(due: Instant) = SrsState(CardPhase.Review, 3.0, 5.0, due, now.minusSeconds(1000))
         val states = mapOf("A" to st(now.plusSeconds(900)), "B" to st(now.plusSeconds(100)), "C" to st(now.minusSeconds(5)))
-        val q = QueueBuilder.extra(listOf("A", "B", "C", "D"), states, now).map { it.kanji }
+        val q = QueueBuilder.extra(listOf("A", "B", "C", "D"), states, now, noise = 0.0).map { it.kanji }
         assertEquals(listOf("C", "D", "B", "A"), q)
-        assertEquals(2, QueueBuilder.extra(listOf("A", "B", "C", "D"), states, now, limit = 2).size)
+        assertEquals(2, QueueBuilder.extra(listOf("A", "B", "C", "D"), states, now, limit = 2, noise = 0.0).size)
     }
 
     @Test
@@ -45,7 +45,20 @@ class RepoAndQueueTest {
             "B" to SrsState(CardPhase.Review, 3.0, 5.0, now.minusSeconds(500), now.minusSeconds(1000)),
             "C" to SrsState(CardPhase.Review, 3.0, 5.0, now.plusSeconds(500), now.minusSeconds(1000)),
         )
-        val q = QueueBuilder.build(listOf("A", "B", "C", "D", "E", "F"), states, now, newCardsRemainingToday = 2)
+        val q = QueueBuilder.build(listOf("A", "B", "C", "D", "E", "F"), states, now, newCardsRemainingToday = 2, noise = 0.0)
         assertEquals(listOf("B", "A", "D", "E"), q.map { it.kanji })
+    }
+
+    @Test
+    fun noiseShufflesButKeepsRoughUrgency() {
+        val now = Instant.parse("2026-01-10T00:00:00Z")
+        fun st(overdueHours: Long) = SrsState(CardPhase.Review, 3.0, 5.0, now.minusSeconds(overdueHours * 3600), now.minusSeconds((overdueHours + 24) * 3600))
+        val states = mapOf("A" to st(30), "B" to st(24), "C" to st(1))
+        val ids = listOf("A", "B", "C", "N1", "N2", "N3", "N4")
+        val firsts = (0 until 200).map { QueueBuilder.build(ids, states, now, 2, rnd = kotlin.random.Random(it)).map { q -> q.kanji } }
+        assertEquals(true, firsts.map { it.take(3) }.toSet().size > 3)
+        assertEquals(true, firsts.all { it.size == 5 && it.toSet().size == 5 })
+        assertEquals(true, firsts.all { r -> r.indexOf("A") < r.indexOf("C") || r.indexOf("B") < r.indexOf("C") })
+        assertEquals(true, firsts.flatten().filter { it.startsWith("N") }.toSet().size > 2)
     }
 }
