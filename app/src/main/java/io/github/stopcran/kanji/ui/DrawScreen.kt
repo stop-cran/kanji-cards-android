@@ -41,6 +41,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.stopcran.kanji.core.draw.DrawOutcome
+import io.github.stopcran.kanji.core.draw.Pt
+import io.github.stopcran.kanji.core.draw.regularize
 import io.github.stopcran.kanji.core.draw.Stroke
 import io.github.stopcran.kanji.core.draw.describe
 
@@ -170,10 +172,12 @@ private fun DrawScope.drawPolyline(points: List<Offset>, color: Color, width: Fl
 
 @Composable
 private fun YourDrawing(drawn: List<List<TimedPt>>, canvasPx: Float, flagged: Set<Int>) {
+    // Show the slightly regularised strokes: kinks too small to matter in writing are dropped.
+    val tidy = remember(drawn) { regularize(drawn.map { s -> s.map { Pt(it.x.toDouble(), it.y.toDouble()) } }, 0.02, 24) }
     Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
         val k = size.width / canvasPx
-        drawn.forEachIndexed { i, s ->
-            drawPolyline(s.map { Offset(it.x * k, it.y * k) }, if (i in flagged) Bad else Ink, 5f)
+        tidy.forEachIndexed { i, s ->
+            drawPolyline(s.map { Offset(it.x.toFloat() * k, it.y.toFloat() * k) }, if (i in flagged) Bad else Ink, 5f)
         }
     }
 }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -49,8 +50,10 @@ fun MarkdownView(text: String, path: String, onOpenDoc: (String) -> Unit, modifi
     val linkColor = MaterialTheme.colorScheme.primary
     val codeBg = MaterialTheme.colorScheme.surfaceVariant
 
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        blocks.forEach { RenderBlock(it, onLink, linkColor, codeBg) }
+    SelectionContainer {
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            blocks.forEach { RenderBlock(it, onLink, linkColor, codeBg) }
+        }
     }
 }
 
