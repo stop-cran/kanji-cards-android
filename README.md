@@ -16,3 +16,9 @@ and the article viewer are next. See [docs/PLAN.md](docs/PLAN.md) and [docs/CONT
 
 Code: Apache-2.0 (see [LICENSE](LICENSE)). Content repos have their own licenses; data derived from
 KANJIDIC2, KanjiVG and JMdict is CC BY-SA and requires attribution (shown in the app's About screen).
+
+## Fonts
+The quiz kanji uses bundled OFL fonts, subset to JIS X 0208 level 1 + ASCII (about 6 MB total, `app/src/main/res/font/kanji_*.ttf`):
+Noto Serif JP (Mincho, wght 400), Klee One (textbook), Yuji Syuku (brush). Licences are in `third_party/fonts/`.
+The plain face is the system CJK font. Which faces a card may use depends on its FSRS stability (`core/srs/FontPolicy`); a lapse resets stability, so the card drops back to plainer faces.
+To regenerate a subset: `python -m fontTools.subset <font> --text-file=chars.txt --layout-features='' --no-hinting` (`pip install fonttools brotli`).

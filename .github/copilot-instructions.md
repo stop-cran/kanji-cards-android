@@ -56,3 +56,5 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
 - `ui/MarkdownView` renders blocks; doc links push a `doc:<path>` route (`DocScreen`), so Back returns to the quiz exactly where it was (quiz ViewModel is keyed by its route and survives).
 - Do not call composable helpers from non-composable lambdas (table rows are a separate `@Composable`).
 - Quiz routes: `quiz:<ts>` (due + new) and `quiz:<ts>:extra` (`QueueBuilder.extra`, 10 cards: overdue, unseen, soonest due). The ViewModel starts via `ensureStarted(extra)` from `LaunchedEffect`, never in `init`.
+
+- Downloadable Google Fonts (`ui-text-google-fonts`) do NOT work for CJK: the provider serves only the Latin subset, and Compose falls back to the system face silently. Bundle subsetted fonts instead (see README "Fonts").

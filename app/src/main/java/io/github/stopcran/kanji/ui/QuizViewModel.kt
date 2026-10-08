@@ -11,7 +11,9 @@ import io.github.stopcran.kanji.core.quiz.QuizBuilder
 import io.github.stopcran.kanji.core.quiz.QuizCard
 import io.github.stopcran.kanji.core.quiz.QuizOption
 import io.github.stopcran.kanji.core.srs.CardPhase
+import io.github.stopcran.kanji.core.srs.FontPolicy
 import io.github.stopcran.kanji.core.srs.Fsrs
+import io.github.stopcran.kanji.core.srs.KanjiFont
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.QueueBuilder
 import io.github.stopcran.kanji.core.srs.SrsState
@@ -29,8 +31,8 @@ import kotlin.random.Random
 sealed interface QuizUi {
     data object Loading : QuizUi
     data class Empty(val message: String) : QuizUi
-    data class Question(val card: KanjiEntity, val options: List<QuizOption>, val remaining: Int) : QuizUi
-    data class Answer(val card: KanjiEntity, val options: List<QuizOption>, val picked: String, val remaining: Int) : QuizUi {
+    data class Question(val card: KanjiEntity, val options: List<QuizOption>, val remaining: Int, val font: KanjiFont) : QuizUi
+    data class Answer(val card: KanjiEntity, val options: List<QuizOption>, val picked: String, val remaining: Int, val font: KanjiFont) : QuizUi {
         val correct: Boolean get() = picked == card.kanji
     }
     data class Done(val answered: Int, val correct: Int) : QuizUi
@@ -81,6 +83,14 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         showNext()
     }
 
+    private var lastFont: KanjiFont? = null
+
+    private fun nextFont(kanji: String): KanjiFont {
+        if (!app.settings.varyFonts.value) return KanjiFont.Gothic
+        val stability = states[kanji]?.takeIf { it.phase != CardPhase.New }?.stability ?: 0.0
+        return FontPolicy.pick(stability, random, lastFont).also { lastFont = it }
+    }
+
     private fun showNext() {
         val kanji = queue.removeFirstOrNull()
         if (kanji == null) {
@@ -89,12 +99,12 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         }
         val card = cards.getValue(kanji)
         val target = quizCards.first { it.kanji == kanji }
-        ui = QuizUi.Question(card, QuizBuilder.options(target, quizCards, random), queue.size + 1)
+        ui = QuizUi.Question(card, QuizBuilder.options(target, quizCards, random), queue.size + 1, nextFont(kanji))
     }
 
     fun pick(kanji: String) {
         val q = ui as? QuizUi.Question ?: return
-        ui = QuizUi.Answer(q.card, q.options, kanji, q.remaining)
+        ui = QuizUi.Answer(q.card, q.options, kanji, q.remaining, q.font)
     }
 
     /** Wrong answers are graded Again; right ones Good, or Hard when the user admits guessing. */

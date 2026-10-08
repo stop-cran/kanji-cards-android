@@ -7,6 +7,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -16,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.stopcran.kanji.Defaults
@@ -65,6 +67,11 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit) {
         OutlinedTextField(url, { url = it }, label = { Text("Repository URL") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(branch, { branch = it }, label = { Text("Branch") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(dailyNew, { dailyNew = it.filter(Char::isDigit).take(3) }, label = { Text("New cards per day") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        val vary by app.settings.varyFonts.collectAsState()
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Vary kanji fonts as cards mature", modifier = Modifier.weight(1f))
+            Switch(vary, { app.settings.setVaryFonts(it) })
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = ::saveAndSync) { Text("Save & sync") }
             OutlinedButton(onClick = { url = Defaults.CONTENT_REPO_URL; branch = Defaults.CONTENT_BRANCH }) { Text("Use default repo") }

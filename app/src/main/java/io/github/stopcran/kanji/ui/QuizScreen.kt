@@ -43,7 +43,7 @@ fun QuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Un
             }
             is QuizUi.Question -> {
                 Text("${s.remaining} left", style = MaterialTheme.typography.labelMedium)
-                Text(s.card.kanji, fontSize = 120.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                Text(s.card.kanji, fontSize = 120.sp, fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 Text("What does it mean?", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 s.options.forEach { o ->
                     OutlinedButton(onClick = { vm.pick(o.kanji) }, modifier = Modifier.fillMaxWidth()) { Text(o.title) }
@@ -56,7 +56,7 @@ fun QuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Un
 
 @Composable
 private fun AnswerState(s: QuizUi.Answer, vm: QuizViewModel, onOpenDoc: (String) -> Unit) {
-    Text(s.card.kanji, fontSize = 96.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    Text(s.card.kanji, fontSize = 96.sp, fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Text(
         if (s.correct) "Correct!" else "Not quite — it means “${s.card.title}”",
         color = if (s.correct) Green else Red,

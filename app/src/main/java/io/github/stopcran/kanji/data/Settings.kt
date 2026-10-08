@@ -15,6 +15,14 @@ class Settings(context: Context) {
     private val _dailyNewCards = MutableStateFlow(prefs.getInt(KEY_NEW, 10))
     val dailyNewCards: StateFlow<Int> = _dailyNewCards
 
+    private val _varyFonts = MutableStateFlow(prefs.getBoolean(KEY_FONTS, true))
+    val varyFonts: StateFlow<Boolean> = _varyFonts
+
+    fun setVaryFonts(v: Boolean) {
+        prefs.edit().putBoolean(KEY_FONTS, v).apply()
+        _varyFonts.value = v
+    }
+
     val repoUrl: String get() = prefs.getString(KEY_URL, Defaults.CONTENT_REPO_URL) ?: Defaults.CONTENT_REPO_URL
     val branch: String get() = prefs.getString(KEY_BRANCH, Defaults.CONTENT_BRANCH) ?: Defaults.CONTENT_BRANCH
 
@@ -40,5 +48,6 @@ class Settings(context: Context) {
         const val KEY_URL = "repoUrl"
         const val KEY_BRANCH = "branch"
         const val KEY_NEW = "dailyNewCards"
+        const val KEY_FONTS = "varyFonts"
     }
 }
