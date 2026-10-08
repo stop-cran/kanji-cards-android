@@ -70,3 +70,4 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
 - `DrawingPad` consumes pointer events so the screen does not scroll while drawing. Test on the emulator with `adb shell input swipe` (draw order matters).
 - Matcher tolerances are tuned on simulated hands only; re-tune with real device fixtures.
 - Short reference strokes (dots, ticks) get a looser shape limit (MatcherConfig.shortStrokeBonus, tapering from 15 to 50 units) because real hands vary most there; dotPlacedAndSizedLooselyIsAccepted covers a real 下 dot.
+- Drawn strokes are regularised before matching (Douglas-Peucker with MatcherConfig.smoothing = 2% of drawing size, then resampled), so tiny kinks are ignored. Gotcha: after matcher changes reinstall the APK before asking for emulator re-checks.

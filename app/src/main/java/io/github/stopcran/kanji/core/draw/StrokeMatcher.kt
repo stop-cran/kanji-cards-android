@@ -91,6 +91,8 @@ data class MatcherConfig(
     val shortStroke: Double = 14.0,
     /** Extra cost for explaining one drawn stroke as two reference strokes or vice versa, so plain matches win. */
     val joinPenalty: Double = 0.03,
+    /** Wobble below this fraction of the drawing size is ignored. */
+    val smoothing: Double = 0.02,
     /** Extra shape tolerance for strokes up to [dotLength] units long, tapering to zero at [relaxedUntil]. */
     val shortStrokeBonus: Double = 0.10,
     val dotLength: Double = 15.0,
@@ -114,7 +116,38 @@ class StrokeMatcher(private val cfg: MatcherConfig = MatcherConfig()) {
         data class Split(val d: Int, val r: Int, override val cost: Double) : Link
     }
 
-    fun match(reference: List<Stroke>, drawn: List<Stroke>): MatchResult {
+    /** Drops wobble far smaller than the drawing (Douglas-Peucker, tolerance relative to the drawing size) and averages the corners left. */
+    private fun regularize(strokes: List<Stroke>): List<Stroke> {
+        if (strokes.isEmpty()) return strokes
+        val b = boxOf(strokes)
+        val eps = max(b.w, b.h) * cfg.smoothing
+        return strokes.map { s -> if (s.size < 3) s else simplify(s, eps).resample(cfg.samples) }
+    }
+
+    private fun simplify(s: Stroke, eps: Double): Stroke {
+        if (s.size < 3) return s
+        val a = s.first()
+        val z = s.last()
+        var worst = 0.0
+        var at = 0
+        for (i in 1 until s.size - 1) {
+            val d = segDist(s[i], a, z)
+            if (d > worst) { worst = d; at = i }
+        }
+        if (worst <= eps) return listOf(a, z)
+        return simplify(s.subList(0, at + 1), eps).dropLast(1) + simplify(s.subList(at, s.size), eps)
+    }
+
+    private fun segDist(p: Pt, a: Pt, b: Pt): Double {
+        val dx = b.x - a.x
+        val dy = b.y - a.y
+        val l2 = dx * dx + dy * dy
+        val t = if (l2 < 1e-12) 0.0 else (((p.x - a.x) * dx + (p.y - a.y) * dy) / l2).coerceIn(0.0, 1.0)
+        return hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
+    }
+
+    fun match(reference: List<Stroke>, rawDrawn: List<Stroke>): MatchResult {
+        val drawn = regularize(rawDrawn)
         if (reference.isEmpty() || drawn.isEmpty()) return MatchResult(emptyList(), reference.size, drawn.size, 0)
         var links = link(reference, normalize(drawn, boxOf(drawn), boxOf(reference)))
         // Refit using only what was found, so a missing or extra stroke does not distort the rest.

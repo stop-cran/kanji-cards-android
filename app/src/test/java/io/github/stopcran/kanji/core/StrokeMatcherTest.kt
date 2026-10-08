@@ -104,8 +104,8 @@ class StrokeMatcherTest {
         val ref = refs.getValue("下")
         val dot = ref[2]
         val c = dot.first()
-        // Real-device case: the dot of 下 sat ~10 units closer to the stem and was 30% shorter.
-        val loose = dot.map { Pt(c.x + (it.x - c.x) * 0.7 - 10, c.y + (it.y - c.y) * 0.7) }
+        // Real-device case: the dot of 下 sat ~11 units left and ~11 lower (nearer the stem) and was 30% shorter.
+        val loose = dot.map { Pt(c.x + (it.x - c.x) * 0.7 - 11, c.y + (it.y - c.y) * 0.7 + 11) }
         val res = matcher.match(ref, listOf(ref[0], ref[1], loose))
         assertTrue(res.issues.toString(), res.clean)
     }
