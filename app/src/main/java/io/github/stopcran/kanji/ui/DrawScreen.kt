@@ -172,7 +172,7 @@ private fun DrawingPad(strokes: List<List<TimedPt>>, onStroke: (List<TimedPt>) -
 @Composable
 private fun YourDrawing(drawn: List<List<TimedPt>>, canvasPx: Float, flagged: Set<Int>) {
     // Show the slightly regularised strokes: kinks too small to matter in writing are dropped.
-    val tidy = remember(drawn) { regularize(drawn.map { s -> s.map { Pt(it.x.toDouble(), it.y.toDouble()) } }, 0.02, 24) }
+    val tidy = remember(drawn) { regularize(drawn.map { s -> s.map { Pt(it.x.toDouble(), it.y.toDouble()) } }, 0.02, 48, curved = true) }
     val brush = LocalBrush.current
     Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
         val k = size.width / canvasPx

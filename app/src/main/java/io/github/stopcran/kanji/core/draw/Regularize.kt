@@ -7,11 +7,39 @@ import kotlin.math.max
  * Drops wobble far smaller than the drawing (Douglas-Peucker, tolerance = [smoothing] of the drawing size)
  * and resamples to [samples] points. Used both before matching and to display the drawn strokes.
  */
-fun regularize(strokes: List<Stroke>, smoothing: Double, samples: Int): List<Stroke> {
+fun regularize(strokes: List<Stroke>, smoothing: Double, samples: Int, curved: Boolean = false): List<Stroke> {
     if (strokes.isEmpty()) return strokes
     val b = boxOf(strokes)
     val eps = max(b.w, b.h) * smoothing
-    return strokes.map { s -> if (s.size < 3) s else simplify(s, eps).resample(samples) }
+    return strokes.map { s ->
+        if (s.size < 3) s
+        else {
+            val v = simplify(s, eps)
+            (if (curved) spline(v) else v).resample(samples)
+        }
+    }
+}
+
+// Catmull-Rom through the vertices, so simplified strokes look like curves instead of polygons.
+private fun spline(v: Stroke): Stroke {
+    if (v.size < 3) return v
+    val out = ArrayList<Pt>()
+    for (i in 0 until v.size - 1) {
+        val p0 = v[maxOf(i - 1, 0)]
+        val p1 = v[i]
+        val p2 = v[i + 1]
+        val p3 = v[minOf(i + 2, v.size - 1)]
+        for (k in 0 until 12) {
+            val t = k / 12.0
+            val t2 = t * t
+            val t3 = t2 * t
+            fun c(a: Double, b: Double, c: Double, d: Double) =
+                0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (3 * b - a - 3 * c + d) * t3)
+            out += Pt(c(p0.x, p1.x, p2.x, p3.x), c(p0.y, p1.y, p2.y, p3.y))
+        }
+    }
+    out += v.last()
+    return out
 }
 
 private fun simplify(s: Stroke, eps: Double): Stroke {
