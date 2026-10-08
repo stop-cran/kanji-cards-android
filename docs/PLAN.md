@@ -53,7 +53,7 @@ Env vars: `JAVA_HOME`, `ANDROID_HOME`.
 
 ## 2. Key decisions / risks
 
-- Licence Apache-2.0 for code; content is CC BY-SA where derived from KANJIDIC2/KanjiVG/JMdict.
+- Licence Apache-2.0 for code; the default content repo is CC BY-SA 4.0 (`strokes/` stays CC BY-SA 3.0 from KanjiVG). Content is downloaded at runtime and not bundled in the APK; any bundled sample keeps its CC BY-SA notice in separate assets. The About screen shows the CC BY-SA, KanjiVG and EDRDG (KANJIDIC2/JMdict) credits.
 - Biggest risk: stroke matcher quality and tolerances; mitigated by prototyping first with fixtures.
 - ML Kit gives rank only (no distance); logic distance comes from our matcher.
 - Review state must survive content updates and repo switches (stable IDs, repo namespace); consider export/backup.
