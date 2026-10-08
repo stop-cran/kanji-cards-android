@@ -80,3 +80,9 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
 - Fast strokes: DrawingPad also keeps change.historical touch samples (denser data for grading). drawBrushStroke runs smoothLongSegments (display only, Catmull-Rom for segments over 1.2% of canvas width); grading always uses the raw points.
 - DrawingPad clamps touch points to the pad bounds and clips drawing, so strokes cannot leave the square.
 - Browse cards has a mixed search (core/content/CardSearch.kt): kanji, English title words, and readings (katakana folded to hiragana; dots and dashes ignored); exact matches rank first; a katakana query prefers on'yomi and a hiragana query prefers kun'yomi (other kind still matches, lower). Romaji input is not supported yet.
+
+## Gotchas
+- Review state is keyed by (sourceId, stack, kanji, mode); every DAO query takes a stack. Room schema bumps need a migration (see Database.kt).
+- Content sync skips the download when the branch head SHA equals the stored one; use force=true to bypass.
+- Release signing reads git-ignored keystore.properties; never commit keystores. See docs/RELEASE.md.
+- Source files have mixed LF/CRLF line endings; check before multi-line text replacements.

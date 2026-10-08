@@ -9,3 +9,4 @@ captures/
 *.jks
 *.keystore
 google-services.json
+keystore.properties

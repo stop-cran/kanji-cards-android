@@ -7,10 +7,13 @@ reviews with FSRS.
 - **Quiz mode** – pick the meaning of a displayed kanji.
 - **Drawing mode** – draw the kanji from its caption; stroke order/direction are checked.
 - **Articles** – Markdown with in-app navigation between kanji, words and articles.
-- **Configurable content repo** – point the app at your own fork in Settings.
+- **Configurable content repo** – point the app at your own fork in Settings; it syncs on launch (only when the branch head changed) and daily in the background.
+- **Stacks** – filter by tag (Starter, JLPT N5…N1); every stack keeps its own FSRS schedule.
+- **Search** in Browse cards: kanji, meaning, kana (katakana prefers on'yomi, hiragana kun'yomi) and romaji.
+- **Gentle reminder** (optional) that backs off while ignored; **brushes**, stroke-number hints and an opt-in drawing log with zip export.
 
-Status: content sync (settings behind ⚙, safe zip import, Room storage, WorkManager), FSRS-5 and the meaning quiz are in place; drawing mode
-and the article viewer are next. See [docs/PLAN.md](docs/PLAN.md) and [docs/CONTENT-SCHEMA.md](docs/CONTENT-SCHEMA.md).
+Status: working on an emulator; preparing for a real-device trial and Google Play. See [docs/PLAN.md](docs/PLAN.md),
+[docs/CONTENT-SCHEMA.md](docs/CONTENT-SCHEMA.md), [docs/PRIVACY.md](docs/PRIVACY.md) and [docs/RELEASE.md](docs/RELEASE.md).
 
 ## License
 
