@@ -73,3 +73,4 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
 - Drawn strokes are regularised before matching (Douglas-Peucker with MatcherConfig.smoothing = 2% of drawing size, then resampled), so tiny kinks are ignored. Gotcha: after matcher changes reinstall the APK before asking for emulator re-checks.
 - shapeLimit is 0.13: real hands drew 亻's slash ~30% short and the 0.10 limit rejected it (shorterSlashIsAccepted). Prefer relaxing shape tolerance over strictness; order, direction and join/break checks stay strict.
 - MarkdownView is wrapped in SelectionContainer (copy/search works, links still clickable). The answer overlay shows the regularised drawing (core/draw/Regularize.kt, shared with the matcher).
+- The correct-strokes panel is jittered per display (core/draw/Variation.kt: shift, rotation, scale, bow; display only, grading uses the unmodified reference). Follow-up for real variants and rules: issue #1.

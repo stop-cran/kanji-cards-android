@@ -43,6 +43,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.stopcran.kanji.core.draw.DrawOutcome
 import io.github.stopcran.kanji.core.draw.Pt
 import io.github.stopcran.kanji.core.draw.regularize
+import io.github.stopcran.kanji.core.draw.varyReference
 import io.github.stopcran.kanji.core.draw.Stroke
 import io.github.stopcran.kanji.core.draw.describe
 
@@ -183,7 +184,8 @@ private fun YourDrawing(drawn: List<List<TimedPt>>, canvasPx: Float, flagged: Se
 }
 
 @Composable
-private fun Reference(reference: List<Stroke>, flagged: Set<Int>, numbers: Boolean) {
+private fun Reference(source: List<Stroke>, flagged: Set<Int>, numbers: Boolean) {
+    val reference = remember(source) { varyReference(source, kotlin.random.Random.nextInt()) }
     val measurer = rememberTextMeasurer()
     Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
         val k = size.width / 109f
