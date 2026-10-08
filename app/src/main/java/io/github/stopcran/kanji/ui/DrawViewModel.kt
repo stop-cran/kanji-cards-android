@@ -67,6 +67,7 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
     private var sourceId = ""
     private var cards: Map<String, KanjiEntity> = emptyMap()
     private val references = mutableMapOf<String, List<Stroke>>()
+    private val orderVariants = mutableMapOf<String, List<List<Int>>>()
     private val states = mutableMapOf<String, SrsState>()
     private val queue = ArrayDeque<String>()
     private var answered = 0
@@ -88,6 +89,7 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
         for (k in all) {
             val data = k.strokesJson?.let { runCatching { json.decodeFromString(StrokeData.serializer(), it) }.getOrNull() } ?: continue
             references[k.kanji] = data.strokes.map { s -> s.points.map { Pt(it[0], it[1]) } }
+            if (data.orderVariants.isNotEmpty()) orderVariants[k.kanji] = data.orderVariants
         }
         val drawable = all.filter { it.kanji in references }
         if (drawable.isEmpty()) {
@@ -120,7 +122,7 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
         ui = DrawUi.Checking(q.card)
         viewModelScope.launch {
             val ref = references.getValue(q.card.kanji)
-            val match = matcher.match(ref, strokes.map { s -> s.map { Pt(it.x.toDouble(), it.y.toDouble()) } })
+            val match = matcher.match(ref, strokes.map { s -> s.map { Pt(it.x.toDouble(), it.y.toDouble()) } }, orderVariants[q.card.kanji].orEmpty())
             val candidates = if (strokes.isEmpty()) emptyList() else recognizer.candidates(strokes)
             val outcome = DrawGrader.outcome(candidates, q.card.kanji, match)
             if (app.settings.saveDrawings.value) DrawingLog.save(app, q.card.kanji, canvasPx, strokes, outcome, match, candidates)

@@ -45,6 +45,8 @@ data class StrokeData(
     val viewBox: List<Double>,
     val strokeCount: Int,
     val strokes: List<Stroke>,
+    /** Alternate accepted drawing orders: each lists all 1-based stroke ids in the order they may be drawn. */
+    val orderVariants: List<List<Int>> = emptyList(),
 )
 
 @Serializable

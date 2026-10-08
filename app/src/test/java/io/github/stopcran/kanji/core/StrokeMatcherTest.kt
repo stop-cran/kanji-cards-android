@@ -100,6 +100,17 @@ class StrokeMatcherTest {
     }
 
     @Test
+    fun declaredOrderVariantIsAcceptedOthersAreNot() {
+        val ref = refs.getValue("上")
+        val swapped = listOf(ref[0], ref[2], ref[1])
+        assertTrue(matcher.match(ref, swapped).issues.any { it.type == IssueType.WrongOrder })
+        assertTrue(matcher.match(ref, swapped, listOf(listOf(1, 3, 2))).clean)
+        val other = listOf(ref[1], ref[0], ref[2])
+        assertTrue(!matcher.match(ref, other, listOf(listOf(1, 3, 2))).clean)
+        assertTrue(!matcher.match(ref, swapped, listOf(listOf(1, 1, 2), listOf(1, 2))).clean)
+    }
+
+    @Test
     fun dotPlacedAndSizedLooselyIsAccepted() {
         val ref = refs.getValue("下")
         val dot = ref[2]

@@ -116,6 +116,21 @@ class StrokeMatcher(private val cfg: MatcherConfig = MatcherConfig()) {
         data class Split(val d: Int, val r: Int, override val cost: Double) : Link
     }
 
+    /**
+     * Like [match], but a drawing that is clean in any of [orderVariants] (permutations of 1-based stroke ids) is accepted.
+     * Without a clean variant the canonical order's result is returned, so mistakes are always described against it.
+     */
+    fun match(reference: List<Stroke>, rawDrawn: List<Stroke>, orderVariants: List<List<Int>>): MatchResult {
+        val canonical = match(reference, rawDrawn)
+        if (canonical.clean) return canonical
+        for (order in orderVariants) {
+            if (order.size != reference.size || order.sorted() != reference.indices.map { it + 1 }) continue
+            val result = match(order.map { reference[it - 1] }, rawDrawn)
+            if (result.clean) return result
+        }
+        return canonical
+    }
+
     fun match(reference: List<Stroke>, rawDrawn: List<Stroke>): MatchResult {
         val drawn = regularize(rawDrawn, cfg.smoothing, cfg.samples)
         if (reference.isEmpty() || drawn.isEmpty()) return MatchResult(emptyList(), reference.size, drawn.size, 0)
