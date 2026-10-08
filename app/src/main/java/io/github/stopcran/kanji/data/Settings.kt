@@ -23,6 +23,14 @@ class Settings(context: Context) {
         _varyFonts.value = v
     }
 
+    private val _saveDrawings = MutableStateFlow(prefs.getBoolean(KEY_SAVE_DRAWINGS, false))
+    val saveDrawings: StateFlow<Boolean> = _saveDrawings
+
+    fun setSaveDrawings(v: Boolean) {
+        prefs.edit().putBoolean(KEY_SAVE_DRAWINGS, v).apply()
+        _saveDrawings.value = v
+    }
+
     val repoUrl: String get() = prefs.getString(KEY_URL, Defaults.CONTENT_REPO_URL) ?: Defaults.CONTENT_REPO_URL
     val branch: String get() = prefs.getString(KEY_BRANCH, Defaults.CONTENT_BRANCH) ?: Defaults.CONTENT_BRANCH
 
@@ -49,5 +57,6 @@ class Settings(context: Context) {
         const val KEY_BRANCH = "branch"
         const val KEY_NEW = "dailyNewCards"
         const val KEY_FONTS = "varyFonts"
+        const val KEY_SAVE_DRAWINGS = "saveDrawings"
     }
 }

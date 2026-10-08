@@ -19,6 +19,7 @@ import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.QueueBuilder
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.StudyMode
+import io.github.stopcran.kanji.data.DrawingLog
 import io.github.stopcran.kanji.data.KanjiEntity
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.toEntity
@@ -118,6 +119,7 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
             val match = matcher.match(ref, strokes.map { s -> s.map { Pt(it.x.toDouble(), it.y.toDouble()) } })
             val candidates = if (strokes.isEmpty()) emptyList() else recognizer.candidates(strokes)
             val outcome = DrawGrader.outcome(candidates, q.card.kanji, match)
+            if (app.settings.saveDrawings.value) DrawingLog.save(app, q.card.kanji, canvasPx, strokes, outcome, match, candidates)
             ui = DrawUi.Answer(q.card, q.remaining, ref, strokes, canvasPx, outcome, match, candidates != null)
         }
     }

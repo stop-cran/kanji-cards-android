@@ -72,6 +72,15 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit) {
             Text("Vary kanji fonts as cards mature", modifier = Modifier.weight(1f))
             Switch(vary, { app.settings.setVaryFonts(it) })
         }
+        val save by app.settings.saveDrawings.collectAsState()
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Save my drawings on this device to help tune handwriting checks", modifier = Modifier.weight(1f))
+            Switch(save, { app.settings.setSaveDrawings(it) })
+        }
+        Text(
+            "Off by default. When on, each checked drawing (strokes, kanji, result) is stored in the app's private storage only. Nothing is uploaded.",
+            style = MaterialTheme.typography.bodySmall,
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = ::saveAndSync) { Text("Save & sync") }
             OutlinedButton(onClick = { url = Defaults.CONTENT_REPO_URL; branch = Defaults.CONTENT_BRANCH }) { Text("Use default repo") }
