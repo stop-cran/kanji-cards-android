@@ -10,6 +10,7 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.toMutableStateList
 import io.github.stopcran.kanji.ui.DocScreen
+import io.github.stopcran.kanji.ui.DrawScreen
 import io.github.stopcran.kanji.ui.CardsScreen
 import io.github.stopcran.kanji.ui.HomeScreen
 import io.github.stopcran.kanji.ui.QuizScreen
@@ -44,6 +45,13 @@ private fun AppNav(app: KanjiApp) {
                 onOpenDoc = { push("doc:$it") },
                 onPracticeMore = { pop(); push("quiz:${System.currentTimeMillis()}:extra") },
             )
+        } else if (route.startsWith("draw:")) {
+            DrawScreen(
+                sessionKey = route,
+                onBack = ::pop,
+                onOpenDoc = { push("doc:$it") },
+                onPracticeMore = { pop(); push("draw:${System.currentTimeMillis()}:extra") },
+            )
         } else if (route.startsWith("doc:")) {
             val path = route.removePrefix("doc:")
             DocScreen(app, path, onBack = ::pop, onOpenDoc = { push("doc:$it") })
@@ -53,6 +61,7 @@ private fun AppNav(app: KanjiApp) {
                 onSettings = { push("settings") },
                 onCards = { push("cards") },
                 onQuiz = { extra -> push("quiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
+                onDraw = { extra -> push("draw:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
             )
         }
     }

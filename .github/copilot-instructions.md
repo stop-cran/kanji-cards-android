@@ -63,3 +63,9 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
 - `StrokeMatcher.match(reference, drawn)` is pure Kotlin. It normalises the drawing onto the reference box (per-axis scale, refit on matched strokes), links drawn to reference strokes greedily by mean resampled distance (single, joined, broken candidates), then reports `Reversed`, `WrongOrder` (strokes outside the longest increasing run of reference indexes), `WrongShape`, `Joined`, `Broken`, `Missing`, `Extra`.
 - Tolerances are in `MatcherConfig` (fractions of the 109 box). They were tuned only on SIMULATED hands (`StrokeMatcherTest.Hand`), so re-tune with real recorded drawings from a device before trusting them; add them as fixtures.
 - The matcher does not identify the kanji: similar kanji share strokes. Identity comes from the recognition gate (ML Kit), the matcher only grades strokes.
+
+## Drawing mode
+- Grading: `DrawGrader` combines the ML Kit Digital Ink gate (target in top 5 candidates) with `StrokeMatcher`. Clean = Good, recognised with stroke mistakes = Hard, not recognised = Again. If ML Kit is unavailable (`candidates` returns null) it falls back to matcher-only (`match.recognizable`).
+- ML Kit `RemoteModelManager.download()` returns `Task<Void>`: success arrives as a null result, so never treat null as failure (this bug showed "model unavailable" while it worked). The model is a one-off download needing network.
+- `DrawingPad` consumes pointer events so the screen does not scroll while drawing. Test on the emulator with `adb shell input swipe` (draw order matters).
+- Matcher tolerances are tuned on simulated hands only; re-tune with real device fixtures.

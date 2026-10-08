@@ -22,6 +22,8 @@ import io.github.stopcran.kanji.data.KanjiEntity
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.ReviewStateEntity
 import io.github.stopcran.kanji.data.splitSep
+import io.github.stopcran.kanji.data.toEntity
+import io.github.stopcran.kanji.data.toSrs
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
@@ -122,16 +124,8 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         if (a.correct) correct++
         if (grade == Grade.Again) queue.add(minOf(3, queue.size), a.card.kanji)
         viewModelScope.launch {
-            app.db.reviews().record(updated.toEntity(sourceId, a.card.kanji), ReviewLogEntity(0, sourceId, a.card.kanji, StudyMode.Quiz.name, grade.value, now.toEpochMilli()))
+            app.db.reviews().record(updated.toEntity(sourceId, a.card.kanji, StudyMode.Quiz), ReviewLogEntity(0, sourceId, a.card.kanji, StudyMode.Quiz.name, grade.value, now.toEpochMilli()))
         }
         showNext()
     }
-
-    private fun ReviewStateEntity.toSrs() = SrsState(
-        CardPhase.valueOf(phase), stability, difficulty, Instant.ofEpochMilli(dueMs), lastReviewMs?.let(Instant::ofEpochMilli), reps, lapses,
-    )
-
-    private fun SrsState.toEntity(source: String, kanji: String) = ReviewStateEntity(
-        source, kanji, StudyMode.Quiz.name, phase.name, stability, difficulty, due.toEpochMilli(), lastReview?.toEpochMilli(), reps, lapses,
-    )
 }
