@@ -1,58 +1,15 @@
-# Content repo schema (v1, draft)
+# Content schema
 
-Layout of a content repo (default: `stop-cran/learning-japanese`):
+The authoritative content format lives with the content: [docs/content-format.md](https://github.com/stop-cran/learning-japanese/blob/main/docs/content-format.md)
+in the default repo `stop-cran/learning-japanese`.
 
-```
-manifest.json        generated; schemaVersion, contentVersion, file list with hashes
-kanji/<char>.md      one card per kanji, e.g. kanji/怪.md
-words/<word>.md      common words covering on'yomi/kun'yomi readings
-articles/<slug>.md   free-form articles, e.g. articles/ayashii-and-related-words.md
-strokes/<char>.json  generated from KanjiVG (stroke paths in order)
-```
+What the app enforces when importing (`core/content/ContentParser.kt`, `SafeZip.kt`):
 
-## Kanji card
-
-YAML front matter + Markdown body (the article shown on "details").
-
-```markdown
----
-kanji: 怪
-title: strange, suspicious     # shown in the question state of both modes
-jlpt: 1                        # 1-5, optional
-tags: [jlpt-n1, grade-S]       # free tags; stacks are filters over tags
-onyomi: [カイ]
-kunyomi: [あや.しい]
-distractors: [妖, 奇]          # optional; similar kanji for quiz options
----
-Article body. Links are relative: [怪しい](../words/怪しい.md),
-[difference](../articles/ayashii-and-related-words.md).
-```
-
-## Word card
-
-```markdown
----
-word: 怪しい
-reading: あやしい
-meaning: suspicious
-kanji: [怪]
----
-```
-
-## Quiz answers
-
-- `title` is the canonical, machine-gradeable answer shown as an option; add optional `meanings: [...]` for extra detail.
-- Each `distractors` entry must resolve to an existing kanji card; options are that card's `title`.
-- Options must be unique after normalization (case/whitespace); the validator rejects kanji sharing a `title` unless they are never offered together (use distinct titles).
-
-## Strokes file (`strokes/<char>.json`, TODO: finalize before generator/matcher)
-
-Generator-produced, versioned, not raw SVG: `{ "schemaVersion": 1, "source": "KanjiVG <version>", "viewBox": [0,0,109,109],
-"strokes": [ { "id": 1, "points": [[x,y], ...] } ] }` with strokes in order and points as sampled polylines in the fixed viewBox.
-
-## Rules
-
-- Relative `.md` links only (plus `https`); no raw HTML; the app rewrites links to in-app navigation.
-- The kanji character is the stable ID. Review state is keyed by `(repo, kanji, mode)`.
-- A CI validator in the content repo checks front matter, duplicate kanji, broken links and strokes presence.
-- `manifest.json` lets the app sync via diff; the app downloads a branch zip archive, not a git clone.
+- The repo archive (`codeload.github.com/<owner>/<repo>/zip/refs/heads/<branch>`) must contain `manifest.json` with `schemaVersion` 1.
+- Only `manifest.json` and files directly in `kanji/`, `words/`, `articles/`, `strokes/` are read; zip-slip paths, more than 5,000 entries,
+  files over 2 MB or 50 MB in total are rejected.
+- Every file listed in the manifest must match its SHA-256 (computed over LF-normalised bytes); mismatching, missing or malformed files are
+  skipped and counted as problems instead of failing the sync. Duplicate kanji titles are rejected (titles are quiz answers).
+- Front matter is a restricted subset: `key: value` scalars and inline `[a, b]` lists.
+- Review state is keyed by (content source `owner/repo` lowercased, kanji, mode), so content edits never reset scheduling; pointing the app at a
+  different repository starts a separate set of review states.

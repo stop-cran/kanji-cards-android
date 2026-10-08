@@ -42,7 +42,7 @@ Env vars: `JAVA_HOME`, `ANDROID_HOME`.
 ## 1a. Review-driven requirements
 
 - **Gradle wrapper first** (blocking): after installing JDK + Gradle, `gradle wrapper --gradle-version 8.9`, commit it; CI uses `./gradlew`; ensure API 35 SDK on CI.
-- **Finalize strokes JSON contract** (see CONTENT-SCHEMA.md) before generator and matcher work.
+- **Finalize strokes JSON contract** (done; see CONTENT-SCHEMA.md and the content repo's format doc) before generator and matcher work.
 - **Sync safety**: app-private storage; reject zip-slip paths; cap compressed/uncompressed size, entry count, per-file size; verify manifest hashes; import into staging and swap atomically; keep last-known-good.
 - **Repo identity**: local content-source ID separate from editable URL/branch; canonical GitHub owner/repo; explicit UX for "same corpus / moved" vs "new corpus (reset scheduling)".
 - **Licences**: content repo gets `LICENSE`/`NOTICE` with exact upstream attributions, source links, modification notes, CC BY-SA for derived data; mirrored in the About screen.
