@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke as DrawStroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -145,17 +146,18 @@ private fun DrawingPad(strokes: List<List<TimedPt>>, onStroke: (List<TimedPt>) -
             .border(2.dp, MaterialTheme.colorScheme.outline)
             .background(Color.White)
             .onSizeChanged { onSize(it.width.toFloat()) }
+            .clipToBounds()
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     down.consume()
                     current.clear()
-                    current += TimedPt(down.position.x, down.position.y, down.uptimeMillis)
+                    current += TimedPt(down.position.x.coerceIn(0f, size.width.toFloat()), down.position.y.coerceIn(0f, size.height.toFloat()), down.uptimeMillis)
                     drag(down.id) { change ->
                         change.consume()
                         // Fast strokes arrive batched: keep the intermediate samples too.
-                        change.historical.forEach { current += TimedPt(it.position.x, it.position.y, it.uptimeMillis) }
-                        current += TimedPt(change.position.x, change.position.y, change.uptimeMillis)
+                        change.historical.forEach { current += TimedPt(it.position.x.coerceIn(0f, size.width.toFloat()), it.position.y.coerceIn(0f, size.height.toFloat()), it.uptimeMillis) }
+                        current += TimedPt(change.position.x.coerceIn(0f, size.width.toFloat()), change.position.y.coerceIn(0f, size.height.toFloat()), change.uptimeMillis)
                     }
                     if (current.isNotEmpty()) onStroke(current.toList())
                     current.clear()
