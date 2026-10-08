@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.asAndroidPath
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -62,7 +66,7 @@ fun DrawScope.drawBrushStroke(rawPoints: List<Offset>, color: Color, style: Brus
         BrushStyle.Dot -> dot(points, color, w * 0.011f * look.width)
         BrushStyle.Chisel -> chisel(densify(points, w * 0.003f), color, w, look)
         BrushStyle.Soft -> variable(densify(points, w * 0.003f), color, w * 0.022f * look.width, endWidth = (0.4f * look.taper).coerceAtMost(0.9f), rough = 0f)
-        BrushStyle.Ink -> variable(densify(points, w * 0.003f), color, w * 0.026f * look.width, endWidth = (0.12f * look.taper).coerceAtMost(0.9f), rough = 0.07f)
+        BrushStyle.Ink -> variable(densify(points, w * 0.003f), color, w * 0.026f * look.width, endWidth = (0.12f * look.taper).coerceAtMost(0.9f), rough = 0.07f, blur = 0.5f)
     }
 }
 
@@ -101,7 +105,7 @@ private fun DrawScope.chisel(pts: List<Offset>, color: Color, w: Float, look: Br
     }
 }
 
-private fun DrawScope.variable(pts: List<Offset>, color: Color, peak: Float, endWidth: Float, rough: Float) {
+private fun DrawScope.variable(pts: List<Offset>, color: Color, peak: Float, endWidth: Float, rough: Float, blur: Float = 0f) {
     if (pts.size < 2) {
         drawCircle(color, peak * 0.4f, pts[0])
         return
@@ -133,6 +137,20 @@ private fun DrawScope.variable(pts: List<Offset>, color: Color, peak: Float, end
         for (i in 1 until n) lineTo(left[i].x, left[i].y)
         for (i in n - 1 downTo 0) lineTo(right[i].x, right[i].y)
         close()
+    }
+    if (blur > 0f) {
+        // Softens the ink/paper edge by about [blur] pixels.
+        drawIntoCanvas { canvas ->
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = color.toArgb()
+                maskFilter = android.graphics.BlurMaskFilter(blur, android.graphics.BlurMaskFilter.Blur.NORMAL)
+            }
+            val native = canvas.nativeCanvas
+            native.drawPath(path.asAndroidPath(), paint)
+            native.drawCircle(pts.first().x, pts.first().y, half(0), paint)
+            native.drawCircle(pts.last().x, pts.last().y, half(n - 1), paint)
+        }
+        return
     }
     drawPath(path, color, style = Fill)
     drawCircle(color, half(0), pts.first())
