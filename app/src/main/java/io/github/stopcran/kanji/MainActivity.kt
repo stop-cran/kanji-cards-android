@@ -4,7 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.material3.MaterialTheme
+import androidx.activity.enableEdgeToEdge
+import io.github.stopcran.kanji.ui.KanjiTheme
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
@@ -24,7 +25,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val app = application as KanjiApp
         lifecycleScope.launch { app.contentSync.syncOnLaunch(app.settings.source.value) }
-        setContent { MaterialTheme { AppNav(app) } }
+        enableEdgeToEdge()
+        setContent { KanjiTheme { AppNav(app) } }
     }
 }
 
