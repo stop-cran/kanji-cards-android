@@ -9,8 +9,8 @@ reviews with FSRS.
 - **Articles** – Markdown with in-app navigation between kanji, words and articles.
 - **Configurable content repo** – point the app at your own fork in Settings.
 
-Status: content sync (settings, safe zip import, Room storage, WorkManager) and the FSRS-5 scheduler are in place; quiz, drawing and article
-viewer are next. See [docs/PLAN.md](docs/PLAN.md) and [docs/CONTENT-SCHEMA.md](docs/CONTENT-SCHEMA.md).
+Status: content sync (settings behind ⚙, safe zip import, Room storage, WorkManager), FSRS-5 and the meaning quiz are in place; drawing mode
+and the article viewer are next. See [docs/PLAN.md](docs/PLAN.md) and [docs/CONTENT-SCHEMA.md](docs/CONTENT-SCHEMA.md).
 
 ## License
 

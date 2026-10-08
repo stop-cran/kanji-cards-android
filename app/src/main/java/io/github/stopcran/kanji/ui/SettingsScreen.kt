@@ -1,0 +1,75 @@
+package io.github.stopcran.kanji.ui
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import io.github.stopcran.kanji.Defaults
+import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.data.SyncResult
+import kotlinx.coroutines.launch
+
+@Composable
+fun SettingsScreen(app: KanjiApp, onBack: () -> Unit) {
+    val source by app.settings.source.collectAsState()
+    val meta by remember(source) { app.db.content().observeMeta(source.id) }.collectAsState(null)
+    var url by rememberSaveable { mutableStateOf(app.settings.repoUrl) }
+    var branch by rememberSaveable { mutableStateOf(app.settings.branch) }
+    var dailyNew by rememberSaveable { mutableStateOf(app.settings.dailyNewCards.value.toString()) }
+    var status by rememberSaveable { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+
+    fun saveAndSync() {
+        val n = dailyNew.toIntOrNull()
+        if (n == null || n !in 0..200) {
+            status = "Daily new cards must be a number from 0 to 200"
+            return
+        }
+        if (!app.settings.setSource(url, branch)) {
+            status = "Invalid repository URL (expected https://github.com/<owner>/<repo>) or branch"
+            return
+        }
+        app.settings.setDailyNewCards(n)
+        status = "Syncing…"
+        scope.launch {
+            status = when (val r = app.contentSync.sync(app.settings.source.value, force = true)) {
+                is SyncResult.Updated -> "Synced ${r.kanji} kanji, ${r.words} words" + if (r.problems.isEmpty()) "" else " (${r.problems.size} files skipped: ${r.problems.first()})"
+                SyncResult.UpToDate -> "Up to date"
+                is SyncResult.Failed -> "Sync failed: ${r.message}"
+            }
+        }
+    }
+
+    Page("Settings", onBack) {
+        Text("Content repository", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Cards, words and articles are downloaded from a public GitHub repository, so they can be corrected without an app update. " +
+                "The default is the author's repository. Fork it on GitHub, edit the cards and articles in your fork, " +
+                "and enter your fork's URL here to study your own version. Each repository keeps its own review progress.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        OutlinedTextField(url, { url = it }, label = { Text("Repository URL") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(branch, { branch = it }, label = { Text("Branch") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(dailyNew, { dailyNew = it.filter(Char::isDigit).take(3) }, label = { Text("New cards per day") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = ::saveAndSync) { Text("Save & sync") }
+            OutlinedButton(onClick = { url = Defaults.CONTENT_REPO_URL; branch = Defaults.CONTENT_BRANCH }) { Text("Use default repo") }
+        }
+        if (status.isNotEmpty()) Text(status)
+        Text(source.id + (meta?.let { " — content version ${it.contentVersion}" } ?: " — not synced yet"), style = MaterialTheme.typography.bodySmall)
+    }
+}
