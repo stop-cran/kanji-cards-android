@@ -7,27 +7,35 @@ object CardSearch {
 
     private fun normalizeReading(r: String) = toHiragana(r).filter { it != '.' && it != '-' }
 
-    /** 0 = no match; higher is a better match. */
-    fun score(kanji: String, title: String, readings: List<String>, query: String): Int {
+    /**
+     * 0 = no match; higher is a better match. A katakana query prefers on'yomi and a hiragana query prefers kun'yomi
+     * (the dictionary convention); readings of the other kind still match, but rank lower.
+     */
+    fun score(kanji: String, title: String, onyomi: List<String>, kunyomi: List<String>, query: String): Int {
         val q = query.trim()
         if (q.isEmpty()) return 1
         var best = 0
         if (q.contains(kanji)) best = 100
         val qk = normalizeReading(q.lowercase())
         if (qk.isNotEmpty()) {
-            for (r in readings) {
-                val full = normalizeReading(r)
-                val stem = toHiragana(r.substringBefore('.').trimStart('-'))
-                best = maxOf(
-                    best,
-                    when {
+            val prefersOn = q.any { it in '\u30A1'..'\u30F6' } && q.none { it in '\u3041'..'\u3096' }
+            val prefersKun = q.any { it in '\u3041'..'\u3096' } && q.none { it in '\u30A1'..'\u30F6' }
+            fun scoreReadings(readings: List<String>, preferred: Boolean) {
+                val penalty = if (preferred) 0 else 30
+                for (r in readings) {
+                    val full = normalizeReading(r)
+                    val stem = toHiragana(r.substringBefore('.').trimStart('-'))
+                    val s = when {
                         full == qk || stem == qk -> 90
                         full.startsWith(qk) -> 70
                         full.contains(qk) -> 50
                         else -> 0
-                    },
-                )
+                    }
+                    if (s > 0) best = maxOf(best, s - penalty)
+                }
             }
+            scoreReadings(onyomi, !prefersKun)
+            scoreReadings(kunyomi, !prefersOn)
         }
         val ql = q.lowercase()
         val words = title.lowercase().split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }

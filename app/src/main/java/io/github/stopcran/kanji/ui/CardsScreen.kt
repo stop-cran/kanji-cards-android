@@ -30,7 +30,7 @@ fun CardsScreen(app: KanjiApp, onBack: () -> Unit, onOpen: (String) -> Unit) {
     val kanji by remember(source) { app.db.content().observeKanji(source.id) }.collectAsState(emptyList())
     var query by rememberSaveable { mutableStateOf("") }
     val shown = remember(kanji, query) {
-        kanji.map { it to CardSearch.score(it.kanji, it.title, it.onyomi.splitSep() + it.kunyomi.splitSep(), query) }
+        kanji.map { it to CardSearch.score(it.kanji, it.title, it.onyomi.splitSep(), it.kunyomi.splitSep(), query) }
             .filter { it.second > 0 }
             .let { list -> if (query.isBlank()) list else list.sortedWith(compareByDescending<Pair<*, Int>> { it.second }.thenBy { (it.first as io.github.stopcran.kanji.data.KanjiEntity).title.length }) }
             .map { it.first }
