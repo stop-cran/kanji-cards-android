@@ -50,10 +50,11 @@ data class WordEntity(
 @Entity(tableName = "articles", primaryKeys = ["sourceId", "slug"])
 data class ArticleEntity(val sourceId: String, val slug: String, val title: String, val body: String)
 
-/** Scheduling state per (content source, kanji, mode); survives content updates and card edits. */
-@Entity(tableName = "review_state", primaryKeys = ["sourceId", "kanji", "mode"])
+/** Scheduling state per (content source, stack, kanji, mode); survives content updates and card edits. */
+@Entity(tableName = "review_state", primaryKeys = ["sourceId", "stack", "kanji", "mode"])
 data class ReviewStateEntity(
     val sourceId: String,
+    val stack: String,
     val kanji: String,
     val mode: String,
     val phase: String,
@@ -69,6 +70,7 @@ data class ReviewStateEntity(
 data class ReviewLogEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val sourceId: String,
+    val stack: String,
     val kanji: String,
     val mode: String,
     val grade: Int,
@@ -146,11 +148,17 @@ interface ContentDao {
 
 @Dao
 interface ReviewDao {
-    @Query("SELECT * FROM review_state WHERE sourceId = :sourceId AND mode = :mode")
-    suspend fun states(sourceId: String, mode: String): List<ReviewStateEntity>
+    @Query("SELECT * FROM review_state WHERE sourceId = :sourceId AND stack = :stack AND mode = :mode")
+    suspend fun states(sourceId: String, stack: String, mode: String): List<ReviewStateEntity>
 
-    @Query("SELECT * FROM review_state WHERE sourceId = :sourceId AND mode = :mode")
-    fun observeStates(sourceId: String, mode: String): Flow<List<ReviewStateEntity>>
+    @Query("SELECT * FROM review_state WHERE sourceId = :sourceId AND stack = :stack AND mode = :mode")
+    fun observeStates(sourceId: String, stack: String, mode: String): Flow<List<ReviewStateEntity>>
+
+    @Query("SELECT MAX(atMs) FROM review_log")
+    suspend fun lastReviewMs(): Long?
+
+    @Query("SELECT COUNT(*) FROM review_log WHERE atMs >= :sinceMs")
+    suspend fun reviewsSince(sinceMs: Long): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putState(state: ReviewStateEntity)
@@ -158,8 +166,8 @@ interface ReviewDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putLog(log: ReviewLogEntity)
 
-    @Query("SELECT COUNT(*) FROM (SELECT kanji FROM review_log WHERE sourceId = :sourceId AND mode = :mode GROUP BY kanji HAVING MIN(atMs) >= :sinceMs)")
-    suspend fun newCardsIntroducedSince(sourceId: String, mode: String, sinceMs: Long): Int
+    @Query("SELECT COUNT(*) FROM (SELECT kanji FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode = :mode GROUP BY kanji HAVING MIN(atMs) >= :sinceMs)")
+    suspend fun newCardsIntroducedSince(sourceId: String, stack: String, mode: String, sinceMs: Long): Int
 
     @Transaction
     suspend fun record(state: ReviewStateEntity, log: ReviewLogEntity) {
@@ -170,10 +178,27 @@ interface ReviewDao {
 
 @Database(
     entities = [KanjiEntity::class, WordEntity::class, ArticleEntity::class, ReviewStateEntity::class, ReviewLogEntity::class, SyncMetaEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun content(): ContentDao
     abstract fun reviews(): ReviewDao
+}
+
+/** v1 had a single stack; its state becomes the "all" stack. */
+val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE review_state_new (sourceId TEXT NOT NULL, stack TEXT NOT NULL, kanji TEXT NOT NULL, mode TEXT NOT NULL, " +
+                "phase TEXT NOT NULL, stability REAL NOT NULL, difficulty REAL NOT NULL, dueMs INTEGER NOT NULL, lastReviewMs INTEGER, " +
+                "reps INTEGER NOT NULL, lapses INTEGER NOT NULL, PRIMARY KEY(sourceId, stack, kanji, mode))",
+        )
+        db.execSQL(
+            "INSERT INTO review_state_new SELECT sourceId, 'all', kanji, mode, phase, stability, difficulty, dueMs, lastReviewMs, reps, lapses FROM review_state",
+        )
+        db.execSQL("DROP TABLE review_state")
+        db.execSQL("ALTER TABLE review_state_new RENAME TO review_state")
+        db.execSQL("ALTER TABLE review_log ADD COLUMN stack TEXT NOT NULL DEFAULT 'all'")
+    }
 }

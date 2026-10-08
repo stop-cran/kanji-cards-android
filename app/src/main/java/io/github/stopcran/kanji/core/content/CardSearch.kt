@@ -2,6 +2,8 @@ package io.github.stopcran.kanji.core.content
 
 /** Mixed search over kanji, English title and readings (kana in either script; okurigana dots and affix dashes ignored). */
 object CardSearch {
+    private const val ROMAJI_PENALTY = 20
+
     fun toHiragana(s: String): String =
         s.map { if (it in '\u30A1'..'\u30F6') (it.code - 0x60).toChar() else it }.joinToString("")
 
@@ -36,6 +38,20 @@ object CardSearch {
             }
             scoreReadings(onyomi, !prefersKun)
             scoreReadings(kunyomi, !prefersOn)
+        }
+        // Romaji is script-neutral: it finds on and kun readings alike, but ranks below a kana query of the matching script.
+        Romaji.toHiragana(q)?.takeIf { it != qk }?.let { kana ->
+            for (r in onyomi + kunyomi) {
+                val full = normalizeReading(r)
+                val stem = toHiragana(r.substringBefore('.').trimStart('-'))
+                val s = when {
+                    full == kana || stem == kana -> 90
+                    full.startsWith(kana) -> 70
+                    full.contains(kana) -> 50
+                    else -> 0
+                }
+                if (s > 0) best = maxOf(best, s - ROMAJI_PENALTY)
+            }
         }
         val ql = q.lowercase()
         val words = title.lowercase().split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }

@@ -4,13 +4,14 @@ import android.app.Application
 import androidx.room.Room
 import io.github.stopcran.kanji.data.AppDatabase
 import io.github.stopcran.kanji.data.ContentSync
+import io.github.stopcran.kanji.data.MIGRATION_1_2
 import io.github.stopcran.kanji.data.Settings
 import io.github.stopcran.kanji.data.SyncWorker
 
 class KanjiApp : Application() {
-    val db: AppDatabase by lazy { Room.databaseBuilder(this, AppDatabase::class.java, "kanji.db").build() }
+    val db: AppDatabase by lazy { Room.databaseBuilder(this, AppDatabase::class.java, "kanji.db").addMigrations(MIGRATION_1_2).build() }
     val settings: Settings by lazy { Settings(this) }
-    val contentSync: ContentSync by lazy { ContentSync(db) }
+    val contentSync: ContentSync by lazy { ContentSync(db, settings) }
 
     override fun onCreate() {
         super.onCreate()

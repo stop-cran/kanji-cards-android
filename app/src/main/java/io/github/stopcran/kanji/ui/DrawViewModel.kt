@@ -18,10 +18,12 @@ import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.QueueBuilder
 import io.github.stopcran.kanji.core.srs.SrsState
+import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.srs.StudyMode
 import io.github.stopcran.kanji.data.DrawingLog
 import io.github.stopcran.kanji.data.KanjiEntity
 import io.github.stopcran.kanji.data.ReviewLogEntity
+import io.github.stopcran.kanji.data.inStack
 import io.github.stopcran.kanji.data.toEntity
 import io.github.stopcran.kanji.data.toSrs
 import kotlinx.coroutines.launch
@@ -65,6 +67,7 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     private var sourceId = ""
+    private var stack = Stacks.ALL
     private var cards: Map<String, KanjiEntity> = emptyMap()
     private val references = mutableMapOf<String, List<Stroke>>()
     private val orderVariants = mutableMapOf<String, List<List<Int>>>()
@@ -85,7 +88,8 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun start(extra: Boolean) {
         val source = app.settings.source.value
         sourceId = source.id
-        val all = app.db.content().kanji(sourceId)
+        stack = app.settings.stack.value
+        val all = app.db.content().kanji(sourceId).inStack(stack)
         for (k in all) {
             val data = k.strokesJson?.let { runCatching { json.decodeFromString(StrokeData.serializer(), it) }.getOrNull() } ?: continue
             references[k.kanji] = data.strokes.map { s -> s.points.map { Pt(it[0], it[1]) } }
@@ -97,10 +101,10 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         cards = drawable.associateBy { it.kanji }
-        app.db.reviews().states(sourceId, StudyMode.Draw.name).forEach { states[it.kanji] = it.toSrs() }
+        app.db.reviews().states(sourceId, stack, StudyMode.Draw.name).forEach { states[it.kanji] = it.toSrs() }
         val ids = drawable.map { it.kanji }
         val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val budget = app.settings.dailyNewCards.value - app.db.reviews().newCardsIntroducedSince(sourceId, StudyMode.Draw.name, startOfDay)
+        val budget = app.settings.dailyNewCards.value - app.db.reviews().newCardsIntroducedSince(sourceId, stack, StudyMode.Draw.name, startOfDay)
         val items = if (extra) QueueBuilder.extra(ids, states, Instant.now()) else QueueBuilder.build(ids, states, Instant.now(), budget)
         queue.addAll(items.map { it.kanji })
         showNext()
@@ -146,8 +150,8 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
         if (grade == Grade.Again) queue.add(minOf(3, queue.size), a.card.kanji)
         viewModelScope.launch {
             app.db.reviews().record(
-                updated.toEntity(sourceId, a.card.kanji, StudyMode.Draw),
-                ReviewLogEntity(0, sourceId, a.card.kanji, StudyMode.Draw.name, grade.value, now.toEpochMilli()),
+                updated.toEntity(sourceId, stack, a.card.kanji, StudyMode.Draw),
+                ReviewLogEntity(0, sourceId, stack, a.card.kanji, StudyMode.Draw.name, grade.value, now.toEpochMilli()),
             )
         }
         showNext()

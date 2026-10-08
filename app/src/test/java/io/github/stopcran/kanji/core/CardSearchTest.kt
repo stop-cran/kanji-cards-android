@@ -12,6 +12,17 @@ class CardSearchTest {
     private fun s(q: String) = CardSearch.score("休", "rest", on, kun, q)
 
     @Test
+    fun romajiFindsReadingsButRanksBelowMatchingKana() {
+        assertTrue(s("yasumu") > 0)
+        assertTrue(s("kyuu") > 0)
+        assertTrue(s("kyu") > 0)
+        assertTrue(s("yasumu") < s("やすむ"))
+        assertTrue(s("kyuu") < s("キュウ"))
+        assertTrue(s("kyuu") > s("きゅう") - 30 - 1)
+        assertEquals(0, s("mizu"))
+    }
+
+    @Test
     fun emptyQueryMatchesEverything() = assertTrue(s("  ") > 0)
 
     @Test

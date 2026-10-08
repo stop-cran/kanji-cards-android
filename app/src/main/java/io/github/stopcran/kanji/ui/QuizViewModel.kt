@@ -17,10 +17,12 @@ import io.github.stopcran.kanji.core.srs.KanjiFont
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.QueueBuilder
 import io.github.stopcran.kanji.core.srs.SrsState
+import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.srs.StudyMode
 import io.github.stopcran.kanji.data.KanjiEntity
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.ReviewStateEntity
+import io.github.stopcran.kanji.data.inStack
 import io.github.stopcran.kanji.data.splitSep
 import io.github.stopcran.kanji.data.toEntity
 import io.github.stopcran.kanji.data.toSrs
@@ -50,6 +52,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     private var sourceId = ""
+    private var stack = Stacks.ALL
     private var cards: Map<String, KanjiEntity> = emptyMap()
     private var quizCards: List<QuizCard> = emptyList()
     private val states = mutableMapOf<String, SrsState>()
@@ -68,17 +71,18 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun start(extra: Boolean) {
         val source = app.settings.source.value
         sourceId = source.id
-        val all = app.db.content().kanji(sourceId)
+        stack = app.settings.stack.value
+        val all = app.db.content().kanji(sourceId).inStack(stack)
         if (all.size < 2) {
             ui = QuizUi.Empty("No cards yet. Sync the content first (⚙ settings).")
             return
         }
         cards = all.associateBy { it.kanji }
         quizCards = all.map { QuizCard(it.kanji, it.title, it.tags.splitSep(), it.distractors.splitSep()) }
-        app.db.reviews().states(sourceId, StudyMode.Quiz.name).forEach { states[it.kanji] = it.toSrs() }
+        app.db.reviews().states(sourceId, stack, StudyMode.Quiz.name).forEach { states[it.kanji] = it.toSrs() }
 
         val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val introduced = app.db.reviews().newCardsIntroducedSince(sourceId, StudyMode.Quiz.name, startOfDay)
+        val introduced = app.db.reviews().newCardsIntroducedSince(sourceId, stack, StudyMode.Quiz.name, startOfDay)
         val budget = app.settings.dailyNewCards.value - introduced
         val items = if (extra) QueueBuilder.extra(all.map { it.kanji }, states, Instant.now()) else QueueBuilder.build(all.map { it.kanji }, states, Instant.now(), budget)
         queue.addAll(items.map { it.kanji })
@@ -124,7 +128,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         if (a.correct) correct++
         if (grade == Grade.Again) queue.add(minOf(3, queue.size), a.card.kanji)
         viewModelScope.launch {
-            app.db.reviews().record(updated.toEntity(sourceId, a.card.kanji, StudyMode.Quiz), ReviewLogEntity(0, sourceId, a.card.kanji, StudyMode.Quiz.name, grade.value, now.toEpochMilli()))
+            app.db.reviews().record(updated.toEntity(sourceId, stack, a.card.kanji, StudyMode.Quiz), ReviewLogEntity(0, sourceId, stack, a.card.kanji, StudyMode.Quiz.name, grade.value, now.toEpochMilli()))
         }
         showNext()
     }
