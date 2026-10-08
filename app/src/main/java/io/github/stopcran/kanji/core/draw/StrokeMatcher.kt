@@ -91,6 +91,10 @@ data class MatcherConfig(
     val shortStroke: Double = 14.0,
     /** Extra cost for explaining one drawn stroke as two reference strokes or vice versa, so plain matches win. */
     val joinPenalty: Double = 0.03,
+    /** Extra shape tolerance for strokes up to [dotLength] units long, tapering to zero at [relaxedUntil]. */
+    val shortStrokeBonus: Double = 0.10,
+    val dotLength: Double = 15.0,
+    val relaxedUntil: Double = 50.0,
     val box: Double = 109.0,
 )
 
@@ -103,7 +107,7 @@ class StrokeMatcher(private val cfg: MatcherConfig = MatcherConfig()) {
 
     private sealed interface Link {
         val cost: Double
-        data class One(val d: Int, val r: Int, override val cost: Double, val reversed: Boolean, val badLength: Boolean) : Link
+        data class One(val d: Int, val r: Int, override val cost: Double, val reversed: Boolean, val badLength: Boolean, val limit: Double) : Link
         /** One drawn stroke covers reference strokes r and r+1. */
         data class Join(val d: Int, val r: Int, override val cost: Double) : Link
         /** Drawn strokes d and d+1 together make up reference stroke r. */
@@ -152,7 +156,7 @@ class StrokeMatcher(private val cfg: MatcherConfig = MatcherConfig()) {
             val reversed = (rev < fwd * 0.7 && fwd - rev > 0.015) || (chordCosine(drawn[d], reference[r]) < -0.3 && refLen[r] > 10.0)
             val ratio = drLen[d] / max(refLen[r], 1e-6)
             val badLength = refLen[r] > cfg.shortStroke && (ratio < cfg.minLengthRatio || ratio > cfg.maxLengthRatio)
-            cands += Link.One(d, r, cost, reversed, badLength)
+            cands += Link.One(d, r, cost, reversed, badLength, shapeLimitFor(refLen[r]))
         }
         for (d in drawn.indices) for (r in 0 until reference.size - 1) {
             val c = meanDist(drR[d], (reference[r] + reference[r + 1]).resample(n)) / cfg.box + cfg.joinPenalty
@@ -182,6 +186,12 @@ class StrokeMatcher(private val cfg: MatcherConfig = MatcherConfig()) {
         return chosen
     }
 
+    /** Short strokes (dots, ticks) vary a lot in real handwriting, so they get a looser shape limit that tapers off with length. */
+    private fun shapeLimitFor(refLength: Double): Double {
+        val t = ((refLength - cfg.dotLength) / (cfg.relaxedUntil - cfg.dotLength)).coerceIn(0.0, 1.0)
+        return cfg.shapeLimit + cfg.shortStrokeBonus * (1 - t)
+    }
+
     private fun chordCosine(a: Stroke, b: Stroke): Double {
         val ax = a.last().x - a.first().x
         val ay = a.last().y - a.first().y
@@ -204,7 +214,7 @@ class StrokeMatcher(private val cfg: MatcherConfig = MatcherConfig()) {
                 usedD[l.d] = true; usedR[l.r] = true
                 order += l.d to l.r
                 if (l.reversed) issues += StrokeIssue(IssueType.Reversed, l.r, l.d)
-                if (l.cost > cfg.shapeLimit || l.badLength) issues += StrokeIssue(IssueType.WrongShape, l.r, l.d)
+                if (l.cost > l.limit || l.badLength) issues += StrokeIssue(IssueType.WrongShape, l.r, l.d)
             }
             is Link.Join -> {
                 usedD[l.d] = true; usedR[l.r] = true; usedR[l.r + 1] = true

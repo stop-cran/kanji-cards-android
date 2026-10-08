@@ -100,6 +100,17 @@ class StrokeMatcherTest {
     }
 
     @Test
+    fun dotPlacedAndSizedLooselyIsAccepted() {
+        val ref = refs.getValue("下")
+        val dot = ref[2]
+        val c = dot.first()
+        // Real-device case: the dot of 下 sat ~10 units closer to the stem and was 30% shorter.
+        val loose = dot.map { Pt(c.x + (it.x - c.x) * 0.7 - 10, c.y + (it.y - c.y) * 0.7) }
+        val res = matcher.match(ref, listOf(ref[0], ref[1], loose))
+        assertTrue(res.issues.toString(), res.clean)
+    }
+
+    @Test
     fun reversedStrokeIsReported() {
         val cases = ArrayList<Pair<String, Boolean>>()
         for ((k, ref) in refs) for (i in ref.indices) {

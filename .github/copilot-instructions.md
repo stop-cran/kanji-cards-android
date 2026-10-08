@@ -69,3 +69,4 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
 - ML Kit `RemoteModelManager.download()` returns `Task<Void>`: success arrives as a null result, so never treat null as failure (this bug showed "model unavailable" while it worked). The model is a one-off download needing network.
 - `DrawingPad` consumes pointer events so the screen does not scroll while drawing. Test on the emulator with `adb shell input swipe` (draw order matters).
 - Matcher tolerances are tuned on simulated hands only; re-tune with real device fixtures.
+- Short reference strokes (dots, ticks) get a looser shape limit (MatcherConfig.shortStrokeBonus, tapering from 15 to 50 units) because real hands vary most there; dotPlacedAndSizedLooselyIsAccepted covers a real 下 dot.
