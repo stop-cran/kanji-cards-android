@@ -66,7 +66,7 @@ fun DrawScreen(
     LaunchedEffect(sessionKey) { vm.ensureStarted(sessionKey.endsWith(":extra")) }
     val app = LocalContext.current.applicationContext as KanjiApp
     val brush by app.settings.brush.collectAsState()
-    androidx.compose.runtime.CompositionLocalProvider(LocalBrush provides brush) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalBrush provides brush, LocalBrushLook provides vm.look) {
     Page("Drawing", onBack) {
         when (val s = vm.ui) {
             DrawUi.Loading -> Text("Loading…")
@@ -141,6 +141,7 @@ private fun Overlay(modifier: Modifier, draw: @Composable () -> Unit) {
 private fun DrawingPad(strokes: List<List<TimedPt>>, onStroke: (List<TimedPt>) -> Unit, onSize: (Float) -> Unit, modifier: Modifier) {
     val current = remember { mutableStateListOf<TimedPt>() }
     val brush = LocalBrush.current
+    val look = LocalBrushLook.current
     Canvas(
         modifier
             .border(2.dp, MaterialTheme.colorScheme.outline)
@@ -167,7 +168,7 @@ private fun DrawingPad(strokes: List<List<TimedPt>>, onStroke: (List<TimedPt>) -
         val guide = Color(0xFFE0E0E0)
         drawLine(guide, Offset(size.width / 2, 0f), Offset(size.width / 2, size.height), 2f)
         drawLine(guide, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 2f)
-        (strokes + listOf(current.toList())).forEach { s -> drawBrushStroke(s.map { Offset(it.x, it.y) }, Ink, brush) }
+        (strokes + listOf(current.toList())).forEach { s -> drawBrushStroke(s.map { Offset(it.x, it.y) }, Ink, brush, look = look) }
     }
 }
 
@@ -176,10 +177,11 @@ private fun YourDrawing(drawn: List<List<TimedPt>>, canvasPx: Float, flagged: Se
     // Show the slightly regularised strokes: kinks too small to matter in writing are dropped.
     val tidy = remember(drawn) { regularize(drawn.map { s -> s.map { Pt(it.x.toDouble(), it.y.toDouble()) } }, 0.02, 48, curved = true) }
     val brush = LocalBrush.current
+    val look = LocalBrushLook.current
     Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
         val k = size.width / canvasPx
         tidy.forEachIndexed { i, s ->
-            drawBrushStroke(s.map { Offset(it.x.toFloat() * k, it.y.toFloat() * k) }, if (i in flagged) Bad else Ink, brush)
+            drawBrushStroke(s.map { Offset(it.x.toFloat() * k, it.y.toFloat() * k) }, if (i in flagged) Bad else Ink, brush, look = look)
         }
     }
 }
@@ -189,11 +191,12 @@ private fun Reference(source: List<Stroke>, flagged: Set<Int>, numbers: Boolean)
     val reference = remember(source) { varyReference(source, kotlin.random.Random.nextInt()) }
     val measurer = rememberTextMeasurer()
     val brush = LocalBrush.current
+    val look = LocalBrushLook.current
     Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
         val k = size.width / 109f
         reference.forEachIndexed { i, s ->
             val c = if (i in flagged) Bad else Good
-            drawBrushStroke(s.map { Offset(it.x.toFloat() * k, it.y.toFloat() * k) }, c, brush)
+            drawBrushStroke(s.map { Offset(it.x.toFloat() * k, it.y.toFloat() * k) }, c, brush, look = look)
             if (numbers) {
                 val p = s.first()
                 drawText(measurer, "${i + 1}", Offset(p.x.toFloat() * k - 12f, p.y.toFloat() * k - 26f), style = TextStyle(color = c, fontSize = 11.sp))

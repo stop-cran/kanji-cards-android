@@ -31,21 +31,38 @@ enum class BrushStyle(val label: String, val hint: String) {
 }
 
 val LocalBrush = compositionLocalOf { BrushStyle.Default }
+val LocalBrushLook = compositionLocalOf { BrushLook.Neutral }
+
+/**
+ * Small per-card variation of the chosen brush, so the student does not overlearn one pen size.
+ * [width] scales thickness, [angle] turns the chisel nib (radians), [taper] scales how thin the stroke end gets.
+ */
+data class BrushLook(val width: Float, val angle: Float, val taper: Float) {
+    companion object {
+        val Neutral = BrushLook(1f, 0f, 1f)
+
+        fun random(rnd: kotlin.random.Random = kotlin.random.Random) = BrushLook(
+            width = 0.8f + 0.45f * rnd.nextFloat(),
+            angle = ((rnd.nextFloat() - 0.5f) * 0.5f),
+            taper = 0.7f + 0.8f * rnd.nextFloat(),
+        )
+    }
+}
 
 /**
  * Draws one stroke in the given brush. All sizes are fractions of [canvasWidth], so the pad, the answer
  * panels and the settings preview look alike. The width comes from direction (chisel) or from the position
  * along the stroke (soft, ink); it never changes grading, which uses the raw points.
  */
-fun DrawScope.drawBrushStroke(rawPoints: List<Offset>, color: Color, style: BrushStyle, canvasWidth: Float = size.width) {
+fun DrawScope.drawBrushStroke(rawPoints: List<Offset>, color: Color, style: BrushStyle, canvasWidth: Float = size.width, look: BrushLook = BrushLook.Neutral) {
     if (rawPoints.isEmpty()) return
     val w = canvasWidth
     val points = smoothLongSegments(rawPoints, w * 0.012f, w * 0.003f)
     when (style) {
-        BrushStyle.Dot -> dot(points, color, w * 0.011f)
-        BrushStyle.Chisel -> chisel(densify(points, w * 0.003f), color, w)
-        BrushStyle.Soft -> variable(densify(points, w * 0.003f), color, w * 0.022f, endWidth = 0.4f, rough = 0f)
-        BrushStyle.Ink -> variable(densify(points, w * 0.003f), color, w * 0.026f, endWidth = 0.12f, rough = 0.07f)
+        BrushStyle.Dot -> dot(points, color, w * 0.011f * look.width)
+        BrushStyle.Chisel -> chisel(densify(points, w * 0.003f), color, w, look)
+        BrushStyle.Soft -> variable(densify(points, w * 0.003f), color, w * 0.022f * look.width, endWidth = (0.4f * look.taper).coerceAtMost(0.9f), rough = 0f)
+        BrushStyle.Ink -> variable(densify(points, w * 0.003f), color, w * 0.026f * look.width, endWidth = (0.12f * look.taper).coerceAtMost(0.9f), rough = 0.07f)
     }
 }
 
@@ -61,10 +78,11 @@ private fun DrawScope.dot(points: List<Offset>, color: Color, width: Float) {
     drawPath(path, color, style = DrawStroke(width, cap = StrokeCap.Round, join = StrokeJoin.Round))
 }
 
-private fun DrawScope.chisel(pts: List<Offset>, color: Color, w: Float) {
-    val half = w * 0.013f
-    val a = Offset(cos(-PI / 4).toFloat() * half, sin(-PI / 4).toFloat() * half)
-    val thin = w * 0.004f
+private fun DrawScope.chisel(pts: List<Offset>, color: Color, w: Float, look: BrushLook) {
+    val half = w * 0.013f * look.width
+    val angle = -PI / 4 + look.angle
+    val a = Offset(cos(angle).toFloat() * half, sin(angle).toFloat() * half)
+    val thin = w * 0.004f * look.width
     val path = Path()
     // Swept area of the nib between consecutive stamps; orientation is normalised so overlaps never cancel.
     for (i in 0 until pts.size - 1) {

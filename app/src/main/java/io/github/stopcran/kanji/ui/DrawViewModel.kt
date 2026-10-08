@@ -58,6 +58,9 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
 
     var ui: DrawUi by mutableStateOf(DrawUi.Loading)
         private set
+    /** Fixed for the whole card (question, answer, undo, clear); re-rolled when the next card appears. */
+    var look: BrushLook by mutableStateOf(BrushLook.random())
+        private set
     var modelState: ModelState by mutableStateOf(ModelState.Unknown)
         private set
 
@@ -106,6 +109,7 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
         ui = if (kanji == null) {
             if (answered == 0) DrawUi.Empty("Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings.") else DrawUi.Done(answered, clean)
         } else {
+            look = BrushLook.random()
             DrawUi.Question(cards.getValue(kanji), queue.size + 1, answered)
         }
     }
