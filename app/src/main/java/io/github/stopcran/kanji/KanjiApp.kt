@@ -5,6 +5,7 @@ import androidx.room.Room
 import io.github.stopcran.kanji.data.AppDatabase
 import io.github.stopcran.kanji.data.ContentSync
 import io.github.stopcran.kanji.data.MIGRATION_1_2
+import io.github.stopcran.kanji.data.ReminderWorker
 import io.github.stopcran.kanji.data.Settings
 import io.github.stopcran.kanji.data.SyncWorker
 
@@ -16,5 +17,6 @@ class KanjiApp : Application() {
     override fun onCreate() {
         super.onCreate()
         SyncWorker.schedulePeriodic(this)
+        if (settings.reminderEnabled.value) ReminderWorker.schedule(this, settings.reminderHour.value, replace = false)
     }
 }

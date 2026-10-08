@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.toMutableStateList
+import io.github.stopcran.kanji.ui.AboutScreen
 import io.github.stopcran.kanji.ui.DocScreen
 import io.github.stopcran.kanji.ui.DrawScreen
 import io.github.stopcran.kanji.ui.CardsScreen
@@ -39,7 +40,8 @@ private fun AppNav(app: KanjiApp) {
     BackHandler(enabled = stack.size > 1) { pop() }
 
     when (val route = stack.last()) {
-        "settings" -> SettingsScreen(app, onBack = ::pop)
+        "settings" -> SettingsScreen(app, onBack = ::pop, onAbout = { push("about") })
+        "about" -> AboutScreen(onBack = ::pop)
         "cards" -> CardsScreen(app, onBack = ::pop, onOpen = { push("doc:kanji/$it.md") })
         else -> if (route.startsWith("quiz:")) {
             QuizScreen(

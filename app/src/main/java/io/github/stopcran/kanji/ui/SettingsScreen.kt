@@ -8,6 +8,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -26,7 +27,7 @@ import io.github.stopcran.kanji.data.SyncResult
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(app: KanjiApp, onBack: () -> Unit) {
+fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
     val source by app.settings.source.collectAsState()
     val meta by remember(source) { app.db.content().observeMeta(source.id) }.collectAsState(null)
     var url by rememberSaveable { mutableStateOf(app.settings.repoUrl) }
@@ -81,6 +82,47 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit) {
         }
         Text(brush.hint, style = MaterialTheme.typography.bodySmall)
         BrushPreview(brush)
+        val remind by app.settings.reminderEnabled.collectAsState()
+        val remindHour by app.settings.reminderHour.collectAsState()
+        val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+        fun enableReminder() {
+            app.settings.setReminderEnabled(true)
+            io.github.stopcran.kanji.data.ReminderWorker.schedule(appContext, app.settings.reminderHour.value, replace = true)
+        }
+        val notificationPermission = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) enableReminder() else status = "Notifications are blocked for this app, so reminders stay off."
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Daily study reminder", modifier = Modifier.weight(1f))
+            Switch(remind, { on ->
+                if (!on) {
+                    app.settings.setReminderEnabled(false)
+                    io.github.stopcran.kanji.data.ReminderWorker.cancel(appContext)
+                } else if (android.os.Build.VERSION.SDK_INT >= 33) {
+                    notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    enableReminder()
+                }
+            })
+        }
+        if (remind) {
+            var hourText by rememberSaveable { mutableStateOf(remindHour.toString()) }
+            OutlinedTextField(
+                hourText,
+                { text ->
+                    hourText = text.filter(Char::isDigit).take(2)
+                    hourText.toIntOrNull()?.takeIf { it in 0..23 }?.let {
+                        app.settings.setReminderHour(it)
+                        io.github.stopcran.kanji.data.ReminderWorker.schedule(appContext, it, replace = true)
+                    }
+                },
+                label = { Text("Reminder hour (0-23)") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+            )
+        }
+        Text(
+            "Only when cards are due and you have not studied today. If you ignore them, the gaps grow (1, 2, 4, 7, 14 days) and then they stop until you study again.",
+            style = MaterialTheme.typography.bodySmall,
+        )
         val save by app.settings.saveDrawings.collectAsState()
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Save my drawings on this device to help tune handwriting checks", modifier = Modifier.weight(1f))
@@ -114,6 +156,7 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit) {
             OutlinedButton(onClick = { url = Defaults.CONTENT_REPO_URL; branch = Defaults.CONTENT_BRANCH }) { Text("Use default repo") }
         }
         if (status.isNotEmpty()) Text(status)
+        TextButton(onClick = onAbout) { Text("About, sources and licences") }
         Text(source.id + (meta?.let { " — content version ${it.contentVersion}" } ?: " — not synced yet"), style = MaterialTheme.typography.bodySmall)
     }
 }
