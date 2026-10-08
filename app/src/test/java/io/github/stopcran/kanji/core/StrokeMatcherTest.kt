@@ -111,6 +111,15 @@ class StrokeMatcherTest {
     }
 
     @Test
+    fun shorterSlashIsAccepted() {
+        val ref = refs.getValue("休")
+        // Real-device case: the first slash of 亻 was drawn ~30% shorter than the reference.
+        val short = ref[0].let { it.take((it.size * 0.7).toInt()) }
+        val res = matcher.match(ref, listOf(short) + ref.drop(1))
+        assertTrue(res.issues.toString(), res.clean)
+    }
+
+    @Test
     fun reversedStrokeIsReported() {
         val cases = ArrayList<Pair<String, Boolean>>()
         for ((k, ref) in refs) for (i in ref.indices) {

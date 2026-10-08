@@ -84,7 +84,7 @@ data class MatcherConfig(
     /** Above this mean distance a drawn stroke is not considered to be the reference stroke at all. */
     val matchLimit: Double = 0.17,
     /** Below this a matched stroke is accepted as correctly drawn. */
-    val shapeLimit: Double = 0.10,
+    val shapeLimit: Double = 0.13,
     /** Accepted drawn/reference length ratio for strokes longer than [shortStroke] units. */
     val minLengthRatio: Double = 0.55,
     val maxLengthRatio: Double = 1.7,

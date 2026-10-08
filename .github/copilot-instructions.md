@@ -71,3 +71,4 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
 - Matcher tolerances are tuned on simulated hands only; re-tune with real device fixtures.
 - Short reference strokes (dots, ticks) get a looser shape limit (MatcherConfig.shortStrokeBonus, tapering from 15 to 50 units) because real hands vary most there; dotPlacedAndSizedLooselyIsAccepted covers a real 下 dot.
 - Drawn strokes are regularised before matching (Douglas-Peucker with MatcherConfig.smoothing = 2% of drawing size, then resampled), so tiny kinks are ignored. Gotcha: after matcher changes reinstall the APK before asking for emulator re-checks.
+- shapeLimit is 0.13: real hands drew 亻's slash ~30% short and the 0.10 limit rejected it (shorterSlashIsAccepted). Prefer relaxing shape tolerance over strictness; order, direction and join/break checks stay strict.
