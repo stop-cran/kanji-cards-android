@@ -37,9 +37,10 @@ val LocalBrush = compositionLocalOf { BrushStyle.Default }
  * panels and the settings preview look alike. The width comes from direction (chisel) or from the position
  * along the stroke (soft, ink); it never changes grading, which uses the raw points.
  */
-fun DrawScope.drawBrushStroke(points: List<Offset>, color: Color, style: BrushStyle, canvasWidth: Float = size.width) {
-    if (points.isEmpty()) return
+fun DrawScope.drawBrushStroke(rawPoints: List<Offset>, color: Color, style: BrushStyle, canvasWidth: Float = size.width) {
+    if (rawPoints.isEmpty()) return
     val w = canvasWidth
+    val points = smoothLongSegments(rawPoints, w * 0.012f, w * 0.003f)
     when (style) {
         BrushStyle.Dot -> dot(points, color, w * 0.011f)
         BrushStyle.Chisel -> chisel(densify(points, w * 0.003f), color, w)
@@ -118,6 +119,37 @@ private fun DrawScope.variable(pts: List<Offset>, color: Color, peak: Float, end
     drawPath(path, color, style = Fill)
     drawCircle(color, half(0), pts.first())
     drawCircle(color, half(n - 1), pts.last())
+}
+
+/**
+ * Fast strokes leave few touch samples, so the line would show as visible straight segments. Segments longer
+ * than [minSeg] are replaced by a Catmull-Rom curve through the neighbouring samples; short ones stay as they are.
+ */
+internal fun smoothLongSegments(pts: List<Offset>, minSeg: Float, step: Float): List<Offset> {
+    if (pts.size < 3) return pts
+    val out = ArrayList<Offset>()
+    out += pts[0]
+    for (i in 0 until pts.size - 1) {
+        val a = pts[i]
+        val b = pts[i + 1]
+        val d = hypot(b.x - a.x, b.y - a.y)
+        if (d > minSeg) {
+            val p0 = pts[maxOf(i - 1, 0)]
+            val p3 = pts[minOf(i + 2, pts.size - 1)]
+            val k = (d / step).toInt().coerceIn(2, 60)
+            for (j in 1 until k) {
+                val t = j.toFloat() / k
+                val t2 = t * t
+                val t3 = t2 * t
+                out += Offset(
+                    0.5f * (2 * a.x + (-p0.x + b.x) * t + (2 * p0.x - 5 * a.x + 4 * b.x - p3.x) * t2 + (-p0.x + 3 * a.x - 3 * b.x + p3.x) * t3),
+                    0.5f * (2 * a.y + (-p0.y + b.y) * t + (2 * p0.y - 5 * a.y + 4 * b.y - p3.y) * t2 + (-p0.y + 3 * a.y - 3 * b.y + p3.y) * t3),
+                )
+            }
+        }
+        out += b
+    }
+    return out
 }
 
 /** Inserts points so that no gap is longer than [step]. */

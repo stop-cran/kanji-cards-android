@@ -135,6 +135,7 @@ private fun Overlay(modifier: Modifier, draw: @Composable () -> Unit) {
     androidx.compose.foundation.layout.Box(modifier.aspectRatio(1f).border(1.dp, MaterialTheme.colorScheme.outline).background(Color.White)) { draw() }
 }
 
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 private fun DrawingPad(strokes: List<List<TimedPt>>, onStroke: (List<TimedPt>) -> Unit, onSize: (Float) -> Unit, modifier: Modifier) {
     val current = remember { mutableStateListOf<TimedPt>() }
@@ -152,6 +153,8 @@ private fun DrawingPad(strokes: List<List<TimedPt>>, onStroke: (List<TimedPt>) -
                     current += TimedPt(down.position.x, down.position.y, down.uptimeMillis)
                     drag(down.id) { change ->
                         change.consume()
+                        // Fast strokes arrive batched: keep the intermediate samples too.
+                        change.historical.forEach { current += TimedPt(it.position.x, it.position.y, it.uptimeMillis) }
                         current += TimedPt(change.position.x, change.position.y, change.uptimeMillis)
                     }
                     if (current.isNotEmpty()) onStroke(current.toList())
