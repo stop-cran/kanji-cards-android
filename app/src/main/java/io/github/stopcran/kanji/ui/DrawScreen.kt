@@ -192,15 +192,46 @@ private fun Reference(source: List<Stroke>, flagged: Set<Int>, numbers: Boolean)
     val measurer = rememberTextMeasurer()
     val brush = LocalBrush.current
     val look = LocalBrushLook.current
+    val labels = remember(reference) { strokeNumberPositions(reference) }
     Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
         val k = size.width / 109f
         reference.forEachIndexed { i, s ->
             val c = if (i in flagged) Bad else Good
             drawBrushStroke(s.map { Offset(it.x.toFloat() * k, it.y.toFloat() * k) }, c, brush, look = look)
             if (numbers) {
-                val p = s.first()
-                drawText(measurer, "${i + 1}", Offset(p.x.toFloat() * k - 12f, p.y.toFloat() * k - 26f), style = TextStyle(color = c, fontSize = 11.sp))
+                val layout = measurer.measure("${i + 1}", TextStyle(color = c, fontSize = 15.sp))
+                val centre = labels[i] * k
+                drawText(layout, topLeft = centre - Offset(layout.size.width / 2f, layout.size.height / 2f))
             }
         }
+    }
+}
+
+/**
+ * Where to put each stroke number (in 109-unit reference space): next to the stroke start, on the side
+ * with the most free room, so a number never sits on top of any stroke or another number.
+ */
+internal fun strokeNumberPositions(strokes: List<Stroke>): List<Offset> {
+    val ink = strokes.flatMap { s -> densify(s.map { Offset(it.x.toFloat(), it.y.toFloat()) }, 1.5f) }
+    val placed = ArrayList<Offset>()
+    return strokes.map { s ->
+        val start = Offset(s.first().x.toFloat(), s.first().y.toFloat())
+        val ahead = s.getOrNull(minOf(3, s.size - 1)) ?: s.first()
+        val back = kotlin.math.atan2(start.y - ahead.y.toFloat(), start.x - ahead.x.toFloat())
+        var best = start
+        var bestScore = -Float.MAX_VALUE
+        for (radius in listOf(6f, 8f, 10f)) {
+            for (step in 0 until 16) {
+                val angle = step * (2 * Math.PI / 16)
+                val cand = Offset(start.x + radius * kotlin.math.cos(angle).toFloat(), start.y + radius * kotlin.math.sin(angle).toFloat())
+                if (cand.x < 4f || cand.y < 4f || cand.x > 105f || cand.y > 105f) continue
+                val clearance = minOf(ink.minOf { (it - cand).getDistance() }, placed.minOfOrNull { (it - cand).getDistance() * 0.8f } ?: 99f)
+                val away = kotlin.math.cos(angle - back).toFloat()
+                val score = minOf(clearance, 6f) * 2f + away - radius * 0.1f
+                if (score > bestScore) { bestScore = score; best = cand }
+            }
+        }
+        placed += best
+        best
     }
 }
