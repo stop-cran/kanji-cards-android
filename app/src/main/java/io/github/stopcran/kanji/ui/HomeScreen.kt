@@ -24,7 +24,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 @Composable
-fun HomeScreen(app: KanjiApp, onSettings: () -> Unit, onCards: () -> Unit, onQuiz: () -> Unit) {
+fun HomeScreen(app: KanjiApp, onSettings: () -> Unit, onCards: () -> Unit, onQuiz: (Boolean) -> Unit) {
     val source by app.settings.source.collectAsState()
     val dailyNew by app.settings.dailyNewCards.collectAsState()
     val kanji by remember(source) { app.db.content().observeKanji(source.id) }.collectAsState(emptyList())
@@ -52,7 +52,8 @@ fun HomeScreen(app: KanjiApp, onSettings: () -> Unit, onCards: () -> Unit, onQui
         if (syncStatus.isNotEmpty()) Text(syncStatus)
         Text("${kanji.size} cards from ${source.id}")
         Text("Meaning quiz: $due due, $fresh new today")
-        Button(onClick = onQuiz, enabled = queue.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Start meaning quiz") }
+        Button(onClick = { onQuiz(false) }, enabled = queue.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Start meaning quiz") }
+        OutlinedButton(onClick = { onQuiz(true) }, enabled = kanji.size >= 2, modifier = Modifier.fillMaxWidth()) { Text("Extra practice") }
         OutlinedButton(onClick = onCards, enabled = kanji.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Browse cards") }
     }
 }

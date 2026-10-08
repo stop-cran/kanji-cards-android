@@ -50,3 +50,9 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
   with `TOKEN = gh auth token --user stop-cran`.
 - Non-ASCII output from Python/PowerShell needs `$env:PYTHONIOENCODING='utf-8'`.
 - The file `create` tool refuses existing files and missing parent directories; create folders first.
+
+## Markdown viewer and extra practice
+- `core/markdown` is a small own parser (no library, no HTML). `Links.resolve` only allows `https://` and repo-relative `.md` links into `kanji/`, `words/`, `articles/`; anything else stays plain text. Content is untrusted.
+- `ui/MarkdownView` renders blocks; doc links push a `doc:<path>` route (`DocScreen`), so Back returns to the quiz exactly where it was (quiz ViewModel is keyed by its route and survives).
+- Do not call composable helpers from non-composable lambdas (table rows are a separate `@Composable`).
+- Quiz routes: `quiz:<ts>` (due + new) and `quiz:<ts>:extra` (`QueueBuilder.extra`, 10 cards: overdue, unseen, soonest due). The ViewModel starts via `ensureStarted(extra)` from `LaunchedEffect`, never in `init`.

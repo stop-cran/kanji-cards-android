@@ -11,6 +11,16 @@ import java.time.Instant
 
 class RepoAndQueueTest {
     @Test
+    fun extraPracticeOrdersOverdueUnseenThenUpcomingWithLimit() {
+        val now = Instant.parse("2025-01-10T00:00:00Z")
+        fun st(due: Instant) = SrsState(CardPhase.Review, 3.0, 5.0, due, now.minusSeconds(1000))
+        val states = mapOf("A" to st(now.plusSeconds(900)), "B" to st(now.plusSeconds(100)), "C" to st(now.minusSeconds(5)))
+        val q = QueueBuilder.extra(listOf("A", "B", "C", "D"), states, now).map { it.kanji }
+        assertEquals(listOf("C", "D", "B", "A"), q)
+        assertEquals(2, QueueBuilder.extra(listOf("A", "B", "C", "D"), states, now, limit = 2).size)
+    }
+
+    @Test
     fun parsesGitHubUrls() {
         val s = RepoSource.parse("https://github.com/stop-cran/learning-japanese", "main")!!
         assertEquals("stop-cran/learning-japanese", s.id)

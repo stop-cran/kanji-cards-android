@@ -9,7 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.toMutableStateList
-import io.github.stopcran.kanji.ui.CardDetailScreen
+import io.github.stopcran.kanji.ui.DocScreen
 import io.github.stopcran.kanji.ui.CardsScreen
 import io.github.stopcran.kanji.ui.HomeScreen
 import io.github.stopcran.kanji.ui.QuizScreen
@@ -36,13 +36,24 @@ private fun AppNav(app: KanjiApp) {
 
     when (val route = stack.last()) {
         "settings" -> SettingsScreen(app, onBack = ::pop)
-        "cards" -> CardsScreen(app, onBack = ::pop, onOpen = { push("card:$it") })
+        "cards" -> CardsScreen(app, onBack = ::pop, onOpen = { push("doc:kanji/$it.md") })
         else -> if (route.startsWith("quiz:")) {
-            QuizScreen(sessionKey = route, onBack = ::pop)
-        } else if (route.startsWith("card:")) {
-            CardDetailScreen(app, route.removePrefix("card:"), onBack = ::pop)
+            QuizScreen(
+                sessionKey = route,
+                onBack = ::pop,
+                onOpenDoc = { push("doc:$it") },
+                onPracticeMore = { pop(); push("quiz:${System.currentTimeMillis()}:extra") },
+            )
+        } else if (route.startsWith("doc:")) {
+            val path = route.removePrefix("doc:")
+            DocScreen(app, path, onBack = ::pop, onOpenDoc = { push("doc:$it") })
         } else {
-            HomeScreen(app, onSettings = { push("settings") }, onCards = { push("cards") }, onQuiz = { push("quiz:${System.currentTimeMillis()}") })
+            HomeScreen(
+                app,
+                onSettings = { push("settings") },
+                onCards = { push("cards") },
+                onQuiz = { extra -> push("quiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
+            )
         }
     }
 }

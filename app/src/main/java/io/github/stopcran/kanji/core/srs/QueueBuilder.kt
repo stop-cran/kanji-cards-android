@@ -24,4 +24,12 @@ object QueueBuilder {
             .map { QueueItem(it, states[it] ?: SrsState(), true) }
         return (due + fresh).take(limit)
     }
-}
+
+    /** Extra practice when nothing is due: overdue, then unseen, then the soonest-due cards. Early reviews simply go through FSRS. */
+    fun extra(allKanji: List<String>, states: Map<String, SrsState>, now: Instant, limit: Int = 10): List<QueueItem> {
+        val seen = allKanji.mapNotNull { k -> states[k]?.takeIf { it.phase != CardPhase.New }?.let { k to it } }
+        val overdue = seen.filter { !it.second.due.isAfter(now) }.sortedBy { it.second.due }.map { QueueItem(it.first, it.second, false) }
+        val fresh = allKanji.filter { k -> seen.none { it.first == k } }.map { QueueItem(it, states[it] ?: SrsState(), true) }
+        val upcoming = seen.filter { it.second.due.isAfter(now) }.sortedBy { it.second.due }.map { QueueItem(it.first, it.second, false) }
+        return (overdue + fresh + upcoming).take(limit)
+    }}

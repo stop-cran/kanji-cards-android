@@ -53,11 +53,15 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     private var answered = 0
     private var correct = 0
 
-    init {
-        viewModelScope.launch { start() }
+    private var started = false
+
+    fun ensureStarted(extra: Boolean) {
+        if (started) return
+        started = true
+        viewModelScope.launch { start(extra) }
     }
 
-    private suspend fun start() {
+    private suspend fun start(extra: Boolean) {
         val source = app.settings.source.value
         sourceId = source.id
         val all = app.db.content().kanji(sourceId)
@@ -72,7 +76,8 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val introduced = app.db.reviews().newCardsIntroducedSince(sourceId, StudyMode.Quiz.name, startOfDay)
         val budget = app.settings.dailyNewCards.value - introduced
-        queue.addAll(QueueBuilder.build(all.map { it.kanji }, states, Instant.now(), budget).map { it.kanji })
+        val items = if (extra) QueueBuilder.extra(all.map { it.kanji }, states, Instant.now()) else QueueBuilder.build(all.map { it.kanji }, states, Instant.now(), budget)
+        queue.addAll(items.map { it.kanji })
         showNext()
     }
 

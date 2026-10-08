@@ -31,17 +31,3 @@ fun CardsScreen(app: KanjiApp, onBack: () -> Unit, onOpen: (String) -> Unit) {
         }
     }
 }
-
-@Composable
-fun CardDetailScreen(app: KanjiApp, kanji: String, onBack: () -> Unit) {
-    val source by app.settings.source.collectAsState()
-    val card by produceState<io.github.stopcran.kanji.data.KanjiEntity?>(null, source, kanji) { value = app.db.content().kanjiCard(source.id, kanji) }
-    Page(kanji, onBack) {
-        card?.let { c ->
-            Text(c.kanji, fontSize = 64.sp)
-            Text(c.title, style = MaterialTheme.typography.titleLarge)
-            Text("on: " + c.onyomi.splitSep().joinToString(" ") + "   kun: " + c.kunyomi.splitSep().joinToString(" "))
-            Text(c.body, modifier = Modifier.padding(top = 12.dp))
-        }
-    }
-}

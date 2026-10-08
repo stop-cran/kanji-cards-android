@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,7 +29,8 @@ private val Green = Color(0xFF2E7D32)
 private val Red = Color(0xFFC62828)
 
 @Composable
-fun QuizScreen(sessionKey: String, onBack: () -> Unit, vm: QuizViewModel = viewModel(key = sessionKey)) {
+fun QuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit, onPracticeMore: () -> Unit, vm: QuizViewModel = viewModel(key = sessionKey)) {
+    LaunchedEffect(sessionKey) { vm.ensureStarted(sessionKey.endsWith(":extra")) }
     Page("Quiz", onBack) {
         when (val s = vm.ui) {
             QuizUi.Loading -> Text("Loading…")
@@ -35,7 +38,8 @@ fun QuizScreen(sessionKey: String, onBack: () -> Unit, vm: QuizViewModel = viewM
             is QuizUi.Done -> {
                 Text("Session complete", style = MaterialTheme.typography.headlineSmall)
                 Text("${s.correct} of ${s.answered} answers correct.")
-                Button(onClick = onBack) { Text("Done") }
+                Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Done") }
+                OutlinedButton(onClick = onPracticeMore, modifier = Modifier.fillMaxWidth()) { Text("Practice more") }
             }
             is QuizUi.Question -> {
                 Text("${s.remaining} left", style = MaterialTheme.typography.labelMedium)
@@ -45,14 +49,13 @@ fun QuizScreen(sessionKey: String, onBack: () -> Unit, vm: QuizViewModel = viewM
                     OutlinedButton(onClick = { vm.pick(o.kanji) }, modifier = Modifier.fillMaxWidth()) { Text(o.title) }
                 }
             }
-            is QuizUi.Answer -> AnswerState(s, vm)
+            is QuizUi.Answer -> AnswerState(s, vm, onOpenDoc)
         }
     }
 }
 
 @Composable
-private fun AnswerState(s: QuizUi.Answer, vm: QuizViewModel) {
-    var details by rememberSaveable(s.card.kanji) { mutableStateOf(false) }
+private fun AnswerState(s: QuizUi.Answer, vm: QuizViewModel, onOpenDoc: (String) -> Unit) {
     Text(s.card.kanji, fontSize = 96.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Text(
         if (s.correct) "Correct!" else "Not quite — it means “${s.card.title}”",
@@ -74,11 +77,11 @@ private fun AnswerState(s: QuizUi.Answer, vm: QuizViewModel) {
             colors = ButtonDefaults.buttonColors(disabledContainerColor = color.copy(alpha = if (color == MaterialTheme.colorScheme.outline) 0.15f else 0.9f), disabledContentColor = if (color == MaterialTheme.colorScheme.outline) MaterialTheme.colorScheme.onSurfaceVariant else Color.White),
         ) { Text(o.title) }
     }
-    Text("on: ${s.card.onyomi.splitSep().joinToString(" ")}   kun: ${s.card.kunyomi.splitSep().joinToString(" ")}", modifier = Modifier.padding(top = 8.dp))
+    Text("${s.card.title}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 4.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Button(onClick = { vm.next() }, modifier = Modifier.weight(1f)) { Text(if (s.correct) "Next" else "Next (will repeat)") }
         if (s.correct) OutlinedButton(onClick = { vm.next(guessed = true) }) { Text("I guessed") }
     }
-    OutlinedButton(onClick = { details = !details }, modifier = Modifier.fillMaxWidth()) { Text(if (details) "Hide details" else "Details") }
-    if (details) Text(s.card.body)
+    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+    MarkdownView(s.card.body, "kanji/${s.card.kanji}.md", onOpenDoc)
 }
