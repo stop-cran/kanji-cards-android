@@ -2,8 +2,13 @@ package io.github.stopcran.kanji
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -51,7 +56,8 @@ private fun HomeScreen(app: KanjiApp) {
 
     val card = selected
     if (card != null) {
-        Column(Modifier.padding(16.dp)) {
+        BackHandler { selected = null }
+        Column(Modifier.statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(16.dp)) {
             Button(onClick = { selected = null }) { Text("Back") }
             Text(card.kanji, fontSize = 64.sp)
             Text(card.title, style = MaterialTheme.typography.titleLarge)
@@ -61,7 +67,7 @@ private fun HomeScreen(app: KanjiApp) {
         return
     }
 
-    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.statusBarsPadding().navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(url, { url = it }, label = { Text("Content repo URL") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(branch, { branch = it }, label = { Text("Branch") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         Button(onClick = {
