@@ -25,6 +25,10 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
 - **Edge-to-edge on API 35:** content draws under the status/navigation bars; a button there is visible but untouchable. Every screen goes
   through `ui/Page`, which applies `statusBarsPadding`/`navigationBarsPadding` and a scroll container. Don't build screens without it.
 - **System back:** `BackHandler` in `AppNav` pops the route stack; without it back closes the app.
+- **ViewModel scope:** `viewModel()` is scoped to the Activity, not to a route, so a quiz VM outlives leaving the screen and would resume
+  mid-answer. The quiz route is `quiz:<timestamp>` and the VM is created with that key, giving each start a fresh session while still
+  surviving rotation. Do the same for any new session-like screen.
+- **Back stack route strings:** `home`, `settings`, `cards`, `quiz:<id>`, `card:<kanji>`.
 - **Manifest hashes** are computed over LF-normalised bytes (`tools/build_manifest.py` in the content repo and `ContentParser.sha256`). Keep
   both in sync, otherwise files fail with "hash mismatch" on Windows checkouts with CRLF.
 - **Content is untrusted.** Parse defensively, skip bad files instead of failing the sync, never render raw HTML, cap archive sizes.

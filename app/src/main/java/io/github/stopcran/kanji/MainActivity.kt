@@ -37,11 +37,12 @@ private fun AppNav(app: KanjiApp) {
     when (val route = stack.last()) {
         "settings" -> SettingsScreen(app, onBack = ::pop)
         "cards" -> CardsScreen(app, onBack = ::pop, onOpen = { push("card:$it") })
-        "quiz" -> QuizScreen(onBack = ::pop)
-        else -> if (route.startsWith("card:")) {
+        else -> if (route.startsWith("quiz:")) {
+            QuizScreen(sessionKey = route, onBack = ::pop)
+        } else if (route.startsWith("card:")) {
             CardDetailScreen(app, route.removePrefix("card:"), onBack = ::pop)
         } else {
-            HomeScreen(app, onSettings = { push("settings") }, onCards = { push("cards") }, onQuiz = { push("quiz") })
+            HomeScreen(app, onSettings = { push("settings") }, onCards = { push("cards") }, onQuiz = { push("quiz:${System.currentTimeMillis()}") })
         }
     }
 }

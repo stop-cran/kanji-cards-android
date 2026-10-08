@@ -27,7 +27,7 @@ private val Green = Color(0xFF2E7D32)
 private val Red = Color(0xFFC62828)
 
 @Composable
-fun QuizScreen(onBack: () -> Unit, vm: QuizViewModel = viewModel()) {
+fun QuizScreen(sessionKey: String, onBack: () -> Unit, vm: QuizViewModel = viewModel(key = sessionKey)) {
     Page("Quiz", onBack) {
         when (val s = vm.ui) {
             QuizUi.Loading -> Text("Loading…")
