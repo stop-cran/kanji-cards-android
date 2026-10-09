@@ -37,16 +37,10 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
     val scope = rememberCoroutineScope()
 
     fun saveAndSync() {
-        val n = dailyNew.toIntOrNull()
-        if (n == null || n !in 0..200) {
-            status = "Daily new cards must be a number from 0 to 200"
-            return
-        }
         if (!app.settings.setSource(url, branch)) {
             status = "Invalid repository URL (expected https://github.com/<owner>/<repo>) or branch"
             return
         }
-        app.settings.setDailyNewCards(n)
         status = "Syncing…"
         scope.launch {
             status = when (val r = app.contentSync.sync(app.settings.source.value, force = true)) {
@@ -58,30 +52,20 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
     }
 
     Page("Settings", onBack) {
-        Text("Content repository", style = MaterialTheme.typography.titleMedium)
-        Text(
-            "Cards, words and articles are downloaded from a public GitHub repository, so they can be corrected without an app update. " +
-                "The default is the author's repository. Fork it on GitHub, edit the cards and articles in your fork, " +
-                "and enter your fork's URL here to study your own version. Each repository keeps its own review progress.",
-            style = MaterialTheme.typography.bodyMedium,
+        Text("Studying", style = MaterialTheme.typography.titleMedium)
+        OutlinedTextField(
+            dailyNew,
+            { text ->
+                dailyNew = text.filter(Char::isDigit).take(3)
+                dailyNew.toIntOrNull()?.takeIf { it in 0..200 }?.let { app.settings.setDailyNewCards(it) }
+            },
+            label = { Text("New cards per day (0-200)") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
         )
-        OutlinedTextField(url, { url = it }, label = { Text("Repository URL") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(branch, { branch = it }, label = { Text("Branch") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(dailyNew, { dailyNew = it.filter(Char::isDigit).take(3) }, label = { Text("New cards per day") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         val vary by app.settings.varyFonts.collectAsState()
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Vary kanji fonts as cards mature", modifier = Modifier.weight(1f))
             Switch(vary, { app.settings.setVaryFonts(it) })
         }
-        Text("Brush for drawing", style = MaterialTheme.typography.titleMedium)
-        val brush by app.settings.brush.collectAsState()
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            BrushStyle.entries.forEach { b ->
-                androidx.compose.material3.FilterChip(brush == b, { app.settings.setBrush(b) }, label = { Text(b.label, maxLines = 2) }, modifier = Modifier.weight(1f))
-            }
-        }
-        Text(brush.hint, style = MaterialTheme.typography.bodySmall)
-        BrushPreview(brush)
         val remind by app.settings.reminderEnabled.collectAsState()
         val remindHour by app.settings.reminderHour.collectAsState()
         val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
@@ -123,6 +107,31 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             "Only when cards are due and you have not studied today. If you ignore them, the gaps grow (1, 2, 4, 7, 14 days) and then they stop until you study again.",
             style = MaterialTheme.typography.bodySmall,
         )
+        Text("Drawing", style = MaterialTheme.typography.titleMedium)
+        val brush by app.settings.brush.collectAsState()
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            BrushStyle.entries.forEach { b ->
+                androidx.compose.material3.FilterChip(brush == b, { app.settings.setBrush(b) }, label = { Text(b.label, maxLines = 2) }, modifier = Modifier.weight(1f))
+            }
+        }
+        Text(brush.hint, style = MaterialTheme.typography.bodySmall)
+        BrushPreview(brush)
+        Text("Advanced", style = MaterialTheme.typography.titleMedium)
+        Text("Content repository", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "Cards, words and articles are downloaded from a public GitHub repository, so they can be corrected without an app update. " +
+                "The default is the author's repository. Fork it on GitHub, edit the cards and articles in your fork, " +
+                "and enter your fork's URL here to study your own version. Each repository keeps its own review progress.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        OutlinedTextField(url, { url = it }, label = { Text("Repository URL") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(branch, { branch = it }, label = { Text("Branch") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = ::saveAndSync) { Text("Save & sync") }
+            OutlinedButton(onClick = { url = Defaults.CONTENT_REPO_URL; branch = Defaults.CONTENT_BRANCH }) { Text("Use default repo") }
+        }
+        if (status.isNotEmpty()) Text(status)
+        Text("Handwriting data", style = MaterialTheme.typography.titleSmall)
         val save by app.settings.saveDrawings.collectAsState()
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Save my drawings on this device to help tune handwriting checks", modifier = Modifier.weight(1f))
@@ -151,11 +160,6 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             style = MaterialTheme.typography.bodySmall,
         )
         if (exportStatus.isNotEmpty()) Text(exportStatus, style = MaterialTheme.typography.bodySmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = ::saveAndSync) { Text("Save & sync") }
-            OutlinedButton(onClick = { url = Defaults.CONTENT_REPO_URL; branch = Defaults.CONTENT_BRANCH }) { Text("Use default repo") }
-        }
-        if (status.isNotEmpty()) Text(status)
         TextButton(onClick = onAbout) { Text("About, sources and licences") }
         Text(source.id + (meta?.let { " — content version ${it.contentVersion}" } ?: " — not synced yet"), style = MaterialTheme.typography.bodySmall)
     }
