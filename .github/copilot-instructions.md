@@ -1,7 +1,7 @@
 # Kanji Cards Android – working notes
 
 Kotlin + Jetpack Compose app that studies kanji from a user-configurable GitHub content repo (default `stop-cran/learning-japanese`).
-Plan: `docs/PLAN.md`. Content format: `docs/CONTENT-SCHEMA.md` and the content repo's `docs/content-format.md`.
+Design decisions, principles, invariants and evolution: `docs/DESIGN.md` (read first; update it when a decision changes). Plan: `docs/PLAN.md`. Content format: `docs/CONTENT-SCHEMA.md` and the content repo's `docs/content-format.md`.
 Keep this file current: add a short note whenever you hit a gotcha, pitfall or non-obvious decision.
 
 ## Layout
