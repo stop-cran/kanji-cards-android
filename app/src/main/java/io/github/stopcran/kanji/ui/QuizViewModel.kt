@@ -36,7 +36,7 @@ sealed interface QuizUi {
     data object Loading : QuizUi
     data class Empty(val message: String) : QuizUi
     data class Question(val card: KanjiEntity, val options: List<QuizOption>, val remaining: Int, val font: KanjiFont) : QuizUi
-    data class Answer(val card: KanjiEntity, val options: List<QuizOption>, val picked: String, val remaining: Int, val font: KanjiFont) : QuizUi {
+    data class Answer(val card: KanjiEntity, val options: List<QuizOption>, val picked: String, val remaining: Int, val font: KanjiFont, val heard: String? = null) : QuizUi {
         val correct: Boolean get() = picked == card.kanji
     }
     data class Done(val answered: Int, val correct: Int) : QuizUi
@@ -108,9 +108,15 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         ui = QuizUi.Question(card, QuizBuilder.options(target, quizCards, random), queue.size + 1, nextFont(kanji))
     }
 
-    fun pick(kanji: String) {
+    fun pick(kanji: String, heard: String? = null) {
         val q = ui as? QuizUi.Question ?: return
-        ui = QuizUi.Answer(q.card, q.options, kanji, q.remaining, q.font)
+        ui = QuizUi.Answer(q.card, q.options, kanji, q.remaining, q.font, heard)
+    }
+
+    /** Takes back a voice pick that was misheard; nothing has been recorded before [next]. */
+    fun retry() {
+        val a = ui as? QuizUi.Answer ?: return
+        if (a.heard != null) ui = QuizUi.Question(a.card, a.options, a.remaining, a.font)
     }
 
     /** Wrong answers are graded Again; right ones Good, or Hard when the user admits guessing. */

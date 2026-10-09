@@ -23,7 +23,7 @@
 ## Data safety form (draft)
 - Data collected / shared: **none** (no server, no analytics, no ads).
 - Network use: downloads public content from GitHub and the ML Kit handwriting model from Google; sends no personal data.
-- Optional permission: `POST_NOTIFICATIONS` for the reminder.
+- Optional permissions: `POST_NOTIFICATIONS` for the reminder; `RECORD_AUDIO` for opt-in on-device voice input (audio never leaves the device or is stored, so it is not "collected"; re-check this answer against the current form).
 - On-device data: progress and optional drawing log; Android Auto Backup is enabled (user's own Google backup).
 - Content rating: questionnaire answers are all "no".
 

@@ -103,6 +103,13 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - The displayed "correct strokes" are jittered for display only; grading always uses the unmodified reference and the raw points.
 - Short strokes (dots, ticks) get a looser shape limit; hands vary most there.
 
+### Voice input (opt-in, on-device only)
+
+- Voice only **picks among the displayed English options** in the JP-to-EN modes (kanji meaning quiz, word JP-to-EN). It never produces Japanese or kanji: homophones, alternative readings and kun-only ambiguity make that unreliable, and it would not help memorise the characters. EN-to-JP and drawing have no voice input.
+- Detection: `VoiceSupport` needs API 31+ `isOnDeviceRecognitionAvailable`, and on API 33+ an installed English on-device pack (`checkRecognitionSupport`). If unsupported the button is hidden and Settings > Advanced explains why. **There is no fallback to the default (possibly networked) recognizer**, so the "no uploads" principle holds; keep it that way unless DESIGN section 1 and PRIVACY are revised first.
+- `OptionMatcher` (pure, unit-tested) compares recogniser hypotheses only with the shown options; unclear or ambiguous means no result and the learner taps. A voice pick goes through the normal answer state and nothing is recorded until "Next", so a misheard pick can be taken back ("That's not what I said").
+- Audio and recognised text are never stored or logged.
+
 ## 7. UI and platform constraints
 
 - Everything goes through `ui/Page` (edge-to-edge insets, scrolling). Back is a string-route stack in `MainActivity`.

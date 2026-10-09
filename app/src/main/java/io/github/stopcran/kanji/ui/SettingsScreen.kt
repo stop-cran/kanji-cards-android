@@ -136,6 +136,23 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
         }
         if (status.isNotEmpty()) Text(status)
         HorizontalDivider()
+        Text("Voice input", style = MaterialTheme.typography.titleSmall)
+        val voiceOn by app.settings.voiceInput.collectAsState()
+        val voiceStatus by rememberVoiceStatus()
+        when (val v = voiceStatus) {
+            VoiceStatus.Checking -> Text("Checking this device…", style = MaterialTheme.typography.bodySmall)
+            is VoiceStatus.Unavailable -> Text("Not available on this device: ${v.reason}.", style = MaterialTheme.typography.bodySmall)
+            VoiceStatus.Available -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Say the English meaning to answer", modifier = Modifier.weight(1f))
+                Switch(voiceOn, { app.settings.setVoiceInput(it) })
+            }
+        }
+        Text(
+            "Adds a microphone button to the meaning quiz and Japanese → English word quiz, so you can answer by speaking one of the shown options. " +
+                "Recognition runs only on this device: audio is never sent anywhere or saved, and there is no online fallback. " +
+                "The option appears only when the device has an on-device English speech recognizer.",
+            style = MaterialTheme.typography.bodySmall,
+        )
         Text("Handwriting data", style = MaterialTheme.typography.titleSmall)
         val save by app.settings.saveDrawings.collectAsState()
         Row(verticalAlignment = Alignment.CenterVertically) {

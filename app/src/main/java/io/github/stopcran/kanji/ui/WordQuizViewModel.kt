@@ -37,7 +37,7 @@ sealed interface WordQuizUi {
     data class Empty(val message: String) : WordQuizUi
     data class Question(val word: WordEntity, val direction: WordDirection, val options: List<WordOption>, val remaining: Int, val font: KanjiFont) : WordQuizUi
     data class Answer(
-        val word: WordEntity, val direction: WordDirection, val options: List<WordOption>, val picked: String, val remaining: Int, val font: KanjiFont,
+        val word: WordEntity, val direction: WordDirection, val options: List<WordOption>, val picked: String, val remaining: Int, val font: KanjiFont, val heard: String? = null,
     ) : WordQuizUi {
         val correct: Boolean get() = picked == word.word
     }
@@ -117,9 +117,15 @@ class WordQuizViewModel(application: Application) : AndroidViewModel(application
         ui = WordQuizUi.Question(entity, direction, WordQuizBuilder.options(entity.toCard(), cards, direction, random), queue.size + 1, nextFont(word))
     }
 
-    fun pick(word: String) {
+    fun pick(word: String, heard: String? = null) {
         val q = ui as? WordQuizUi.Question ?: return
-        ui = WordQuizUi.Answer(q.word, q.direction, q.options, word, q.remaining, q.font)
+        ui = WordQuizUi.Answer(q.word, q.direction, q.options, word, q.remaining, q.font, heard)
+    }
+
+    /** Takes back a voice pick that was misheard; nothing has been recorded before [next]. */
+    fun retry() {
+        val a = ui as? WordQuizUi.Answer ?: return
+        if (a.heard != null) ui = WordQuizUi.Question(a.word, a.direction, a.options, a.remaining, a.font)
     }
 
     /** Wrong answers are graded Again and asked again a few cards later; right ones Good, or Hard when guessed. */

@@ -54,6 +54,7 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
                 s.options.forEach { o ->
                     OutlinedButton(onClick = { vm.pick(o.word) }, modifier = Modifier.fillMaxWidth()) { Text(o.label) }
                 }
+                if (s.direction == WordDirection.JpToEn) VoiceButton(s.options.map { it.label }, { i, heard -> vm.pick(s.options[i].word, heard) })
             }
             is WordQuizUi.Answer -> Answer(s, vm, onOpenDoc)
         }
@@ -99,6 +100,7 @@ private fun Answer(s: WordQuizUi.Answer, vm: WordQuizViewModel, onOpenDoc: (Stri
             ),
         ) { Text(o.label) }
     }
+    s.heard?.let { VoiceHeard(it, vm::retry) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
         Button(onClick = { vm.next() }, modifier = Modifier.weight(1f)) { Text(if (s.correct) "Next" else "Next (will repeat)") }
         if (s.correct) OutlinedButton(onClick = { vm.next(guessed = true) }) { Text("I guessed") }
