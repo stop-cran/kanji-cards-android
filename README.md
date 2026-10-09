@@ -9,6 +9,7 @@ reviews with FSRS.
 - **Articles** – Markdown with in-app navigation between kanji, words and articles.
 - **Configurable content repo** – point the app at your own fork in Settings; it syncs on launch (only when the branch head changed) and daily in the background.
 - **Stacks** – filter by tag (Starter, JLPT N5…N1); every stack keeps its own FSRS schedule.
+- **Word quizzes** – explicit vocabulary JLPT levels include kana-only words in N5/N4; unlabelled words retain the hardest-kanji fallback. N4 words include N5, with separate schedules for each stack and quiz direction.
 - **Search** in Browse cards: kanji, meaning, kana (katakana prefers on'yomi, hiragana kun'yomi) and romaji.
 - **Gentle reminder** (optional) that backs off while ignored; **brushes**, stroke-number hints and an opt-in drawing log with zip export.
 

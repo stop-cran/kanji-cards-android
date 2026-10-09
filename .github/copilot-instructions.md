@@ -86,3 +86,6 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
 - Content sync skips the download when the branch head SHA equals the stored one; use force=true to bypass.
 - Release signing reads git-ignored keystore.properties; never commit keystores. See docs/RELEASE.md.
 - Source files have mixed LF/CRLF line endings; check before multi-line text replacements.
+- Word `jlpt` is optional vocabulary metadata, not a kanji-derived value to persist. `inWordStack` applies explicit levels first, then the legacy fallback for null; all queue/progression callers share it. Room v3 keeps IDs/SRS state and clears only sync metadata so previously ignored labels are reimported even from an unchanged revision.
+- Only omitted word `jlpt` enables fallback: present values must be top-level unquoted integers 1-5. Preserve raw front-matter entries to reject blank/quoted/list values and duplicate or multiline shadowing without changing kanji parsing. Never synthesize level tags; word tags and quiz tag scoring stay independent of `jlpt`.
+- `DatabaseMigrationTest` runs Room upgrades/reopen tests on Robolectric native SQLite (API 28), without the content repo or an emulator. Room 2.6 databases are not `Closeable`; close them explicitly in `finally` rather than using Kotlin `use`.

@@ -16,13 +16,24 @@ enum class WordDirection(val mode: StudyMode) {
     val other: WordDirection get() = if (this == JpToEn) EnToJp else JpToEn
 }
 
-data class WordCard(val word: String, val reading: String, val title: String, val type: String?, val kanji: List<String>, val tags: List<String> = emptyList())
+data class WordCard(
+    val word: String,
+    val reading: String,
+    val title: String,
+    val type: String?,
+    val kanji: List<String>,
+    val tags: List<String> = emptyList(),
+    val jlpt: Int? = null,
+    val quizExclusions: List<String> = emptyList(),
+)
 
 /**
- * A word's JLPT level is that of its hardest kanji (N5 = 5 is easiest, so the lowest number). Words without kanji, or with a kanji
- * that has no known level, have no level: they appear only in the "all words" stack.
+ * An explicit vocabulary JLPT level wins, independently of the written kanji. Otherwise use the hardest kanji
+ * (N5 = 5 is easiest, so the lowest number). Unlabelled words without kanji, or with an unknown kanji level,
+ * appear only in the "all words" stack.
  */
-fun wordLevel(kanji: List<String>, kanjiLevels: Map<String, Int?>): Int? {
+fun wordLevel(kanji: List<String>, kanjiLevels: Map<String, Int?>, jlpt: Int? = null): Int? {
+    if (jlpt != null) return jlpt
     if (kanji.isEmpty()) return null
     val levels = kanji.map { kanjiLevels[it] ?: return null }
     return levels.min()
@@ -74,16 +85,18 @@ data class WordOption(val word: String, val label: String)
 
 /**
  * Builds answer options for a word. Wrong options are the "same kind" of word: the most shared tags and the same type
- * first, with a bonus for sharing a kanji with the target (the confusions that matter). Options never share a meaning
- * or a written form with the target or each other, so there is exactly one correct answer.
+ * first, with a bonus for sharing a kanji with the target (the confusions that matter). Exact title/written-form
+ * duplicates and curated exclusion pairs are kept apart; other semantic overlaps are not inferred.
  */
 object WordQuizBuilder {
     fun options(target: WordCard, all: List<WordCard>, direction: WordDirection, random: Random, count: Int = 4): List<WordOption> {
         val usedTitles = hashSetOf(target.title)
         val usedWords = hashSetOf(target.word)
         val chosen = ArrayList<WordCard>()
+        fun excluded(a: WordCard, b: WordCard) = b.word in a.quizExclusions || a.word in b.quizExclusions
         fun tryAdd(c: WordCard) {
-            if (chosen.size < count - 1 && c.word !in usedWords && usedTitles.add(c.title)) {
+            if (chosen.size < count - 1 && c.word !in usedWords &&
+                !excluded(target, c) && chosen.none { excluded(it, c) } && usedTitles.add(c.title)) {
                 usedWords += c.word
                 chosen += c
             }

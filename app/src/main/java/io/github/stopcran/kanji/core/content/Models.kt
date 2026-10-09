@@ -34,6 +34,8 @@ data class WordArticle(
     val kanji: List<String>,
     val tags: List<String>,
     val body: String,
+    val jlpt: Int? = null,
+    val quizExclusions: List<String> = emptyList(),
 )
 
 data class Article(val slug: String, val title: String, val body: String)

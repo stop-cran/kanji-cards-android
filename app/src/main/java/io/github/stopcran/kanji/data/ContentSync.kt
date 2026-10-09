@@ -72,7 +72,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings) {
                     i,
                 )
             }
-            val words = parsed.words.map { WordEntity(source.id, it.word, it.reading, it.title, it.type, it.kanji.joinSep(), it.tags.joinSep(), it.body) }
+            val words = parsed.words.map { it.toEntity(source.id) }
             val articles = parsed.articles.map { ArticleEntity(source.id, it.slug, it.title, it.body) }
             val meta = SyncMetaEntity(source.id, parsed.manifest.contentVersion, System.currentTimeMillis(), parsed.problems.size)
             dao.replaceContent(source.id, kanji, words, articles, meta)

@@ -1,5 +1,6 @@
 package io.github.stopcran.kanji.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -45,6 +46,8 @@ data class WordEntity(
     val kanji: String,
     val tags: String,
     val body: String,
+    val jlpt: Int? = null,
+    @ColumnInfo(defaultValue = "''") val quizExclusions: String = "",
 )
 
 @Entity(tableName = "articles", primaryKeys = ["sourceId", "slug"])
@@ -184,7 +187,7 @@ interface ReviewDao {
 
 @Database(
     entities = [KanjiEntity::class, WordEntity::class, ArticleEntity::class, ReviewStateEntity::class, ReviewLogEntity::class, SyncMetaEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -206,5 +209,14 @@ val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
         db.execSQL("DROP TABLE review_state")
         db.execSQL("ALTER TABLE review_state_new RENAME TO review_state")
         db.execSQL("ALTER TABLE review_log ADD COLUMN stack TEXT NOT NULL DEFAULT 'all'")
+    }
+}
+
+/** Keep content and review state; reimport even an unchanged snapshot to pick up previously ignored word metadata. */
+val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE words ADD COLUMN jlpt INTEGER")
+        db.execSQL("ALTER TABLE words ADD COLUMN quizExclusions TEXT NOT NULL DEFAULT ''")
+        db.execSQL("DELETE FROM sync_meta")
     }
 }

@@ -58,6 +58,19 @@ object ContentParser {
             }
         }
 
+        // A rejected word can make another word's references dangling; do not persist references to skipped files.
+        while (true) {
+            val wordIds = words.mapTo(hashSetOf()) { it.word }
+            val removed = words.removeAll { word ->
+                val missing = word.quizExclusions.filter { it !in wordIds }
+                if (missing.isEmpty()) false else {
+                    problems += "words/${word.word}.md: 'quiz_exclusions' references missing words: ${missing.joinToString(", ")}"
+                    true
+                }
+            }
+            if (!removed) break
+        }
+
         val titles = HashSet<String>()
         val unique = kanji.filter { c ->
             titles.add(c.title).also { if (!it) problems += "kanji/${c.kanji}.md: duplicate title '${c.title}'" }
@@ -90,7 +103,7 @@ object ContentParser {
     }
 
     fun parseWord(path: String, text: String): WordArticle {
-        val fm = FrontMatter.parse(text) ?: throw ContentException("missing front matter")
+        val fm = FrontMatter.parse(text, requirePlainKeys = true) ?: throw ContentException("missing front matter")
         val f = fm.fields
         val word = f.str("word") ?: throw ContentException("missing 'word'")
         if (word != path.substringAfterLast('/').removeSuffix(".md")) throw ContentException("'word' must match the file name")
@@ -102,6 +115,8 @@ object ContentParser {
             kanji = f.list("kanji"),
             tags = f.list("tags"),
             body = fm.body,
+            jlpt = fm.wordJlpt(),
+            quizExclusions = fm.wordQuizExclusions(word),
         )
     }
 
@@ -125,6 +140,34 @@ object ContentParser {
         !path.startsWith("/") && !path.contains('\\') && path.split('/').none { it == ".." || it.isEmpty() }
 
     private fun Map<String, Any>.str(key: String): String? = (this[key] as? String)?.takeIf { it.isNotEmpty() }
+
+    private fun FrontMatter.Parsed.wordJlpt(): Int? {
+        val expected = "a single top-level unquoted integer from 1 to 5"
+        val field = wordDeclaration("jlpt", expected) ?: return null
+        if (!field.rawValue.matches(Regex("[1-5]"))) {
+            throw ContentException("'jlpt' must be $expected")
+        }
+        return field.rawValue.toInt()
+    }
+
+    private fun FrontMatter.Parsed.wordQuizExclusions(word: String): List<String> {
+        val field = wordDeclaration("quiz_exclusions", "a single top-level unquoted-key inline list") ?: return emptyList()
+        val ids = FrontMatter.parseStringList(field.rawValue)
+            ?: throw ContentException("'quiz_exclusions' must be an inline list of strings")
+        if (ids.any { it.isBlank() || it.any { c -> c.isISOControl() || c == '/' || c == '\\' } }) {
+            throw ContentException("'quiz_exclusions' contains an empty or invalid word ID")
+        }
+        if (ids.size != ids.toSet().size) throw ContentException("'quiz_exclusions' contains duplicate IDs")
+        if (word in ids) throw ContentException("'quiz_exclusions' must not contain the word itself")
+        return ids
+    }
+
+    private fun FrontMatter.Parsed.wordDeclaration(key: String, expected: String): FrontMatter.Entry? {
+        // Word-header syntax is already validated; retain every entry so duplicate canonical keys cannot be hidden.
+        val declarations = entries.filter { it.key == key }
+        if (declarations.isEmpty()) return null
+        return declarations.singleOrNull() ?: throw ContentException("'$key' must be $expected")
+    }
 
     @Suppress("UNCHECKED_CAST")
     private fun Map<String, Any>.list(key: String): List<String> = (this[key] as? List<String>) ?: emptyList()

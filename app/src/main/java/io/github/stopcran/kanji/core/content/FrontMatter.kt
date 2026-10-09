@@ -2,35 +2,75 @@ package io.github.stopcran.kanji.core.content
 
 /** Minimal front-matter reader: `key: value` scalars and inline `[a, b]` lists. Content is untrusted, so no full YAML. */
 object FrontMatter {
-    data class Parsed(val fields: Map<String, Any>, val body: String)
+    data class Entry(val key: String, val rawValue: String, val indented: Boolean)
+    data class Parsed(val fields: Map<String, Any>, val body: String, val entries: List<Entry>)
+    private val plainKey = Regex("[A-Za-z_][A-Za-z0-9_-]*")
 
-    fun parse(text: String): Parsed? {
+    fun parse(text: String, requirePlainKeys: Boolean = false): Parsed? {
         val normalized = text.removePrefix("\uFEFF").replace("\r\n", "\n")
         if (!normalized.startsWith("---\n")) return null
         val end = normalized.indexOf("\n---", 4)
         if (end < 0) return null
         val header = normalized.substring(4, end)
-        val afterMarker = normalized.indexOf('\n', end + 1).let { if (it < 0) normalized.length else it + 1 }
+        val markerEnd = normalized.indexOf('\n', end + 1).let { if (it < 0) normalized.length else it }
+        if (requirePlainKeys) {
+            // A delimiter prefix must not conceal unsupported keys from word-header validation.
+            val suffix = normalized.substring(end + 4, markerEnd)
+            if (suffix.isNotBlank() && (!suffix.first().isWhitespace() || !suffix.trimStart().startsWith("#"))) {
+                throw ContentException("word front matter must end with a standalone '---' delimiter")
+            }
+        }
+        val afterMarker = if (markerEnd < normalized.length) markerEnd + 1 else markerEnd
         val body = normalized.substring(afterMarker).trimStart('\n')
-        val fields = LinkedHashMap<String, Any>()
+        val entries = mutableListOf<Entry>()
         for (line in header.split('\n')) {
             if (line.isBlank() || line.trimStart().startsWith("#")) continue
             val colon = line.indexOf(':')
+            if (requirePlainKeys && (colon <= 0 || !plainKey.matches(line.substring(0, colon).trimEnd()))) {
+                throw ContentException("word header keys must be unquoted, unindented ASCII identifiers matching [A-Za-z_][A-Za-z0-9_-]*")
+            }
             if (colon <= 0) return null
             val key = line.substring(0, colon).trim()
             val raw = line.substring(colon + 1).trim()
-            fields[key] = parseValue(raw)
+            entries += Entry(key, raw, line.first().isWhitespace())
         }
-        return Parsed(fields, body)
+        val fields = LinkedHashMap<String, Any>()
+        for (entry in entries) fields[entry.key] = parseValue(entry.rawValue)
+        return Parsed(fields, body, entries)
     }
 
     private fun parseValue(raw: String): Any {
         if (raw.startsWith("[") && raw.endsWith("]")) {
-            val inner = raw.substring(1, raw.length - 1)
-            return if (inner.isBlank()) emptyList<String>() else inner.split(',').map { unquote(it.trim()) }
+            return listItems(raw).map(::unquote)
         }
         return unquote(raw)
     }
+
+    /** Strict string lists do not coerce YAML scalars or accept syntax this flat reader cannot interpret. */
+    fun parseStringList(raw: String): List<String>? {
+        if (!raw.startsWith("[") || !raw.endsWith("]")) return null
+        return listItems(raw).map { item ->
+            val quoted = item.length >= 2 && (item.first() == '\'' && item.last() == '\'' || item.first() == '"' && item.last() == '"')
+            if (quoted) {
+                val value = unquote(item)
+                if (item.first() in value || '\\' in value) return null
+                value
+            } else {
+                if (item.isEmpty() || item.any { it in "[]{}'\",:&*!#?|>@`\\" } || nonStringScalar.matches(item)) return null
+                item
+            }
+        }
+    }
+
+    private fun listItems(raw: String): List<String> {
+        val inner = raw.substring(1, raw.length - 1)
+        return if (inner.isBlank()) emptyList() else inner.split(',').map { it.trim() }
+    }
+
+    private val nonStringScalar = Regex(
+        "(?i:~|null|true|false|yes|no|on|off|[-+]?(?:[0-9][0-9_]*(?:\\.[0-9_]*)?|\\.[0-9_]+)(?:e[-+]?[0-9]+)?|" +
+            "[-+]?0(?:x[0-9a-f_]+|o[0-7_]+|b[01_]+)|[-+]?\\.(?:inf|nan)|[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}(?:[Tt ].*)?)",
+    )
 
     private fun unquote(s: String): String =
         if (s.length >= 2 && (s.first() == '"' && s.last() == '"' || s.first() == '\'' && s.last() == '\'')) s.substring(1, s.length - 1) else s

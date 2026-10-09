@@ -35,6 +35,19 @@ class WordsTest {
     }
 
     @Test
+    fun explicitLevelOverridesKanjiInference() {
+        val levels = mapOf("音" to 5, "開" to 4, "難" to 1, "京" to null)
+        assertEquals(5, wordLevel(listOf("音", "難"), levels, jlpt = 5))
+        assertEquals(5, wordLevel(listOf("京"), levels, jlpt = 5))
+        assertEquals(5, wordLevel(listOf("missing"), levels, jlpt = 5))
+        assertEquals(4, wordLevel(listOf("音"), levels, jlpt = 4))
+        for (level in 1..5) {
+            assertEquals(level, wordLevel(emptyList(), emptyMap(), jlpt = level))
+        }
+        assertEquals(4, wordLevel(listOf("開", "音"), levels, jlpt = null))
+    }
+
+    @Test
     fun stacksAreCumulative() {
         assertTrue(WordStacks.n5.contains(5))
         assertFalse(WordStacks.n5.contains(4))
@@ -93,6 +106,118 @@ class WordsTest {
         }
         assertEquals("開ける (あける)", WordQuizBuilder.label(WordCard("開ける", "あける", "x", null, emptyList()), WordDirection.EnToJp))
         assertEquals("ねこ", WordQuizBuilder.label(WordCard("ねこ", "ねこ", "cat", null, emptyList()), WordDirection.EnToJp))
+    }
+
+    @Test
+    fun wordLevelMetadataDoesNotChangeQuizOptions() {
+        val words = (1..6).map {
+            WordCard("word-$it", "reading-$it", "meaning-$it", null, emptyList(), tags = listOf("free-tag-${it % 2}"))
+        }
+        val labelled = words.mapIndexed { i, word -> word.copy(jlpt = i % 5 + 1) }
+        for (direction in WordDirection.entries) {
+            assertEquals(
+                WordQuizBuilder.options(words.first(), words, direction, Random(42)),
+                WordQuizBuilder.options(labelled.first(), labelled, direction, Random(42)),
+            )
+        }
+    }
+
+    private fun optionWord(id: String, exclusions: List<String> = emptyList(), tags: List<String> = emptyList()) =
+        WordCard(id, id, "meaning-$id", "noun", emptyList(), tags, quizExclusions = exclusions)
+
+    @Test
+    fun oneSidedQuizExclusionsApplyToEitherTargetInBothDirections() {
+        val a = optionWord("気", listOf("気分"))
+        val b = optionWord("気分")
+        val all = listOf(a, b) + (1..4).map { optionWord("other-$it") }
+        for (direction in WordDirection.entries) {
+            for ((target, excluded) in listOf(a to b, b to a)) {
+                repeat(20) { seed ->
+                    val options = WordQuizBuilder.options(target, all, direction, Random(seed))
+                    assertEquals(4, options.size)
+                    assertEquals(1, options.count { it.word == target.word })
+                    assertFalse(options.any { it.word == excluded.word })
+                }
+            }
+        }
+    }
+
+    @Test
+    fun excludedPairsCannotAppearTogetherAmongDistractorsInEitherSelectionOrder() {
+        val target = optionWord("target", tags = listOf("kind"))
+        val a = optionWord("a", listOf("b"), listOf("kind"))
+        val b = optionWord("b", tags = listOf("kind"))
+        val all = listOf(target, a, b, optionWord("c"), optionWord("d"))
+        val seen = mutableSetOf<String>()
+        for (direction in WordDirection.entries) {
+            repeat(40) { seed ->
+                val options = WordQuizBuilder.options(target, all, direction, Random(seed))
+                assertEquals(4, options.size)
+                val pair = options.filter { it.word in listOf("a", "b") }
+                assertEquals(1, pair.size)
+                seen += pair.single().word
+            }
+        }
+        assertEquals(setOf("a", "b"), seen)
+    }
+
+    @Test
+    fun quizExclusionsAreNotTransitive() {
+        val a = optionWord("a", listOf("b"))
+        val b = optionWord("b", listOf("c"))
+        val c = optionWord("c")
+        for (direction in WordDirection.entries) {
+            for (target in listOf(a, c)) {
+                assertEquals(setOf("a", "c"), WordQuizBuilder.options(target, listOf(a, b, c), direction, Random(1)).map { it.word }.toSet())
+            }
+        }
+    }
+
+    @Test
+    fun excludedCandidatesDoNotReserveTitlesAndExistingExactDedupRemains() {
+        val target = optionWord("target", listOf("blocked"), listOf("first", "second"))
+        val blocked = optionWord("blocked", tags = target.tags)
+        val eligible = optionWord("eligible", tags = listOf("first")).copy(title = blocked.title)
+        val other = optionWord("other")
+        val all = listOf(target, blocked, eligible, other, other.copy(title = "different"), optionWord("same-title").copy(title = target.title))
+        for (direction in WordDirection.entries) {
+            repeat(20) { seed ->
+                val options = WordQuizBuilder.options(target, all, direction, Random(seed), count = 8)
+                assertEquals(setOf("target", "eligible", "other"), options.map { it.word }.toSet())
+                assertEquals(3, options.size)
+            }
+        }
+    }
+
+    @Test
+    fun eligibleCandidatesRetainTheirExistingScorePriority() {
+        val target = optionWord("target", listOf("blocked"), listOf("first", "second"))
+        val blocked = optionWord("blocked", tags = target.tags)
+        val high = optionWord("high", tags = listOf("first"))
+        val low = optionWord("low")
+        for (direction in WordDirection.entries) {
+            repeat(20) { seed ->
+                assertEquals(
+                    setOf("target", "high"),
+                    WordQuizBuilder.options(target, listOf(target, blocked, low, high), direction, Random(seed), count = 2).map { it.word }.toSet(),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun smallPoolsNeverReintroduceExcludedOptionsEvenWhenOnlyTheTargetRemains() {
+        val a = optionWord("a", listOf("b"))
+        val b = optionWord("b")
+        val target = optionWord("target")
+        val clique = listOf(target, a.copy(quizExclusions = listOf("b", "c")), b.copy(quizExclusions = listOf("c")), optionWord("c"))
+        for (direction in WordDirection.entries) {
+            repeat(20) { seed ->
+                assertEquals(listOf("a"), WordQuizBuilder.options(a, listOf(a, b), direction, Random(seed)).map { it.word })
+                assertEquals(2, WordQuizBuilder.options(target, clique, direction, Random(seed)).size)
+            }
+            assertEquals(listOf("target"), WordQuizBuilder.options(target, clique, direction, Random(1), count = 1).map { it.word })
+        }
     }
 
     @Test

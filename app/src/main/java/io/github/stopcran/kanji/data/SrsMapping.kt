@@ -1,5 +1,6 @@
 package io.github.stopcran.kanji.data
 
+import io.github.stopcran.kanji.core.content.WordArticle
 import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.Stack
@@ -28,9 +29,10 @@ fun List<KanjiEntity>.inStack(stackId: String): List<KanjiEntity> {
 
 fun List<KanjiEntity>.levels(): Map<String, Int?> = associate { it.kanji to it.jlpt }
 
-fun WordEntity.toCard() = WordCard(word, reading, title, type, kanji.splitSep(), tags.splitSep())
+fun WordArticle.toEntity(sourceId: String) = WordEntity(sourceId, word, reading, title, type, kanji.joinSep(), tags.joinSep(), body, jlpt, quizExclusions.joinSep())
 
-/** The words of [stack], by the level of their hardest kanji. */
+fun WordEntity.toCard() = WordCard(word, reading, title, type, kanji.splitSep(), tags.splitSep(), jlpt, quizExclusions.splitSep())
+
+/** Shared by quizzes, home counts/progression and reminders; explicit word levels take precedence over kanji. */
 fun List<WordEntity>.inWordStack(stack: WordStack, levels: Map<String, Int?>): List<WordEntity> =
-    filter { stack.contains(wordLevel(it.kanji.splitSep(), levels)) }
-
+    filter { stack.contains(wordLevel(it.kanji.splitSep(), levels, it.jlpt)) }
