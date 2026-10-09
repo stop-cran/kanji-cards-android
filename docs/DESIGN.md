@@ -75,8 +75,16 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   look-alikes (voiced/unvoiced, long/short vowel, small っ) first, then real readings of words sharing a kanji or of similar shape. The option
   key is the reading (`WordQuizUi.Answer.key`), unlike the other directions where it is the written word. Tap only for now (voice: issue #5).
   Meaning-based `quiz_exclusions` do not filter reading options; reading uniqueness is checked independently.
+- Kanji readings quiz (`core/reading`): "Pick the on'yomi / kun'yomi of 生" — one mode on the home page, two kinds scheduled separately
+  (`StudyMode.KanjiOn`/`KanjiKun`, so (kanji, kind) is the review item). **Exactly one option is valid:** the correct reading is of the asked kind;
+  no other option may be any reading of the target in either kind (readings are shared between kinds, e.g. 気 キ/き) or a voicing / long-vowel /
+  small-っ variant of one (`ReadingKey`: raw form from the card, kana-folded match key without `.`/`-`, display form: on in katakana, kun in
+  hiragana). Fewer than two safe options means the question is skipped, never shown with a doubtful answer; a test builds questions for every
+  card of the content snapshot. A kanji's readings are asked once its meaning has been answered without "Again" twice (or that kind was already
+  started). The daily new budget is shared: a kanji costs one unit however many kinds it brings, and its second kind is free the same day. The same
+  kanji is kept apart in the queue so its kinds do not cue each other. Not part of N4 advancement (yet); tap only (voice: later).
 - Font variety grows with memory stability (Gothic only when young, then Mincho, Textbook, Brush; a lapse drops it back) so recognition does not depend on one glyph shape (`FontPolicy`).
-- Each session screen is keyed by its route (`quiz:<ts>[:extra]`, `wquiz:<ts>:<jp|en|rd>[:extra]`, `draw:<ts>[:extra]`) so a ViewModel
+- Each session screen is keyed by its route (`quiz:<ts>[:extra]`, `wquiz:<ts>:<jp|en|rd>[:extra]`, `draw:<ts>[:extra]`, `kreading:<ts>[:extra]`) so a ViewModel
   survives rotation and following a doc link, but a new start is a fresh session. Start sessions from `LaunchedEffect`, not `init`.
 
 ## 5. Words, levels and advancement
@@ -125,7 +133,15 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 
 - Everything goes through `ui/Page` (edge-to-edge insets, scrolling). Back is a string-route stack in `MainActivity`.
 - Theme follows the system (light/dark); drawing canvases stay paper-white on purpose.
-- Home loads asynchronously. The seven main flows (kanji, words, five review-state sets) start as null = "not yet" and the screen shows a progress
+- **Home structure: a short main screen plus a Kanji page and a Words page** (`HomePages`: routes `home`, `kanji-home`, `words-home`). The main
+  screen shows status, the N4 offer and two entries with one-line summaries; each page lists its modes. **One button per mode**, never a disabled
+  "Start" next to an enabled "Extra practice": `ModeState` (`core/home`) is `Loading | Start(due,new) | PracticeMore | Locked(reason) | Unavailable(reason)`,
+  computed from the same eligibility predicates the session view models enforce (a quiz needs two cards, drawing one stroke card, ...) so a
+  tappable button never leads to an empty session. The reason for a disabled button is visible text and part of the row's accessibility state.
+  All counts come from one `HomeData` (`rememberHomeData`), shared by the main screen and both pages, built from strict noise-free queues; a one-minute
+  tick makes newly due cards and the day rollover show up. Rows stay in `Loading` until content, review states and introduced-today counts are all known.
+  After process death session routes are dropped from the restored back stack (a session is not resumable) and the user lands on the page they started from.
+- Home loads asynchronously. The nine main flows (kanji, words, seven review-state sets) start as null = "not yet" and the screen shows a progress
   bar until all emit; empty means "no data". The new-card-introduced counts still start at 0 (meaning "none today") and settle a moment later.
 - Home reads only slim rows (`observeKanjiLite`/`observeWordsLite`: no article body, `strokesJson` reduced to `''` or NULL). Screens that need bodies
   or strokes load a single card (`kanjiCard`, `word`). Slim word rows retain `jlpt` and `quizExclusions`; omitting metadata from a projection must
@@ -144,7 +160,7 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 3. A hash mismatch or malformed manifest file skips that file only; an unsafe zip entry or limit violation aborts the whole sync.
 4. Each quiz grades one designated target. Meaning-quiz word options enforce exact title/form deduplication and curated exclusions; these
    checks do not guarantee semantic uniqueness for uncurated meanings. Reading options have distinct reading keys.
-5. Stacks, modes and directions never share SRS state; only ordering may look across directions.
+5. Stacks, modes, directions and reading kinds never share SRS state; only ordering may look across directions.
 6. Grading uses raw/regularised drawn points and the unmodified reference; display jitter and brush smoothing never leak into grading.
 7. No network use beyond: GitHub (`api.github.com` head lookup, `codeload.github.com` download), the one-off ML Kit model download, and links the
    user taps (any `https://` link opens the browser; repo links must be exactly `kanji|words|articles/<file>.md`).

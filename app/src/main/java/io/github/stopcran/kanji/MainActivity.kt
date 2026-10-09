@@ -16,7 +16,9 @@ import io.github.stopcran.kanji.ui.AboutScreen
 import io.github.stopcran.kanji.ui.DocScreen
 import io.github.stopcran.kanji.ui.DrawScreen
 import io.github.stopcran.kanji.ui.CardsScreen
-import io.github.stopcran.kanji.ui.HomeScreen
+import io.github.stopcran.kanji.ui.HomeActions
+import io.github.stopcran.kanji.ui.HomePages
+import io.github.stopcran.kanji.ui.KanjiReadingScreen
 import io.github.stopcran.kanji.ui.QuizScreen
 import io.github.stopcran.kanji.ui.SettingsScreen
 import io.github.stopcran.kanji.ui.WordQuizScreen
@@ -32,10 +34,26 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** Back stack of route strings: "home", "settings", "cards", "quiz", "card:<kanji>". Survives rotation via rememberSaveable. */
+/** Identifies this process; a saved back stack from another process (process death) must not resume a half-finished session. */
+private val processToken = System.nanoTime().toString()
+private val sessionPrefixes = listOf("quiz:", "wquiz:", "draw:", "kreading:")
+
+/**
+ * Back stack of route strings: "home", "kanji-home", "words-home", "settings", "cards", "quiz:..", "doc:<path>". Survives rotation via
+ * rememberSaveable; after process death session routes are dropped, which returns to the page the session was started from.
+ */
 @Composable
 private fun AppNav(app: KanjiApp) {
-    val stack = rememberSaveable(saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() })) {
+    val stack = rememberSaveable(
+        saver = listSaver(
+            save = { listOf("t:$processToken") + it },
+            restore = { saved ->
+                val routes = saved.filterNot { it.startsWith("t:") }
+                val sameProcess = saved.firstOrNull() == "t:$processToken"
+                (if (sameProcess) routes else routes.filterNot { r -> sessionPrefixes.any { r.startsWith(it) } }).ifEmpty { listOf("home") }.toMutableStateList()
+            },
+        ),
+    ) {
         listOf("home").toMutableStateList()
     }
     fun push(route: String) { stack.add(route) }
@@ -61,6 +79,13 @@ private fun AppNav(app: KanjiApp) {
                 onOpenDoc = { push("doc:$it") },
                 onPracticeMore = { pop(); push("wquiz:${System.currentTimeMillis()}:${route.split(":")[2]}:extra") },
             )
+        } else if (route.startsWith("kreading:")) {
+            KanjiReadingScreen(
+                sessionKey = route,
+                onBack = ::pop,
+                onOpenDoc = { push("doc:$it") },
+                onPracticeMore = { pop(); push("kreading:${System.currentTimeMillis()}:extra") },
+            )
         } else if (route.startsWith("draw:")) {
             DrawScreen(
                 sessionKey = route,
@@ -72,13 +97,20 @@ private fun AppNav(app: KanjiApp) {
             val path = route.removePrefix("doc:")
             DocScreen(app, path, onBack = ::pop, onOpenDoc = { push("doc:$it") })
         } else {
-            HomeScreen(
+            HomePages(
                 app,
-                onSettings = { push("settings") },
-                onCards = { push("cards") },
-                onQuiz = { extra -> push("quiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
-                onWords = { dir, extra -> push("wquiz:${System.currentTimeMillis()}:${when (dir) { WordDirection.JpToEn -> "jp"; WordDirection.EnToJp -> "en"; WordDirection.Reading -> "rd" }}" + if (extra) ":extra" else "") },
-                onDraw = { extra -> push("draw:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
+                route,
+                onBack = ::pop,
+                actions = HomeActions(
+                    onSettings = { push("settings") },
+                    onCards = { push("cards") },
+                    onKanjiPage = { push("kanji-home") },
+                    onWordsPage = { push("words-home") },
+                    onQuiz = { extra -> push("quiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
+                    onDraw = { extra -> push("draw:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
+                    onReadings = { extra -> push("kreading:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
+                    onWords = { dir, extra -> push("wquiz:${System.currentTimeMillis()}:${when (dir) { WordDirection.JpToEn -> "jp"; WordDirection.EnToJp -> "en"; WordDirection.Reading -> "rd" }}" + if (extra) ":extra" else "") },
+                ),
             )
         }
     }

@@ -1,185 +1,175 @@
 package io.github.stopcran.kanji.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import io.github.stopcran.kanji.core.srs.Stacks
-import io.github.stopcran.kanji.core.srs.SrsState
-import io.github.stopcran.kanji.core.words.Advancement
-import io.github.stopcran.kanji.core.words.WordDirection
-import io.github.stopcran.kanji.core.words.WordQueues
-import io.github.stopcran.kanji.core.words.WordStacks
-import io.github.stopcran.kanji.data.forDirection
-import io.github.stopcran.kanji.data.inWordStack
-import io.github.stopcran.kanji.data.levels
-import androidx.compose.foundation.layout.Column
-import androidx.compose.material3.Card
-import io.github.stopcran.kanji.data.inStack
-import io.github.stopcran.kanji.data.stacks
-import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import io.github.stopcran.kanji.KanjiApp
-import io.github.stopcran.kanji.core.srs.QueueBuilder
-import io.github.stopcran.kanji.core.srs.QueueItem
-import io.github.stopcran.kanji.core.srs.StudyMode
-import io.github.stopcran.kanji.data.ReviewStateEntity
-import io.github.stopcran.kanji.data.SyncResult
-import io.github.stopcran.kanji.data.toSrs
-import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
+import io.github.stopcran.kanji.Defaults
+import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.core.content.RepoSource
+import io.github.stopcran.kanji.core.home.ModeState
+import io.github.stopcran.kanji.core.words.WordDirection
+import io.github.stopcran.kanji.core.words.WordStacks
+import io.github.stopcran.kanji.data.SyncResult
+import io.github.stopcran.kanji.data.inStack
 
+/** Where the user can go from the home pages; sessions are started by the caller. */
+class HomeActions(
+    val onSettings: () -> Unit,
+    val onCards: () -> Unit,
+    val onKanjiPage: () -> Unit,
+    val onWordsPage: () -> Unit,
+    val onQuiz: (extra: Boolean) -> Unit,
+    val onDraw: (extra: Boolean) -> Unit,
+    val onReadings: (extra: Boolean) -> Unit,
+    val onWords: (WordDirection, extra: Boolean) -> Unit,
+)
+
+/** The main screen and the Kanji / Words pages share one [HomeData], so every count agrees across them. */
 @Composable
-fun HomeScreen(app: KanjiApp, onSettings: () -> Unit, onCards: () -> Unit, onQuiz: (Boolean) -> Unit, onDraw: (Boolean) -> Unit, onWords: (WordDirection, Boolean) -> Unit) {
-    val source by app.settings.source.collectAsState()
-    val dailyNew by app.settings.dailyNewCards.collectAsState()
-    val kanjiOrNull by remember(source) { app.db.content().observeKanjiLite(source.id) }.collectAsState(null)
-    val kanji = kanjiOrNull ?: emptyList()
-    val syncStatus by produceState("", source) {
-        if (app.db.content().meta(source.id) == null) {
+fun HomePages(app: KanjiApp, route: String, onBack: () -> Unit, actions: HomeActions) {
+    val data = rememberHomeData(app)
+    val syncStatus by produceState("", data.sourceId) {
+        if (app.db.content().meta(data.sourceId) == null) {
             value = "Downloading cards…"
-            value = when (val r = app.contentSync.sync(source)) {
+            value = when (val r = app.contentSync.sync(app.settings.source.value)) {
                 is SyncResult.Failed -> "Could not download cards: ${r.message}"
                 else -> ""
             }
         }
     }
-
-    val stackId by app.settings.stack.collectAsState()
-    val stacks = remember(kanji) { kanji.stacks() }
-    val stack = Stacks.find(stackId, stacks)
-    val inStack = remember(kanji, stack) { kanji.inStack(stack.id) }
-
-
-    val n4Unlocked by app.settings.n4Unlocked.collectAsState()
-    val dismissedMs by app.settings.advanceDismissedMs.collectAsState()
-    val wordsOrNull by remember(source) { app.db.content().observeWordsLite(source.id) }.collectAsState(null)
-    val words = wordsOrNull ?: emptyList()
-    val wordStacks = WordStacks.offered(n4Unlocked)
-    val wordStackId by app.settings.wordStack.collectAsState()
-    val wordStack = WordStacks.find(wordStackId, wordStacks)
-    val levels = remember(kanji) { kanji.levels() }
-    val wordsInStack = remember(words, levels, wordStack) { words.inWordStack(wordStack, levels) }
-    val wordIds = wordsInStack.map { it.word }
-    val jpLoaded = rememberStates(app, source.id, wordStack.id, StudyMode.WordJpEn)
-    val jpStates = jpLoaded ?: emptyMap()
-    val enLoaded = rememberStates(app, source.id, wordStack.id, StudyMode.WordEnJp)
-    val enStates = enLoaded ?: emptyMap()
-    val rdLoaded = rememberStates(app, source.id, wordStack.id, StudyMode.WordReading)
-    val rdStates = rdLoaded ?: emptyMap()
-    val startOfDay = remember { LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() }
-    val jpIntroduced by produceState(0, source.id, wordStack.id, jpStates.size) { value = app.db.reviews().newCardsIntroducedSince(source.id, wordStack.id, StudyMode.WordJpEn.name, startOfDay) }
-    val enIntroduced by produceState(0, source.id, wordStack.id, enStates.size) { value = app.db.reviews().newCardsIntroducedSince(source.id, wordStack.id, StudyMode.WordEnJp.name, startOfDay) }
-    val rdIntroduced by produceState(0, source.id, wordStack.id, rdStates.size) { value = app.db.reviews().newCardsIntroducedSince(source.id, wordStack.id, StudyMode.WordReading.name, startOfDay) }
-    val now = Instant.now()
-    val jpQueue = WordQueues.build(WordDirection.JpToEn, wordIds, jpStates, enStates, now, dailyNew - jpIntroduced)
-    val enQueue = WordQueues.build(WordDirection.EnToJp, wordIds, enStates, jpStates, now, dailyNew - enIntroduced)
-    val readableIds = remember(wordsInStack) { wordsInStack.forDirection(WordDirection.Reading).map { it.word } }
-    val rdQueue = WordQueues.build(WordDirection.Reading, readableIds, rdStates, jpStates, now, dailyNew - rdIntroduced)
-
-    val quizLoaded = rememberStates(app, source.id, stack.id, StudyMode.Quiz)
-    val quizStates = quizLoaded ?: emptyMap()
-    val drawLoaded = rememberStates(app, source.id, stack.id, StudyMode.Draw)
-    val drawStates = drawLoaded ?: emptyMap()
-    val loading = kanjiOrNull == null || wordsOrNull == null || jpLoaded == null || enLoaded == null || rdLoaded == null || quizLoaded == null || drawLoaded == null
-    val quizQueue = rememberQueue(app, source.id, stack.id, inStack.map { it.kanji }, StudyMode.Quiz, dailyNew, quizStates)
-    val drawQueue = rememberQueue(app, source.id, stack.id, inStack.filter { it.strokesJson != null }.map { it.kanji }, StudyMode.Draw, dailyNew, drawStates)
-    val n5Kanji = inStack.filter { it.jlpt == 5 }
-    val n5Words = remember(words, levels) { words.inWordStack(WordStacks.n5, levels) }
-    val n5Readable = remember(n5Words) { n5Words.forDirection(WordDirection.Reading) }
-    val ready = remember(quizStates, drawStates, jpStates, enStates, rdStates, n5Kanji, n5Words, n5Readable, wordStack) {
-        Advancement.ready(
-            listOf(
-                n5Kanji.map { quizStates[it.kanji] },
-                n5Kanji.filter { it.strokesJson != null }.map { drawStates[it.kanji] },
-                if (wordStack.id == WordStacks.n5.id) n5Words.map { jpStates[it.word] } else emptyList(),
-                if (wordStack.id == WordStacks.n5.id) n5Words.map { enStates[it.word] } else emptyList(),
-                if (wordStack.id == WordStacks.n5.id) n5Readable.map { rdStates[it.word] } else emptyList(),
-            ),
-            Instant.now(),
-        )
+    when (route) {
+        "kanji-home" -> KanjiPage(app, data, onBack, actions)
+        "words-home" -> WordsPage(app, data, onBack, actions)
+        else -> MainPage(app, data, syncStatus, actions)
     }
+}
 
-    Page("Kanji Cards", actions = { TextButton(onClick = onSettings) { Text("⚙") } }) {
+@Composable
+private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeActions) {
+    Page("Kanji Cards", actions = { TextButton(onClick = a.onSettings) { Text("⚙") } }) {
         if (syncStatus.isNotEmpty()) Text(syncStatus)
-        if (loading) {
-            LinearProgressIndicator(Modifier.fillMaxWidth())
-            Text("Loading your cards…", style = MaterialTheme.typography.bodySmall)
-        }
-        val defaultId = remember { io.github.stopcran.kanji.core.content.RepoSource.parse(io.github.stopcran.kanji.Defaults.CONTENT_REPO_URL, io.github.stopcran.kanji.Defaults.CONTENT_BRANCH)?.id }
-        Text(if (source.id == defaultId) "${kanji.size} cards" else "${kanji.size} cards from ${source.id}")
-        if (stacks.size > 1) {
+        LoadingBar(data)
+        val defaultId = remember { RepoSource.parse(Defaults.CONTENT_REPO_URL, Defaults.CONTENT_BRANCH)?.id }
+        Text(if (data.sourceId == defaultId) "${data.kanji.size} cards" else "${data.kanji.size} cards from ${data.sourceId}")
+        N4Offer(app, data)
+        val kanjiStack = if (data.stacks.size > 1) " · ${data.stack.label}" else ""
+        Entry("Kanji", (data.summary(HomeMode.Meaning, HomeMode.Drawing, HomeMode.Readings) ?: "Loading…") + kanjiStack, a.onKanjiPage)
+        val wordStack = if (data.wordStacks.size > 1) " · ${data.wordStack.label}" else ""
+        Entry("Words", (data.summary(HomeMode.WordJp, HomeMode.WordEn, HomeMode.WordReading) ?: "Loading…") + wordStack, a.onWordsPage)
+        OutlinedButton(onClick = a.onCards, enabled = data.kanji.isNotEmpty(), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Browse cards") }
+    }
+}
+
+@Composable
+private fun KanjiPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: HomeActions) {
+    Page("Kanji", onBack) {
+        LoadingBar(data)
+        if (data.stacks.size > 1) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                stacks.forEach { s ->
-                    FilterChip(selected = s.id == stack.id, onClick = { app.settings.setStack(s.id) }, label = { Text("${s.label} (${kanji.inStack(s.id).size})") })
+                data.stacks.forEach { s ->
+                    FilterChip(selected = s.id == data.stack.id, onClick = { app.settings.setStack(s.id) }, label = { Text("${s.label} (${data.kanji.inStack(s.id).size})") })
                 }
             }
             Text("Each stack keeps its own review schedule.", style = MaterialTheme.typography.bodySmall)
         }
-        Text("Meaning quiz: ${quizQueue.count { !it.isNew }} due, ${quizQueue.count { it.isNew }} new today")
-        Button(onClick = { onQuiz(false) }, enabled = quizQueue.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Start meaning quiz") }
-        OutlinedButton(onClick = { onQuiz(true) }, enabled = inStack.size >= 2, modifier = Modifier.fillMaxWidth()) { Text("Extra practice") }
-        Text("Drawing: ${drawQueue.count { !it.isNew }} due, ${drawQueue.count { it.isNew }} new today", modifier = Modifier.padding(top = 8.dp))
-        Button(onClick = { onDraw(false) }, enabled = drawQueue.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Start drawing") }
-        OutlinedButton(onClick = { onDraw(true) }, enabled = inStack.any { it.strokesJson != null }, modifier = Modifier.fillMaxWidth()) { Text("Extra drawing practice") }
-        if (Advancement.shouldOffer(ready, n4Unlocked, dismissedMs, System.currentTimeMillis())) {
-            Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("You know N5 well!", style = MaterialTheme.typography.titleMedium)
-                    Text("Most N5 kanji and words are solid across quizzes and drawing. Ready to add N4 words?")
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { app.settings.setN4Unlocked(true); app.settings.setWordStack(WordStacks.n4.id) }) { Text("Add N4 words") }
-                        TextButton(onClick = { app.settings.dismissAdvance(System.currentTimeMillis()) }) { Text("Not yet") }
-                    }
-                }
-            }
-        }
-        Text("Words (${wordsInStack.size})", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
-        if (wordStacks.size > 1) {
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                wordStacks.forEach { s ->
-                    FilterChip(selected = s.id == wordStack.id, onClick = { app.settings.setWordStack(s.id) }, label = { Text(s.label) })
-                }
-            }
-        }
-        Text("Japanese → English: ${jpQueue.count { !it.isNew }} due, ${jpQueue.count { it.isNew }} new today")
-        Button(onClick = { onWords(WordDirection.JpToEn, false) }, enabled = jpQueue.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Start Japanese → English") }
-        Text(if (enQueue.isEmpty()) "English → Japanese: unlocks as you learn words" else "English → Japanese: ${enQueue.count { !it.isNew }} due, ${enQueue.count { it.isNew }} new today")
-        Button(onClick = { onWords(WordDirection.EnToJp, false) }, enabled = enQueue.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Start English → Japanese") }
-        Text(if (rdQueue.isEmpty()) "Reading: unlocks as you learn words" else "Reading: ${rdQueue.count { !it.isNew }} due, ${rdQueue.count { it.isNew }} new today")
-        Button(onClick = { onWords(WordDirection.Reading, false) }, enabled = rdQueue.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Start reading quiz") }
-        OutlinedButton(onClick = { onWords(WordDirection.JpToEn, true) }, enabled = wordsInStack.size >= 2, modifier = Modifier.fillMaxWidth()) { Text("Extra word practice") }
-        OutlinedButton(onClick = onCards, enabled = kanji.isNotEmpty(), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Browse cards") }
+        ModeRow("Meaning quiz", data.mode(HomeMode.Meaning), a.onQuiz)
+        ModeRow("Drawing", data.mode(HomeMode.Drawing), a.onDraw)
+        ModeRow("Readings (on'yomi and kun'yomi)", data.mode(HomeMode.Readings), a.onReadings)
     }
 }
 
 @Composable
-/** Null until the first emission, so the screen can tell "still loading" from "nothing yet". */
-private fun rememberStates(app: KanjiApp, sourceId: String, stack: String, mode: StudyMode): Map<String, SrsState>? {
-    val states by remember(sourceId, stack, mode) { app.db.reviews().observeStates(sourceId, stack, mode.name) }.collectAsState(null)
-    return remember(states) { states?.associate { it.kanji to it.toSrs() } }
+private fun WordsPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: HomeActions) {
+    Page("Words (${data.wordCount})", onBack) {
+        LoadingBar(data)
+        N4Offer(app, data)
+        if (data.wordStacks.size > 1) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                data.wordStacks.forEach { s ->
+                    FilterChip(selected = s.id == data.wordStack.id, onClick = { app.settings.setWordStack(s.id) }, label = { Text(s.label) })
+                }
+            }
+        }
+        ModeRow("Japanese → English", data.mode(HomeMode.WordJp)) { a.onWords(WordDirection.JpToEn, it) }
+        ModeRow("English → Japanese", data.mode(HomeMode.WordEn)) { a.onWords(WordDirection.EnToJp, it) }
+        ModeRow("Reading", data.mode(HomeMode.WordReading)) { a.onWords(WordDirection.Reading, it) }
+    }
 }
 
-/** Cards that would be offered now for [mode]: due first, then new ones within today's remaining budget. */
 @Composable
-private fun rememberQueue(app: KanjiApp, sourceId: String, stack: String, ids: List<String>, mode: StudyMode, dailyNew: Int, states: Map<String, SrsState>): List<QueueItem> {
-    val startOfDay = remember { LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() }
-    val introduced by produceState(0, sourceId, stack, states.size) { value = app.db.reviews().newCardsIntroducedSince(sourceId, stack, mode.name, startOfDay) }
-    return QueueBuilder.build(ids, states, Instant.now(), dailyNew - introduced)
+private fun LoadingBar(data: HomeData) {
+    if (!data.loading) return
+    LinearProgressIndicator(Modifier.fillMaxWidth())
+    Text("Loading your cards…", style = MaterialTheme.typography.bodySmall)
+}
+
+@Composable
+private fun Entry(title: String, summary: String, onClick: () -> Unit) {
+    Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(summary, style = MaterialTheme.typography.bodyMedium)
+            }
+            Text("›", style = MaterialTheme.typography.headlineMedium)
+        }
+    }
+}
+
+/** One study mode: a title, what is on offer, and a single button whose meaning depends on the state. */
+@Composable
+private fun ModeRow(title: String, state: ModeState, onStart: (extra: Boolean) -> Unit) {
+    val summary = when (state) {
+        ModeState.Loading -> "Loading…"
+        is ModeState.Start -> "${state.due} due, ${state.new} new today"
+        ModeState.PracticeMore -> "Nothing due right now"
+        is ModeState.Locked -> state.reason
+        is ModeState.Unavailable -> state.reason
+    }
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp).semantics(mergeDescendants = true) { stateDescription = summary }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(summary, style = MaterialTheme.typography.bodyMedium)
+        if (state == ModeState.PracticeMore) {
+            OutlinedButton(onClick = { onStart(true) }, modifier = Modifier.fillMaxWidth()) { Text("Practice more") }
+        } else {
+            Button(onClick = { onStart(false) }, enabled = state.enabled, modifier = Modifier.fillMaxWidth()) { Text("Start") }
+        }
+    }
+}
+
+@Composable
+private fun N4Offer(app: KanjiApp, data: HomeData) {
+    if (!data.n4Offer) return
+    Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("You know N5 well!", style = MaterialTheme.typography.titleMedium)
+            Text("Most N5 kanji and words are solid across quizzes and drawing. Ready to add N4 words?")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { app.settings.setN4Unlocked(true); app.settings.setWordStack(WordStacks.n4.id) }) { Text("Add N4 words") }
+                TextButton(onClick = { app.settings.dismissAdvance(System.currentTimeMillis()) }) { Text("Not yet") }
+            }
+        }
+    }
 }

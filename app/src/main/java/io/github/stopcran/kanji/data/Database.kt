@@ -192,6 +192,14 @@ interface ReviewDao {
     @Query("SELECT COUNT(*) FROM (SELECT kanji FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode = :mode GROUP BY kanji HAVING MIN(atMs) >= :sinceMs)")
     suspend fun newCardsIntroducedSince(sourceId: String, stack: String, mode: String, sinceMs: Long): Int
 
+    /** Kanji whose first reading review (of either kind) happened since [sinceMs]; they have already used a unit of the daily budget. */
+    @Query("SELECT DISTINCT kanji FROM (SELECT kanji, mode FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode IN ('KanjiOn', 'KanjiKun') GROUP BY kanji, mode HAVING MIN(atMs) >= :sinceMs)")
+    suspend fun readingKanjiIntroducedSince(sourceId: String, stack: String, sinceMs: Long): List<String>
+
+    /** Kanji whose meaning was answered without "Again" at least twice: their readings become askable. */
+    @Query("SELECT kanji FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode = 'Quiz' AND grade > 1 GROUP BY kanji HAVING COUNT(*) >= 2")
+    suspend fun meaningLearned(sourceId: String, stack: String): List<String>
+
     @Transaction
     suspend fun record(state: ReviewStateEntity, log: ReviewLogEntity) {
         putState(state)
