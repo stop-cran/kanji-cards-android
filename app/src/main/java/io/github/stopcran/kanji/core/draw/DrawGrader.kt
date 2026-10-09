@@ -28,5 +28,7 @@ fun StrokeIssue.describe(): String {
         IssueType.Broken -> "Stroke $r was broken into two"
         IssueType.Missing -> "Stroke $r is missing"
         IssueType.Extra -> "Extra stroke (your number $d)"
+        IssueType.MissingHook -> "Stroke $r needs a hook at its end"
+        IssueType.ExtraHook -> "Stroke $r should end straight, without a hook"
     }
 }

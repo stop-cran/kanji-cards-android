@@ -20,6 +20,14 @@ fun regularize(strokes: List<Stroke>, smoothing: Double, samples: Int, curved: B
     }
 }
 
+/** The same wobble removal as [regularize] but without resampling, so small features such as hooks keep their corners. */
+fun simplifyStrokes(strokes: List<Stroke>, smoothing: Double): List<Stroke> {
+    if (strokes.isEmpty()) return strokes
+    val b = boxOf(strokes)
+    val eps = max(b.w, b.h) * smoothing
+    return strokes.map { if (it.size < 3) it else simplify(it, eps) }
+}
+
 // Catmull-Rom through the vertices, so simplified strokes look like curves instead of polygons.
 private fun spline(v: Stroke): Stroke {
     if (v.size < 3) return v

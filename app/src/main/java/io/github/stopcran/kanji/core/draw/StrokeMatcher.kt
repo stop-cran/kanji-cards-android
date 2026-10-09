@@ -54,7 +54,7 @@ internal fun meanDist(a: Stroke, b: Stroke): Double {
     return s / a.size
 }
 
-enum class IssueType { Reversed, WrongOrder, WrongShape, Joined, Broken, Missing, Extra }
+enum class IssueType { Reversed, WrongOrder, WrongShape, Joined, Broken, Missing, Extra, MissingHook, ExtraHook }
 
 /**
  * One mistake. [refIndex] is the 0-based reference stroke (stroke order position) and [drawnIndex] the 0-based
@@ -134,16 +134,35 @@ class StrokeMatcher(private val cfg: MatcherConfig = MatcherConfig()) {
     fun match(reference: List<Stroke>, rawDrawn: List<Stroke>): MatchResult {
         val drawn = regularize(rawDrawn, cfg.smoothing, cfg.samples)
         if (reference.isEmpty() || drawn.isEmpty()) return MatchResult(emptyList(), reference.size, drawn.size, 0)
+        var scale = fitScale(boxOf(drawn), boxOf(reference))
         var links = link(reference, normalize(drawn, boxOf(drawn), boxOf(reference)))
         // Refit using only what was found, so a missing or extra stroke does not distort the rest.
         repeat(2) {
             val usedD = links.flatMap { l -> when (l) { is Link.One -> listOf(l.d); is Link.Join -> listOf(l.d); is Link.Split -> listOf(l.d, l.d + 1) } }
             val usedR = links.flatMap { l -> when (l) { is Link.One -> listOf(l.r); is Link.Join -> listOf(l.r, l.r + 1); is Link.Split -> listOf(l.r) } }
             if (usedD.size >= 2 && usedR.size >= 2) {
-                links = link(reference, normalize(drawn, boxOf(usedD.map { drawn[it] }), boxOf(usedR.map { reference[it] })))
+                val from = boxOf(usedD.map { drawn[it] })
+                val to = boxOf(usedR.map { reference[it] })
+                scale = fitScale(from, to)
+                links = link(reference, normalize(drawn, from, to))
             }
         }
-        return classify(reference.size, drawn.size, links)
+        val result = classify(reference.size, drawn.size, links)
+        return if (result.issues.isEmpty()) result.withHookChecks(reference, simplifyStrokes(rawDrawn, cfg.smoothing), links, scale) else result
+    }
+
+    private fun fitScale(from: Box, to: Box): Double = max(to.w, to.h).coerceAtLeast(1e-6) / max(from.w, from.h).coerceAtLeast(1e-6)
+
+    /** Strokes drawn without a required hook (or with an unwanted one); only run on otherwise clean drawings. */
+    private fun MatchResult.withHookChecks(reference: List<Stroke>, simple: List<Stroke>, links: List<Link>, scale: Double): MatchResult {
+        val found = ArrayList<StrokeIssue>()
+        for (l in links) {
+            if (l !is Link.One) continue
+            val drawnTurn = endHook(simple[l.d].map { Pt(it.x * scale, it.y * scale) })
+            val type = hookIssue(endTurn(reference[l.r]), drawnTurn) ?: continue
+            found += StrokeIssue(type, l.r, l.d)
+        }
+        return if (found.isEmpty()) this else copy(issues = found.sortedBy { it.refIndex })
     }
 
     /** Maps [from] onto [to]; scaling is per axis (within 1.4x of uniform) unless an axis is nearly flat. */

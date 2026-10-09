@@ -6,6 +6,7 @@ import io.github.stopcran.kanji.core.draw.MatchResult
 import io.github.stopcran.kanji.core.draw.Pt
 import io.github.stopcran.kanji.core.draw.Stroke
 import io.github.stopcran.kanji.core.draw.StrokeMatcher
+import io.github.stopcran.kanji.core.draw.endTurn
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -32,7 +33,7 @@ private class Hand(private val rnd: Random) {
         val a1 = rnd.nextDouble(0.5, 1.8)
         val f1 = rnd.nextDouble(0.5, 2.5)
         val ph = rnd.nextDouble(0.0, 6.28)
-        val trimEnd = rnd.nextDouble(0.0, 0.06)
+        val trimEnd = rnd.nextDouble(0.0, 0.06).takeIf { kotlin.math.abs(endTurn(ref)) < 60.0 } ?: 0.0
         val pts = ref.map { it }
         val total = (1 until pts.size).sumOf { hypot(pts[it].x - pts[it - 1].x, pts[it].y - pts[it - 1].y) }
         val out = ArrayList<Pt>()
