@@ -27,13 +27,24 @@ private val Green = Color(0xFF2E7D32)
 private val Red = Color(0xFFC62828)
 private val originTags = setOf("wago", "kango", "gairaigo")
 
-/** Session key: "wquiz:<timestamp>:<jp|en>[:extra]". */
+/** Session key: "wquiz:<timestamp>:<jp|en|rd>[:extra]". */
 @Composable
 fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit, onPracticeMore: () -> Unit, vm: WordQuizViewModel = viewModel(key = sessionKey)) {
     val parts = sessionKey.split(':')
-    val direction = if (parts.getOrNull(2) == "en") WordDirection.EnToJp else WordDirection.JpToEn
+    val direction = when (parts.getOrNull(2)) {
+        "en" -> WordDirection.EnToJp
+        "rd" -> WordDirection.Reading
+        else -> WordDirection.JpToEn
+    }
     LaunchedEffect(sessionKey) { vm.ensureStarted(direction, sessionKey.endsWith(":extra")) }
-    Page(if (direction == WordDirection.JpToEn) "Words: Japanese → English" else "Words: English → Japanese", onBack) {
+    Page(
+        when (direction) {
+            WordDirection.JpToEn -> "Words: Japanese → English"
+            WordDirection.EnToJp -> "Words: English → Japanese"
+            WordDirection.Reading -> "Words: reading"
+        },
+        onBack,
+    ) {
         when (val s = vm.ui) {
             WordQuizUi.Loading -> Text("Loading…")
             is WordQuizUi.Empty -> Text(s.message)
@@ -47,7 +58,11 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
                 Text("${s.remaining} left", style = MaterialTheme.typography.labelMedium)
                 Prompt(s.word, s.direction, s.font, big = true)
                 Text(
-                    if (s.direction == WordDirection.JpToEn) "What does it mean?" else "Which word is it?",
+                    when (s.direction) {
+                        WordDirection.JpToEn -> "What does it mean?"
+                        WordDirection.EnToJp -> "Which word is it?"
+                        WordDirection.Reading -> "How is it read?"
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center,
                 )
@@ -63,7 +78,7 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
 
 @Composable
 private fun Prompt(word: WordEntity, direction: WordDirection, font: io.github.stopcran.kanji.core.srs.KanjiFont, big: Boolean) {
-    if (direction == WordDirection.JpToEn || !big) {
+    if (direction != WordDirection.EnToJp || !big) {
         Text(word.word, fontSize = if (big) 64.sp else 48.sp, fontFamily = font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     } else {
         Text(word.title, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
@@ -85,7 +100,7 @@ private fun Answer(s: WordQuizUi.Answer, vm: WordQuizViewModel, onOpenDoc: (Stri
     )
     s.options.forEach { o ->
         val color = when {
-            o.word == s.word.word -> Green
+            o.word == s.key -> Green
             o.word == s.picked -> Red
             else -> MaterialTheme.colorScheme.outline
         }

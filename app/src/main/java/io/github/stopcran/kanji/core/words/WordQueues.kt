@@ -24,11 +24,10 @@ object WordQueues {
         noise: Double = QueueBuilder.DEFAULT_NOISE,
         rnd: Random = Random.Default,
     ): List<QueueItem> {
-        val eligible = when (direction) {
-            WordDirection.JpToEn -> words
-            WordDirection.EnToJp -> words.filter { w -> WordGate.reverseUnlocked(other[w]) || own[w]?.phase.let { it != null && it != CardPhase.New } }
-        }
+        val eligible = if (!direction.gated) words else words.filter { w -> WordGate.reverseUnlocked(other[w]) || own[w]?.phase.let { it != null && it != CardPhase.New } }
         return if (extra) QueueBuilder.extra(eligible, own, now, limit, noise, rnd)
-        else QueueBuilder.build(eligible, own, now, newBudget, limit, noise, rnd) { w -> WordBlend.urgencyFactor(other[w], now) }
+        else QueueBuilder.build(eligible, own, now, newBudget, limit, noise, rnd) { w ->
+            if (direction == WordDirection.Reading) 1.0 else WordBlend.urgencyFactor(other[w], now)
+        }
     }
 }

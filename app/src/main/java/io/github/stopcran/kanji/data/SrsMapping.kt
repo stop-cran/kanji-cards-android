@@ -30,6 +30,10 @@ fun List<KanjiEntity>.levels(): Map<String, Int?> = associate { it.kanji to it.j
 
 fun WordEntity.toCard() = WordCard(word, reading, title, type, kanji.splitSep(), tags.splitSep())
 
+/** The words a direction can ask about: the reading quiz skips kana-only words. */
+fun List<WordEntity>.forDirection(direction: io.github.stopcran.kanji.core.words.WordDirection): List<WordEntity> =
+    if (direction == io.github.stopcran.kanji.core.words.WordDirection.Reading) filter { io.github.stopcran.kanji.core.words.hasReadingToLearn(it.word, it.reading) } else this
+
 /** The words of [stack], by the level of their hardest kanji. */
 fun List<WordEntity>.inWordStack(stack: WordStack, levels: Map<String, Int?>): List<WordEntity> =
     filter { stack.contains(wordLevel(it.kanji.splitSep(), levels)) }

@@ -48,7 +48,7 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   position. `sourceId` is the lower-case `owner/repo`, so switching to a fork keeps separate progress.
 - **Stacks have independent state** on purpose: a kanji learned in a small set may be confused in a larger one and must be re-learned there.
   Kanji stacks are tag filters (`all`, `starter`, `jlpt-n5`...). Word stacks are `words-n5`, `words-n4`, `words-all` (cumulative by level).
-- **Modes** are `Quiz`, `Draw`, `WordJpEn`, `WordEnJp`; each mode has its own state for the same item. Recognition and recall are different
+- **Modes** are `Quiz`, `Draw`, `WordJpEn`, `WordEnJp`, `WordReading`; each mode has its own state for the same item. Recognition and recall are different
   memories and must not share a schedule.
 - Grades: wrong = Again (FSRS schedules it about 10 minutes later in a learning state; the quiz view models also re-insert it about 3 cards
   later in the same session, and that re-insert is session-only); right = Good; "I guessed" = Hard. Easy is never used (with 4 options a
@@ -67,8 +67,12 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   `distractors`, then most shared tags, then random.
 - Word quiz: `JpToEn` shows the word and asks for the meaning; `EnToJp` shows the meaning (+ tags as a hint) and asks for `word (reading)`.
   Options never share a title or written form with the target.
+- Reading quiz (`WordDirection.Reading`): shows the word and asks for its kana reading. Only words whose reading differs from the written form
+  (`hasReadingToLearn`) are asked. Options (`ReadingOptions`) are all distinct readings, never equal to the correct one: generated
+  look-alikes (voiced/unvoiced, long/short vowel, small っ) first, then real readings of words sharing a kanji or of similar shape. The option
+  key is the reading (`WordQuizUi.Answer.key`), unlike the other directions where it is the written word. Tap only for now (voice: issue #5).
 - Font variety grows with memory stability (Gothic only when young, then Mincho, Textbook, Brush; a lapse drops it back) so recognition does not depend on one glyph shape (`FontPolicy`).
-- Each session screen is keyed by its route (`quiz:<ts>[:extra]`, `wquiz:<ts>:<jp|en>[:extra]`, `draw:<ts>[:extra]`) so a ViewModel
+- Each session screen is keyed by its route (`quiz:<ts>[:extra]`, `wquiz:<ts>:<jp|en|rd>[:extra]`, `draw:<ts>[:extra]`) so a ViewModel
   survives rotation and following a doc link, but a new start is a fresh session. Start sessions from `LaunchedEffect`, not `init`.
 
 ## 5. Words, levels and advancement
@@ -79,11 +83,11 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   unknown kanji has no level and appears only in "All words".
 - Word scope defaults to N5. N4 (and All) appear only after the user unlocks them; the unlock is **offered, never forced** (`Advancement`).
   It evaluates the N5 kanji of the *currently selected kanji stack* (quiz and draw state of that stack) and, when the `words-n5` stack is
-  selected, the N5 words in both directions. An item is solid at stability of at least 7 days and recall of at least 85%; the offer needs 85%
+  selected, the N5 words in every direction (the reading quiz counts only N5 words with kanji). An item is solid at stability of at least 7 days and recall of at least 85%; the offer needs 85%
   solid overall, 60% in each non-empty mode (modes with no items, e.g. kanji without stroke data, are ignored) and at least 20 item-mode
   entries. Dismissal hides the offer for 7 days.
-- `EnToJp` (harder recall) is offered per word only after 2 answers in `JpToEn`, or once already started.
-- **Cross-direction blending affects ordering and eligibility only.** Eligibility: `EnToJp` gating above. Ordering: for *overdue* cards
+- `EnToJp` and `Reading` (harder recall) are offered per word only after 2 answers in `JpToEn`, or once already started (`WordDirection.gated`).
+- **Cross-direction blending affects ordering and eligibility only.** Eligibility: the `gated` directions above. `Reading` is gated by `JpToEn` but never deferred by it (knowing the meaning says nothing about the reading). Ordering: for *overdue* cards
   (positive urgency only; scaling a negative urgency would make it sooner) urgency is multiplied by `1 - 0.2 * R_other` (retrievability of
   the other direction; unseen or forgotten changes nothing). Due dates and stored states of each direction are never changed by the other. Don't make weights additive: FSRS stability and difficulty are not additive quantities.
 

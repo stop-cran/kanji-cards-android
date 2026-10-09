@@ -7,16 +7,26 @@ import io.github.stopcran.kanji.core.srs.StudyMode
 import java.time.Instant
 import kotlin.random.Random
 
-/** The two word-quiz directions; each keeps its own scheduling state. */
+/**
+ * The word-quiz directions; each keeps its own scheduling state. [Reading] shows the written word and asks for its kana
+ * reading. [other] is the direction whose memory gates this one (and, for the forward direction, slightly defers it).
+ */
 enum class WordDirection(val mode: StudyMode) {
     JpToEn(StudyMode.WordJpEn),
     EnToJp(StudyMode.WordEnJp),
+    Reading(StudyMode.WordReading),
     ;
 
     val other: WordDirection get() = if (this == JpToEn) EnToJp else JpToEn
+
+    /** Directions other than the forward one open only after the forward direction has been answered a couple of times. */
+    val gated: Boolean get() = this != JpToEn
 }
 
 data class WordCard(val word: String, val reading: String, val title: String, val type: String?, val kanji: List<String>, val tags: List<String> = emptyList())
+
+/** A reading is worth asking only when it differs from the written form, i.e. the word contains kanji. */
+fun hasReadingToLearn(word: String, reading: String) = word != reading
 
 /**
  * A word's JLPT level is that of its hardest kanji (N5 = 5 is easiest, so the lowest number). Words without kanji, or with a kanji
@@ -79,6 +89,7 @@ data class WordOption(val word: String, val label: String)
  */
 object WordQuizBuilder {
     fun options(target: WordCard, all: List<WordCard>, direction: WordDirection, random: Random, count: Int = 4): List<WordOption> {
+        if (direction == WordDirection.Reading) return ReadingOptions.build(target, all, random, count)
         val usedTitles = hashSetOf(target.title)
         val usedWords = hashSetOf(target.word)
         val chosen = ArrayList<WordCard>()
@@ -96,6 +107,61 @@ object WordQuizBuilder {
     fun label(c: WordCard, direction: WordDirection): String = when (direction) {
         WordDirection.JpToEn -> c.title
         WordDirection.EnToJp -> if (c.word == c.reading) c.word else "${c.word} (${c.reading})"
+        WordDirection.Reading -> c.reading
+    }
+}
+
+/**
+ * Options for the reading quiz are kana readings, which are also the option keys. Every option differs from the correct
+ * reading and from each other, so exactly one is right. Wrong options are the confusions that matter: generated look-alikes
+ * (voiced/unvoiced, long/short vowel, small っ present or absent) and real readings of words sharing a kanji or of a similar shape.
+ */
+object ReadingOptions {
+    private val voicing = mapOf(
+        'か' to "が", 'き' to "ぎ", 'く' to "ぐ", 'け' to "げ", 'こ' to "ご", 'さ' to "ざ", 'し' to "じ", 'す' to "ず", 'せ' to "ぜ", 'そ' to "ぞ",
+        'た' to "だ", 'ち' to "じ", 'つ' to "ず", 'て' to "で", 'と' to "ど", 'は' to "ばぱ", 'ひ' to "びぴ", 'ふ' to "ぶぷ", 'へ' to "べぺ", 'ほ' to "ぼぽ",
+        'が' to "か", 'ぎ' to "き", 'ぐ' to "く", 'げ' to "け", 'ご' to "こ", 'ざ' to "さ", 'じ' to "し", 'ず' to "す", 'ぜ' to "せ", 'ぞ' to "そ",
+        'だ' to "た", 'で' to "て", 'ど' to "と", 'ば' to "は", 'び' to "ひ", 'ぶ' to "ふ", 'べ' to "へ", 'ぼ' to "ほ",
+        'ぱ' to "は", 'ぴ' to "ひ", 'ぷ' to "ふ", 'ぺ' to "へ", 'ぽ' to "ほ",
+    )
+    private const val LONG_O = "おこそとのほもよろごぞどぼぽょ"
+    private const val LONG_U = "ゅくすつぬふむゆるぐずぶぷ"
+    private const val DOUBLING_NEXT = "かきくけこさしすせそたちつてとぱぴぷぺぽ"
+
+    fun mutations(reading: String): List<String> {
+        val out = linkedSetOf<String>()
+        for (i in reading.indices) {
+            val c = reading[i]
+            voicing[c]?.forEach { out += reading.replaceRange(i, i + 1, it.toString()) }
+            if (c == 'っ') out += reading.removeRange(i, i + 1)
+            else if (i > 0 && i < reading.lastIndex && reading[i - 1] != 'っ' && c in DOUBLING_NEXT) out += reading.substring(0, i) + "っ" + reading.substring(i)
+            if (c == 'う' && i > 0 && (reading[i - 1] in LONG_O || reading[i - 1] in LONG_U)) out += reading.removeRange(i, i + 1)
+            else if (c in LONG_O && (i == reading.lastIndex || reading[i + 1] != 'う')) out += reading.substring(0, i + 1) + "う" + reading.substring(i + 1)
+        }
+        out.remove(reading)
+        return out.filter { it.length >= 2 }
+    }
+
+    private fun closeness(target: WordCard, c: WordCard): Int {
+        val d = kotlin.math.abs(c.reading.length - target.reading.length)
+        return (if (c.kanji.any { it in target.kanji }) 3 else 0) +
+            (if (d <= 1) 2 else 0) +
+            (if (c.reading.last() == target.reading.last()) 1 else 0) +
+            (if (c.reading.first() == target.reading.first()) 1 else 0)
+    }
+
+    fun build(target: WordCard, all: List<WordCard>, random: Random, count: Int = 4): List<WordOption> {
+        val used = hashSetOf(target.reading)
+        val chosen = ArrayList<String>()
+        fun add(r: String) {
+            if (chosen.size < count - 1 && used.add(r)) chosen += r
+        }
+        val generated = mutations(target.reading).shuffled(random)
+        generated.take(2).forEach(::add)
+        all.filter { it.word != target.word && hasReadingToLearn(it.word, it.reading) && it.reading.isNotEmpty() }
+            .shuffled(random).sortedByDescending { closeness(target, it) }.forEach { add(it.reading) }
+        generated.drop(2).forEach(::add)
+        return (chosen + target.reading).map { WordOption(it, it) }.shuffled(random)
     }
 }
 

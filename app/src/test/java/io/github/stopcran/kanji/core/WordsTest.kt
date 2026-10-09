@@ -3,6 +3,7 @@ package io.github.stopcran.kanji.core
 import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.words.Advancement
+import io.github.stopcran.kanji.core.words.ReadingOptions
 import io.github.stopcran.kanji.core.words.WordBlend
 import io.github.stopcran.kanji.core.words.WordCard
 import io.github.stopcran.kanji.core.words.WordDirection
@@ -10,6 +11,7 @@ import io.github.stopcran.kanji.core.words.WordGate
 import io.github.stopcran.kanji.core.words.WordQueues
 import io.github.stopcran.kanji.core.words.WordQuizBuilder
 import io.github.stopcran.kanji.core.words.WordStacks
+import io.github.stopcran.kanji.core.words.hasReadingToLearn
 import io.github.stopcran.kanji.core.words.wordLevel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -111,4 +113,41 @@ class WordsTest {
         assertFalse(Advancement.shouldOffer(true, true, 0, 100 * day))
         assertFalse(Advancement.shouldOffer(false, false, 0, 100 * day))
     }
-}
+
+    @Test
+    fun readingOptionsAreDistinctAndIncludeLookAlikes() {
+        fun w(word: String, reading: String, kanji: List<String>) = WordCard(word, reading, "x$word", null, kanji)
+        val target = w("学校", "がっこう", listOf("学", "校"))
+        val all = listOf(target, w("学生", "がくせい", listOf("学", "生")), w("先生", "せんせい", listOf("先", "生")), w("今日", "きょう", listOf("今", "日")), w("犬", "いぬ", listOf("犬")), w("ねこ", "ねこ", emptyList()), w("学", "がっこう", listOf("学")))
+        repeat(30) { seed ->
+            val o = WordQuizBuilder.options(target, all, WordDirection.Reading, Random(seed))
+            assertEquals(4, o.size)
+            assertEquals(4, o.map { it.word }.toSet().size)
+            assertEquals(1, o.count { it.word == "がっこう" })
+            assertTrue(o.all { it.word == it.label })
+            assertFalse(o.any { it.word == "ねこ" })
+            assertTrue(o.count { it.word in ReadingOptions.mutations("がっこう") } >= 2)
+        }
+    }
+
+    @Test
+    fun mutationsCoverVoicingSokuonAndLongVowel() {
+        val m = ReadingOptions.mutations("がっこう")
+        assertTrue("かっこう" in m)
+        assertTrue("がこう" in m)
+        assertTrue("がっこ" in m)
+        assertTrue("きょう" !in m && "がっこう" !in m)
+        assertTrue("きょ" in ReadingOptions.mutations("きょう"))
+        assertTrue(ReadingOptions.mutations("あ").isEmpty())
+    }
+
+    @Test
+    fun readingDirectionIsGatedAndKanaOnlyWordsAreSkipped() {
+        assertTrue(WordDirection.Reading.gated && WordDirection.EnToJp.gated && !WordDirection.JpToEn.gated)
+        assertEquals(WordDirection.JpToEn, WordDirection.Reading.other)
+        assertFalse(hasReadingToLearn("ねこ", "ねこ"))
+        assertTrue(hasReadingToLearn("犬", "いぬ"))
+        val jp = mapOf("a" to review(2.0, reps = 2, dueOffsetSec = 99999), "b" to review(2.0, reps = 1))
+        val q = WordQueues.build(WordDirection.Reading, listOf("a", "b", "c"), emptyMap(), jp, now, newBudget = 10, noise = 0.0)
+        assertEquals(listOf("a"), q.map { it.kanji })
+    }}

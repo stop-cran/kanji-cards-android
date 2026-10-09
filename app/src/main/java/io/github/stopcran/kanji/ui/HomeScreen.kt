@@ -14,6 +14,7 @@ import io.github.stopcran.kanji.core.words.Advancement
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.WordQueues
 import io.github.stopcran.kanji.core.words.WordStacks
+import io.github.stopcran.kanji.data.forDirection
 import io.github.stopcran.kanji.data.inWordStack
 import io.github.stopcran.kanji.data.levels
 import androidx.compose.foundation.layout.Column
@@ -80,29 +81,36 @@ fun HomeScreen(app: KanjiApp, onSettings: () -> Unit, onCards: () -> Unit, onQui
     val jpStates = jpLoaded ?: emptyMap()
     val enLoaded = rememberStates(app, source.id, wordStack.id, StudyMode.WordEnJp)
     val enStates = enLoaded ?: emptyMap()
+    val rdLoaded = rememberStates(app, source.id, wordStack.id, StudyMode.WordReading)
+    val rdStates = rdLoaded ?: emptyMap()
     val startOfDay = remember { LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() }
     val jpIntroduced by produceState(0, source.id, wordStack.id, jpStates.size) { value = app.db.reviews().newCardsIntroducedSince(source.id, wordStack.id, StudyMode.WordJpEn.name, startOfDay) }
     val enIntroduced by produceState(0, source.id, wordStack.id, enStates.size) { value = app.db.reviews().newCardsIntroducedSince(source.id, wordStack.id, StudyMode.WordEnJp.name, startOfDay) }
+    val rdIntroduced by produceState(0, source.id, wordStack.id, rdStates.size) { value = app.db.reviews().newCardsIntroducedSince(source.id, wordStack.id, StudyMode.WordReading.name, startOfDay) }
     val now = Instant.now()
     val jpQueue = WordQueues.build(WordDirection.JpToEn, wordIds, jpStates, enStates, now, dailyNew - jpIntroduced)
     val enQueue = WordQueues.build(WordDirection.EnToJp, wordIds, enStates, jpStates, now, dailyNew - enIntroduced)
+    val readableIds = remember(wordsInStack) { wordsInStack.forDirection(WordDirection.Reading).map { it.word } }
+    val rdQueue = WordQueues.build(WordDirection.Reading, readableIds, rdStates, jpStates, now, dailyNew - rdIntroduced)
 
     val quizLoaded = rememberStates(app, source.id, stack.id, StudyMode.Quiz)
     val quizStates = quizLoaded ?: emptyMap()
     val drawLoaded = rememberStates(app, source.id, stack.id, StudyMode.Draw)
     val drawStates = drawLoaded ?: emptyMap()
-    val loading = kanjiOrNull == null || wordsOrNull == null || jpLoaded == null || enLoaded == null || quizLoaded == null || drawLoaded == null
+    val loading = kanjiOrNull == null || wordsOrNull == null || jpLoaded == null || enLoaded == null || rdLoaded == null || quizLoaded == null || drawLoaded == null
     val quizQueue = rememberQueue(app, source.id, stack.id, inStack.map { it.kanji }, StudyMode.Quiz, dailyNew, quizStates)
     val drawQueue = rememberQueue(app, source.id, stack.id, inStack.filter { it.strokesJson != null }.map { it.kanji }, StudyMode.Draw, dailyNew, drawStates)
     val n5Kanji = inStack.filter { it.jlpt == 5 }
     val n5Words = remember(words, levels) { words.inWordStack(WordStacks.n5, levels) }
-    val ready = remember(quizStates, drawStates, jpStates, enStates, n5Kanji, n5Words, wordStack) {
+    val n5Readable = remember(n5Words) { n5Words.forDirection(WordDirection.Reading) }
+    val ready = remember(quizStates, drawStates, jpStates, enStates, rdStates, n5Kanji, n5Words, n5Readable, wordStack) {
         Advancement.ready(
             listOf(
                 n5Kanji.map { quizStates[it.kanji] },
                 n5Kanji.filter { it.strokesJson != null }.map { drawStates[it.kanji] },
                 if (wordStack.id == WordStacks.n5.id) n5Words.map { jpStates[it.word] } else emptyList(),
                 if (wordStack.id == WordStacks.n5.id) n5Words.map { enStates[it.word] } else emptyList(),
+                if (wordStack.id == WordStacks.n5.id) n5Readable.map { rdStates[it.word] } else emptyList(),
             ),
             Instant.now(),
         )
@@ -152,8 +160,10 @@ fun HomeScreen(app: KanjiApp, onSettings: () -> Unit, onCards: () -> Unit, onQui
         }
         Text("Japanese → English: ${jpQueue.count { !it.isNew }} due, ${jpQueue.count { it.isNew }} new today")
         Button(onClick = { onWords(WordDirection.JpToEn, false) }, enabled = jpQueue.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Start Japanese → English") }
-        Text("English → Japanese: ${enQueue.count { !it.isNew }} due (unlocks as you learn words)")
+        Text(if (enQueue.isEmpty()) "English → Japanese: unlocks as you learn words" else "English → Japanese: ${enQueue.count { !it.isNew }} due, ${enQueue.count { it.isNew }} new today")
         Button(onClick = { onWords(WordDirection.EnToJp, false) }, enabled = enQueue.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Start English → Japanese") }
+        Text(if (rdQueue.isEmpty()) "Reading: unlocks as you learn words" else "Reading: ${rdQueue.count { !it.isNew }} due, ${rdQueue.count { it.isNew }} new today")
+        Button(onClick = { onWords(WordDirection.Reading, false) }, enabled = rdQueue.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Start reading quiz") }
         OutlinedButton(onClick = { onWords(WordDirection.JpToEn, true) }, enabled = wordsInStack.size >= 2, modifier = Modifier.fillMaxWidth()) { Text("Extra word practice") }
         OutlinedButton(onClick = onCards, enabled = kanji.isNotEmpty(), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Browse cards") }
     }
