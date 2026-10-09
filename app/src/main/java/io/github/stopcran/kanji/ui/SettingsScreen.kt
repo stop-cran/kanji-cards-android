@@ -169,12 +169,19 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
         val exporter = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip")) { uri ->
             if (uri != null) {
                 exportStatus = runCatching {
-                    val n = context.contentResolver.openOutputStream(uri)!!.use { io.github.stopcran.kanji.data.DrawingLog.exportZip(context, it) }
-                    "Exported $n drawings"
+                    val n = context.contentResolver.openOutputStream(uri, "wt")!!.use { io.github.stopcran.kanji.data.DrawingLog.exportZip(context, it) }
+                    "Exported $n drawings at ${java.time.LocalTime.now().withNano(0)}"
                 }.getOrElse { "Export failed: ${it.message}" }
             }
         }
-        OutlinedButton(onClick = { saved = io.github.stopcran.kanji.data.DrawingLog.count(context); exporter.launch("kanji-drawings.zip") }, enabled = saved > 0 || exportStatus.isEmpty()) {
+        OutlinedButton(
+            onClick = {
+                saved = io.github.stopcran.kanji.data.DrawingLog.count(context)
+                val stamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+                exporter.launch("kanji-drawings-$stamp.zip")
+            },
+            enabled = saved > 0 || exportStatus.isEmpty(),
+        ) {
             Text("Export saved drawings ($saved)")
         }
         Text(

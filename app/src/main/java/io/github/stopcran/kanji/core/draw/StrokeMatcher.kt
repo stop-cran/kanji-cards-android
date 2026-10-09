@@ -68,6 +68,8 @@ data class MatchResult(
     val drawnStrokes: Int,
     /** Reference strokes found in the drawing, possibly with order or direction mistakes. */
     val matchedStrokes: Int,
+    /** Mean normalised distance of the matched strokes (lower fits better); 1.0 when nothing matched. */
+    val fitCost: Double = 1.0,
 ) {
     val clean: Boolean get() = issues.isEmpty()
 
@@ -147,7 +149,7 @@ class StrokeMatcher(private val cfg: MatcherConfig = MatcherConfig()) {
                 links = link(reference, normalize(drawn, from, to))
             }
         }
-        val result = classify(reference.size, drawn.size, links)
+        val result = classify(reference.size, drawn.size, links).copy(fitCost = if (links.isEmpty()) 1.0 else links.sumOf { it.cost } / links.size)
         return if (result.issues.isEmpty()) result.withHookChecks(reference, simplifyStrokes(rawDrawn, cfg.smoothing), links, scale) else result
     }
 
@@ -158,8 +160,8 @@ class StrokeMatcher(private val cfg: MatcherConfig = MatcherConfig()) {
         val found = ArrayList<StrokeIssue>()
         for (l in links) {
             if (l !is Link.One) continue
-            val drawnTurn = endHook(simple[l.d].map { Pt(it.x * scale, it.y * scale) })
-            val type = hookIssue(endTurn(reference[l.r]), drawnTurn) ?: continue
+            val scaled = simple[l.d].map { Pt(it.x * scale, it.y * scale) }
+            val type = hookIssue(endTurn(reference[l.r]), endHook(scaled), endHook(scaled, HOOK_LONG_WINDOW)) ?: continue
             found += StrokeIssue(type, l.r, l.d)
         }
         return if (found.isEmpty()) this else copy(issues = found.sortedBy { it.refIndex })

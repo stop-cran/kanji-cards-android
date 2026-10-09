@@ -14,13 +14,13 @@ internal fun endTurn(stroke: Stroke): Double = endHook(stroke).turn
  * Finds the strongest turn between the stem (the 5 units before a corner) and the chord from that corner to the end,
  * with corners up to 12 units from the end. Coordinates are in 109-unit KanjiVG space.
  */
-internal fun endHook(stroke: Stroke): EndHook {
+internal fun endHook(stroke: Stroke, window: Int = HOOK_WINDOW): EndHook {
     if (stroke.size < 3 || stroke.length() < 14.0) return EndHook(0.0, 0.0)
     val q = smooth(stroke.resampleBy(1.0))
     val last = q.lastIndex
     var best = 0.0
     var tail = 0.0
-    for (c in (last - 12).coerceAtLeast(5)..last - 2) {
+    for (c in (last - window).coerceAtLeast(5)..last - 2) {
         val sx = q[c].x - q[c - 5].x
         val sy = q[c].y - q[c - 5].y
         val tx = q[last].x - q[c].x
@@ -43,13 +43,24 @@ private fun smooth(q: Stroke): Stroke =
 /** Resamples to points about [step] apart along the stroke (the last point is kept). */
 internal fun Stroke.resampleBy(step: Double): Stroke = resample((length() / step).toInt().coerceAtLeast(2) + 1)
 
-/** A hooked reference needs a visible hook on the same side; a straight reference rejects a pronounced, long one. */
-internal fun hookIssue(refTurn: Double, drawn: EndHook): IssueType? = when {
-    abs(refTurn) >= HOOK_REF && (drawn.turn * refTurn <= 0 || abs(drawn.turn) < HOOK_MIN) -> IssueType.MissingHook
-    abs(refTurn) < HOOK_FLAT && abs(drawn.turn) >= HOOK_EXTRA && drawn.tail >= HOOK_EXTRA_TAIL -> IssueType.ExtraHook
-    else -> null
+/**
+ * A hooked reference needs a visible hook on the same side; a straight reference rejects a pronounced, long one.
+ * [drawnLong] is measured over a wider window: people draw hooks larger than the reference ones, which puts the
+ * corner outside the normal window. It only counts as a hook when it is sharp ([HOOK_LONG_MIN]) and the tail is short.
+ */
+internal fun hookIssue(refTurn: Double, drawn: EndHook, drawnLong: EndHook = drawn): IssueType? {
+    val sameSide = { h: EndHook, min: Double -> h.turn * refTurn > 0 && abs(h.turn) >= min }
+    return when {
+        abs(refTurn) >= HOOK_REF && !sameSide(drawn, HOOK_MIN) && !(sameSide(drawnLong, HOOK_LONG_MIN) && drawnLong.tail <= HOOK_LONG_TAIL) -> IssueType.MissingHook
+        abs(refTurn) < HOOK_FLAT && abs(drawn.turn) >= HOOK_EXTRA && drawn.tail >= HOOK_EXTRA_TAIL -> IssueType.ExtraHook
+        else -> null
+    }
 }
 
+internal const val HOOK_WINDOW = 12
+internal const val HOOK_LONG_WINDOW = 28
+private const val HOOK_LONG_MIN = 60.0
+private const val HOOK_LONG_TAIL = 25.0
 private const val HOOK_REF = 60.0
 private const val HOOK_MIN = 35.0
 private const val HOOK_FLAT = 35.0

@@ -2,6 +2,7 @@ package io.github.stopcran.kanji.core
 
 import io.github.stopcran.kanji.core.content.StrokeData
 import io.github.stopcran.kanji.core.draw.IssueType
+import io.github.stopcran.kanji.core.draw.LookalikeGate
 import io.github.stopcran.kanji.core.draw.MatchResult
 import io.github.stopcran.kanji.core.draw.Pt
 import io.github.stopcran.kanji.core.draw.Stroke
@@ -252,6 +253,75 @@ class StrokeMatcherTest {
         rate("other-not-clean", notClean, 0.995)
         // Similar kanji (上/下, 大/人, 木/休) legitimately share strokes; telling them apart is the recognition gate's job.
         rate("other-not-recognizable", notRecognizable, 0.8)
+    }
+
+    @Test
+    fun largeHookIsAcceptedAndMissingHookIsNot() {
+        val ref = refs.getValue("気")
+        val hooked = ref[3]
+        val stem = hooked.dropLast(3)
+        val e = stem.last()
+        fun withHook(tail: Double): Stroke {
+            val a = Pt(e.x + 1, e.y + 2)
+            val b = Pt(e.x + 2.5, e.y + 4)
+            return stem + listOf(a, b, Pt(b.x + 0.6, b.y - tail * 0.5), Pt(b.x + 1.0, b.y - tail))
+        }
+        fun verdict(s: Stroke, seed: Int): MatchResult {
+            val shown = ref.toMutableList().also { it[3] = s }
+            return matcher.match(ref, handDraw(shown, seed))
+        }
+        for (tail in listOf(9.0, 14.0, 18.0, 22.0)) for (seed in 1..10) {
+            val r = verdict(withHook(tail), seed)
+            assertTrue("tail $tail #$seed: ${r.issues}", r.issues.none { it.type == IssueType.MissingHook })
+        }
+        val flat = (1..10).count { seed -> verdict(stem + Pt(e.x + 1, e.y + 2), seed).issues.any { it.type == IssueType.MissingHook } }
+        assertTrue("hook-less stroke flagged in $flat/10", flat >= 9)
+    }
+
+    @Test
+    fun cowDrawnForNoonIsCaughtAndTheReverseToo() {
+        val gate = LookalikeGate(matcher)
+        val pool = refs.map { it.key to it.value }
+        for ((asked, drawnKanji) in listOf("午" to "牛", "牛" to "午")) {
+            val hits = (1..10).count { seed ->
+                val d = handDraw(refs.getValue(drawnKanji), seed)
+                gate.find(asked, matcher.match(refs.getValue(asked), d), d, pool) == drawnKanji
+            }
+            assertTrue("$drawnKanji asked as $asked caught in $hits/10", hits >= 8)
+            val own = (1..10).count { seed ->
+                val d = handDraw(refs.getValue(asked), seed)
+                gate.find(asked, matcher.match(refs.getValue(asked), d), d, pool) != null
+            }
+            assertEquals("$asked drawn correctly was rejected $own/10", 0, own)
+        }
+    }
+
+    @Test
+    fun lookalikeGateRejectsNoGenuineDrawingsAndCatchesMostLookalikes() {
+        val gate = LookalikeGate(matcher)
+        val byCount = refs.entries.groupBy { it.value.size }
+        var genuine = 0
+        var falseRejects = ArrayList<String>()
+        var cases = 0
+        var caught = 0
+        for ((a, ref) in refs) {
+            val d = handDraw(ref, 1)
+            val own = matcher.match(ref, d)
+            if (!own.clean) continue
+            genuine++
+            val pool = byCount.getValue(ref.size).map { it.key to it.value }
+            if (gate.find(a, own, d, pool) != null) falseRejects += a
+            for ((b, rb) in pool) {
+                if (b == a) continue
+                val asB = matcher.match(rb, d)
+                if (!asB.clean) continue
+                cases++
+                if (gate.find(b, asB, d, pool) == a) caught++
+            }
+        }
+        println("lookalike gate: false rejects ${falseRejects.size}/$genuine, caught $caught/$cases")
+        assertTrue("false rejects: ${falseRejects.take(20)}", falseRejects.size * 200 <= genuine)
+        assertTrue("caught $caught/$cases", cases == 0 || caught * 10 >= cases * 8)
     }
 
     @Test
