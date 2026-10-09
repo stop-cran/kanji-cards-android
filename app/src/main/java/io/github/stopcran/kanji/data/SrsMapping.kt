@@ -5,6 +5,9 @@ import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.Stack
 import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.srs.StudyMode
+import io.github.stopcran.kanji.core.words.WordCard
+import io.github.stopcran.kanji.core.words.WordStack
+import io.github.stopcran.kanji.core.words.wordLevel
 import java.time.Instant
 
 fun ReviewStateEntity.toSrs() = SrsState(
@@ -22,3 +25,12 @@ fun List<KanjiEntity>.inStack(stackId: String): List<KanjiEntity> {
     val stack = Stacks.find(stackId, stacks())
     return filter { stack.contains(it.tags.splitSep()) }
 }
+
+fun List<KanjiEntity>.levels(): Map<String, Int?> = associate { it.kanji to it.jlpt }
+
+fun WordEntity.toCard() = WordCard(word, reading, title, type, kanji.splitSep(), tags.splitSep())
+
+/** The words of [stack], by the level of their hardest kanji. */
+fun List<WordEntity>.inWordStack(stack: WordStack, levels: Map<String, Int?>): List<WordEntity> =
+    filter { stack.contains(wordLevel(it.kanji.splitSep(), levels)) }
+

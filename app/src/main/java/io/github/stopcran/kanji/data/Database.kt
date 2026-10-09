@@ -91,6 +91,12 @@ interface ContentDao {
     @Query("SELECT * FROM kanji WHERE sourceId = :sourceId AND kanji = :kanji")
     suspend fun kanjiCard(sourceId: String, kanji: String): KanjiEntity?
 
+    @Query("SELECT * FROM words WHERE sourceId = :sourceId ORDER BY word")
+    suspend fun words(sourceId: String): List<WordEntity>
+
+    @Query("SELECT * FROM words WHERE sourceId = :sourceId ORDER BY word")
+    fun observeWords(sourceId: String): Flow<List<WordEntity>>
+
     @Query("SELECT * FROM words WHERE sourceId = :sourceId AND word = :word")
     suspend fun word(sourceId: String, word: String): WordEntity?
 

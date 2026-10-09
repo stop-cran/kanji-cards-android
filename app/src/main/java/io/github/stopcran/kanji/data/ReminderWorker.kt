@@ -20,6 +20,9 @@ import io.github.stopcran.kanji.MainActivity
 import io.github.stopcran.kanji.core.srs.QueueBuilder
 import io.github.stopcran.kanji.core.srs.ReminderPolicy
 import io.github.stopcran.kanji.core.srs.StudyMode
+import io.github.stopcran.kanji.core.words.WordDirection
+import io.github.stopcran.kanji.core.words.WordQueues
+import io.github.stopcran.kanji.core.words.WordStacks
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -45,6 +48,14 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 val startOfDay = LocalDate.now().atStartOfDay(zone).toInstant().toEpochMilli()
                 val budget = app.settings.dailyNewCards.value - app.db.reviews().newCardsIntroducedSince(source.id, stack, mode.name, startOfDay)
                 due += QueueBuilder.build(ids, states, Instant.ofEpochMilli(now), budget).size
+            }
+            val wordStack = WordStacks.find(app.settings.wordStack.value, WordStacks.offered(app.settings.n4Unlocked.value))
+            val words = app.db.content().words(source.id).inWordStack(wordStack, app.db.content().kanji(source.id).levels()).map { it.word }
+            val wordStates = WordDirection.entries.associateWith { d -> app.db.reviews().states(source.id, wordStack.id, d.mode.name).associate { it.kanji to it.toSrs() } }
+            val startOfDay = LocalDate.now().atStartOfDay(zone).toInstant().toEpochMilli()
+            for (d in WordDirection.entries) {
+                val budget = app.settings.dailyNewCards.value - app.db.reviews().newCardsIntroducedSince(source.id, wordStack.id, d.mode.name, startOfDay)
+                due += WordQueues.build(d, words, wordStates.getValue(d), wordStates.getValue(d.other), Instant.ofEpochMilli(now), budget).size
             }
             val decision = ReminderPolicy.decide(
                 now, LocalDate.now().atStartOfDay(zone).toInstant().toEpochMilli(), app.db.reviews().lastReviewMs(),

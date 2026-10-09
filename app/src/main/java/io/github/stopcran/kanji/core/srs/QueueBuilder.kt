@@ -4,7 +4,7 @@ import java.time.Duration
 import java.time.Instant
 import kotlin.random.Random
 
-enum class StudyMode { Quiz, Draw }
+enum class StudyMode { Quiz, Draw, WordJpEn, WordEnJp }
 
 data class QueueItem(val kanji: String, val state: SrsState, val isNew: Boolean)
 
@@ -23,11 +23,12 @@ object QueueBuilder {
         limit: Int = Int.MAX_VALUE,
         noise: Double = DEFAULT_NOISE,
         rnd: Random = Random.Default,
+        urgencyFactor: (String) -> Double = { 1.0 },
     ): List<QueueItem> {
         val due = allKanji.mapNotNull { k ->
             val s = states[k] ?: return@mapNotNull null
             if (s.phase != CardPhase.New && !s.due.isAfter(now)) QueueItem(k, s, false) else null
-        }.let { byUrgency(it, now, noise, rnd) }
+        }.let { byUrgency(it, now, noise, rnd, urgencyFactor) }
         val fresh = allKanji.filter { states[it] == null || states[it]!!.phase == CardPhase.New }
             .let { if (noise > 0) it.shuffled(rnd) else it }
             .take(maxOf(0, newCardsRemainingToday))
@@ -54,8 +55,8 @@ object QueueBuilder {
 
     const val DEFAULT_NOISE = 0.3
 
-    private fun byUrgency(items: List<QueueItem>, now: Instant, noise: Double, rnd: Random): List<QueueItem> =
-        items.map { it to urgency(it.state, now) + noise * (rnd.nextDouble() * 2 - 1) }
+    private fun byUrgency(items: List<QueueItem>, now: Instant, noise: Double, rnd: Random, factor: (String) -> Double = { 1.0 }): List<QueueItem> =
+        items.map { it to urgency(it.state, now).let { u -> if (u > 0) u * factor(it.kanji) else u } + noise * (rnd.nextDouble() * 2 - 1) }
             .sortedByDescending { it.second }
             .map { it.first }
 

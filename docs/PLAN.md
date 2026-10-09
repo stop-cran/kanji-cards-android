@@ -1,7 +1,7 @@
 # Implementation plan
 
 > **Status (October 2026):** milestones 1–8 are done (content foundation with N5 cards, sync, FSRS-5 with per-stack state, quiz, article viewer,
-> matcher, drawing mode, settings/About/stacks) plus later additions: brushes, search, queue noise, launch sync, reminders. Remaining: real-device
+> matcher, drawing mode, settings/About/stacks) plus later additions: brushes, search, queue noise, launch sync, reminders, and the word quiz (both directions, N5 scope with an N4 unlock offer; word level = hardest kanji; separate FSRS state per direction; the other direction only slightly defers ordering). Remaining: real-device
 > tuning from the drawing log (after the N4 set), writing-pattern variants ([issue #1](https://github.com/stop-cran/kanji-cards-android/issues/1)),
 > and the release work in milestone 9 (see [RELEASE.md](RELEASE.md)). The sections below are the original plan and are kept for context.
 

@@ -19,6 +19,8 @@ import io.github.stopcran.kanji.ui.CardsScreen
 import io.github.stopcran.kanji.ui.HomeScreen
 import io.github.stopcran.kanji.ui.QuizScreen
 import io.github.stopcran.kanji.ui.SettingsScreen
+import io.github.stopcran.kanji.ui.WordQuizScreen
+import io.github.stopcran.kanji.core.words.WordDirection
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,6 +54,13 @@ private fun AppNav(app: KanjiApp) {
                 onOpenDoc = { push("doc:$it") },
                 onPracticeMore = { pop(); push("quiz:${System.currentTimeMillis()}:extra") },
             )
+        } else if (route.startsWith("wquiz:")) {
+            WordQuizScreen(
+                sessionKey = route,
+                onBack = ::pop,
+                onOpenDoc = { push("doc:$it") },
+                onPracticeMore = { pop(); push("wquiz:${System.currentTimeMillis()}:${route.split(":")[2]}:extra") },
+            )
         } else if (route.startsWith("draw:")) {
             DrawScreen(
                 sessionKey = route,
@@ -68,6 +77,7 @@ private fun AppNav(app: KanjiApp) {
                 onSettings = { push("settings") },
                 onCards = { push("cards") },
                 onQuiz = { extra -> push("quiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
+                onWords = { dir, extra -> push("wquiz:${System.currentTimeMillis()}:${if (dir == WordDirection.JpToEn) "jp" else "en"}" + if (extra) ":extra" else "") },
                 onDraw = { extra -> push("draw:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
             )
         }

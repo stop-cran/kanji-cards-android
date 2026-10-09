@@ -4,6 +4,7 @@ import android.content.Context
 import io.github.stopcran.kanji.Defaults
 import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.srs.Stacks
+import io.github.stopcran.kanji.core.words.WordStacks
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -46,6 +47,31 @@ class Settings(context: Context) {
     fun setStack(id: String) {
         prefs.edit().putString(KEY_STACK, id).apply()
         _stack.value = id
+    }
+
+    private val _wordStack = MutableStateFlow(prefs.getString(KEY_WORD_STACK, WordStacks.n5.id) ?: WordStacks.n5.id)
+    val wordStack: StateFlow<String> = _wordStack
+
+    fun setWordStack(id: String) {
+        prefs.edit().putString(KEY_WORD_STACK, id).apply()
+        _wordStack.value = id
+    }
+
+    private val _n4Unlocked = MutableStateFlow(prefs.getBoolean(KEY_N4, false))
+    val n4Unlocked: StateFlow<Boolean> = _n4Unlocked
+
+    fun setN4Unlocked(v: Boolean) {
+        prefs.edit().putBoolean(KEY_N4, v).apply()
+        _n4Unlocked.value = v
+    }
+
+    /** When the user last dismissed the offer to move on to N4 (0 = never). */
+    private val _advanceDismissedMs = MutableStateFlow(prefs.getLong(KEY_ADVANCE_DISMISSED, 0))
+    val advanceDismissedMs: StateFlow<Long> = _advanceDismissedMs
+
+    fun dismissAdvance(nowMs: Long) {
+        prefs.edit().putLong(KEY_ADVANCE_DISMISSED, nowMs).apply()
+        _advanceDismissedMs.value = nowMs
     }
 
     private val _reminderEnabled = MutableStateFlow(prefs.getBoolean(KEY_REMIND, false))
@@ -110,6 +136,9 @@ class Settings(context: Context) {
         const val KEY_SAVE_DRAWINGS = "saveDrawings"
         const val KEY_BRUSH = "brush"
         const val KEY_STACK = "stack"
+        const val KEY_WORD_STACK = "wordStack"
+        const val KEY_N4 = "n4Unlocked"
+        const val KEY_ADVANCE_DISMISSED = "advanceDismissedMs"
         const val KEY_REMIND = "reminder"
         const val KEY_REMIND_HOUR = "reminderHour"
         const val KEY_REMIND_IGNORED = "remindersIgnored"
