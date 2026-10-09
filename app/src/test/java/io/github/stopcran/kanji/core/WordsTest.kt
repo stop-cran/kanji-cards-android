@@ -3,6 +3,7 @@ package io.github.stopcran.kanji.core
 import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.words.Advancement
+import io.github.stopcran.kanji.core.words.ReadingOptions
 import io.github.stopcran.kanji.core.words.WordBlend
 import io.github.stopcran.kanji.core.words.WordCard
 import io.github.stopcran.kanji.core.words.WordDirection
@@ -10,6 +11,7 @@ import io.github.stopcran.kanji.core.words.WordGate
 import io.github.stopcran.kanji.core.words.WordQueues
 import io.github.stopcran.kanji.core.words.WordQuizBuilder
 import io.github.stopcran.kanji.core.words.WordStacks
+import io.github.stopcran.kanji.core.words.hasReadingToLearn
 import io.github.stopcran.kanji.core.words.wordLevel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -21,6 +23,7 @@ import kotlin.random.Random
 
 class WordsTest {
     private val now = Instant.parse("2026-01-10T00:00:00Z")
+    private val meaningDirections = listOf(WordDirection.JpToEn, WordDirection.EnToJp)
     private fun review(stability: Double, reps: Int = 3, dueOffsetSec: Long = 0, lastDaysAgo: Long = 1) =
         SrsState(CardPhase.Review, stability, 5.0, now.plusSeconds(dueOffsetSec), now.minusSeconds(lastDaysAgo * 86400), reps)
 
@@ -130,7 +133,7 @@ class WordsTest {
         val a = optionWord("気", listOf("気分"))
         val b = optionWord("気分")
         val all = listOf(a, b) + (1..4).map { optionWord("other-$it") }
-        for (direction in WordDirection.entries) {
+        for (direction in meaningDirections) {
             for ((target, excluded) in listOf(a to b, b to a)) {
                 repeat(20) { seed ->
                     val options = WordQuizBuilder.options(target, all, direction, Random(seed))
@@ -149,7 +152,7 @@ class WordsTest {
         val b = optionWord("b", tags = listOf("kind"))
         val all = listOf(target, a, b, optionWord("c"), optionWord("d"))
         val seen = mutableSetOf<String>()
-        for (direction in WordDirection.entries) {
+        for (direction in meaningDirections) {
             repeat(40) { seed ->
                 val options = WordQuizBuilder.options(target, all, direction, Random(seed))
                 assertEquals(4, options.size)
@@ -166,7 +169,7 @@ class WordsTest {
         val a = optionWord("a", listOf("b"))
         val b = optionWord("b", listOf("c"))
         val c = optionWord("c")
-        for (direction in WordDirection.entries) {
+        for (direction in meaningDirections) {
             for (target in listOf(a, c)) {
                 assertEquals(setOf("a", "c"), WordQuizBuilder.options(target, listOf(a, b, c), direction, Random(1)).map { it.word }.toSet())
             }
@@ -180,7 +183,7 @@ class WordsTest {
         val eligible = optionWord("eligible", tags = listOf("first")).copy(title = blocked.title)
         val other = optionWord("other")
         val all = listOf(target, blocked, eligible, other, other.copy(title = "different"), optionWord("same-title").copy(title = target.title))
-        for (direction in WordDirection.entries) {
+        for (direction in meaningDirections) {
             repeat(20) { seed ->
                 val options = WordQuizBuilder.options(target, all, direction, Random(seed), count = 8)
                 assertEquals(setOf("target", "eligible", "other"), options.map { it.word }.toSet())
@@ -195,7 +198,7 @@ class WordsTest {
         val blocked = optionWord("blocked", tags = target.tags)
         val high = optionWord("high", tags = listOf("first"))
         val low = optionWord("low")
-        for (direction in WordDirection.entries) {
+        for (direction in meaningDirections) {
             repeat(20) { seed ->
                 assertEquals(
                     setOf("target", "high"),
@@ -211,7 +214,7 @@ class WordsTest {
         val b = optionWord("b")
         val target = optionWord("target")
         val clique = listOf(target, a.copy(quizExclusions = listOf("b", "c")), b.copy(quizExclusions = listOf("c")), optionWord("c"))
-        for (direction in WordDirection.entries) {
+        for (direction in meaningDirections) {
             repeat(20) { seed ->
                 assertEquals(listOf("a"), WordQuizBuilder.options(a, listOf(a, b), direction, Random(seed)).map { it.word })
                 assertEquals(2, WordQuizBuilder.options(target, clique, direction, Random(seed)).size)
@@ -236,4 +239,60 @@ class WordsTest {
         assertFalse(Advancement.shouldOffer(true, true, 0, 100 * day))
         assertFalse(Advancement.shouldOffer(false, false, 0, 100 * day))
     }
-}
+
+    @Test
+    fun readingOptionsAreDistinctAndIncludeLookAlikes() {
+        fun w(word: String, reading: String, kanji: List<String>) = WordCard(word, reading, "x$word", null, kanji)
+        val target = w("学校", "がっこう", listOf("学", "校"))
+        val all = listOf(target, w("学生", "がくせい", listOf("学", "生")), w("先生", "せんせい", listOf("先", "生")), w("今日", "きょう", listOf("今", "日")), w("犬", "いぬ", listOf("犬")), w("ねこ", "ねこ", emptyList()), w("学", "がっこう", listOf("学")))
+        repeat(30) { seed ->
+            val o = WordQuizBuilder.options(target, all, WordDirection.Reading, Random(seed))
+            assertEquals(4, o.size)
+            assertEquals(4, o.map { it.word }.toSet().size)
+            assertEquals(1, o.count { it.word == "がっこう" })
+            assertTrue(o.all { it.word == it.label })
+            assertFalse(o.any { it.word == "ねこ" })
+            assertTrue(o.count { it.word in ReadingOptions.mutations("がっこう") } >= 2)
+        }
+    }
+
+    @Test
+    fun meaningExclusionsDoNotChangeDistinctReadingOptions() {
+        val target = WordCard("青", "あお", "blue", "wago", listOf("青"), jlpt = 5, quizExclusions = listOf("青い"))
+        val adjective = target.copy(word = "青い", reading = "あおい", title = "blue; green", quizExclusions = emptyList())
+        val words = listOf(target, adjective, WordCard("森", "もり", "forest", "wago", listOf("森")))
+        val withoutExclusions = words.map { it.copy(quizExclusions = emptyList()) }
+        repeat(20) { seed ->
+            val options = WordQuizBuilder.options(target, words, WordDirection.Reading, Random(seed))
+            assertEquals(
+                WordQuizBuilder.options(withoutExclusions.first(), withoutExclusions, WordDirection.Reading, Random(seed)),
+                options,
+            )
+            assertEquals(4, options.size)
+            assertEquals(options.size, options.map { it.word }.toSet().size)
+            assertEquals(1, options.count { it.word == target.reading })
+            assertTrue(options.any { it.word == adjective.reading })
+        }
+    }
+
+    @Test
+    fun mutationsCoverVoicingSokuonAndLongVowel() {
+        val m = ReadingOptions.mutations("がっこう")
+        assertTrue("かっこう" in m)
+        assertTrue("がこう" in m)
+        assertTrue("がっこ" in m)
+        assertTrue("きょう" !in m && "がっこう" !in m)
+        assertTrue("きょ" in ReadingOptions.mutations("きょう"))
+        assertTrue(ReadingOptions.mutations("あ").isEmpty())
+    }
+
+    @Test
+    fun readingDirectionIsGatedAndKanaOnlyWordsAreSkipped() {
+        assertTrue(WordDirection.Reading.gated && WordDirection.EnToJp.gated && !WordDirection.JpToEn.gated)
+        assertEquals(WordDirection.JpToEn, WordDirection.Reading.other)
+        assertFalse(hasReadingToLearn("ねこ", "ねこ"))
+        assertTrue(hasReadingToLearn("犬", "いぬ"))
+        val jp = mapOf("a" to review(2.0, reps = 2, dueOffsetSec = 99999), "b" to review(2.0, reps = 1))
+        val q = WordQueues.build(WordDirection.Reading, listOf("a", "b", "c"), emptyMap(), jp, now, newBudget = 10, noise = 0.0)
+        assertEquals(listOf("a"), q.map { it.kanji })
+    }}

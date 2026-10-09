@@ -77,7 +77,7 @@ private fun AppNav(app: KanjiApp) {
                 onSettings = { push("settings") },
                 onCards = { push("cards") },
                 onQuiz = { extra -> push("quiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
-                onWords = { dir, extra -> push("wquiz:${System.currentTimeMillis()}:${if (dir == WordDirection.JpToEn) "jp" else "en"}" + if (extra) ":extra" else "") },
+                onWords = { dir, extra -> push("wquiz:${System.currentTimeMillis()}:${when (dir) { WordDirection.JpToEn -> "jp"; WordDirection.EnToJp -> "en"; WordDirection.Reading -> "rd" }}" + if (extra) ":extra" else "") },
                 onDraw = { extra -> push("draw:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
             )
         }

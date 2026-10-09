@@ -83,7 +83,7 @@ class WordMappingTest {
         assertEquals(listOf("b", "c"), entity.toCard().quizExclusions)
         val entities = listOf(entity, word("b", jlpt = 5), word("c", jlpt = 5), word("d", jlpt = 5))
         assertEquals(entities, entities.inWordStack(WordStacks.n5, emptyMap()))
-        for (direction in WordDirection.entries) {
+        for (direction in listOf(WordDirection.JpToEn, WordDirection.EnToJp)) {
             assertEquals(
                 setOf("a", "d"),
                 WordQuizBuilder.options(entity.toCard(), entities.map { it.toCard() }, direction, Random(1)).map { it.word }.toSet(),
@@ -148,6 +148,30 @@ class WordMappingTest {
             WordDirection.EnToJp, ids, mapOf("explicit-unknown" to solid), forward, now, newBudget = 10, noise = 0.0,
         )
         assertEquals(setOf("explicit-kana", "explicit-unknown", "legacy-n5"), reverse.map { it.kanji }.toSet())
+    }
+
+    @Test
+    fun readingQueuesPreserveExplicitLevelsMetadataAndWrittenWordIdentity() {
+        val explicit = word("explicit-hard", listOf("hard"), 5).copy(reading = "reading-hard", quizExclusions = "paired")
+        val kana = word("explicit-kana", jlpt = 5)
+        val n4 = word("explicit-n4", listOf("easy"), 4).copy(reading = "reading-n4")
+        val legacy = word("legacy-n5", listOf("easy")).copy(reading = "reading-legacy")
+        val all = listOf(explicit, kana, n4, legacy)
+        val inStack = all.inWordStack(WordStacks.n5, levels)
+        val readable = inStack.forDirection(WordDirection.Reading)
+        assertEquals(listOf(explicit, kana, legacy), inStack.forDirection(WordDirection.JpToEn))
+        assertEquals(listOf(explicit, legacy), readable)
+        assertEquals(5, readable.first().toCard().jlpt)
+        assertEquals(listOf("paired"), readable.first().toCard().quizExclusions)
+        val forward = all.associate { it.word to solid }
+        val queue = WordQueues.build(
+            WordDirection.Reading, readable.map { it.word }, emptyMap(), forward, now, newBudget = 10, noise = 0.0,
+        )
+        assertEquals(setOf(explicit.word, legacy.word), queue.map { it.kanji }.toSet())
+        val state = solid.toEntity(source, WordStacks.n5.id, explicit.word, WordDirection.Reading.mode)
+        assertEquals(explicit.word, state.kanji)
+        assertEquals("WordReading", state.mode)
+        assertEquals(solid, state.toSrs())
     }
 
     @Test

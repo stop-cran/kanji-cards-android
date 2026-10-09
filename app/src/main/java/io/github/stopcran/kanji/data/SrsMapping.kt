@@ -7,7 +7,9 @@ import io.github.stopcran.kanji.core.srs.Stack
 import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.srs.StudyMode
 import io.github.stopcran.kanji.core.words.WordCard
+import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.WordStack
+import io.github.stopcran.kanji.core.words.hasReadingToLearn
 import io.github.stopcran.kanji.core.words.wordLevel
 import java.time.Instant
 
@@ -32,6 +34,10 @@ fun List<KanjiEntity>.levels(): Map<String, Int?> = associate { it.kanji to it.j
 fun WordArticle.toEntity(sourceId: String) = WordEntity(sourceId, word, reading, title, type, kanji.joinSep(), tags.joinSep(), body, jlpt, quizExclusions.joinSep())
 
 fun WordEntity.toCard() = WordCard(word, reading, title, type, kanji.splitSep(), tags.splitSep(), jlpt, quizExclusions.splitSep())
+
+/** The reading quiz skips words whose written form already gives the reading. */
+fun List<WordEntity>.forDirection(direction: WordDirection): List<WordEntity> =
+    if (direction == WordDirection.Reading) filter { hasReadingToLearn(it.word, it.reading) } else this
 
 /** Shared by quizzes, home counts/progression and reminders; explicit word levels take precedence over kanji. */
 fun List<WordEntity>.inWordStack(stack: WordStack, levels: Map<String, Int?>): List<WordEntity> =

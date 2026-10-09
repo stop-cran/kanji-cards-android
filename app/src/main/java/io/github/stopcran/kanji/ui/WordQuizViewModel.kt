@@ -21,6 +21,7 @@ import io.github.stopcran.kanji.core.words.WordQueues
 import io.github.stopcran.kanji.core.words.WordStacks
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.WordEntity
+import io.github.stopcran.kanji.data.forDirection
 import io.github.stopcran.kanji.data.inWordStack
 import io.github.stopcran.kanji.data.levels
 import io.github.stopcran.kanji.data.toCard
@@ -39,7 +40,8 @@ sealed interface WordQuizUi {
     data class Answer(
         val word: WordEntity, val direction: WordDirection, val options: List<WordOption>, val picked: String, val remaining: Int, val font: KanjiFont, val heard: String? = null,
     ) : WordQuizUi {
-        val correct: Boolean get() = picked == word.word
+        val key: String get() = if (direction == WordDirection.Reading) word.reading else word.word
+        val correct: Boolean get() = picked == key
     }
     data class Done(val answered: Int, val correct: Int) : WordQuizUi
 }
@@ -92,7 +94,7 @@ class WordQuizViewModel(application: Application) : AndroidViewModel(application
         val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val introduced = app.db.reviews().newCardsIntroducedSince(sourceId, stackId, direction.mode.name, startOfDay)
         val budget = app.settings.dailyNewCards.value - introduced
-        queue.addAll(WordQueues.build(direction, all.map { it.word }, states, other, Instant.now(), budget, extra).map { it.kanji })
+        queue.addAll(WordQueues.build(direction, all.forDirection(direction).map { it.word }, states, other, Instant.now(), budget, extra).map { it.kanji })
         showNext()
     }
 
@@ -107,8 +109,11 @@ class WordQuizViewModel(application: Application) : AndroidViewModel(application
         if (word == null) {
             ui = if (answered == 0) {
                 WordQuizUi.Empty(
-                    if (direction == WordDirection.EnToJp) "Nothing is due. English → Japanese opens for words you have answered twice in Japanese → English."
-                    else "Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings.",
+                    when (direction) {
+                        WordDirection.EnToJp -> "Nothing is due. English → Japanese opens for words you have answered twice in Japanese → English."
+                        WordDirection.Reading -> "Nothing is due. The reading quiz opens for words with kanji that you have answered twice in Japanese → English."
+                        WordDirection.JpToEn -> "Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings."
+                    },
                 )
             } else WordQuizUi.Done(answered, correct)
             return
