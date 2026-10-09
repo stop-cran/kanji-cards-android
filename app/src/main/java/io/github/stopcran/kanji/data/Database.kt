@@ -88,6 +88,20 @@ interface ContentDao {
     @Query("SELECT * FROM kanji WHERE sourceId = :sourceId ORDER BY position")
     fun observeKanji(sourceId: String): Flow<List<KanjiEntity>>
 
+    /** Home-screen variant: no article body; strokesJson is only '' (present) or NULL (absent). */
+    @Query(
+        "SELECT sourceId, kanji, title, jlpt, tags, strokeCount, radical, phonetic, onyomi, kunyomi, distractors, " +
+            "'' AS body, CASE WHEN strokesJson IS NULL THEN NULL ELSE '' END AS strokesJson, position " +
+            "FROM kanji WHERE sourceId = :sourceId ORDER BY position"
+    )
+    fun observeKanjiLite(sourceId: String): Flow<List<KanjiEntity>>
+
+    @Query(
+        "SELECT sourceId, word, reading, title, type, kanji, tags, '' AS body, jlpt, quizExclusions " +
+            "FROM words WHERE sourceId = :sourceId ORDER BY word"
+    )
+    fun observeWordsLite(sourceId: String): Flow<List<WordEntity>>
+
     @Query("SELECT * FROM kanji WHERE sourceId = :sourceId ORDER BY position")
     suspend fun kanji(sourceId: String): List<KanjiEntity>
 

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.srs.SrsState
@@ -47,7 +48,8 @@ import java.time.ZoneId
 fun HomeScreen(app: KanjiApp, onSettings: () -> Unit, onCards: () -> Unit, onQuiz: (Boolean) -> Unit, onDraw: (Boolean) -> Unit, onWords: (WordDirection, Boolean) -> Unit) {
     val source by app.settings.source.collectAsState()
     val dailyNew by app.settings.dailyNewCards.collectAsState()
-    val kanji by remember(source) { app.db.content().observeKanji(source.id) }.collectAsState(emptyList())
+    val kanjiOrNull by remember(source) { app.db.content().observeKanjiLite(source.id) }.collectAsState(null)
+    val kanji = kanjiOrNull ?: emptyList()
     val syncStatus by produceState("", source) {
         if (app.db.content().meta(source.id) == null) {
             value = "Downloading cards…"
@@ -63,20 +65,21 @@ fun HomeScreen(app: KanjiApp, onSettings: () -> Unit, onCards: () -> Unit, onQui
     val stack = Stacks.find(stackId, stacks)
     val inStack = remember(kanji, stack) { kanji.inStack(stack.id) }
 
-    val quizQueue = rememberQueue(app, source.id, stack.id, inStack.map { it.kanji }, StudyMode.Quiz, dailyNew)
-    val drawQueue = rememberQueue(app, source.id, stack.id, inStack.filter { it.strokesJson != null }.map { it.kanji }, StudyMode.Draw, dailyNew)
 
     val n4Unlocked by app.settings.n4Unlocked.collectAsState()
     val dismissedMs by app.settings.advanceDismissedMs.collectAsState()
-    val words by remember(source) { app.db.content().observeWords(source.id) }.collectAsState(emptyList())
+    val wordsOrNull by remember(source) { app.db.content().observeWordsLite(source.id) }.collectAsState(null)
+    val words = wordsOrNull ?: emptyList()
     val wordStacks = WordStacks.offered(n4Unlocked)
     val wordStackId by app.settings.wordStack.collectAsState()
     val wordStack = WordStacks.find(wordStackId, wordStacks)
     val levels = remember(kanji) { kanji.levels() }
     val wordsInStack = remember(words, levels, wordStack) { words.inWordStack(wordStack, levels) }
     val wordIds = wordsInStack.map { it.word }
-    val jpStates = rememberStates(app, source.id, wordStack.id, StudyMode.WordJpEn)
-    val enStates = rememberStates(app, source.id, wordStack.id, StudyMode.WordEnJp)
+    val jpLoaded = rememberStates(app, source.id, wordStack.id, StudyMode.WordJpEn)
+    val jpStates = jpLoaded ?: emptyMap()
+    val enLoaded = rememberStates(app, source.id, wordStack.id, StudyMode.WordEnJp)
+    val enStates = enLoaded ?: emptyMap()
     val startOfDay = remember { LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() }
     val jpIntroduced by produceState(0, source.id, wordStack.id, jpStates.size) { value = app.db.reviews().newCardsIntroducedSince(source.id, wordStack.id, StudyMode.WordJpEn.name, startOfDay) }
     val enIntroduced by produceState(0, source.id, wordStack.id, enStates.size) { value = app.db.reviews().newCardsIntroducedSince(source.id, wordStack.id, StudyMode.WordEnJp.name, startOfDay) }
@@ -84,8 +87,13 @@ fun HomeScreen(app: KanjiApp, onSettings: () -> Unit, onCards: () -> Unit, onQui
     val jpQueue = WordQueues.build(WordDirection.JpToEn, wordIds, jpStates, enStates, now, dailyNew - jpIntroduced)
     val enQueue = WordQueues.build(WordDirection.EnToJp, wordIds, enStates, jpStates, now, dailyNew - enIntroduced)
 
-    val quizStates = rememberStates(app, source.id, stack.id, StudyMode.Quiz)
-    val drawStates = rememberStates(app, source.id, stack.id, StudyMode.Draw)
+    val quizLoaded = rememberStates(app, source.id, stack.id, StudyMode.Quiz)
+    val quizStates = quizLoaded ?: emptyMap()
+    val drawLoaded = rememberStates(app, source.id, stack.id, StudyMode.Draw)
+    val drawStates = drawLoaded ?: emptyMap()
+    val loading = kanjiOrNull == null || wordsOrNull == null || jpLoaded == null || enLoaded == null || quizLoaded == null || drawLoaded == null
+    val quizQueue = rememberQueue(app, source.id, stack.id, inStack.map { it.kanji }, StudyMode.Quiz, dailyNew, quizStates)
+    val drawQueue = rememberQueue(app, source.id, stack.id, inStack.filter { it.strokesJson != null }.map { it.kanji }, StudyMode.Draw, dailyNew, drawStates)
     val n5Kanji = inStack.filter { it.jlpt == 5 }
     val n5Words = remember(words, levels) { words.inWordStack(WordStacks.n5, levels) }
     val ready = remember(quizStates, drawStates, jpStates, enStates, n5Kanji, n5Words, wordStack) {
@@ -102,7 +110,12 @@ fun HomeScreen(app: KanjiApp, onSettings: () -> Unit, onCards: () -> Unit, onQui
 
     Page("Kanji Cards", actions = { TextButton(onClick = onSettings) { Text("⚙") } }) {
         if (syncStatus.isNotEmpty()) Text(syncStatus)
-        Text("${kanji.size} cards from ${source.id}")
+        if (loading) {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+            Text("Loading your cards…", style = MaterialTheme.typography.bodySmall)
+        }
+        val defaultId = remember { io.github.stopcran.kanji.core.content.RepoSource.parse(io.github.stopcran.kanji.Defaults.CONTENT_REPO_URL, io.github.stopcran.kanji.Defaults.CONTENT_BRANCH)?.id }
+        Text(if (source.id == defaultId) "${kanji.size} cards" else "${kanji.size} cards from ${source.id}")
         if (stacks.size > 1) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 stacks.forEach { s ->
@@ -147,16 +160,16 @@ fun HomeScreen(app: KanjiApp, onSettings: () -> Unit, onCards: () -> Unit, onQui
 }
 
 @Composable
-private fun rememberStates(app: KanjiApp, sourceId: String, stack: String, mode: StudyMode): Map<String, SrsState> {
-    val states by remember(sourceId, stack, mode) { app.db.reviews().observeStates(sourceId, stack, mode.name) }.collectAsState(emptyList<ReviewStateEntity>())
-    return remember(states) { states.associate { it.kanji to it.toSrs() } }
+/** Null until the first emission, so the screen can tell "still loading" from "nothing yet". */
+private fun rememberStates(app: KanjiApp, sourceId: String, stack: String, mode: StudyMode): Map<String, SrsState>? {
+    val states by remember(sourceId, stack, mode) { app.db.reviews().observeStates(sourceId, stack, mode.name) }.collectAsState(null)
+    return remember(states) { states?.associate { it.kanji to it.toSrs() } }
 }
 
 /** Cards that would be offered now for [mode]: due first, then new ones within today's remaining budget. */
 @Composable
-private fun rememberQueue(app: KanjiApp, sourceId: String, stack: String, ids: List<String>, mode: StudyMode, dailyNew: Int): List<QueueItem> {
-    val states by remember(sourceId, stack, mode) { app.db.reviews().observeStates(sourceId, stack, mode.name) }.collectAsState(emptyList<ReviewStateEntity>())
+private fun rememberQueue(app: KanjiApp, sourceId: String, stack: String, ids: List<String>, mode: StudyMode, dailyNew: Int, states: Map<String, SrsState>): List<QueueItem> {
     val startOfDay = remember { LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() }
     val introduced by produceState(0, sourceId, stack, states.size) { value = app.db.reviews().newCardsIntroducedSince(sourceId, stack, mode.name, startOfDay) }
-    return QueueBuilder.build(ids, states.associate { it.kanji to it.toSrs() }, Instant.now(), dailyNew - introduced)
+    return QueueBuilder.build(ids, states, Instant.now(), dailyNew - introduced)
 }

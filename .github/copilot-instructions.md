@@ -1,7 +1,7 @@
 # Kanji Cards Android – working notes
 
 Kotlin + Jetpack Compose app that studies kanji from a user-configurable GitHub content repo (default `stop-cran/learning-japanese`).
-Plan: `docs/PLAN.md`. Content format: `docs/CONTENT-SCHEMA.md` and the content repo's `docs/content-format.md`.
+Design decisions, principles, invariants and evolution: `docs/DESIGN.md` (read first; update it when a decision changes). Plan: `docs/PLAN.md`. Content format: `docs/CONTENT-SCHEMA.md` and the content repo's `docs/content-format.md`.
 Keep this file current: add a short note whenever you hit a gotcha, pitfall or non-obvious decision.
 
 ## Layout
@@ -33,7 +33,7 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
   both in sync, otherwise files fail with "hash mismatch" on Windows checkouts with CRLF.
 - **Content is untrusted.** Parse defensively, skip bad files instead of failing the sync, never render raw HTML, cap archive sizes.
 - **Room:** list columns are joined with `SEP` (`\u001F`); use `joinSep()`/`splitSep()`. `review_log.id` is auto-generated, so pass `0`.
-  Review state is keyed by (`sourceId` = lower-case `owner/repo`, kanji, mode). Never key it by title or position; titles are editable.
+  Review state is keyed by (`sourceId` = lower-case `owner/repo`, stack, item, mode). Never key it by title or position; titles are editable.
 - **Quiz semantics:** options are meaning titles and unique by title (one correct answer). Wrong = Again (re-asked after 3 cards),
   right = Good, "I guessed" = Hard. Time-based Easy was dropped: with 4 options a fast answer is often luck.
 - **Daily new-card budget** counts kanji whose first review log entry is today (`newCardsIntroducedSince`), per mode.

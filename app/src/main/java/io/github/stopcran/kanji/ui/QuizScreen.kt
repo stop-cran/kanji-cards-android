@@ -48,6 +48,7 @@ fun QuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Un
                 s.options.forEach { o ->
                     OutlinedButton(onClick = { vm.pick(o.kanji) }, modifier = Modifier.fillMaxWidth()) { Text(o.title) }
                 }
+                VoiceButton(s.options.map { it.title }, { i, heard -> vm.pick(s.options[i].kanji, heard) })
             }
             is QuizUi.Answer -> AnswerState(s, vm, onOpenDoc)
         }
@@ -77,6 +78,7 @@ private fun AnswerState(s: QuizUi.Answer, vm: QuizViewModel, onOpenDoc: (String)
             colors = ButtonDefaults.buttonColors(disabledContainerColor = color.copy(alpha = if (color == MaterialTheme.colorScheme.outline) 0.15f else 0.9f), disabledContentColor = if (color == MaterialTheme.colorScheme.outline) MaterialTheme.colorScheme.onSurfaceVariant else Color.White),
         ) { Text(o.title) }
     }
+    s.heard?.let { VoiceHeard(it, vm::retry) }
     Text("${s.card.title}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 4.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Button(onClick = { vm.next() }, modifier = Modifier.weight(1f)) { Text(if (s.correct) "Next" else "Next (will repeat)") }

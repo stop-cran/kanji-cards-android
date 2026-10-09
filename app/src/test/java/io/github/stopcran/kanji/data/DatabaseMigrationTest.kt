@@ -5,17 +5,26 @@ import android.content.Context
 import android.database.Cursor
 import androidx.room.Room
 import io.github.stopcran.kanji.core.content.ContentParser
+import io.github.stopcran.kanji.core.srs.CardPhase
+import io.github.stopcran.kanji.core.srs.SrsState
+import io.github.stopcran.kanji.core.words.Advancement
+import io.github.stopcran.kanji.core.words.WordDirection
+import io.github.stopcran.kanji.core.words.WordQueues
+import io.github.stopcran.kanji.core.words.WordStacks
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.SQLiteMode
+import java.time.Instant
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], manifest = Config.NONE, application = Application::class)
@@ -62,6 +71,58 @@ class DatabaseMigrationTest {
             val withoutLevel = expected.last().copy(jlpt = null)
             db.content().insertWords(listOf(withoutLevel))
             assertEquals(withoutLevel, db.content().word(withoutLevel.sourceId, withoutLevel.word))
+        }
+    }
+
+    @Test
+    fun homeWordProjectionPreservesMetadataAndMatchesQuizQueuesAndAdvancement() = runBlocking {
+        val source = sources.first()
+        val levels = mapOf("easy" to 5, "medium" to 4, "hard" to 1, "unknown" to null)
+        fun word(id: String, kanji: List<String>, jlpt: Int? = null, exclusions: List<String> = emptyList()) =
+            WordEntity(source, id, "reading $id", "meaning $id", "noun", kanji.joinSep(), "custom", "article body", jlpt, exclusions.joinSep())
+        val spellings = listOf(emptyList(), listOf("hard"), listOf("unknown"), listOf("missing"))
+        val explicit = (0..9).map { word("explicit-$it", spellings[it % spellings.size], 5, listOf("explicit-${(it + 1) % 10}")) }
+        val legacy = (0..9).map { word("legacy-$it", listOf("easy")) }
+        val expected = explicit + legacy + listOf(
+            word("explicit-n4", listOf("easy"), 4),
+            word("explicit-n3", listOf("easy"), 3),
+            word("legacy-n4", listOf("easy", "medium")),
+            word("legacy-kana", emptyList()),
+            word("legacy-unknown", listOf("unknown")),
+            word("legacy-missing", listOf("missing")),
+        )
+        withDatabase { db ->
+            db.content().insertWords(expected + expected.first().copy(sourceId = sources.last(), word = "other-source"))
+        }
+        withDatabase { db ->
+            val full = db.content().words(source)
+            val home = db.content().observeWordsLite(source).first()
+            assertEquals(expected.sortedBy { it.word }, full)
+            assertEquals(full.map { it.copy(body = "") }, home)
+            assertEquals(full.map { it.toCard() }, home.map { it.toCard() })
+            assertEquals((explicit + legacy).map { it.word }.toSet(), home.inWordStack(WordStacks.n5, levels).map { it.word }.toSet())
+            assertEquals(22, home.inWordStack(WordStacks.n4, levels).size)
+            assertEquals(26, home.inWordStack(WordStacks.all, levels).size)
+
+            val now = Instant.parse("2026-01-10T00:00:00Z")
+            val solid = SrsState(CardPhase.Review, 30.0, 5.0, now, now.minusSeconds(86400), 3)
+            val states = full.associate { it.word to solid }
+            for (stack in listOf(WordStacks.n5, WordStacks.n4, WordStacks.all)) {
+                val quizIds = full.inWordStack(stack, levels).map { it.word }
+                val homeIds = home.inWordStack(stack, levels).map { it.word }
+                assertEquals(quizIds, homeIds)
+                for (direction in WordDirection.entries) {
+                    assertEquals(
+                        WordQueues.build(direction, quizIds, states, states, now, 0, noise = 0.0),
+                        WordQueues.build(direction, homeIds, states, states, now, 0, noise = 0.0),
+                    )
+                }
+            }
+            val knownLegacy = legacy.associate { it.word to solid }
+            assertTrue(Advancement.ready(List(2) { legacy.map { knownLegacy[it.word] } }, now))
+            val homeN5 = home.inWordStack(WordStacks.n5, levels)
+            assertFalse(Advancement.ready(List(2) { homeN5.map { knownLegacy[it.word] } }, now))
+            assertTrue(Advancement.ready(List(2) { homeN5.map { states[it.word] } }, now))
         }
     }
 

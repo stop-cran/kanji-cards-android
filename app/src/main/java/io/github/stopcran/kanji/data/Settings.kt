@@ -41,6 +41,14 @@ class Settings(context: Context) {
         _saveDrawings.value = v
     }
 
+    private val _voiceInput = MutableStateFlow(prefs.getBoolean(KEY_VOICE_INPUT, false))
+    val voiceInput: StateFlow<Boolean> = _voiceInput
+
+    fun setVoiceInput(v: Boolean) {
+        prefs.edit().putBoolean(KEY_VOICE_INPUT, v).apply()
+        _voiceInput.value = v
+    }
+
     private val _stack = MutableStateFlow(prefs.getString(KEY_STACK, Stacks.ALL) ?: Stacks.ALL)
     val stack: StateFlow<String> = _stack
 
@@ -134,6 +142,7 @@ class Settings(context: Context) {
         const val KEY_NEW = "dailyNewCards"
         const val KEY_FONTS = "varyFonts"
         const val KEY_SAVE_DRAWINGS = "saveDrawings"
+        const val KEY_VOICE_INPUT = "voiceInput"
         const val KEY_BRUSH = "brush"
         const val KEY_STACK = "stack"
         const val KEY_WORD_STACK = "wordStack"

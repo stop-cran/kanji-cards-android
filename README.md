@@ -13,7 +13,7 @@ reviews with FSRS.
 - **Search** in Browse cards: kanji, meaning, kana (katakana prefers on'yomi, hiragana kun'yomi) and romaji.
 - **Gentle reminder** (optional) that backs off while ignored; **brushes**, stroke-number hints and an opt-in drawing log with zip export.
 
-Status: working on an emulator; preparing for a real-device trial and Google Play. See [docs/PLAN.md](docs/PLAN.md),
+Status: working on an emulator; preparing for a real-device trial and Google Play. See [docs/DESIGN.md](docs/DESIGN.md), [docs/PLAN.md](docs/PLAN.md),
 [docs/CONTENT-SCHEMA.md](docs/CONTENT-SCHEMA.md), [docs/PRIVACY.md](docs/PRIVACY.md) and [docs/RELEASE.md](docs/RELEASE.md).
 
 ## License

@@ -8,6 +8,7 @@ Kanji Cards is a personal study app. It has no accounts, no analytics, no advert
 - Your review progress (which cards you studied and when), settings and the downloaded cards.
 - If you turn on **"Save my drawings"** (off by default), your checked handwriting is stored in the app's private storage. It is never uploaded. You can export it as a zip file yourself.
 - The optional daily reminder is a local notification; nothing is sent anywhere.
+- If you turn on **voice input** (off by default; offered only when your device has an on-device English speech recognizer), the app uses the microphone while you press the button. Recognition runs on the device only; audio is never sent anywhere or saved, and there is no online fallback.
 - Android's automatic backup may copy this data to your own Google account backup, under your device's backup settings.
 
 ## What the app downloads
