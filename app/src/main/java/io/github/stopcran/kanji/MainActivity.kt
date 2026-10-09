@@ -22,6 +22,7 @@ import io.github.stopcran.kanji.ui.KanjiReadingScreen
 import io.github.stopcran.kanji.ui.QuizScreen
 import io.github.stopcran.kanji.ui.SettingsScreen
 import io.github.stopcran.kanji.ui.WordQuizScreen
+import io.github.stopcran.kanji.ui.WordCardsScreen
 import io.github.stopcran.kanji.core.words.WordDirection
 
 class MainActivity : ComponentActivity() {
@@ -39,7 +40,7 @@ private val processToken = System.nanoTime().toString()
 private val sessionPrefixes = listOf("quiz:", "wquiz:", "draw:", "kreading:")
 
 /**
- * Back stack of route strings: "home", "kanji-home", "words-home", "settings", "cards", "quiz:..", "doc:<path>". Survives rotation via
+ * Back stack of route strings: "home", "kanji-home", "words-home", "settings", "cards", "word-cards", "quiz:..", "doc:<path>". Survives rotation via
  * rememberSaveable; after process death session routes are dropped, which returns to the page the session was started from.
  */
 @Composable
@@ -65,6 +66,7 @@ private fun AppNav(app: KanjiApp) {
         "settings" -> SettingsScreen(app, onBack = ::pop, onAbout = { push("about") })
         "about" -> AboutScreen(onBack = ::pop)
         "cards" -> CardsScreen(app, onBack = ::pop, onOpen = { push("doc:kanji/$it.md") })
+        "word-cards" -> WordCardsScreen(app, onBack = ::pop, onOpen = { push("doc:words/$it.md") })
         else -> if (route.startsWith("quiz:")) {
             QuizScreen(
                 sessionKey = route,
@@ -104,6 +106,7 @@ private fun AppNav(app: KanjiApp) {
                 actions = HomeActions(
                     onSettings = { push("settings") },
                     onCards = { push("cards") },
+                    onWordCards = { push("word-cards") },
                     onKanjiPage = { push("kanji-home") },
                     onWordsPage = { push("words-home") },
                     onQuiz = { extra -> push("quiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },

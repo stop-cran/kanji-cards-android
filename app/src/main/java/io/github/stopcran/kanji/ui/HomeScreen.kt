@@ -38,6 +38,7 @@ import io.github.stopcran.kanji.data.inStack
 class HomeActions(
     val onSettings: () -> Unit,
     val onCards: () -> Unit,
+    val onWordCards: () -> Unit,
     val onKanjiPage: () -> Unit,
     val onWordsPage: () -> Unit,
     val onQuiz: (extra: Boolean) -> Unit,
@@ -72,13 +73,12 @@ private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeA
         if (syncStatus.isNotEmpty()) Text(syncStatus)
         LoadingBar(data)
         val defaultId = remember { RepoSource.parse(Defaults.CONTENT_REPO_URL, Defaults.CONTENT_BRANCH)?.id }
-        Text(if (data.sourceId == defaultId) "${data.kanji.size} cards" else "${data.kanji.size} cards from ${data.sourceId}")
+        if (data.sourceId != defaultId) Text("Cards from ${data.sourceId}")
         N4Offer(app, data)
         val kanjiStack = if (data.stacks.size > 1) " · ${data.stack.label}" else ""
         Entry("Kanji", (data.summary(HomeMode.Meaning, HomeMode.Drawing, HomeMode.Readings) ?: "Loading…") + kanjiStack, a.onKanjiPage)
         val wordStack = if (data.wordStacks.size > 1) " · ${data.wordStack.label}" else ""
         Entry("Words", (data.summary(HomeMode.WordJp, HomeMode.WordEn, HomeMode.WordReading) ?: "Loading…") + wordStack, a.onWordsPage)
-        OutlinedButton(onClick = a.onCards, enabled = data.kanji.isNotEmpty(), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Browse cards") }
     }
 }
 
@@ -86,6 +86,7 @@ private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeA
 private fun KanjiPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: HomeActions) {
     Page("Kanji", onBack) {
         LoadingBar(data)
+        Text("${data.kanji.size} cards")
         if (data.stacks.size > 1) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 data.stacks.forEach { s ->
@@ -97,13 +98,15 @@ private fun KanjiPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: Home
         ModeRow("Meaning quiz", data.mode(HomeMode.Meaning), a.onQuiz)
         ModeRow("Drawing", data.mode(HomeMode.Drawing), a.onDraw)
         ModeRow("Readings (on'yomi and kun'yomi)", data.mode(HomeMode.Readings), a.onReadings)
+        OutlinedButton(onClick = a.onCards, enabled = data.kanji.isNotEmpty(), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Browse cards") }
     }
 }
 
 @Composable
 private fun WordsPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: HomeActions) {
-    Page("Words (${data.wordCount})", onBack) {
+    Page("Words", onBack) {
         LoadingBar(data)
+        Text("${data.wordCount} words")
         N4Offer(app, data)
         if (data.wordStacks.size > 1) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -115,6 +118,7 @@ private fun WordsPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: Home
         ModeRow("Japanese → English", data.mode(HomeMode.WordJp)) { a.onWords(WordDirection.JpToEn, it) }
         ModeRow("English → Japanese", data.mode(HomeMode.WordEn)) { a.onWords(WordDirection.EnToJp, it) }
         ModeRow("Reading", data.mode(HomeMode.WordReading)) { a.onWords(WordDirection.Reading, it) }
+        OutlinedButton(onClick = a.onWordCards, enabled = data.wordCount > 0, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Browse words") }
     }
 }
 

@@ -140,6 +140,9 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   tappable button never leads to an empty session. The reason for a disabled button is visible text and part of the row's accessibility state.
   All counts come from one `HomeData` (`rememberHomeData`), shared by the main screen and both pages, built from strict noise-free queues; a one-minute
   tick makes newly due cards and the day rollover show up. Rows stay in `Loading` until content, review states and introduced-today counts are all known.
+  Card browsing lives on each page, since the sets differ: the Kanji page shows the card count and "Browse cards" (route `cards`, `CardSearch`), the
+  Words page shows the word count and "Browse words" (route `word-cards`, `WordSearch`: written form, kana in either script, romaji ranked below kana,
+  English title words). Both open the card's article; the main screen only notes the source when it is not the default repo.
   After process death session routes are dropped from the restored back stack (a session is not resumable) and the user lands on the page they started from.
 - Home loads asynchronously. The nine main flows (kanji, words, seven review-state sets) start as null = "not yet" and the screen shows a progress
   bar until all emit; empty means "no data". The new-card-introduced counts still start at 0 (meaning "none today") and settle a moment later.
@@ -174,7 +177,6 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - **`orderVariants` data** (issue #2) and **writing-pattern rules** (issue #1).
 - **Word content**: mixed on+kun word type, weighting new cards towards common kanji, reading-only word mode (reading to meaning).
 - **Stacks**: custom user stacks, per-stack daily limits, word stacks beyond N4 (kanji stacks already cover N1-N5 when tagged).
-- **Words in browse and search** (kanji search already supports kana and romaji).
 - **Branch vs source id**: `sourceId` is `owner/repo` without the branch, so switching branches shares progress and may confuse the SHA cache. Investigate
   before encouraging branch switching.
 - **Content freshness**: a bad publish that forgets to bump `contentVersion` stays hidden until a forced sync.
