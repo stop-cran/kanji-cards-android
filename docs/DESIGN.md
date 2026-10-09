@@ -109,6 +109,12 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - Theme follows the system (light/dark); drawing canvases stay paper-white on purpose.
 - Home loads asynchronously. The six main flows (kanji, words, four review-state sets) start as null = "not yet" and the screen shows a progress
   bar until all emit; empty means "no data". The new-card-introduced counts still start at 0 (meaning "none today") and settle a moment later.
+- Home reads only slim rows (`observeKanjiLite`/`observeWordsLite`: no article body, `strokesJson` reduced to `''` or NULL). Screens that need bodies
+  or strokes load a single card (`kanjiCard`, `word`). Never observe whole content rows in a list that recomposes on every state change.
+- **Settings order: basic to advanced, grouped with dividers.** Groups: Studying (daily new cards, fonts, reminder), Drawing (brush), then Advanced
+  (content repository, handwriting data), then About. Put new settings in the group they belong to by how often a typical learner needs them;
+  anything that can break or reset the user's content or privacy posture goes under Advanced. Settings that are a single value apply
+  immediately (no Save button); only the repository URL/branch need an explicit "Save & sync" because they trigger a download.
 - Release: signed with an upload key (git-ignored `keystore.properties`), R8 and resource shrinking on, Play App Signing recommended.
 
 ## 8. Invariants (don't break these; tests cover most)
@@ -130,8 +136,6 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - **Matcher tuning** from real drawings (more fixtures; the hook thresholds are initial guesses; 北 stroke 2 was flagged red and not yet
   investigated).
 - **`orderVariants` data** (issue #2) and **writing-pattern rules** (issue #1).
-- **Home load time** after a sync: the home screen observes whole kanji and word rows (bodies and stroke JSON); project only the columns
-  it needs.
 - **Word content**: mixed on+kun word type, weighting new cards towards common kanji, reading-only word mode (reading to meaning).
 - **Stacks**: custom user stacks, per-stack daily limits, word stacks beyond N4 (kanji stacks already cover N1-N5 when tagged).
 - **Words in browse and search** (kanji search already supports kana and romaji).

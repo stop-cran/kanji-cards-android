@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -66,6 +67,7 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             Text("Vary kanji fonts as cards mature", modifier = Modifier.weight(1f))
             Switch(vary, { app.settings.setVaryFonts(it) })
         }
+        HorizontalDivider()
         val remind by app.settings.reminderEnabled.collectAsState()
         val remindHour by app.settings.reminderHour.collectAsState()
         val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
@@ -107,6 +109,7 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             "Only when cards are due and you have not studied today. If you ignore them, the gaps grow (1, 2, 4, 7, 14 days) and then they stop until you study again.",
             style = MaterialTheme.typography.bodySmall,
         )
+        HorizontalDivider()
         Text("Drawing", style = MaterialTheme.typography.titleMedium)
         val brush by app.settings.brush.collectAsState()
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -116,6 +119,7 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
         }
         Text(brush.hint, style = MaterialTheme.typography.bodySmall)
         BrushPreview(brush)
+        HorizontalDivider()
         Text("Advanced", style = MaterialTheme.typography.titleMedium)
         Text("Content repository", style = MaterialTheme.typography.titleSmall)
         Text(
@@ -131,6 +135,7 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             OutlinedButton(onClick = { url = Defaults.CONTENT_REPO_URL; branch = Defaults.CONTENT_BRANCH }) { Text("Use default repo") }
         }
         if (status.isNotEmpty()) Text(status)
+        HorizontalDivider()
         Text("Handwriting data", style = MaterialTheme.typography.titleSmall)
         val save by app.settings.saveDrawings.collectAsState()
         Row(verticalAlignment = Alignment.CenterVertically) {
