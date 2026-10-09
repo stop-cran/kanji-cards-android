@@ -114,7 +114,8 @@ fun HomeScreen(app: KanjiApp, onSettings: () -> Unit, onCards: () -> Unit, onQui
             LinearProgressIndicator(Modifier.fillMaxWidth())
             Text("Loading your cards…", style = MaterialTheme.typography.bodySmall)
         }
-        Text("${kanji.size} cards from ${source.id}")
+        val defaultId = remember { io.github.stopcran.kanji.core.content.RepoSource.parse(io.github.stopcran.kanji.Defaults.CONTENT_REPO_URL, io.github.stopcran.kanji.Defaults.CONTENT_BRANCH)?.id }
+        Text(if (source.id == defaultId) "${kanji.size} cards" else "${kanji.size} cards from ${source.id}")
         if (stacks.size > 1) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 stacks.forEach { s ->
