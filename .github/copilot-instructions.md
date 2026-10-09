@@ -19,6 +19,16 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
   clone sits next to this repo, and is skipped otherwise.
 - Emulator: Pixel 9, API 35. UI can be driven from the shell with `adb shell uiautomator dump` + `adb shell input tap`; read element bounds
   from the dump instead of guessing coordinates.
+- Gradle treats `ContentTest.parsesRealContentRepoWhenPresent` as up to date when only the sibling content clone changed; re-run it with
+  `./gradlew cleanTestDebugUnitTest testDebugUnitTest --tests '*ContentTest*'` after pulling or editing `../../learning-japanese`.
+- Check the exit status/test results before committing; a chained `test; commit; push` publishes a red build.
+
+## Work flow
+
+One GitHub issue per work item (file it, get an independent review of the plan, post the outcome as a comment), then implement, run the
+unit tests, check the UI on the emulator, update `docs/DESIGN.md`, commit with the Co-authored-by trailer, push, close the issue with the
+commit. Say plainly what was not tested on a real device. Release APK: `assembleRelease`, then copy to the phone's `Download` over MTP
+(`Shell.Application` COM; deleting an existing file prompts, so copy under a new name; the MTP listing can be stale until the cable is replugged).
 
 ## Gotchas
 
