@@ -48,7 +48,7 @@ import java.time.ZoneId
 fun HomeScreen(app: KanjiApp, onSettings: () -> Unit, onCards: () -> Unit, onQuiz: (Boolean) -> Unit, onDraw: (Boolean) -> Unit, onWords: (WordDirection, Boolean) -> Unit) {
     val source by app.settings.source.collectAsState()
     val dailyNew by app.settings.dailyNewCards.collectAsState()
-    val kanjiOrNull by remember(source) { app.db.content().observeKanji(source.id) }.collectAsState(null)
+    val kanjiOrNull by remember(source) { app.db.content().observeKanjiLite(source.id) }.collectAsState(null)
     val kanji = kanjiOrNull ?: emptyList()
     val syncStatus by produceState("", source) {
         if (app.db.content().meta(source.id) == null) {
@@ -68,7 +68,7 @@ fun HomeScreen(app: KanjiApp, onSettings: () -> Unit, onCards: () -> Unit, onQui
 
     val n4Unlocked by app.settings.n4Unlocked.collectAsState()
     val dismissedMs by app.settings.advanceDismissedMs.collectAsState()
-    val wordsOrNull by remember(source) { app.db.content().observeWords(source.id) }.collectAsState(null)
+    val wordsOrNull by remember(source) { app.db.content().observeWordsLite(source.id) }.collectAsState(null)
     val words = wordsOrNull ?: emptyList()
     val wordStacks = WordStacks.offered(n4Unlocked)
     val wordStackId by app.settings.wordStack.collectAsState()
