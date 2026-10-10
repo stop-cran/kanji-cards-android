@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -35,7 +37,7 @@ fun WordCardsScreen(app: KanjiApp, onBack: () -> Unit, onOpen: (String) -> Unit)
             .map { it.first }
     }
     val count = if (query.isBlank()) "${words.size}" else "${shown.size} of ${words.size}"
-    Page("Words ($count)", onBack) {
+    Page("Words ($count)", onBack, scrollable = false) {
         OutlinedTextField(
             query, { query = it },
             modifier = Modifier.fillMaxWidth(),
@@ -44,12 +46,14 @@ fun WordCardsScreen(app: KanjiApp, onBack: () -> Unit, onOpen: (String) -> Unit)
             trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("Clear") } },
         )
         if (shown.isEmpty() && words.isNotEmpty()) Text("No words match.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        shown.forEach { w ->
-            Row(Modifier.fillMaxWidth().clickable { onOpen(w.word) }.padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(w.word, fontSize = 22.sp, modifier = Modifier.weight(0.4f))
-                Column(Modifier.weight(0.6f)) {
-                    Text(w.title)
-                    if (w.reading != w.word) Text(w.reading, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LazyColumn(Modifier.weight(1f)) {
+            items(shown, key = { it.word }) { w ->
+                Row(Modifier.fillMaxWidth().clickable { onOpen(w.word) }.padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(w.word, fontSize = 22.sp, modifier = Modifier.weight(0.4f))
+                    Column(Modifier.weight(0.6f)) {
+                        Text(w.title)
+                        if (w.reading != w.word) Text(w.reading, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }

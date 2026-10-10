@@ -63,17 +63,11 @@ private fun AnswerState(s: ReadingUi.Answer, vm: KanjiReadingViewModel, onOpenDo
         textAlign = TextAlign.Center,
     )
     s.question.options.forEach { o ->
-        val color = when {
-            o.key == s.question.correctKey -> Green
-            o.key == s.picked -> Red
-            else -> MaterialTheme.colorScheme.outline
-        }
-        Button(
-            onClick = {},
-            enabled = false,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(disabledContainerColor = color.copy(alpha = if (color == MaterialTheme.colorScheme.outline) 0.15f else 0.9f), disabledContentColor = if (color == MaterialTheme.colorScheme.outline) MaterialTheme.colorScheme.onSurfaceVariant else Color.White),
-        ) { Text(o.label) }
+        AnswerOption(o.label, when {
+            o.key == s.question.correctKey -> Verdict.Correct
+            o.key == s.picked -> Verdict.Wrong
+            else -> Verdict.Neutral
+        })
     }
     Text("${s.card.title}: ${s.allReadings.joinToString("、")}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {

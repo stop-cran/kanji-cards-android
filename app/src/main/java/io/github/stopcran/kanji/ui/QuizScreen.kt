@@ -66,17 +66,11 @@ private fun AnswerState(s: QuizUi.Answer, vm: QuizViewModel, onOpenDoc: (String)
         textAlign = TextAlign.Center,
     )
     s.options.forEach { o ->
-        val color = when {
-            o.kanji == s.card.kanji -> Green
-            o.kanji == s.picked -> Red
-            else -> MaterialTheme.colorScheme.outline
-        }
-        Button(
-            onClick = {},
-            enabled = false,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(disabledContainerColor = color.copy(alpha = if (color == MaterialTheme.colorScheme.outline) 0.15f else 0.9f), disabledContentColor = if (color == MaterialTheme.colorScheme.outline) MaterialTheme.colorScheme.onSurfaceVariant else Color.White),
-        ) { Text(o.title) }
+        AnswerOption(o.title, when {
+            o.kanji == s.card.kanji -> Verdict.Correct
+            o.kanji == s.picked -> Verdict.Wrong
+            else -> Verdict.Neutral
+        })
     }
     s.heard?.let { VoiceHeard(it, vm::retry) }
     Text("${s.card.title}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 4.dp))

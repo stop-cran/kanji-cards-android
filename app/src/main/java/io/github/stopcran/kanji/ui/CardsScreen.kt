@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -36,7 +38,7 @@ fun CardsScreen(app: KanjiApp, onBack: () -> Unit, onOpen: (String) -> Unit) {
             .map { it.first }
     }
     val count = if (query.isBlank()) "${kanji.size}" else "${shown.size} of ${kanji.size}"
-    Page("Cards ($count)", onBack) {
+    Page("Cards ($count)", onBack, scrollable = false) {
         OutlinedTextField(
             query, { query = it },
             modifier = Modifier.fillMaxWidth(),
@@ -45,13 +47,15 @@ fun CardsScreen(app: KanjiApp, onBack: () -> Unit, onOpen: (String) -> Unit) {
             trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("Clear") } },
         )
         if (shown.isEmpty() && kanji.isNotEmpty()) Text("No cards match.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        shown.forEach { k ->
-            Row(Modifier.fillMaxWidth().clickable { onOpen(k.kanji) }.padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(k.kanji, fontSize = 28.sp)
-                Column {
-                    Text(k.title)
-                    val readings = (k.onyomi.splitSep() + k.kunyomi.splitSep()).joinToString("  ")
-                    if (readings.isNotEmpty()) Text(readings, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LazyColumn(Modifier.weight(1f)) {
+            items(shown, key = { it.kanji }) { k ->
+                Row(Modifier.fillMaxWidth().clickable { onOpen(k.kanji) }.padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(k.kanji, fontSize = 28.sp)
+                    Column {
+                        Text(k.title)
+                        val readings = (k.onyomi.splitSep() + k.kunyomi.splitSep()).joinToString("  ")
+                        if (readings.isNotEmpty()) Text(readings, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }

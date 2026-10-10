@@ -35,6 +35,8 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke as DrawStroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextStyle
@@ -148,6 +150,7 @@ private fun DrawingPad(strokes: List<List<TimedPt>>, onStroke: (List<TimedPt>) -
             .background(Color.White)
             .onSizeChanged { onSize(it.width.toFloat()) }
             .clipToBounds()
+            .semantics { contentDescription = "Drawing area for the kanji, ${strokes.size} strokes drawn. Drawing needs touch input; use “I don't remember” to skip." }
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown()

@@ -22,6 +22,8 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
@@ -69,7 +71,7 @@ fun HomePages(app: KanjiApp, route: String, onBack: () -> Unit, actions: HomeAct
 
 @Composable
 private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeActions) {
-    Page("Kanji Cards", actions = { TextButton(onClick = a.onSettings) { Text("⚙") } }) {
+    Page("Kanji Cards", actions = { TextButton(onClick = a.onSettings, modifier = Modifier.semantics { contentDescription = "Settings" }) { Text("⚙") } }) {
         if (syncStatus.isNotEmpty()) Text(syncStatus)
         LoadingBar(data)
         val defaultId = remember { RepoSource.parse(Defaults.CONTENT_REPO_URL, Defaults.CONTENT_BRANCH)?.id }
@@ -131,13 +133,13 @@ private fun LoadingBar(data: HomeData) {
 
 @Composable
 private fun Entry(title: String, summary: String, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+    Card(Modifier.fillMaxWidth().clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)
                 Text(summary, style = MaterialTheme.typography.bodyMedium)
             }
-            Text("›", style = MaterialTheme.typography.headlineMedium)
+            Text("›", modifier = Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.headlineMedium)
         }
     }
 }

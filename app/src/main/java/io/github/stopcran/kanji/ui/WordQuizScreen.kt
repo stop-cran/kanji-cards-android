@@ -99,21 +99,11 @@ private fun Answer(s: WordQuizUi.Answer, vm: WordQuizViewModel, onOpenDoc: (Stri
         textAlign = TextAlign.Center,
     )
     s.options.forEach { o ->
-        val color = when {
-            o.word == s.key -> Green
-            o.word == s.picked -> Red
-            else -> MaterialTheme.colorScheme.outline
-        }
-        val neutral = color == MaterialTheme.colorScheme.outline
-        Button(
-            onClick = {},
-            enabled = false,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                disabledContainerColor = color.copy(alpha = if (neutral) 0.15f else 0.9f),
-                disabledContentColor = if (neutral) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
-            ),
-        ) { Text(o.label) }
+        AnswerOption(o.label, when {
+            o.word == s.key -> Verdict.Correct
+            o.word == s.picked -> Verdict.Wrong
+            else -> Verdict.Neutral
+        })
     }
     s.heard?.let { VoiceHeard(it, vm::retry) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
