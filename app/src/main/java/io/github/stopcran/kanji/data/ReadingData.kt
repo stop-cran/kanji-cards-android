@@ -14,7 +14,15 @@ fun KanjiEntity.toReadingCard() = ReadingCard(kanji, onyomi.splitSep(), kunyomi.
 /** Everything the readings quiz and reminders need for one stack: scheduling state per kind and the resulting queue. */
 class ReadingData(val cards: List<ReadingCard>, val states: Map<ReadingKind, Map<String, SrsState>>, val items: List<ReadingItem>)
 
-suspend fun AppDatabase.readingData(settings: Settings, sourceId: String, stack: String, kanji: List<KanjiEntity>, newRemaining: Int, now: Instant, extra: Boolean): ReadingData {
+/** Which stack the readings are built for, how many new cards may start, and whether this is the extra "practice more" queue. */
+data class ReadingRequest(val sourceId: String, val stack: String, val newRemaining: Int, val now: Instant, val extra: Boolean = false)
+
+suspend fun AppDatabase.readingData(settings: Settings, kanji: List<KanjiEntity>, request: ReadingRequest): ReadingData {
+    val sourceId = request.sourceId
+    val stack = request.stack
+    val newRemaining = request.newRemaining
+    val now = request.now
+    val extra = request.extra
     val cards = kanji.map { it.toReadingCard() }
     val states = ReadingKind.entries.associateWith { kind -> reviews().states(sourceId, stack, kind.mode.name).toReadingStates() }
     val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()

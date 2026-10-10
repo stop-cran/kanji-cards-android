@@ -41,22 +41,36 @@ import java.time.ZoneId
 
 enum class HomeMode { Meaning, Drawing, Readings, WordJp, WordEn, WordReading }
 
+/** The stack pickers' contents: kanji and word stacks with their current selection, and how many words the selected one holds. */
+class StackChoices(val stacks: List<Stack>, val stack: Stack, val wordStacks: List<WordStack>, val wordStack: WordStack, val wordCount: Int)
+
+/** What the home screen says besides the mode counts: the N4 offer, the new-item allowance, week progress and the focus batch. */
+class HomeGuidance(
+    val n4Offer: Boolean,
+    val pacing: NewAllowance? = null,
+    val week: WeekProgress? = null,
+    val focus: io.github.stopcran.kanji.data.FocusStatus? = null,
+)
+
 /** Canonical state of the main screen and the Kanji / Words pages; computed once and consumed as slices so counts never drift. */
 class HomeData(
     val loading: Boolean,
     val sourceId: String,
     val kanji: List<KanjiEntity>,
-    val stacks: List<Stack>,
-    val stack: Stack,
-    val wordStacks: List<WordStack>,
-    val wordStack: WordStack,
-    val wordCount: Int,
+    private val choices: StackChoices,
     val modes: Map<HomeMode, ModeState>,
-    val n4Offer: Boolean,
-    val pacing: NewAllowance? = null,
-    val week: WeekProgress? = null,
-    val focus: io.github.stopcran.kanji.data.FocusStatus? = null,
+    private val guidance: HomeGuidance,
 ) {
+    val stacks get() = choices.stacks
+    val stack get() = choices.stack
+    val wordStacks get() = choices.wordStacks
+    val wordStack get() = choices.wordStack
+    val wordCount get() = choices.wordCount
+    val n4Offer get() = guidance.n4Offer
+    val pacing get() = guidance.pacing
+    val week get() = guidance.week
+    val focus get() = guidance.focus
+
     fun mode(m: HomeMode): ModeState = if (loading) ModeState.Loading else modes[m] ?: ModeState.Loading
 
     /** "3 due, 5 new" over the given modes, or null while loading / when nothing is offered. */
@@ -69,9 +83,12 @@ class HomeData(
     }
 }
 
+/** Which kanji have Draw and the readings open, under which rule, and how many reading cards started today. */
+private class Unlocks(val learned: Set<String>, val rule: io.github.stopcran.kanji.core.unlock.UnlockRule, val introducedReadings: Int)
+
 private class Extras(
-    val stackId: String, val wordStackId: String, val allowance: NewAllowance, val week: WeekProgress, val unlocked: Set<String>, val introducedReadings: Int,
-    val focus: io.github.stopcran.kanji.data.FocusStatus?, val rule: io.github.stopcran.kanji.core.unlock.UnlockRule,
+    val stackId: String, val wordStackId: String, val allowance: NewAllowance, val week: WeekProgress, val unlocks: Unlocks,
+    val focus: io.github.stopcran.kanji.data.FocusStatus?,
 )
 
 /** All seven scheduling-state maps, each non-null; exists so loading is decided once instead of with !! at each use. */
@@ -161,7 +178,9 @@ fun rememberHomeData(app: KanjiApp): HomeData {
         val r = app.db.reviews()
         val allowance = app.db.newAllowance(app.settings, source.id, Instant.now())
         val focus = app.db.focusStatus(app.settings, source.id, stack.id, inStack, System.currentTimeMillis())
-        value = Extras(stack.id, wordStack.id, allowance, app.db.weekProgress(app.settings, source.id, Instant.now()), app.db.meaningLearned(app.settings, source.id, stack.id), r.readingCardsIntroducedSince(source.id, stack.id, startOfDay), focus, unlockRule)
+        val learned = app.db.meaningLearned(app.settings, source.id, stack.id)
+        val unlocks = Unlocks(learned, unlockRule, r.readingCardsIntroducedSince(source.id, stack.id, startOfDay))
+        value = Extras(stack.id, wordStack.id, allowance, app.db.weekProgress(app.settings, source.id, Instant.now()), unlocks, focus)
     }
     val ex = extras?.takeIf { it.stackId == stack.id && it.wordStackId == wordStack.id }
     val loading = !statesReady || ex == null
@@ -173,7 +192,10 @@ fun rememberHomeData(app: KanjiApp): HomeData {
     val n4Offer = remember(loading, stateSet, kanji, words, levels, wordStack, n4Unlocked, dismissedMs) {
         stateSet != null && !loading && shouldOfferN4(inStack, words, levels, wordStack, stateSet, n4Unlocked, dismissedMs, Instant.now(), System.currentTimeMillis())
     }
-    return HomeData(loading, source.id, kanji, stacks, stack, wordStacks, wordStack, wordsInStack.size, modes, n4Offer, ex?.allowance, ex?.week, ex?.focus)
+    return HomeData(
+        loading, source.id, kanji, StackChoices(stacks, stack, wordStacks, wordStack, wordsInStack.size), modes,
+        HomeGuidance(n4Offer, ex?.allowance, ex?.week, ex?.focus),
+    )
 }
 
 /** Counts use strict (noise-free) queues so the numbers are stable; sessions build their own randomised queues. */
@@ -194,9 +216,9 @@ private fun computeModes(
     }
     val cards = inStack.map { it.toReadingCard() }
     val readingStates = mapOf(ReadingKind.On to on, ReadingKind.Kun to kun)
-    fun readings(extra: Boolean) = KanjiReadingQueue.build(cards, readingStates, ex.unlocked, ex.introducedReadings, newLeft + ex.introducedReadings, now, extra, noise = 0.0)
+    fun readings(extra: Boolean) = KanjiReadingQueue.build(cards, readingStates, ex.unlocks.learned, ex.unlocks.introducedReadings, newLeft + ex.unlocks.introducedReadings, now, extra, noise = 0.0)
     val rq = readings(false)
-    val locked = ex.rule.hint
+    val locked = ex.unlocks.rule.hint
     val meaningNew = ex.focus?.let { minOf(newLeft, it.capacity) } ?: newLeft
     val meaning = run {
         val q = QueueBuilder.build(inStack.map { it.kanji }, quiz, now, meaningNew, noise = 0.0)
@@ -205,7 +227,7 @@ private fun computeModes(
     return mapOf(
         HomeMode.Meaning to meaning,
         HomeMode.Drawing to inStack.filter { it.strokesJson != null }.map { it.kanji }.let { strokeIds ->
-            plain(DrawGate.eligible(strokeIds, draw, ex.unlocked), draw, 1, "kanji with stroke data", locked, pool = strokeIds.size)
+            plain(DrawGate.eligible(strokeIds, draw, ex.unlocks.learned), draw, 1, "kanji with stroke data", locked, pool = strokeIds.size)
         },
         HomeMode.Readings to ModeState.of(cards.size >= 2, "Needs at least 2 kanji in this stack", rq.count { !it.isNew }, rq.count { it.isNew }, readings(true).isNotEmpty(), locked),
         HomeMode.WordJp to word(WordDirection.JpToEn, jp, en, ""),

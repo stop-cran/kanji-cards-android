@@ -25,6 +25,7 @@ import io.github.stopcran.kanji.data.KanjiEntity
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.inStack
 import io.github.stopcran.kanji.data.newAllowance
+import io.github.stopcran.kanji.data.ReadingRequest
 import io.github.stopcran.kanji.data.readingData
 import io.github.stopcran.kanji.data.toEntity
 import kotlinx.coroutines.launch
@@ -73,7 +74,8 @@ class KanjiReadingViewModel(private val app: Services) : ViewModel() {
             return
         }
         cards = all.associateBy { it.kanji }
-        val data = app.db.readingData(app.settings, sourceId, stack, all, app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining, Instant.now(), extra)
+        val remaining = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
+        val data = app.db.readingData(app.settings, all, ReadingRequest(sourceId, stack, remaining, Instant.now(), extra))
         readingCards = data.cards
         data.states.forEach { (kind, m) -> states.getValue(kind) += m }
         session = QuizSession(data.items, { it.id })
