@@ -9,7 +9,8 @@ object DrawGrader {
      * - Otherwise the drawing must be recognised (top [topN] candidates, or by the matcher when the recogniser
      *   is unavailable, i.e. [candidates] is null); if it is, the stroke issues are the mistakes, if not it is rejected.
      */
-    fun outcome(candidates: List<String>?, target: String, match: MatchResult, topN: Int = 5): DrawOutcome {
+    fun outcome(candidates: List<String>?, target: String, match: MatchResult, topN: Int = 5, strokeLookalike: String? = null): DrawOutcome {
+        if (strokeLookalike != null) return DrawOutcome.NotRecognized
         if (match.drawnStrokes > 0 && match.clean) return DrawOutcome.Clean
         val recognized = candidates?.take(topN)?.any { it == target } ?: match.recognizable
         return if (recognized && match.drawnStrokes > 0) DrawOutcome.Mistakes else DrawOutcome.NotRecognized

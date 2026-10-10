@@ -6,6 +6,7 @@ import io.github.stopcran.kanji.core.draw.IssueType
 import io.github.stopcran.kanji.core.draw.MatchResult
 import io.github.stopcran.kanji.core.draw.StrokeIssue
 import io.github.stopcran.kanji.core.draw.describe
+import io.github.stopcran.kanji.core.draw.lookalikeFromCandidates
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -36,6 +37,23 @@ class DrawGraderTest {
     fun withoutRecogniserMatcherDecides() {
         assertEquals(DrawOutcome.Mistakes, DrawGrader.outcome(null, "日", mistakes))
         assertEquals(DrawOutcome.NotRecognized, DrawGrader.outcome(null, "日", unrecognizable))
+    }
+
+    @Test
+    fun strokeLookalikeRejectsAnOtherwiseCleanDrawing() {
+        assertEquals(DrawOutcome.NotRecognized, DrawGrader.outcome(listOf("日"), "日", clean, strokeLookalike = "目"))
+    }
+
+    @Test
+    fun lookalikeFromCandidatesTakesOnlyASingleOtherHanTopGuess() {
+        assertEquals("風", lookalikeFromCandidates(listOf("風", "気"), "気"))
+        assertEquals(null, lookalikeFromCandidates(listOf("気", "風"), "気"))
+        assertEquals(null, lookalikeFromCandidates(listOf("風気"), "気"))
+        assertEquals(null, lookalikeFromCandidates(listOf("a"), "気"))
+        assertEquals(null, lookalikeFromCandidates(listOf(""), "気"))
+        assertEquals(null, lookalikeFromCandidates(listOf("あ"), "気"))
+        assertEquals(null, lookalikeFromCandidates(null, "気"))
+        assertEquals(null, lookalikeFromCandidates(emptyList(), "気"))
     }
 
     @Test

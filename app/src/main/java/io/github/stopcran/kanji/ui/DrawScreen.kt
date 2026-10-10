@@ -15,6 +15,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -110,23 +111,28 @@ private fun QuestionState(s: DrawUi.Question, vm: DrawViewModel) {
 
 @Composable
 private fun AnswerState(s: DrawUi.Answer, vm: DrawViewModel, onOpenDoc: (String) -> Unit) {
+    val showIssues = s.outcome == DrawOutcome.Mistakes
     val (headline, color) = when (s.outcome) {
         DrawOutcome.Clean -> "Well drawn!" to Good
         DrawOutcome.Mistakes -> "Recognised, with stroke mistakes" to Color(0xFFEF6C00)
-        DrawOutcome.NotRecognized -> (if (s.drawn.isEmpty()) "Here is the kanji" else "Not recognised") to Bad
+        DrawOutcome.NotRecognized -> (
+            if (s.drawn.isEmpty()) "Here is the kanji"
+            else s.lookalike?.let { "That looks like ${it.kanji}" + (it.title?.let { t -> " ($t)" } ?: "") } ?: "Not recognised"
+            ) to Bad
     }
     Text(s.card.kanji + "  " + s.card.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     Text(headline, color = color, style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-    val flaggedDrawn = s.match.issues.mapNotNull { it.drawnIndex }.toSet()
+    s.lookalike?.takeIf { it.hasCard }?.let { TextButton(onClick = { onOpenDoc("kanji/${it.kanji}.md") }, modifier = Modifier.fillMaxWidth()) { Text("Read about ${it.kanji}") } }
+    val flaggedDrawn = if (showIssues) s.match.issues.mapNotNull { it.drawnIndex }.toSet() else emptySet()
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Overlay(Modifier.weight(1f)) { YourDrawing(s.drawn, s.canvasPx, flaggedDrawn) }
-        Overlay(Modifier.weight(1f)) { Reference(s.reference, s.match.flaggedRefStrokes, numbers = true) }
+        Overlay(Modifier.weight(1f)) { Reference(s.reference, if (showIssues) s.match.flaggedRefStrokes else emptySet(), numbers = true) }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Your drawing", Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)
         Text("Correct strokes", Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)
     }
-    s.match.issues.forEach { Text("• " + it.describe(), color = Bad) }
+    if (showIssues) s.match.issues.forEach { Text("• " + it.describe(), color = Bad) }
     if (!s.recognizerUsed && s.drawn.isNotEmpty()) Text("Graded by stroke shapes only (handwriting model not available).", style = MaterialTheme.typography.bodySmall)
     Button(onClick = { vm.next() }, modifier = Modifier.fillMaxWidth()) { Text(if (s.outcome == DrawOutcome.NotRecognized) "Next (will repeat)" else "Next") }
     HorizontalDivider(Modifier.padding(vertical = 4.dp))

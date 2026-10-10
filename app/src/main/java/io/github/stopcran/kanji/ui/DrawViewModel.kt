@@ -10,6 +10,8 @@ import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.core.content.StrokeData
 import io.github.stopcran.kanji.core.draw.DrawGrader
 import io.github.stopcran.kanji.core.draw.DrawOutcome
+import io.github.stopcran.kanji.core.draw.LookalikeGate
+import io.github.stopcran.kanji.core.draw.lookalikeFromCandidates
 import io.github.stopcran.kanji.core.draw.MatchResult
 import io.github.stopcran.kanji.core.draw.Pt
 import io.github.stopcran.kanji.core.draw.Stroke
@@ -27,11 +29,16 @@ import io.github.stopcran.kanji.data.inStack
 import io.github.stopcran.kanji.data.toEntity
 import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.toSrs
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+
+/** A different kanji that the drawing was taken for; [title] is null when it is not in the content. */
+data class Lookalike(val kanji: String, val title: String?, val hasCard: Boolean)
 
 sealed interface DrawUi {
     data object Loading : DrawUi
@@ -47,6 +54,7 @@ sealed interface DrawUi {
         val outcome: DrawOutcome,
         val match: MatchResult,
         val recognizerUsed: Boolean,
+        val lookalike: Lookalike? = null,
     ) : DrawUi
     data class Done(val answered: Int, val clean: Int) : DrawUi
 }
@@ -126,13 +134,29 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
         ui = DrawUi.Checking(q.card)
         viewModelScope.launch {
             val ref = references.getValue(q.card.kanji)
-            val match = matcher.match(ref, strokes.map { s -> s.map { Pt(it.x.toDouble(), it.y.toDouble()) } }, orderVariants[q.card.kanji].orEmpty())
+            val drawn = strokes.map { s -> s.map { Pt(it.x.toDouble(), it.y.toDouble()) } }
+            val match = matcher.match(ref, drawn, orderVariants[q.card.kanji].orEmpty())
             val candidates = if (strokes.isEmpty()) emptyList() else recognizer.candidates(strokes)
-            val outcome = DrawGrader.outcome(candidates, q.card.kanji, match)
+            val byStrokes = if (match.clean && match.drawnStrokes > 0) {
+                withContext(Dispatchers.Default) { LookalikeGate(matcher).find(q.card.kanji, match, drawn, pool().filter { it.second.size == ref.size }) }
+            } else null
+            val outcome = DrawGrader.outcome(candidates, q.card.kanji, match, strokeLookalike = byStrokes)
+            val guess = byStrokes ?: if (outcome == DrawOutcome.NotRecognized && strokes.isNotEmpty()) lookalikeFromCandidates(candidates, q.card.kanji) else null
+            val lookalike = guess?.let { g -> app.db.content().kanji(sourceId).firstOrNull { it.kanji == g }.let { Lookalike(g, it?.title, it != null) } }
             if (app.settings.saveDrawings.value) DrawingLog.save(app, q.card.kanji, canvasPx, strokes, outcome, match, candidates)
-            ui = DrawUi.Answer(q.card, q.remaining, ref, strokes, canvasPx, outcome, match, candidates != null)
+            ui = DrawUi.Answer(q.card, q.remaining, ref, strokes, canvasPx, outcome, match, candidates != null, lookalike)
         }
     }
+
+    private var poolCache: List<Pair<String, List<Stroke>>>? = null
+
+    /** Reference strokes of every kanji in the source, whatever the stack, parsed once on first use. */
+    private suspend fun pool(): List<Pair<String, List<Stroke>>> = poolCache ?: withContext(Dispatchers.Default) {
+        app.db.content().kanji(sourceId).mapNotNull { k ->
+            val data = k.strokesJson?.let { runCatching { json.decodeFromString(StrokeData.serializer(), it) }.getOrNull() } ?: return@mapNotNull null
+            k.kanji to data.strokes.map { s -> s.points.map { Pt(it[0], it[1]) } }
+        }
+    }.also { poolCache = it }
 
     /** Not recognised = Again (asked again soon), recognised with stroke mistakes = Hard, clean = Good. */
     fun next() {

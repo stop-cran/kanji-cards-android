@@ -119,6 +119,10 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   if ML Kit disagrees (avoids false rejects; the trade-off is that a different character within tolerance would pass); otherwise the target must
   be in ML Kit's candidates (not recognised = Again, recognised with issues = Hard). When ML Kit is unavailable (null candidates, e.g. model
   missing or timeout) the matcher alone decides (`recognizable`). Giving up passes an empty list, not null.
+- **Lookalikes**: a clean match is still rejected (NotRecognized = Again) when another kanji with the same stroke count, from any stack of the source,
+  fits the drawing clearly better (`LookalikeGate`; catches 牛 for 午, where only a crossing-vs-attachment relation differs). Otherwise, when not
+  recognised, the recogniser's top-1 candidate, if a single Han character other than the target, is shown as "That looks like X (meaning)" with a link to
+  its article when it has a card. The per-stroke issue list and red flags are shown only for the Mistakes outcome.
 - Shape matching uses regularised strokes (Douglas-Peucker at 2% of drawing size, resampled to 24 points), so tiny kinks are ignored. Small
   details, including a tiny hook, are removed and not counted. Hook detection deliberately uses the Douglas-Peucker-simplified but
   **not resampled** points (resampling would erase the corners); never feed `regularize()` output into `endHook`.

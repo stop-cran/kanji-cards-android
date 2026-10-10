@@ -31,6 +31,10 @@ class LookalikeGate(
     }
 }
 
+/** The recogniser's best guess when it is a single kanji other than [target]; null for blank, multi-character or same answers. */
+fun lookalikeFromCandidates(candidates: List<String>?, target: String): String? =
+    candidates?.firstOrNull()?.takeIf { it != target && isSingleHan(it) }
+
 /** True for exactly one code point in the Han script (supplementary-plane kanji are two UTF-16 chars). */
 fun isSingleHan(s: String): Boolean =
     s.isNotEmpty() && s.codePointCount(0, s.length) == 1 && Character.UnicodeScript.of(s.codePointAt(0)) == Character.UnicodeScript.HAN
