@@ -1,6 +1,7 @@
 package io.github.stopcran.kanji.core.reading
 
 import io.github.stopcran.kanji.core.srs.CardPhase
+import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.QueueBuilder
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.StudyMode
@@ -129,6 +130,9 @@ data class ReadingItem(val kanji: String, val kind: ReadingKind, val reading: St
  */
 object KanjiReadingQueue {
     const val EXTRA_LIMIT = 10
+    const val SIBLING_GAP = 2
+    const val URGENCY_EPSILON = 0.05
+    private val fsrs = Fsrs()
 
     /** The reading cards of [card] that may be asked now: all started ones, plus the next one when the previous is learned. */
     fun eligible(card: ReadingCard, kind: ReadingKind, states: Map<String, SrsState>, unlocked: Boolean): List<ReadingItem> {
@@ -160,15 +164,31 @@ object KanjiReadingQueue {
             val lists = kinds.map { kind ->
                 QueueBuilder.extra(eligible(kind).map { it.id }, states[kind].orEmpty(), now, EXTRA_LIMIT, noise, rnd).map { item(kind, it.kanji, it.isNew) }
             }
-            return separate(merge(lists, rnd, shuffle)).take(EXTRA_LIMIT)
+            return interleave(merge(lists, rnd, shuffle).take(EXTRA_LIMIT))
         }
-        val due = kinds.map { kind ->
-            QueueBuilder.build(eligible(kind).filter { !it.isNew }.map { it.id }, states[kind].orEmpty(), now, 0, noise = noise, rnd = rnd).map { item(kind, it.kanji, false) }
-        }
+        val due = rankDue(
+            kinds.flatMap { kind ->
+                val st = states[kind].orEmpty()
+                eligible(kind).filter { !it.isNew }.mapNotNull { it -> st[it.id]?.takeIf { s -> s.phase != CardPhase.New && !s.due.isAfter(now) }?.let { s -> it to s } }
+            },
+            now, noise, rnd,
+        )
         val candidates = kinds.flatMap { kind -> eligible(kind).filter { it.isNew } }.let { if (shuffle) it.shuffled(rnd) else it }
         val fresh = candidates.take(maxOf(0, dailyNew - introducedToday))
-        return separate(merge(listOf(merge(due, rnd, shuffle), fresh), rnd, shuffle))
+        return interleave(merge(listOf(due, fresh), rnd, shuffle))
     }
+
+    private class Scored(val item: ReadingItem, val bucket: Long, val retrievability: Double)
+
+    /**
+     * One global ranking of due cards of both kinds: urgency (how overdue relative to the card's own interval, plus noise),
+     * compared in buckets of [URGENCY_EPSILON]; within a bucket the lower retrievability (the more obscure reading) goes first.
+     */
+    internal fun rankDue(items: List<Pair<ReadingItem, SrsState>>, now: Instant, noise: Double, rnd: Random): List<ReadingItem> =
+        items.map { (item, s) ->
+            val score = QueueBuilder.urgency(s, now) + noise * (rnd.nextDouble() * 2 - 1)
+            Scored(item, Math.floorDiv((score * 1_000_000).toLong(), (URGENCY_EPSILON * 1_000_000).toLong()), fsrs.retrievability(s, now))
+        }.sortedWith(compareByDescending<Scored> { it.bucket }.thenBy { it.retrievability }).map { it.item }
 
     /** Merges lists keeping each list's order; randomly weighted by remaining length when [random], else in list order. */
     private fun merge(lists: List<List<ReadingItem>>, rnd: Random, random: Boolean): List<ReadingItem> {
@@ -185,13 +205,26 @@ object KanjiReadingQueue {
         }
     }
 
-    /** Keeps the same kanji from appearing back to back (its readings would cue each other) when possible. */
-    private fun separate(items: List<ReadingItem>): List<ReadingItem> {
-        val out = items.toMutableList()
-        for (i in 1 until out.size) {
-            if (out[i].kanji != out[i - 1].kanji) continue
-            val j = (i + 1 until out.size).firstOrNull { out[it].kanji != out[i - 1].kanji } ?: continue
-            val t = out[i]; out[i] = out[j]; out[j] = t
+    /**
+     * Greedy interleave: each position takes the first remaining card whose kanji is not among the last [gap] emitted, else the
+     * first remaining one. Nothing is dropped and each kanji's own order is kept; a new card never jumps ahead of a due card
+     * that was only skipped because of spacing. Readings of one kanji would otherwise cue each other.
+     */
+    internal fun interleave(items: List<ReadingItem>, gap: Int = SIBLING_GAP): List<ReadingItem> {
+        val rest = items.toMutableList()
+        val out = ArrayList<ReadingItem>(items.size)
+        while (rest.isNotEmpty()) {
+            val recent = out.takeLast(gap).map { it.kanji }
+            var skippedDue = false
+            var pick = -1
+            for (i in rest.indices) {
+                val c = rest[i]
+                if (c.kanji in recent) { if (!c.isNew) skippedDue = true; continue }
+                if (c.isNew && skippedDue) continue
+                pick = i
+                break
+            }
+            out += rest.removeAt(if (pick >= 0) pick else 0)
         }
         return out
     }

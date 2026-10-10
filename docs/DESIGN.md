@@ -96,8 +96,10 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   card of the content snapshot. A kanji's readings are asked once its meaning has been answered without "Again" on two different days (or that kind was already
   started). Only the first three distinct kana stems of a kind become cards (`ReadingCard.quizReadings`: い.きる and い.かす are one reading); a further reading
   is introduced only after the previous one of that kind has reached the Review phase. Each new reading card costs one unit of the shared new-item
-  allowance, counted per card (`review_log.reading`). The same
-  kanji is kept apart in the queue so its kinds do not cue each other. Not part of N4 advancement (yet); tap only (voice: later).
+  allowance, counted per card (`review_log.reading`). Order only, nothing is withheld: due cards of both kinds are ranked globally (urgency in
+  `URGENCY_EPSILON` buckets, then lower retrievability first so obscure readings of known kanji surface), then interleaved greedily so a kanji does
+  not recur within `SIBLING_GAP` (2) cards while others remain (its readings would cue each other; interleaving also aids discrimination). A new card
+  never jumps a due card skipped only for spacing; extra practice keeps its 10-card selection and is interleaved. Not part of N4 advancement (yet); tap only (voice: later).
 - Font variety grows with memory stability (Gothic only when young, then Mincho, Textbook, Brush; a lapse drops it back) so recognition does not depend on one glyph shape (`FontPolicy`).
 - Each session screen is keyed by its route (`quiz:<ts>[:extra]`, `wquiz:<ts>:<jp|en|rd>[:extra]`, `draw:<ts>[:extra]`, `kreading:<ts>[:extra]`) so a ViewModel
   survives rotation and following a doc link, but a new start is a fresh session. Start sessions from `LaunchedEffect`, not `init`.
