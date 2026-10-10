@@ -58,7 +58,7 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
         }
     }
 
-    Page("Settings", onBack) {
+    Page("Settings", onBack, ime = true) {
         Text(stringResource(R.string.studying), style = MaterialTheme.typography.titleMedium)
         val committed = Commitment.of(dailyNew.toIntOrNull() ?: -1)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

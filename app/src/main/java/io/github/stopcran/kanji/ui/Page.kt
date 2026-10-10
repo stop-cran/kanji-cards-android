@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
 
-/** Scrollable page that respects system bars (the app draws edge-to-edge), with an optional top bar. */
+/** Scrollable page that respects system bars (the app draws edge-to-edge), with an optional top bar; [ime] lifts it above the keyboard. */
 @Composable
 fun Page(
     title: String,
@@ -34,9 +34,11 @@ fun Page(
     actions: @Composable () -> Unit = {},
     scrollable: Boolean = true,
     maxWidth: Dp = 720.dp,
+    ime: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding(), horizontalAlignment = Alignment.CenterHorizontally) {
+    // Only pages with text fields track the keyboard; elsewhere a stale IME inset would shrink the page.
+    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().let { if (ime) it.imePadding() else it }, horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.widthIn(max = maxWidth).fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (onBack != null) TextButton(onClick = onBack, modifier = Modifier.semantics { contentDescription = "Back" }) { Text(stringResource(R.string.back)) }
             Text(title, style = androidx.compose.material3.MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).padding(start = if (onBack == null) 8.dp else 0.dp).semantics { heading() })
