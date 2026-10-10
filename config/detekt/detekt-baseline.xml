@@ -2,7 +2,6 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>ComplexCondition:ContentParser.kt$ContentParser$ids.any { it.isBlank() || it.any { c -&gt; c.isISOControl() || c == '/' || c == '\\' } }</ID>
     <ID>ComplexCondition:ContentSync.kt$ContentSync$!force &amp;&amp; head != null &amp;&amp; head == settings.syncedCommit(commitKey) &amp;&amp; db.content().meta(source.id) != null</ID>
     <ID>ComplexCondition:ContentSync.kt$ContentSync$!force &amp;&amp; parsed.problems.isNotEmpty() &amp;&amp; dao.meta(source.id) != null &amp;&amp; (parsed.kanji.size &lt; dao.kanjiCount(source.id) || parsed.words.size &lt; dao.wordCount(source.id))</ID>
     <ID>ComplexCondition:DrawScreen.kt$cand.x &lt; 4f || cand.y &lt; 4f || cand.x &gt; 105f || cand.y &gt; 105f</ID>
@@ -11,7 +10,7 @@
     <ID>ComplexCondition:KanjiReadings.kt$KanjiReadingQuiz$chosen.size &lt; count - 1 &amp;&amp; k.isNotEmpty() &amp;&amp; k !in excluded &amp;&amp; used.add(k)</ID>
     <ID>ComplexCondition:Markdown.kt$Links$t.contains("://") || t.startsWith("/") || t.startsWith("#") || t.contains(':') || t.contains('\\')</ID>
     <ID>ComplexCondition:Markdown.kt$Markdown$end &lt; s.length &amp;&amp; !(s[end] == '*' &amp;&amp; !s[end - 1].isWhitespace() &amp;&amp; !s.startsWith("**", end))</ID>
-    <ID>ComplexCondition:Markdown.kt$Markdown$i &lt; lines.size &amp;&amp; lines[i].isNotBlank() &amp;&amp; !bullet.matches(lines[i]) &amp;&amp; !numbered.matches(lines[i]) &amp;&amp; !lines[i].trim().startsWith("|") &amp;&amp; !lines[i].trim().startsWith("&gt;") &amp;&amp; heading.matchEntire(lines[i].trim()) == null</ID>
+    <ID>ComplexCondition:Markdown.kt$Markdown$i &lt; lines.size &amp;&amp; lines[i].isNotBlank() &amp;&amp; !bullet.matches(lines[i]) &amp;&amp; !numbered.matches(lines[i]) &amp;&amp; !lines[i].trim().startsWith("|") &amp;&amp; !lines[i].trim().startsWith("&gt;") &amp;&amp; heading.matchEntire(lines[i].trim()) == null &amp;&amp; !lines[i].trim().startsWith("```") &amp;&amp; !lines[i].trim().let { it.length &gt;= 3 &amp;&amp; it.all { c -&gt; c == '-' } }</ID>
     <ID>ComplexCondition:Markdown.kt$Markdown$last != null &amp;&amp; last.link == null &amp;&amp; s.link == null &amp;&amp; last.bold == s.bold &amp;&amp; last.italic == s.italic &amp;&amp; last.code == s.code</ID>
     <ID>ComplexCondition:RepoSource.kt$RepoSource.Companion$!branchRegex.matches(b) || b.contains("..") || b.endsWith("/") || b.endsWith(".lock")</ID>
     <ID>ComplexCondition:Romaji.kt$Romaji$c == 'n' &amp;&amp; (next == null || next == '\'' || (next !in "aiueoy"))</ID>
@@ -44,7 +43,8 @@
     <ID>LongParameterList:Brush.kt$(pts: List&lt;Offset&gt;, color: Color, peak: Float, endWidth: Float, rough: Float, blur: Float = 0f)</ID>
     <ID>LongParameterList:DrawingLog.kt$DrawingLog$(context: Context, kanji: String, canvasPx: Float, strokes: List&lt;List&lt;TimedPt&gt;&gt;, outcome: DrawOutcome, match: MatchResult, candidates: List&lt;String&gt;?)</ID>
     <ID>LongParameterList:HomeData.kt$( inStack: List&lt;KanjiEntity&gt;, words: List&lt;io.github.stopcran.kanji.data.WordEntity&gt;, levels: Map&lt;String, Int?&gt;, wordStack: WordStack, s: StateSet, n4Unlocked: Boolean, dismissedMs: Long, now: Instant, nowMs: Long, )</ID>
-    <ID>LongParameterList:HomeData.kt$HomeData$( val loading: Boolean, val sourceId: String, val kanji: List&lt;KanjiEntity&gt;, val stacks: List&lt;Stack&gt;, val stack: Stack, val wordStacks: List&lt;WordStack&gt;, val wordStack: WordStack, val wordCount: Int, val modes: Map&lt;HomeMode, ModeState&gt;, val n4Offer: Boolean, val pacing: NewAllowance? = null, val week: WeekProgress? = null, )</ID>
+    <ID>LongParameterList:HomeData.kt$Extras$( val stackId: String, val wordStackId: String, val allowance: NewAllowance, val week: WeekProgress, val unlocked: Set&lt;String&gt;, val introducedReadings: Int, val focus: io.github.stopcran.kanji.data.FocusStatus?, val rule: io.github.stopcran.kanji.core.unlock.UnlockRule, )</ID>
+    <ID>LongParameterList:HomeData.kt$HomeData$( val loading: Boolean, val sourceId: String, val kanji: List&lt;KanjiEntity&gt;, val stacks: List&lt;Stack&gt;, val stack: Stack, val wordStacks: List&lt;WordStack&gt;, val wordStack: WordStack, val wordCount: Int, val modes: Map&lt;HomeMode, ModeState&gt;, val n4Offer: Boolean, val pacing: NewAllowance? = null, val week: WeekProgress? = null, val focus: io.github.stopcran.kanji.data.FocusStatus? = null, )</ID>
     <ID>LongParameterList:HomeData.kt$StateSet.Companion$( quiz: Map&lt;String, SrsState&gt;?, draw: Map&lt;String, SrsState&gt;?, on: Map&lt;String, SrsState&gt;?, kun: Map&lt;String, SrsState&gt;?, jp: Map&lt;String, SrsState&gt;?, en: Map&lt;String, SrsState&gt;?, rd: Map&lt;String, SrsState&gt;?, )</ID>
     <ID>LongParameterList:HomeScreen.kt$HomeActions$( val onSettings: () -&gt; Unit, val onCards: () -&gt; Unit, val onWordCards: () -&gt; Unit, val onKanjiPage: () -&gt; Unit, val onWordsPage: () -&gt; Unit, val onQuiz: (extra: Boolean) -&gt; Unit, val onDraw: (extra: Boolean) -&gt; Unit, val onReadings: (extra: Boolean) -&gt; Unit, val onWords: (WordDirection, extra: Boolean) -&gt; Unit, )</ID>
     <ID>LongParameterList:KanjiReadings.kt$KanjiReadingQueue$( cards: List&lt;ReadingCard&gt;, states: Map&lt;ReadingKind, Map&lt;String, SrsState&gt;&gt;, unlocked: Set&lt;String&gt;, introducedToday: Int, dailyNew: Int, now: Instant, extra: Boolean = false, noise: Double = QueueBuilder.DEFAULT_NOISE, rnd: Random = Random.Default, )</ID>
@@ -53,7 +53,7 @@
     <ID>LongParameterList:ModeState.kt$ModeState.Companion$(available: Boolean, unavailableReason: String, due: Int, new: Int, extraPossible: Boolean, lockedReason: String)</ID>
     <ID>LongParameterList:QueueBuilder.kt$QueueBuilder$( allKanji: List&lt;String&gt;, states: Map&lt;String, SrsState&gt;, now: Instant, limit: Int = 10, noise: Double = DEFAULT_NOISE, rnd: Random = Random.Default, )</ID>
     <ID>LongParameterList:QueueBuilder.kt$QueueBuilder$( allKanji: List&lt;String&gt;, states: Map&lt;String, SrsState&gt;, now: Instant, newCardsRemainingToday: Int, limit: Int = Int.MAX_VALUE, noise: Double = DEFAULT_NOISE, rnd: Random = Random.Default, urgencyFactor: (String) -&gt; Double = { 1.0 }, )</ID>
-    <ID>LongParameterList:ReadingData.kt$(sourceId: String, stack: String, kanji: List&lt;KanjiEntity&gt;, newRemaining: Int, now: Instant, extra: Boolean)</ID>
+    <ID>LongParameterList:ReadingData.kt$(settings: Settings, sourceId: String, stack: String, kanji: List&lt;KanjiEntity&gt;, newRemaining: Int, now: Instant, extra: Boolean)</ID>
     <ID>LongParameterList:ReminderPolicy.kt$ReminderPolicy$(nowMs: Long, startOfTodayMs: Long, lastStudyMs: Long?, lastReminderMs: Long, ignored: Int, dueCount: Int)</ID>
     <ID>LongParameterList:WordQueues.kt$WordQueues$( direction: WordDirection, words: List&lt;String&gt;, own: Map&lt;String, SrsState&gt;, other: Map&lt;String, SrsState&gt;, now: Instant, newBudget: Int, extra: Boolean = false, limit: Int = if (extra) 10 else Int.MAX_VALUE, noise: Double = QueueBuilder.DEFAULT_NOISE, rnd: Random = Random.Default, )</ID>
     <ID>LoopWithTooManyJumpStatements:ContentParser.kt$ContentParser$for</ID>
@@ -97,26 +97,26 @@
     <ID>MaxLineLength:DrawingLog.kt$DrawingLog$fun</ID>
     <ID>MaxLineLength:EndHook.kt$abs(refTurn) &gt;= HOOK_REF &amp;&amp; !sameSide(drawn, HOOK_MIN) &amp;&amp; !(sameSide(drawnLong, HOOK_LONG_MIN) &amp;&amp; drawnLong.tail &lt;= HOOK_LONG_TAIL) -&gt; IssueType.MissingHook</ID>
     <ID>MaxLineLength:Fsrs.kt$Fsrs$*</ID>
-    <ID>MaxLineLength:HomeData.kt$Extras</ID>
-    <ID>MaxLineLength:HomeData.kt$HomeMode.Readings to ModeState.of(cards.size &gt;= 2, "Needs at least 2 kanji in this stack", rq.count { !it.isNew }, rq.count { it.isNew }, readings(true).isNotEmpty(), "Unlocks after you answer a kanji's meaning well twice")</ID>
+    <ID>MaxLineLength:HomeData.kt$HomeMode.Readings to ModeState.of(cards.size &gt;= 2, "Needs at least 2 kanji in this stack", rq.count { !it.isNew }, rq.count { it.isNew }, readings(true).isNotEmpty(), locked)</ID>
     <ID>MaxLineLength:HomeData.kt$StateSet.Companion$)</ID>
     <ID>MaxLineLength:HomeData.kt$fun readings(extra: Boolean)</ID>
-    <ID>MaxLineLength:HomeData.kt$plain(DrawGate.eligible(strokeIds, draw, ex.unlocked), draw, 1, "kanji with stroke data", "Unlocks after you answer a kanji's meaning well twice", pool = strokeIds.size)</ID>
     <ID>MaxLineLength:HomeData.kt$stateSet != null &amp;&amp; !loading &amp;&amp; shouldOfferN4(inStack, words, levels, wordStack, stateSet, n4Unlocked, dismissedMs, Instant.now(), System.currentTimeMillis())</ID>
-    <ID>MaxLineLength:HomeData.kt$value = Extras(stack.id, wordStack.id, allowance, app.db.weekProgress(app.settings, source.id, Instant.now()), r.meaningLearned(source.id, stack.id).toSet(), r.readingCardsIntroducedSince(source.id, stack.id, startOfDay))</ID>
+    <ID>MaxLineLength:HomeData.kt$val</ID>
+    <ID>MaxLineLength:HomeData.kt$value = Extras(stack.id, wordStack.id, allowance, app.db.weekProgress(app.settings, source.id, Instant.now()), app.db.meaningLearned(app.settings, source.id, stack.id), r.readingCardsIntroducedSince(source.id, stack.id, startOfDay), focus, unlockRule)</ID>
     <ID>MaxLineLength:HomeScreen.kt$Button(onClick = { app.settings.setN4Unlocked(true); app.settings.setWordStack(WordStacks.n4.id) }) { Text(stringResource(R.string.add_n4_words)) }</ID>
     <ID>MaxLineLength:HomeScreen.kt$Column</ID>
     <ID>MaxLineLength:HomeScreen.kt$FilterChip(selected = s.id == data.stack.id, onClick = { app.settings.setStack(s.id) }, label = { Text(stringResource(R.string.label_with_count, s.label, data.kanji.inStack(s.id).size)) })</ID>
     <ID>MaxLineLength:HomeScreen.kt$OutlinedButton(onClick = a.onCards, enabled = data.kanji.isNotEmpty(), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text(stringResource(R.string.browse_cards)) }</ID>
     <ID>MaxLineLength:HomeScreen.kt$OutlinedButton(onClick = a.onWordCards, enabled = data.wordCount &gt; 0, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text(stringResource(R.string.browse_words)) }</ID>
     <ID>MaxLineLength:HomeScreen.kt$Page</ID>
-    <ID>MaxLineLength:KanjiApp.kt$KanjiApp$val db: AppDatabase by lazy { Room.databaseBuilder(this, AppDatabase::class.java, "kanji.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build() }</ID>
+    <ID>MaxLineLength:HomeScreen.kt$Text("Finish your current ${it.occupancy} kanji first: new kanji come in as they are learned in every mode.", style = MaterialTheme.typography.bodySmall)</ID>
     <ID>MaxLineLength:KanjiReadingScreen.kt$Text("You chose a reading of ${s.pickedBelongsTo.joinToString("、")}.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)</ID>
     <ID>MaxLineLength:KanjiReadingScreen.kt$Text(stringResource(R.string.pick_the, s.question.kind.label), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)</ID>
     <ID>MaxLineLength:KanjiReadingScreen.kt$fun</ID>
     <ID>MaxLineLength:KanjiReadingViewModel.kt$KanjiReadingViewModel$app.db.reviews().record(updated.toEntity(sourceId, stack, kanji, kind.mode, a.question.correctKey), ReviewLogEntity(0, sourceId, stack, kanji, kind.mode.name, grade.value, now.toEpochMilli(), a.question.correctKey))</ID>
-    <ID>MaxLineLength:KanjiReadingViewModel.kt$KanjiReadingViewModel$ui = if (session.answered == 0) ReadingUi.Empty("Nothing to practise yet. Readings unlock after a kanji's meaning is answered well twice in the Quiz.") else ReadingUi.Done(session.answered, session.correct)</ID>
+    <ID>MaxLineLength:KanjiReadingViewModel.kt$KanjiReadingViewModel$ui = if (session.answered == 0) ReadingUi.Empty("Nothing to practise yet. ${app.settings.unlockRule.value.hint.replace("Unlocks", "Readings unlock")}.") else ReadingUi.Done(session.answered, session.correct)</ID>
     <ID>MaxLineLength:KanjiReadingViewModel.kt$KanjiReadingViewModel$val</ID>
+    <ID>MaxLineLength:KanjiReadingViewModel.kt$KanjiReadingViewModel$val data = app.db.readingData(app.settings, sourceId, stack, all, app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining, Instant.now(), extra)</ID>
     <ID>MaxLineLength:KanjiReadingViewModel.kt$ReadingUi.Answer$data</ID>
     <ID>MaxLineLength:KanjiReadings.kt$KanjiReadingQueue$eligible(kind).filter { !it.isNew }.mapNotNull { it -&gt; st[it.id]?.takeIf { s -&gt; s.phase != CardPhase.New &amp;&amp; !s.due.isAfter(now) }?.let { s -&gt; it to s } }</ID>
     <ID>MaxLineLength:KanjiReadingsTest.kt$KanjiReadingsTest$val others = listOf(card("日", listOf("ニチ"), listOf("び", "ぴ", "ひ")), card("月", listOf("ゲツ"), listOf("つき")), card("水", listOf("スイ"), listOf("みず")), card("木", listOf("ボク"), listOf("こ")))</ID>
@@ -126,6 +126,7 @@
     <ID>MaxLineLength:Markdown.kt$Markdown$if (end &gt; i + 2) { flushText(); parseInline(s.substring(i + 2, end), path, true, italic, out, depth + 1); i = end + 2 } else { buf.append(c); i++ }</ID>
     <ID>MaxLineLength:MarkdownView.kt$is Block.Code -&gt; Text(b.text, fontFamily = FontFamily.Monospace, modifier = Modifier.fillMaxWidth().background(codeBg).horizontalScroll(rememberScrollState()).padding(8.dp))</ID>
     <ID>MaxLineLength:MarkdownView.kt$private</ID>
+    <ID>MaxLineLength:Page.kt$Column</ID>
     <ID>MaxLineLength:Page.kt$Column(Modifier.widthIn(max = maxWidth).fillMaxWidth().weight(1f).let { if (scrollable) it.verticalScroll(rememberScrollState()) else it }.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)</ID>
     <ID>MaxLineLength:Page.kt$Text(title, style = androidx.compose.material3.MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).padding(start = if (onBack == null) 8.dp else 0.dp).semantics { heading() })</ID>
     <ID>MaxLineLength:Page.kt$if (onBack != null) TextButton(onClick = onBack, modifier = Modifier.semantics { contentDescription = "Back" }) { Text(stringResource(R.string.back)) }</ID>
@@ -137,15 +138,17 @@
     <ID>MaxLineLength:QuizViewModel.kt$QuizViewModel$app.db.reviews().record(updated.toEntity(sourceId, stack, a.card.kanji, StudyMode.Quiz), ReviewLogEntity(0, sourceId, stack, a.card.kanji, StudyMode.Quiz.name, grade.value, now.toEpochMilli()))</ID>
     <ID>MaxLineLength:QuizViewModel.kt$QuizViewModel$firstSuccessCapDays = Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS</ID>
     <ID>MaxLineLength:QuizViewModel.kt$QuizViewModel$ui = if (session.answered == 0) QuizUi.Empty("Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings.") else QuizUi.Done(session.answered, session.correct)</ID>
-    <ID>MaxLineLength:QuizViewModel.kt$QuizViewModel$val items = if (extra) QueueBuilder.extra(all.map { it.kanji }, states, Instant.now()) else QueueBuilder.build(all.map { it.kanji }, states, Instant.now(), budget)</ID>
+    <ID>MaxLineLength:ReadingData.kt$suspend</ID>
     <ID>MaxLineLength:RealDrawingsTest.kt$RealDrawingsTest$val drawn = o["strokes"]!!.jsonArray.map { s -&gt; s.jsonArray.map { p -&gt; Pt(p.jsonArray[0].jsonPrimitive.double, p.jsonArray[1].jsonPrimitive.double) } }</ID>
     <ID>MaxLineLength:ReminderWorker.kt$ReminderWorker$due += WordQueues.build(d, wordEntities.forDirection(d).map { it.word }, wordStates.getValue(d), wordStates.getValue(d.other), Instant.ofEpochMilli(now), newRemaining).size</ID>
     <ID>MaxLineLength:ReminderWorker.kt$ReminderWorker$if (Build.VERSION.SDK_INT &gt;= 33 &amp;&amp; ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return false</ID>
     <ID>MaxLineLength:ReminderWorker.kt$ReminderWorker$val wordStates = WordDirection.entries.associateWith { d -&gt; app.db.reviews().states(source.id, wordStack.id, d.mode.name).associate { it.kanji to it.toSrs() } }</ID>
+    <ID>MaxLineLength:SafeZip.kt$SafeZip$val bytes = readLimited(zip, if (wanted) limits.maxFileBytes else Long.MAX_VALUE, keep = wanted) { inflated += it; if (inflated &gt; limits.maxInflatedBytes) throw ContentException("Archive is too large") }</ID>
     <ID>MaxLineLength:SettingsScreen.kt$"Only when cards are due and you have not studied today. If you ignore them, the gaps grow (1, 2, 4, 7, 14 days) and then they stop until you study again."</ID>
     <ID>MaxLineLength:SettingsScreen.kt$LaunchedEffect(Unit) { saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { io.github.stopcran.kanji.data.DrawingLog.count(context) } }</ID>
     <ID>MaxLineLength:SettingsScreen.kt$OutlinedTextField(branch, { branch = it }, label = { Text(stringResource(R.string.branch)) }, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done), modifier = Modifier.fillMaxWidth(), singleLine = true)</ID>
     <ID>MaxLineLength:SettingsScreen.kt$OutlinedTextField(url, { url = it }, label = { Text(stringResource(R.string.repository_url)) }, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri, imeAction = androidx.compose.ui.text.input.ImeAction.Next), modifier = Modifier.fillMaxWidth(), singleLine = true)</ID>
+    <ID>MaxLineLength:SettingsScreen.kt$Text("App version ${io.github.stopcran.kanji.BuildConfig.VERSION_NAME} (${io.github.stopcran.kanji.BuildConfig.GIT_SHA})", style = MaterialTheme.typography.bodySmall)</ID>
     <ID>MaxLineLength:SettingsScreen.kt$Text(stringResource(R.string.notifications_are_blocked_for_this), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)</ID>
     <ID>MaxLineLength:SettingsScreen.kt$Text(when (level) { DayLevel.Full -&gt; "Full"; DayLevel.Light -&gt; "Light"; DayLevel.Off -&gt; "Rest" }, style = MaterialTheme.typography.labelSmall)</ID>
     <ID>MaxLineLength:SettingsScreen.kt$androidx.compose.material3.FilterChip(brush == b, { app.settings.setBrush(b) }, label = { Text(b.label, maxLines = 2) }, modifier = Modifier.weight(1f))</ID>
@@ -178,8 +181,10 @@
     <ID>NestedBlockDepth:ContentSync.kt$ContentSync$private fun headCommit(source: RepoSource): String?</ID>
     <ID>NestedBlockDepth:DatabaseMigrationTest.kt$DatabaseMigrationTest$private fun createLegacyDatabase(version: Int): Map&lt;String, List&lt;List&lt;String?&gt;&gt;&gt;</ID>
     <ID>NestedBlockDepth:DrawScreen.kt$@Composable private fun AnswerState(s: DrawUi.Answer, vm: DrawViewModel, onOpenDoc: (String) -&gt; Unit)</ID>
+    <ID>NestedBlockDepth:FrontMatter.kt$FrontMatter$fun parse(text: String, requirePlainKeys: Boolean = false): Parsed?</ID>
     <ID>NestedBlockDepth:KanjiReadings.kt$KanjiReadingQueue$internal fun interleave(items: List&lt;ReadingItem&gt;, gap: Int = SIBLING_GAP): List&lt;ReadingItem&gt;</ID>
     <ID>NestedBlockDepth:Markdown.kt$Markdown$private fun parseInline(s: String, path: String, bold: Boolean, italic: Boolean, out: MutableList&lt;Span&gt;, depth: Int)</ID>
+    <ID>NestedBlockDepth:Markdown.kt$Markdown$private fun parseLines(lines: List&lt;String&gt;, path: String, depth: Int): List&lt;Block&gt;</ID>
     <ID>NestedBlockDepth:ReminderWorker.kt$ReminderWorker$override suspend fun doWork(): Result</ID>
     <ID>NewLineAtEndOfFile:ContentHttp.kt$io.github.stopcran.kanji.data.ContentHttp.kt</ID>
     <ID>NewLineAtEndOfFile:DrawScreen.kt$io.github.stopcran.kanji.ui.DrawScreen.kt</ID>
@@ -193,7 +198,6 @@
     <ID>ThrowsCount:ContentParser.kt$ContentParser$fun parse(files: Map&lt;String, ByteArray&gt;): ParsedContent</ID>
     <ID>ThrowsCount:ContentParser.kt$ContentParser$fun parseKanji(path: String, text: String): KanjiCard</ID>
     <ID>ThrowsCount:ContentParser.kt$ContentParser$fun parseWord(path: String, text: String): WordArticle</ID>
-    <ID>ThrowsCount:ContentParser.kt$ContentParser$private fun FrontMatter.Parsed.wordQuizExclusions(word: String): List&lt;String&gt;</ID>
     <ID>ThrowsCount:SafeZip.kt$SafeZip$fun read(input: InputStream, limits: Limits = Limits()): Map&lt;String, ByteArray&gt;</ID>
     <ID>TooGenericExceptionCaught:ContentParser.kt$ContentParser$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ContentSync.kt$ContentSync$e: Exception</ID>
