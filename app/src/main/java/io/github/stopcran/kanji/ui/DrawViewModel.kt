@@ -120,7 +120,23 @@ class DrawViewModel(private val app: Services) : ViewModel() {
         showNext()
     }
 
+    /** Strokes of the question being drawn; kept here so they survive rotation. [inkSize] is the pad size they are in. */
+    val ink = androidx.compose.runtime.mutableStateListOf<List<TimedPt>>()
+    var inkSize = 1f
+        private set
+
+    /** The pad was laid out at [px]; strokes drawn at another size (after rotation) are rescaled to it. */
+    fun padSized(px: Float) {
+        if (px <= 0f) return
+        if (ink.isNotEmpty() && inkSize > 1f && kotlin.math.abs(px - inkSize) > 0.5f) {
+            val k = px / inkSize
+            for (i in ink.indices) ink[i] = ink[i].map { TimedPt(it.x * k, it.y * k, it.t) }
+        }
+        inkSize = px
+    }
+
     private fun showNext() {
+        ink.clear()
         val kanji = session.take()
         ui = if (kanji == null) {
             if (session.answered == 0) DrawUi.Empty("Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings.") else DrawUi.Done(session.answered, session.correct)
