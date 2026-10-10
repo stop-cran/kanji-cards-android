@@ -105,6 +105,12 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             Switch(vary, { app.settings.setVaryFonts(it) })
         }
         HorizontalDivider()
+        val n4 by app.settings.n4Unlocked.collectAsState()
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.offer_n4_and_all_word_decks), modifier = Modifier.weight(1f))
+            Switch(n4, { app.settings.setN4Unlocked(it) })
+        }
+        HorizontalDivider()
         val remind by app.settings.reminderEnabled.collectAsState()
         val remindHour by app.settings.reminderHour.collectAsState()
         val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext

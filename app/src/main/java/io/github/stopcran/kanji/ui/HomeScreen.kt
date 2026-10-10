@@ -112,7 +112,7 @@ private fun KanjiPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: Home
 private fun WordsPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: HomeActions) {
     Page("Words", onBack) {
         LoadingBar(data)
-        Text(stringResource(R.string.words, data.wordCount))
+        Text(data.wordStack.label + " · " + stringResource(R.string.words, data.wordCount))
         N4Offer(app, data)
         if (data.wordStacks.size > 1) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
