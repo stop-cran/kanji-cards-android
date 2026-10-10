@@ -160,6 +160,26 @@ class ContentTest {
         return parsed.problems.single()
     }
 
+    @Test
+    fun quizDistractorsAreOptionalCappedAndPrunedWhenTargetsAreMissing() {
+        assertEquals(emptyList<String>(), ContentParser.parseWord("words/a.md", quizWord("a")).quizDistractors)
+        val parsed = parseQuizWords("a" to "quiz_distractors: [b, c, gone]", "b" to "", "c" to "")
+        assertEquals(listOf("b", "c"), parsed.words.first { it.word == "a" }.quizDistractors)
+        assertTrue(parsed.problems.single().contains("'quiz_distractors' references missing words: gone"))
+        assertThrows("a") { ContentParser.parseWord("words/a.md", quizWord("a", "quiz_distractors: [b, c, d, e]")) }
+        assertThrows("a") { ContentParser.parseWord("words/a.md", quizWord("a", "quiz_distractors: [a]")) }
+        assertThrows("a") { ContentParser.parseWord("words/a.md", quizWord("a", "quiz_distractors: [b, b]")) }
+    }
+
+    private fun assertThrows(@Suppress("UNUSED_PARAMETER") id: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (_: ContentException) {
+            return
+        }
+        org.junit.Assert.fail("expected ContentException")
+    }
+
     private fun quizWord(id: String, header: String = "") =
         "---\nword: $id\nreading: reading-$id\ntitle: meaning-$id\n$header\n---\nbody"
 

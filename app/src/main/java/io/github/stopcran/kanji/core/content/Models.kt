@@ -36,6 +36,7 @@ data class WordArticle(
     val body: String,
     val jlpt: Int? = null,
     val quizExclusions: List<String> = emptyList(),
+    val quizDistractors: List<String> = emptyList(),
 )
 
 data class Article(val slug: String, val title: String, val body: String)

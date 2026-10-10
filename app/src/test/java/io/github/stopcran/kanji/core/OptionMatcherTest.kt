@@ -7,6 +7,7 @@ import io.github.stopcran.kanji.core.words.WordQuizBuilder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.random.Random
 
@@ -43,6 +44,23 @@ class OptionMatcherTest {
     @Test fun ambiguousPhraseGivesNull() = assertNull(OptionMatcher.match(listOf("up"), listOf("up, above", "up, upward")))
 
     @Test fun exactBeatsPartialOverlap() = assertEquals(1, OptionMatcher.match(listOf("one"), listOf("one person; alone", "one")))
+
+    @Test fun curatedWordDistractorsAppearAndRespectExclusionsAndLeaveASlotForScoring() {
+        fun word(id: String, title: String, distractors: List<String> = emptyList(), exclusions: List<String> = emptyList()) =
+            WordCard(id, id, title, "noun", emptyList(), quizExclusions = exclusions, quizDistractors = distractors)
+        val words = listOf(word("target", "today", listOf("d1", "d2", "d3", "x1", "ghost"), listOf("x1")),
+            word("d1", "this morning"), word("d2", "this year"), word("d3", "this month"), word("x1", "mood"),
+            word("f1", "water"), word("f2", "tree"), word("f3", "sky"), word("f4", "stone"))
+        val seen = hashSetOf<String>()
+        repeat(40) { seed ->
+            val shown = WordQuizBuilder.options(words[0], words, WordDirection.JpToEn, Random(seed)).map { it.word }
+            assertEquals(4, shown.size)
+            assertFalse("x1" in shown)
+            assertTrue(shown.count { it in setOf("d1", "d2", "d3") } >= 2)
+            seen += shown
+        }
+        assertTrue(seen.containsAll(listOf("d1", "d2", "d3")))
+    }
 
     @Test fun curatedWordChoicesRemainTheClosedSetForVoicePicks() {
         fun word(id: String, title: String, exclusions: List<String> = emptyList()) =

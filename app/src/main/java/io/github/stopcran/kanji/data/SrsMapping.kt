@@ -35,9 +35,9 @@ fun List<KanjiEntity>.inStack(stackId: String): List<KanjiEntity> {
 
 fun List<KanjiEntity>.levels(): Map<String, Int?> = associate { it.kanji to it.jlpt }
 
-fun WordArticle.toEntity(sourceId: String) = WordEntity(sourceId, word, reading, title, type, kanji.joinSep(), tags.joinSep(), body, jlpt, quizExclusions.joinSep())
+fun WordArticle.toEntity(sourceId: String) = WordEntity(sourceId, word, reading, title, type, kanji.joinSep(), tags.joinSep(), body, jlpt, quizExclusions.joinSep(), quizDistractors.joinSep())
 
-fun WordEntity.toCard() = WordCard(word, reading, title, type, kanji.splitSep(), tags.splitSep(), jlpt, quizExclusions.splitSep())
+fun WordEntity.toCard() = WordCard(word, reading, title, type, kanji.splitSep(), tags.splitSep(), jlpt, quizExclusions.splitSep(), quizDistractors.splitSep())
 
 /** The reading quiz skips words whose written form already gives the reading. */
 fun List<WordEntity>.forDirection(direction: WordDirection): List<WordEntity> =

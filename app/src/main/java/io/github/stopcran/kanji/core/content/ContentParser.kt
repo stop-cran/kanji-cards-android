@@ -7,6 +7,8 @@ class ContentException(message: String) : Exception(message)
 
 /** Turns a map of repo-relative path -> bytes into validated content. Everything here is treated as untrusted input. */
 object ContentParser {
+    const val MAX_QUIZ_DISTRACTORS = 3
+
     private val json = Json { ignoreUnknownKeys = true }
 
     fun parse(files: Map<String, ByteArray>): ParsedContent {
@@ -71,6 +73,17 @@ object ContentParser {
             if (!removed) break
         }
 
+        // Missing curated distractors are dropped from the word (the word itself stays usable).
+        val knownWords = words.mapTo(hashSetOf()) { it.word }
+        for (i in words.indices) {
+            val w = words[i]
+            val kept = w.quizDistractors.filter { it in knownWords }
+            if (kept.size != w.quizDistractors.size) {
+                problems += "words/${w.word}.md: 'quiz_distractors' references missing words: ${(w.quizDistractors - kept.toSet()).joinToString(", ")}"
+                words[i] = w.copy(quizDistractors = kept)
+            }
+        }
+
         val titles = HashSet<String>()
         val unique = kanji.filter { c ->
             titles.add(c.title).also { if (!it) problems += "kanji/${c.kanji}.md: duplicate title '${c.title}'" }
@@ -116,7 +129,10 @@ object ContentParser {
             tags = f.list("tags"),
             body = fm.body,
             jlpt = fm.wordJlpt(),
-            quizExclusions = fm.wordQuizExclusions(word),
+            quizExclusions = fm.wordIdList("quiz_exclusions", word),
+            quizDistractors = fm.wordIdList("quiz_distractors", word).also {
+                if (it.size > MAX_QUIZ_DISTRACTORS) throw ContentException("'quiz_distractors' may list at most $MAX_QUIZ_DISTRACTORS words")
+            },
         )
     }
 
@@ -150,15 +166,16 @@ object ContentParser {
         return field.rawValue.toInt()
     }
 
-    private fun FrontMatter.Parsed.wordQuizExclusions(word: String): List<String> {
-        val field = wordDeclaration("quiz_exclusions", "a single top-level unquoted-key inline list") ?: return emptyList()
-        val ids = FrontMatter.parseStringList(field.rawValue)
-            ?: throw ContentException("'quiz_exclusions' must be an inline list of strings")
-        if (ids.any { it.isBlank() || it.any { c -> c.isISOControl() || c == '/' || c == '\\' } }) {
-            throw ContentException("'quiz_exclusions' contains an empty or invalid word ID")
+    private fun FrontMatter.Parsed.wordIdList(key: String, word: String): List<String> {
+        val field = wordDeclaration(key, "a single top-level unquoted-key inline list") ?: return emptyList()
+        val ids = FrontMatter.parseStringList(field.rawValue) ?: throw ContentException("'$key' must be an inline list of strings")
+        val problem = when {
+            ids.any { it.isBlank() || it.any { c -> c.isISOControl() || c == '/' || c == '\\' } } -> "contains an empty or invalid word ID"
+            ids.size != ids.toSet().size -> "contains duplicate IDs"
+            word in ids -> "must not contain the word itself"
+            else -> null
         }
-        if (ids.size != ids.toSet().size) throw ContentException("'quiz_exclusions' contains duplicate IDs")
-        if (word in ids) throw ContentException("'quiz_exclusions' must not contain the word itself")
+        if (problem != null) throw ContentException("'$key' $problem")
         return ids
     }
 

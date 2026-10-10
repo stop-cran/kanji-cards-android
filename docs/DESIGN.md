@@ -28,7 +28,7 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - Kanji card `kanji/<char>.md` (front matter: `kanji`, `title`, `jlpt`, `tags`, readings, `distractors`...). The file name is the identity;
   titles are editable and **must be unique** among kanji (duplicates are dropped with a problem report) because the meaning quiz offers titles
   as options.
-- Word `words/<word>.md` (`word`, `reading`, `title`, `type`, `kanji` list, `tags`, optional `jlpt` and `quiz_exclusions`).
+- Word `words/<word>.md` (`word`, `reading`, `title`, `type`, `kanji` list, `tags`, optional `jlpt`, `quiz_exclusions` and `quiz_distractors`).
   An explicit community vocabulary level takes precedence over kanji difficulty; only omission enables the legacy fallback (see §5).
   Word tags remain free-form: no JLPT tags are required or generated, and level metadata does not affect quiz tag scoring.
 - `articles/*.md` free-form; `strokes/<char>.json` KanjiVG-derived geometry in a 109-unit box with optional `orderVariants`.
@@ -89,6 +89,7 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   (`hasReadingToLearn`) are asked. Options (`ReadingOptions`) are all distinct readings, never equal to the correct one: generated
   look-alikes (voiced/unvoiced, long/short vowel, small っ) first, then real readings of words sharing a kanji or of similar shape. The option
   key is the reading (`WordQuizUi.Answer.key`), unlike the other directions where it is the written word. Tap only for now (voice: issue #5).
+  Curated `quiz_distractors` (at most 3 word IDs, never the word itself or an excluded pair; references to missing words are pruned with a sync problem) are offered first, but never fill more than `count - 2` slots so scored candidates still vary the options.
   Meaning-based `quiz_exclusions` do not filter reading options; reading uniqueness is checked independently.
 - Kanji readings quiz (`core/reading`): "Pick the on'yomi / kun'yomi of 生" — one mode on the home page, two kinds scheduled separately
   (`StudyMode.KanjiOn`/`KanjiKun`), and **each reading is its own card**: the review item is (kanji, kind, reading), where the reading is the match key (`review_state.reading`, '' for all other modes), so failing ショウ never hides behind succeeding on セイ. **Exactly one option is valid:** the correct reading is of the asked kind;

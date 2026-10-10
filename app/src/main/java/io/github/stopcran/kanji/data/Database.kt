@@ -51,6 +51,7 @@ data class WordEntity(
     val body: String,
     val jlpt: Int? = null,
     @ColumnInfo(defaultValue = "''") val quizExclusions: String = "",
+    @ColumnInfo(defaultValue = "''") val quizDistractors: String = "",
 )
 
 @Entity(tableName = "articles", primaryKeys = ["sourceId", "slug"])
@@ -106,7 +107,7 @@ interface ContentDao {
     fun observeKanjiLite(sourceId: String): Flow<List<KanjiEntity>>
 
     @Query(
-        "SELECT sourceId, word, reading, title, type, kanji, tags, '' AS body, jlpt, quizExclusions " +
+        "SELECT sourceId, word, reading, title, type, kanji, tags, '' AS body, jlpt, quizExclusions, quizDistractors " +
             "FROM words WHERE sourceId = :sourceId ORDER BY word"
     )
     fun observeWordsLite(sourceId: String): Flow<List<WordEntity>>
@@ -246,7 +247,7 @@ interface ReviewDao {
 
 @Database(
     entities = [KanjiEntity::class, WordEntity::class, ArticleEntity::class, ReviewStateEntity::class, ReviewLogEntity::class, SyncMetaEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -276,6 +277,14 @@ val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
     override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE words ADD COLUMN jlpt INTEGER")
         db.execSQL("ALTER TABLE words ADD COLUMN quizExclusions TEXT NOT NULL DEFAULT ''")
+        db.execSQL("DELETE FROM sync_meta")
+    }
+}
+
+/** Curated word distractors: keep review state, reimport an unchanged snapshot so the new field is read. */
+val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE words ADD COLUMN quizDistractors TEXT NOT NULL DEFAULT ''")
         db.execSQL("DELETE FROM sync_meta")
     }
 }

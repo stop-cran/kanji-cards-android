@@ -40,7 +40,7 @@ class DatabaseMigrationTest {
     }
 
     private fun openDatabase() = Room.databaseBuilder(context, AppDatabase::class.java, name)
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
         .allowMainThreadQueries()
         .build()
 
@@ -230,6 +230,7 @@ class DatabaseMigrationTest {
                 assertNull(db.content().meta(source))
                 assertNull(requireNotNull(db.content().word(source, "legacy-word")).jlpt)
                 assertEquals("", requireNotNull(db.content().word(source, "legacy-word")).quizExclusions)
+                assertEquals("", requireNotNull(db.content().word(source, "legacy-word")).quizDistractors)
             }
             if (version == 1) {
                 for (table in listOf("review_state", "review_log")) {

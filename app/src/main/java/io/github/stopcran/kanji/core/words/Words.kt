@@ -32,6 +32,8 @@ data class WordCard(
     val tags: List<String> = emptyList(),
     val jlpt: Int? = null,
     val quizExclusions: List<String> = emptyList(),
+    /** Curated wrong options (word IDs), used before the scored candidates. */
+    val quizDistractors: List<String> = emptyList(),
 )
 
 /** A reading is worth asking only when it differs from the written form, i.e. the word contains kanji. */
@@ -116,8 +118,17 @@ object WordQuizBuilder {
             }
         }
         fun score(c: WordCard) = 2 * c.tags.count { it in target.tags } + (if (c.type != null && c.type == target.type) 1 else 0) + (if (c.kanji.any { it in target.kanji }) 1 else 0)
+        curatedDistractors(target, all, random, (count - 2).coerceAtLeast(0)).forEach(::tryAdd)
         all.filter { it.word != target.word }.shuffled(random).sortedByDescending(::score).forEach(::tryAdd)
         return (chosen + target).map { WordOption(it.word, label(it, direction)) }.shuffled(random)
+    }
+
+    /** Curated distractors come first, but at most [limit] of them so a slot is always left to the scored candidates and the options still vary. */
+    private fun curatedDistractors(target: WordCard, all: List<WordCard>, random: Random, limit: Int): List<WordCard> {
+        val byWord = all.associateBy { it.word }
+        return target.quizDistractors.shuffled(random).mapNotNull { byWord[it] }
+            .filter { it.word != target.word && it.word !in target.quizExclusions && target.word !in it.quizExclusions }
+            .take(limit)
     }
 
     fun label(c: WordCard, direction: WordDirection): String = when (direction) {
