@@ -76,7 +76,7 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
                 dailyNew = text.filter(Char::isDigit).take(3)
                 dailyNew.toIntOrNull()?.takeIf { it in 0..200 }?.let { app.settings.setDailyNewCards(it) }
             },
-            label = { Text(stringResource(R.string.new_items_per_day_0)) }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+            label = { Text(stringResource(R.string.new_items_per_day_0)) }, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number, imeAction = androidx.compose.ui.text.input.ImeAction.Done),  modifier = Modifier.fillMaxWidth(), singleLine = true,
         )
         val weekPlan by app.settings.weekPlan.collectAsState()
         val week = DayLevel.parseWeek(weekPlan)
@@ -151,7 +151,7 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
                         io.github.stopcran.kanji.data.ReminderWorker.schedule(appContext, it, replace = true)
                     }
                 },
-                label = { Text(stringResource(R.string.reminder_hour_0_23)) }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+                label = { Text(stringResource(R.string.reminder_hour_0_23)) }, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number, imeAction = androidx.compose.ui.text.input.ImeAction.Done),  modifier = Modifier.fillMaxWidth(), singleLine = true,
             )
         }
         Text(
@@ -177,8 +177,8 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
                 "and enter your fork's URL here to study your own version. Each repository keeps its own review progress.",
             style = MaterialTheme.typography.bodyMedium,
         )
-        OutlinedTextField(url, { url = it }, label = { Text(stringResource(R.string.repository_url)) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(branch, { branch = it }, label = { Text(stringResource(R.string.branch)) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(url, { url = it }, label = { Text(stringResource(R.string.repository_url)) }, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri, imeAction = androidx.compose.ui.text.input.ImeAction.Next), modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(branch, { branch = it }, label = { Text(stringResource(R.string.branch)) }, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done), modifier = Modifier.fillMaxWidth(), singleLine = true)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = ::saveAndSync) { Text(stringResource(R.string.save_sync)) }
             OutlinedButton(onClick = { url = Defaults.CONTENT_REPO_URL; branch = Defaults.CONTENT_BRANCH }) { Text(stringResource(R.string.use_default_repo)) }

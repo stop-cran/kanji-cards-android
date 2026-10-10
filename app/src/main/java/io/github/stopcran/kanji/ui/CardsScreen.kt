@@ -42,6 +42,7 @@ fun CardsScreen(app: KanjiApp, onBack: () -> Unit, onOpen: (String) -> Unit, onO
     val count = if (query.isBlank()) "${kanji.size}" else "${shown.size} of ${kanji.size}"
     val wide = isExpandedWidth()
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     Page("Cards ($count)", onBack, scrollable = false, maxWidth = if (wide) 1400.dp else 720.dp) {
       Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
        Column(Modifier.weight(if (wide) 0.4f else 1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -49,6 +50,8 @@ fun CardsScreen(app: KanjiApp, onBack: () -> Unit, onOpen: (String) -> Unit, onO
             query, { query = it },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { focusManager.clearFocus() }),
             label = { Text(stringResource(R.string.search_kanji_meaning_or_reading)) },
             trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text(stringResource(R.string.clear)) } },
         )

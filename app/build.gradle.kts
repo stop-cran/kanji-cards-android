@@ -56,6 +56,10 @@ android {
     buildFeatures {
         compose = true
     }
+    testOptions {
+        // Compose UI tests on Robolectric need merged resources and the test manifest's ComponentActivity.
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 dependencies {
@@ -75,6 +79,8 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.junit)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
 }

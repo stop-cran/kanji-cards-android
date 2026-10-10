@@ -198,6 +198,10 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 8. Room schema changes need a migration; there is no destructive fallback and `exportSchema` is on (schemas in `app/schemas`), so a missing migration crashes.
 9. Source files have mixed LF/CRLF: check before multi-line text replacements.
 
+Testing seams: network goes through `ContentHttp` (tests use a fake), view models are built with `serviceViewModel` over in-memory Room, and Compose
+UI tests (`ComposeUiTest`) run on Robolectric for the stateless pieces (answer feedback, article toggle, page chrome). Static analysis is Detekt
+with a baseline (`config/detekt`); new code must add no findings, and the baseline should only shrink.
+
 ## 9. Known gaps and evolution
 
 - **Matcher tuning** from real drawings (more fixtures; the hook thresholds are initial guesses; 北 stroke 2 was flagged red and not yet

@@ -21,8 +21,9 @@ Status: working on an emulator; preparing for a real-device trial and Google Pla
 Requirements: JDK 17 (`JAVA_HOME`), the Android SDK (`ANDROID_HOME`, or `sdk.dir` in `local.properties`) with platform 36. Gradle comes from the wrapper.
 
 ```
-./gradlew testDebugUnitTest      # JVM tests: parser, FSRS, matcher, sync (fake HTTP), Room migrations and view models on Robolectric
+./gradlew testDebugUnitTest      # JVM tests: parser, FSRS, matcher, sync (fake HTTP), Room migrations and view models and Compose UI tests on Robolectric
 ./gradlew lintDebug              # Android lint; must be clean of errors
+./gradlew detekt                 # static analysis; existing findings are in config/detekt/detekt-baseline.xml, new code must add none
 ./gradlew installDebug           # build and install on a connected device/emulator (API 26+)
 ./gradlew assembleRelease        # R8-minified build; signing is optional, see docs/RELEASE.md
 ```
