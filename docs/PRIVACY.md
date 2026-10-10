@@ -2,7 +2,7 @@
 
 _Last updated: October 2026._
 
-Kanji Cards is a personal study app. It has no accounts, no analytics, no advertising and no server of its own.
+Kanji Cards is a personal study app. It has no accounts, no advertising, no analytics of its own and no server of its own. Google's ML Kit library, used for handwriting recognition, may send technical diagnostics and usage metrics to Google (see below).
 
 ## What stays on your device
 - Your review progress (which cards you studied and when), settings and the downloaded cards.
@@ -13,7 +13,7 @@ Kanji Cards is a personal study app. It has no accounts, no analytics, no advert
 
 ## What the app downloads
 - **Card content** from the public GitHub repository set in Settings (default `github.com/stop-cran/learning-japanese`), and a tiny request to the GitHub API to see whether the repository changed. GitHub sees your IP address as for any web request, as described in the [GitHub privacy statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement). The app does not send any personal data to GitHub.
-- **Handwriting recognition model** from Google (ML Kit Digital Ink Recognition) the first time you use drawing mode. Recognition itself runs on the device; your drawings are not sent to Google. See [ML Kit terms](https://developers.google.com/ml-kit/terms).
+- **Handwriting recognition model** from Google (ML Kit Digital Ink Recognition) the first time you use drawing mode. Recognition itself runs on the device; your drawings are not sent to Google. The ML Kit SDK may send diagnostics and usage metrics (such as performance and model-download events) to Google; see the [ML Kit data disclosure](https://developers.google.com/ml-kit/android-data-disclosure) and [ML Kit terms](https://developers.google.com/ml-kit/terms).
 
 ## Your control
 - Uninstalling the app deletes all local data. Settings → export saves your drawings first.

@@ -21,7 +21,7 @@
 - Needs: 512×512 icon, 1024×500 feature graphic, ≥2 phone screenshots, privacy policy URL (`docs/PRIVACY.md` on GitHub).
 
 ## Data safety form (draft)
-- Data collected / shared: **none** (no server, no analytics, no ads).
+- Data collected / shared: the app itself collects nothing (no server, no analytics, no ads), but **ML Kit (digital-ink-recognition) sends diagnostics/usage metrics to Google** — declare it per https://developers.google.com/ml-kit/android-data-disclosure (diagnostics / app-activity types, "collected", not shared for ads) before release; recognition and drawings stay on device.
 - Network use: downloads public content from GitHub and the ML Kit handwriting model from Google; sends no personal data.
 - Optional permissions: `POST_NOTIFICATIONS` for the reminder; `RECORD_AUDIO` for opt-in on-device voice input (audio never leaves the device or is stored, so it is not "collected"; re-check this answer against the current form).
 - On-device data: progress and optional drawing log; Android Auto Backup is enabled (user's own Google backup).

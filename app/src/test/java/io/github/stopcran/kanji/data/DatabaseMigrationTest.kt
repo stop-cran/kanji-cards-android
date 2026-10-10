@@ -198,6 +198,9 @@ class DatabaseMigrationTest {
             }
             // A state whose kanji is no longer in the content cannot be assigned to any reading.
             db.execSQL("INSERT INTO review_state VALUES (?, 'all', 'gone', 'KanjiOn', 'Review', 1.0, 5.0, 999, 500, 1, 0)", arrayOf(source))
+            // A kanji with no readings of that kind has no reading card to carry its state either; the state is retired.
+            db.execSQL("INSERT INTO kanji VALUES (?, '無', 'none', 5, 'tag', 5, NULL, NULL, '', '', '', 'body', NULL, 1)", arrayOf(source))
+            db.execSQL("INSERT INTO review_state VALUES (?, 'all', '無', 'KanjiOn', 'Review', 1.0, 5.0, 999, 500, 1, 0)", arrayOf(source))
             db.version = 3
         }
         withDatabase { db ->

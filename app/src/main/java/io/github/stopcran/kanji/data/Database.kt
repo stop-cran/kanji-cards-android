@@ -290,8 +290,9 @@ val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
 }
 
 /**
- * Kanji readings are scheduled per reading. The state of each (kanji, kind) is copied to every reading card of that kanji and kind
- * (no progress lost); the old per-kind rows go away. Also adds the review_log indexes.
+ * Kanji readings are scheduled per reading. The state of each (kanji, kind) is copied to every reading card of that kanji and kind;
+ * the old per-kind rows go away. Orphaned states (kanji no longer in the corpus) and states of a kanji with no readings of that kind
+ * are retired, because there is no reading card to carry them. Also adds the review_log indexes.
  */
 val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
     override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
