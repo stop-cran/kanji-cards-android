@@ -14,11 +14,13 @@ class Relearn(private val confirm: Boolean = true) {
 
     private val stage = HashMap<String, Int>()
 
+    /** With nothing else queued ([queueSize] 0) a repeat would follow itself directly, so it is dropped; the answer is still recorded. */
     fun answered(id: String, ok: Boolean, queueSize: Int, weak: Boolean = false): Step {
         val s = stage[id] ?: 0
+        val alone = queueSize == 0
         return when {
-            !ok || (weak && s == 0) -> { stage[id] = 1; Step(minOf(FIRST_GAP, queueSize), true) }
-            s == 1 && confirm -> { stage[id] = 2; Step(minOf(CONFIRM_GAP, queueSize), true) }
+            !ok || (weak && s == 0) -> if (alone) { stage.remove(id); Step(null, true) } else { stage[id] = 1; Step(minOf(FIRST_GAP, queueSize), true) }
+            s == 1 && confirm -> if (alone) { stage.remove(id); Step(null, true) } else { stage[id] = 2; Step(minOf(CONFIRM_GAP, queueSize), true) }
             s == 2 -> { stage.remove(id); Step(null, false) }
             else -> { stage.remove(id); Step(null, true) }
         }

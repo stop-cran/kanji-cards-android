@@ -35,6 +35,15 @@ class RelearnTest {
     }
 
     @Test
+    fun aRepeatIsDroppedWhenNothingElseIsQueued() {
+        val r = Relearn()
+        assertEquals(Step(null, true), r.answered("a", ok = false, queueSize = 0))
+        assertEquals(Step(1, true), r.answered("b", ok = false, queueSize = 1))
+        assertEquals(Step(null, true), r.answered("b", ok = true, queueSize = 0))
+        assertEquals(Step(null, true), Relearn(confirm = false).answered("c", ok = true, queueSize = 0, weak = true))
+    }
+
+    @Test
     fun weakAnswerGetsOneReaskWhenConfirmationIsOff() {
         val r = Relearn(confirm = false)
         assertEquals(Step(3, true), r.answered("d", ok = true, queueSize = 9, weak = true))

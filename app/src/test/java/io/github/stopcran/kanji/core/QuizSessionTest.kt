@@ -35,6 +35,30 @@ class QuizSessionTest {
     }
 
     @Test
+    fun aLoneFailedCardIsRecordedButNeverAskedStraightAgain() {
+        val s = session("a")
+        val result = s.answer(s.take()!!, ok = false)
+        assertEquals(Grade.Again, result.grade)
+        assertEquals(true, result.record)
+        assertNull(s.take())
+    }
+
+    @Test
+    fun aRepeatAlwaysHasAnotherCardBetween() {
+        for (size in 1..9) for (failAt in 0 until size) {
+            val items = (0 until size).map { "c$it" }
+            val s = session(*items.toTypedArray())
+            val asked = ArrayList<String>()
+            while (true) {
+                val c = s.take() ?: break
+                asked += c
+                s.answer(c, ok = asked.size - 1 != failAt)
+            }
+            asked.zipWithNext().forEach { (x, y) -> assertEquals("$size/$failAt $asked", true, x != y) }
+        }
+    }
+
+    @Test
     fun scoreCanDifferFromRecall() {
         val s = session("a", confirm = false)
         s.answer(s.take()!!, ok = true, weak = true, countsAsCorrect = false)
