@@ -9,8 +9,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import java.net.HttpURLConnection
-import java.net.URL
 
 sealed interface SyncResult {
     data class Updated(val kanji: Int, val words: Int, val problems: List<String>) : SyncResult
@@ -18,7 +16,7 @@ sealed interface SyncResult {
     data class Failed(val message: String, val retryable: Boolean) : SyncResult
 }
 
-class ContentSync(private val db: AppDatabase, private val settings: Settings) {
+class ContentSync(private val db: AppDatabase, private val settings: Settings, private val http: ContentHttp = UrlConnectionHttp) {
     private val json = Json
     private val lock = Mutex()
 
@@ -34,28 +32,29 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings) {
     /** Head commit of the branch via the GitHub API (one tiny request); null when unavailable, e.g. offline or rate limited. */
     private fun headCommit(source: RepoSource): String? {
         val key = "${source.id}@${source.branch}"
-        val conn = URL("https://api.github.com/repos/${source.owner}/${source.repo}/commits/${source.branch}").openConnection() as HttpURLConnection
+        // A 304 does not count against the API rate limit.
+        val known = settings.headEtag(key)
+        val headers = buildMap {
+            put("Accept", "application/vnd.github.sha")
+            if (known != null) put("If-None-Match", known.first)
+        }
         return try {
-            conn.connectTimeout = 8_000
-            conn.readTimeout = 8_000
-            conn.setRequestProperty("Accept", "application/vnd.github.sha")
-            conn.setRequestProperty("User-Agent", USER_AGENT)
-            // A 304 does not count against the API rate limit.
-            val known = settings.headEtag(key)
-            if (known != null) conn.setRequestProperty("If-None-Match", known.first)
-            if (conn.responseCode == 304) return known?.second
-            if (conn.responseCode != 200) return null
-            val sha = conn.inputStream.bufferedReader().use { it.readText() }.trim().takeIf { it.matches(Regex("[0-9a-f]{40}")) }
-            val etag = conn.getHeaderField("ETag")
-            if (sha != null && etag != null) settings.setHeadEtag(key, etag, sha)
-            sha
+            http.open("https://api.github.com/repos/${source.owner}/${source.repo}/commits/${source.branch}", headers, 8_000, 8_000).use { r ->
+                when (r.code) {
+                    304 -> known?.second
+                    200 -> {
+                        val sha = r.body.bufferedReader().readText().trim().takeIf { it.matches(Regex("[0-9a-f]{40}")) }
+                        val etag = r.header("ETag")
+                        if (sha != null && etag != null) settings.setHeadEtag(key, etag, sha)
+                        sha
+                    }
+                    else -> null
+                }
+            }
         } catch (e: java.io.IOException) {
             null
-        } finally {
-            conn.disconnect()
         }
     }
-
     suspend fun sync(source: RepoSource, force: Boolean = false): SyncResult = lock.withLock { withContext(Dispatchers.IO) {
         try {
             val commitKey = "${source.id}@${source.branch}"
@@ -110,22 +109,12 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings) {
     } }
 
     /** Streams the archive to [block] without holding it in memory; the compressed size is capped. */
-    private fun <T> download(url: String, block: (java.io.InputStream) -> T): T {
-        val conn = URL(url).openConnection() as HttpURLConnection
-        conn.setRequestProperty("User-Agent", USER_AGENT)
-        conn.connectTimeout = 15_000
-        conn.readTimeout = 30_000
-        conn.instanceFollowRedirects = true
-        try {
-            val code = conn.responseCode
-            if (code == 404) throw ContentException("Repository or branch not found (or private)")
-            if (code !in 200..299) throw java.io.IOException("HTTP $code")
-            return conn.inputStream.use { block(CappedInputStream(it, MAX_DOWNLOAD_BYTES)) }
-        } finally {
-            conn.disconnect()
+    private fun <T> download(url: String, block: (java.io.InputStream) -> T): T =
+        http.open(url, emptyMap(), 15_000, 30_000).use { r ->
+            if (r.code == 404) throw ContentException("Repository or branch not found (or private)")
+            if (r.code !in 200..299) throw java.io.IOException("HTTP ${r.code}")
+            block(CappedInputStream(r.body, MAX_DOWNLOAD_BYTES))
         }
-    }
-
     private class CappedInputStream(private val inner: java.io.InputStream, private val max: Long) : java.io.FilterInputStream(inner) {
         private var total = 0L
 
@@ -138,7 +127,6 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings) {
     }
     private companion object {
         const val MAX_DOWNLOAD_BYTES = 30L * 1024 * 1024
-        const val USER_AGENT = "KanjiCards-Android"
         const val LAUNCH_INTERVAL_MS = 6L * 60 * 60 * 1000
     }
 }

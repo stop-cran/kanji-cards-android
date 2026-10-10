@@ -14,12 +14,20 @@ import androidx.work.WorkerParameters
 import io.github.stopcran.kanji.KanjiApp
 import java.util.concurrent.TimeUnit
 
+enum class WorkOutcome { Success, Retry, Failure }
+
+/** Only transient failures are retried (with backoff); permanent ones, such as a missing repository, would fail again. */
+fun SyncResult.toWorkOutcome(): WorkOutcome = when {
+    this is SyncResult.Failed && retryable -> WorkOutcome.Retry
+    this is SyncResult.Failed -> WorkOutcome.Failure
+    else -> WorkOutcome.Success
+}
+
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val app = applicationContext as KanjiApp
-        return when (val r = app.contentSync.sync(app.settings.source.value)) {
-            is SyncResult.Failed -> if (r.retryable) Result.retry() else Result.failure()
-            else -> Result.success()
+        return app.contentSync.sync(app.settings.source.value).toWorkOutcome().let {
+            when (it) { WorkOutcome.Success -> Result.success(); WorkOutcome.Retry -> Result.retry(); WorkOutcome.Failure -> Result.failure() }
         }
     }
 
