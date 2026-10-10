@@ -7,10 +7,18 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 android {
     namespace = "io.github.stopcran.kanji"
     compileSdk = 35
 
+    lint {
+        // Reports produceState blocks that do assign `value` (false positive with this lint/Compose pair).
+        disable += "ProduceStateDoesNotAssignValue"
+    }
     defaultConfig {
         applicationId = "io.github.stopcran.kanji"
         minSdk = 26

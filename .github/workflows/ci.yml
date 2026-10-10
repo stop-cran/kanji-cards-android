@@ -4,14 +4,19 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Content-dependent tests read ../../learning-japanese relative to app/; without it they skip silently.
+      - run: git clone --depth 1 https://github.com/stop-cran/learning-japanese.git ../learning-japanese
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew testDebugUnitTest assembleDebug  # needs the committed Gradle wrapper (see docs/PLAN.md)
+      - run: ./gradlew testDebugUnitTest assembleDebug lintDebug assembleRelease

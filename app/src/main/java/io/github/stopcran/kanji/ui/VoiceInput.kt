@@ -120,6 +120,7 @@ fun VoiceButton(options: List<String>, onMatch: (index: Int, heard: String) -> U
     DisposableEffect(Unit) { onDispose { recognizer[0]?.destroy(); recognizer[0] = null } }
 
     fun start() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
         recognizer[0]?.destroy()
         val r = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
         recognizer[0] = r
