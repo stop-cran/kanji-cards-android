@@ -44,6 +44,7 @@ fun KanjiReadingScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (Strin
                 s.question.options.forEach { o ->
                     OutlinedButton(onClick = { vm.pick(o.key) }, modifier = Modifier.fillMaxWidth()) { Text(o.label) }
                 }
+                DontKnowButton { vm.pick(NO_ANSWER) }
             }
             is ReadingUi.Answer -> AnswerState(s, vm, onOpenDoc)
         }
@@ -56,12 +57,19 @@ private fun AnswerState(s: ReadingUi.Answer, vm: KanjiReadingViewModel, onOpenDo
     val right = s.question.options.first { it.key == s.question.correctKey }.label
     Text(s.card.kanji, fontSize = 96.sp, fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Text(
-        if (s.correct) "Correct!" else "Not quite — a ${kind.label} of ${s.card.kanji} is “$right”",
+        when {
+            s.correct -> "Correct!"
+            s.picked == NO_ANSWER -> "No problem — a ${kind.label} of ${s.card.kanji} is “$right”"
+            else -> "Not quite — a ${kind.label} of ${s.card.kanji} is “$right”"
+        },
         color = if (s.correct) Green else Red,
         style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.fillMaxWidth(),
         textAlign = TextAlign.Center,
     )
+    if (!s.correct && s.pickedBelongsTo.isNotEmpty()) {
+        Text("You chose a reading of ${s.pickedBelongsTo.joinToString("、")}.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    }
     s.question.options.forEach { o ->
         AnswerOption(o.label, when {
             o.key == s.question.correctKey -> Verdict.Correct
@@ -74,6 +82,5 @@ private fun AnswerState(s: ReadingUi.Answer, vm: KanjiReadingViewModel, onOpenDo
         Button(onClick = { vm.next() }, modifier = Modifier.weight(1f)) { Text(if (s.correct) "Next" else "Next (will repeat)") }
         if (s.correct) OutlinedButton(onClick = { vm.next(guessed = true) }) { Text("I guessed") }
     }
-    HorizontalDivider(Modifier.padding(vertical = 4.dp))
-    MarkdownView(s.card.body, "kanji/${s.card.kanji}.md", onOpenDoc)
+    ArticleSection(s.correct, "r:${s.card.kanji}:${s.picked}:${s.remaining}", s.card.body, "kanji/${s.card.kanji}.md", onOpenDoc)
 }

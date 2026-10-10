@@ -69,6 +69,7 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
                 s.options.forEach { o ->
                     OutlinedButton(onClick = { vm.pick(o.word) }, modifier = Modifier.fillMaxWidth()) { Text(o.label) }
                 }
+                DontKnowButton { vm.pick(NO_ANSWER) }
                 if (s.direction == WordDirection.JpToEn) VoiceButton(s.options.map { it.label }, { i, heard -> vm.pick(s.options[i].word, heard) })
             }
             is WordQuizUi.Answer -> Answer(s, vm, onOpenDoc)
@@ -92,12 +93,19 @@ private fun Answer(s: WordQuizUi.Answer, vm: WordQuizViewModel, onOpenDoc: (Stri
     Text(s.word.word, fontSize = 56.sp, fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Text("${s.word.reading} — ${s.word.title}", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Text(
-        if (s.correct) "Correct!" else "Not quite",
+        when {
+            s.correct -> "Correct!"
+            s.picked == NO_ANSWER -> "No problem — here it is"
+            else -> "Not quite"
+        },
         color = if (s.correct) Green else Red,
         style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.fillMaxWidth(),
         textAlign = TextAlign.Center,
     )
+    s.pickedWord?.takeIf { !s.correct && s.direction != WordDirection.Reading }?.let {
+        Text("You chose ${it.word} (${it.reading}) — ${it.title}.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    }
     s.options.forEach { o ->
         AnswerOption(o.label, when {
             o.word == s.key -> Verdict.Correct
@@ -110,6 +118,5 @@ private fun Answer(s: WordQuizUi.Answer, vm: WordQuizViewModel, onOpenDoc: (Stri
         Button(onClick = { vm.next() }, modifier = Modifier.weight(1f)) { Text(if (s.correct) "Next" else "Next (will repeat)") }
         if (s.correct) OutlinedButton(onClick = { vm.next(guessed = true) }) { Text("I guessed") }
     }
-    HorizontalDivider(Modifier.padding(vertical = 4.dp))
-    MarkdownView(s.word.body, "words/${s.word.word}.md", onOpenDoc)
+    ArticleSection(s.correct, "w:${s.word.word}:${s.picked}:${s.remaining}", s.word.body, "words/${s.word.word}.md", onOpenDoc)
 }

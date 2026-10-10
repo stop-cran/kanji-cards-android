@@ -16,6 +16,7 @@ import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.KanjiFont
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.QueueBuilder
+import io.github.stopcran.kanji.core.srs.Relearn
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.srs.StudyMode
@@ -61,6 +62,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     private val states = mutableMapOf<String, SrsState>()
     private val queue = ArrayDeque<String>()
     private val studied = mutableSetOf<String>()
+    private val relearn = Relearn()
     private var answered = 0
     private var correct = 0
 
@@ -136,7 +138,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         if (a.heard != null) ui = QuizUi.Question(a.card, a.options, a.remaining, a.font)
     }
 
-    /** Wrong answers are graded Again; right ones Good, or Hard when the user admits guessing. */
+    /** Wrong answers (and "don't know") are graded Again and relearned in-session; right ones Good, or Hard when the user admits guessing. */
     fun next(guessed: Boolean = false) {
         val a = ui as? QuizUi.Answer ?: return
         val grade = when {
@@ -144,17 +146,20 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
             guessed -> Grade.Hard
             else -> Grade.Good
         }
-        val now = Instant.now()
-        val updated = fsrs.review(
-            states[a.card.kanji] ?: SrsState(), grade, now,
-            firstSuccessCapDays = Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS, fuzzSeed = Fsrs.seed(a.card.kanji, StudyMode.Quiz.name, states[a.card.kanji]?.reps ?: 0),
-        )
-        states[a.card.kanji] = updated
+        val step = relearn.answered(a.card.kanji, a.correct, queue.size)
         answered++
         if (a.correct) correct++
-        if (grade == Grade.Again) queue.add(minOf(3, queue.size), a.card.kanji)
-        viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
-            app.db.reviews().record(updated.toEntity(sourceId, stack, a.card.kanji, StudyMode.Quiz), ReviewLogEntity(0, sourceId, stack, a.card.kanji, StudyMode.Quiz.name, grade.value, now.toEpochMilli()))
+        step.reinsertAt?.let { queue.add(it, a.card.kanji) }
+        if (step.record) {
+            val now = Instant.now()
+            val updated = fsrs.review(
+                states[a.card.kanji] ?: SrsState(), grade, now,
+                firstSuccessCapDays = Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS, fuzzSeed = Fsrs.seed(a.card.kanji, StudyMode.Quiz.name, states[a.card.kanji]?.reps ?: 0),
+            )
+            states[a.card.kanji] = updated
+            viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
+                app.db.reviews().record(updated.toEntity(sourceId, stack, a.card.kanji, StudyMode.Quiz), ReviewLogEntity(0, sourceId, stack, a.card.kanji, StudyMode.Quiz.name, grade.value, now.toEpochMilli()))
+            }
         }
         showNext()
     }

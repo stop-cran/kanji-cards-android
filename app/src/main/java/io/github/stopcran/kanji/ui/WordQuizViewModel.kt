@@ -12,6 +12,7 @@ import io.github.stopcran.kanji.core.srs.FontPolicy
 import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.KanjiFont
+import io.github.stopcran.kanji.core.srs.Relearn
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.words.WordCard
 import io.github.stopcran.kanji.core.words.WordDirection
@@ -40,6 +41,7 @@ sealed interface WordQuizUi {
     data class Question(val word: WordEntity, val direction: WordDirection, val options: List<WordOption>, val remaining: Int, val font: KanjiFont) : WordQuizUi
     data class Answer(
         val word: WordEntity, val direction: WordDirection, val options: List<WordOption>, val picked: String, val remaining: Int, val font: KanjiFont, val heard: String? = null,
+        val pickedWord: WordEntity? = null,
     ) : WordQuizUi {
         val key: String get() = if (direction == WordDirection.Reading) word.reading else word.word
         val correct: Boolean get() = picked == key
@@ -66,6 +68,7 @@ class WordQuizViewModel(application: Application) : AndroidViewModel(application
     private var answered = 0
     private var correct = 0
     private var started = false
+    private val relearn = Relearn()
     private var lastFont: KanjiFont? = null
 
     fun ensureStarted(direction: WordDirection, extra: Boolean) {
@@ -123,7 +126,7 @@ class WordQuizViewModel(application: Application) : AndroidViewModel(application
 
     fun pick(word: String, heard: String? = null) {
         val q = ui as? WordQuizUi.Question ?: return
-        ui = WordQuizUi.Answer(q.word, q.direction, q.options, word, q.remaining, q.font, heard)
+        ui = WordQuizUi.Answer(q.word, q.direction, q.options, word, q.remaining, q.font, heard, words[word])
     }
 
     /** Takes back a voice pick that was misheard; nothing has been recorded before [next]. */
@@ -132,7 +135,7 @@ class WordQuizViewModel(application: Application) : AndroidViewModel(application
         if (a.heard != null) ui = WordQuizUi.Question(a.word, a.direction, a.options, a.remaining, a.font)
     }
 
-    /** Wrong answers are graded Again and asked again a few cards later; right ones Good, or Hard when guessed. */
+    /** Wrong answers (and "don't know") are graded Again and relearned in-session; right ones Good, or Hard when guessed. */
     fun next(guessed: Boolean = false) {
         val a = ui as? WordQuizUi.Answer ?: return
         val grade = when {
@@ -140,18 +143,21 @@ class WordQuizViewModel(application: Application) : AndroidViewModel(application
             guessed -> Grade.Hard
             else -> Grade.Good
         }
-        val now = Instant.now()
-        val updated = fsrs.review(
-            states[a.word.word] ?: SrsState(), grade, now,
-            firstSuccessCapDays = Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS, fuzzSeed = Fsrs.seed(a.word.word, direction.mode.name, states[a.word.word]?.reps ?: 0),
-        )
-        states[a.word.word] = updated
+        val step = relearn.answered(a.word.word, a.correct, queue.size)
         answered++
         if (a.correct) correct++
-        if (grade == Grade.Again) queue.add(minOf(3, queue.size), a.word.word)
-        val mode = direction.mode
-        viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
-            app.db.reviews().record(updated.toEntity(sourceId, stackId, a.word.word, mode), ReviewLogEntity(0, sourceId, stackId, a.word.word, mode.name, grade.value, now.toEpochMilli()))
+        step.reinsertAt?.let { queue.add(it, a.word.word) }
+        if (step.record) {
+            val now = Instant.now()
+            val updated = fsrs.review(
+                states[a.word.word] ?: SrsState(), grade, now,
+                firstSuccessCapDays = Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS, fuzzSeed = Fsrs.seed(a.word.word, direction.mode.name, states[a.word.word]?.reps ?: 0),
+            )
+            states[a.word.word] = updated
+            val mode = direction.mode
+            viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
+                app.db.reviews().record(updated.toEntity(sourceId, stackId, a.word.word, mode), ReviewLogEntity(0, sourceId, stackId, a.word.word, mode.name, grade.value, now.toEpochMilli()))
+            }
         }
         showNext()
     }

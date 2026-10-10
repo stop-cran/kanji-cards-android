@@ -20,6 +20,7 @@ import io.github.stopcran.kanji.core.draw.StrokeMatcher
 import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.QueueBuilder
+import io.github.stopcran.kanji.core.srs.Relearn
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.srs.StudyMode
@@ -86,6 +87,7 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
     private var answered = 0
     private var clean = 0
     private var started = false
+    private val relearn = Relearn(confirm = false)
 
     fun ensureStarted(extra: Boolean) {
         if (started) return
@@ -163,7 +165,7 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
         }
     }.also { poolCache = it }
 
-    /** Not recognised = Again (asked again soon), recognised with stroke mistakes = Hard, clean = Good. */
+    /** Not recognised = Again (relearned), recognised with stroke mistakes = Hard (asked once more), clean = Good. */
     fun next() {
         val a = ui as? DrawUi.Answer ?: return
         val grade = when (a.outcome) {
@@ -171,12 +173,13 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
             DrawOutcome.Mistakes -> Grade.Hard
             DrawOutcome.Clean -> Grade.Good
         }
+        val step = relearn.answered(a.card.kanji, a.outcome != DrawOutcome.NotRecognized, queue.size, weak = a.outcome == DrawOutcome.Mistakes)
+        answered++
+        if (a.outcome == DrawOutcome.Clean) clean++
+        step.reinsertAt?.let { queue.add(it, a.card.kanji) }
         val now = Instant.now()
         val updated = fsrs.review(states[a.card.kanji] ?: SrsState(), grade, now, fuzzSeed = Fsrs.seed(a.card.kanji, StudyMode.Draw.name, states[a.card.kanji]?.reps ?: 0))
         states[a.card.kanji] = updated
-        answered++
-        if (a.outcome == DrawOutcome.Clean) clean++
-        if (grade == Grade.Again) queue.add(minOf(3, queue.size), a.card.kanji)
         viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
             app.db.reviews().record(
                 updated.toEntity(sourceId, stack, a.card.kanji, StudyMode.Draw),

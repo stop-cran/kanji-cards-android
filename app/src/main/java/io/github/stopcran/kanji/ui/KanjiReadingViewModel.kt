@@ -19,6 +19,7 @@ import io.github.stopcran.kanji.core.srs.FontPolicy
 import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.KanjiFont
+import io.github.stopcran.kanji.core.srs.Relearn
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.data.KanjiEntity
@@ -35,7 +36,7 @@ sealed interface ReadingUi {
     data object Loading : ReadingUi
     data class Empty(val message: String) : ReadingUi
     data class Question(val card: KanjiEntity, val question: ReadingQuestion, val remaining: Int, val font: KanjiFont) : ReadingUi
-    data class Answer(val card: KanjiEntity, val question: ReadingQuestion, val picked: String, val remaining: Int, val font: KanjiFont, val allReadings: List<String>) : ReadingUi {
+    data class Answer(val card: KanjiEntity, val question: ReadingQuestion, val picked: String, val remaining: Int, val font: KanjiFont, val allReadings: List<String>, val pickedBelongsTo: List<String> = emptyList()) : ReadingUi {
         val correct: Boolean get() = picked == question.correctKey
     }
     data class Done(val answered: Int, val correct: Int) : ReadingUi
@@ -60,6 +61,7 @@ class KanjiReadingViewModel(application: Application) : AndroidViewModel(applica
     private var correct = 0
     private var lastFont: KanjiFont? = null
     private var started = false
+    private val relearn = Relearn()
 
     fun ensureStarted(extra: Boolean) {
         if (started) return
@@ -109,10 +111,13 @@ class KanjiReadingViewModel(application: Application) : AndroidViewModel(applica
         val target = readingCards.first { it.kanji == q.card.kanji }
         val all = (target.on.map { ReadingKey.key(it) to ReadingKey.display(it, ReadingKind.On) } + target.kun.map { ReadingKey.key(it) to ReadingKey.display(it, ReadingKind.Kun) })
             .distinctBy { it.first }.map { it.second }
-        ui = ReadingUi.Answer(q.card, q.question, key, q.remaining, q.font, all)
+        val belongsTo = if (key == NO_ANSWER) emptyList() else readingCards.filter { c ->
+            c.kanji != q.card.kanji && (c.on + c.kun).any { ReadingKey.key(it) == key }
+        }.map { it.kanji }.take(3)
+        ui = ReadingUi.Answer(q.card, q.question, key, q.remaining, q.font, all, belongsTo)
     }
 
-    /** Wrong answers are graded Again; right ones Good, or Hard when the user admits guessing. */
+    /** Wrong answers (and "don't know") are graded Again and relearned in-session; right ones Good, or Hard when the user admits guessing. */
     fun next(guessed: Boolean = false) {
         val a = ui as? ReadingUi.Answer ?: return
         val kind = a.question.kind
@@ -123,17 +128,20 @@ class KanjiReadingViewModel(application: Application) : AndroidViewModel(applica
             guessed -> Grade.Hard
             else -> Grade.Good
         }
-        val now = Instant.now()
-        val updated = fsrs.review(
-            states.getValue(kind)[id] ?: SrsState(), grade, now,
-            firstSuccessCapDays = Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS, fuzzSeed = Fsrs.seed(id, kind.mode.name, states.getValue(kind)[id]?.reps ?: 0),
-        )
-        states.getValue(kind)[id] = updated
+        val step = relearn.answered(id, a.correct, queue.size)
         answered++
         if (a.correct) correct++
-        if (grade == Grade.Again) queue.add(minOf(3, queue.size), ReadingItem(kanji, kind, a.question.correctKey, false))
-        viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
-            app.db.reviews().record(updated.toEntity(sourceId, stack, kanji, kind.mode, a.question.correctKey), ReviewLogEntity(0, sourceId, stack, kanji, kind.mode.name, grade.value, now.toEpochMilli(), a.question.correctKey))
+        step.reinsertAt?.let { queue.add(it, ReadingItem(kanji, kind, a.question.correctKey, false)) }
+        if (step.record) {
+            val now = Instant.now()
+            val updated = fsrs.review(
+                states.getValue(kind)[id] ?: SrsState(), grade, now,
+                firstSuccessCapDays = Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS, fuzzSeed = Fsrs.seed(id, kind.mode.name, states.getValue(kind)[id]?.reps ?: 0),
+            )
+            states.getValue(kind)[id] = updated
+            viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
+                app.db.reviews().record(updated.toEntity(sourceId, stack, kanji, kind.mode, a.question.correctKey), ReviewLogEntity(0, sourceId, stack, kanji, kind.mode.name, grade.value, now.toEpochMilli(), a.question.correctKey))
+            }
         }
         showNext()
     }
