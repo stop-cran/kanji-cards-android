@@ -4,12 +4,15 @@ import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import io.github.stopcran.kanji.core.reading.ReadingCard
+import io.github.stopcran.kanji.core.reading.ReadingKind
 import kotlinx.coroutines.flow.Flow
 
 /** List-valued columns are stored joined with this separator (never occurs in front-matter values). */
@@ -54,7 +57,7 @@ data class WordEntity(
 data class ArticleEntity(val sourceId: String, val slug: String, val title: String, val body: String)
 
 /** Scheduling state per (content source, stack, kanji, mode); survives content updates and card edits. */
-@Entity(tableName = "review_state", primaryKeys = ["sourceId", "stack", "kanji", "mode"])
+@Entity(tableName = "review_state", primaryKeys = ["sourceId", "stack", "kanji", "mode", "reading"])
 data class ReviewStateEntity(
     val sourceId: String,
     val stack: String,
@@ -67,9 +70,14 @@ data class ReviewStateEntity(
     val lastReviewMs: Long?,
     val reps: Int,
     val lapses: Int,
+    /** Match key of the reading for the kanji readings modes; '' for every other mode. */
+    @ColumnInfo(defaultValue = "''") val reading: String = "",
 )
 
-@Entity(tableName = "review_log")
+@Entity(
+    tableName = "review_log",
+    indices = [Index(value = ["sourceId", "stack", "kanji", "mode"]), Index(value = ["atMs"])],
+)
 data class ReviewLogEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val sourceId: String,
@@ -78,6 +86,7 @@ data class ReviewLogEntity(
     val mode: String,
     val grade: Int,
     val atMs: Long,
+    @ColumnInfo(defaultValue = "''") val reading: String = "",
 )
 
 @Entity(tableName = "sync_meta", primaryKeys = ["sourceId"])
@@ -199,7 +208,7 @@ interface ReviewDao {
     suspend fun newCardsIntroducedSince(sourceId: String, stack: String, mode: String, sinceMs: Long): Int
 
     /** Distinct items (kanji or words, across every mode) whose first-ever review happened since [sinceMs]: the shared daily new-item pool. */
-    @Query("SELECT COUNT(*) FROM (SELECT 1 FROM review_log WHERE sourceId = :sourceId GROUP BY stack, kanji HAVING MIN(atMs) >= :sinceMs)")
+    @Query("SELECT COUNT(*) FROM (SELECT 1 FROM review_log WHERE sourceId = :sourceId GROUP BY stack, kanji, reading, CASE WHEN reading = '' THEN '' ELSE mode END HAVING MIN(atMs) >= :sinceMs)")
     suspend fun itemsIntroducedSince(sourceId: String, sinceMs: Long): Int
 
     /** Cards that were reviewed before and are due at [nowMs], in any mode. */
@@ -209,9 +218,9 @@ interface ReviewDao {
     @Query("SELECT atMs FROM review_log WHERE sourceId = :sourceId AND atMs >= :sinceMs")
     suspend fun reviewTimesSince(sourceId: String, sinceMs: Long): List<Long>
 
-    /** Kanji whose first reading review (of either kind) happened since [sinceMs]; they have already used a unit of the daily budget. */
-    @Query("SELECT kanji FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode IN ('KanjiOn', 'KanjiKun') GROUP BY kanji HAVING MIN(atMs) >= :sinceMs")
-    suspend fun readingKanjiIntroducedSince(sourceId: String, stack: String, sinceMs: Long): List<String>
+    /** Reading cards (kanji + reading) whose first review happened since [sinceMs]; each used a unit of the daily budget. */
+    @Query("SELECT COUNT(*) FROM (SELECT 1 FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode IN ('KanjiOn', 'KanjiKun') AND reading != '' GROUP BY mode, kanji, reading HAVING MIN(atMs) >= :sinceMs)")
+    suspend fun readingCardsIntroducedSince(sourceId: String, stack: String, sinceMs: Long): Int
 
     /** Kanji whose meaning was answered without "Again" on at least two different days: their readings become askable. */
     @Query(
@@ -229,7 +238,7 @@ interface ReviewDao {
 
 @Database(
     entities = [KanjiEntity::class, WordEntity::class, ArticleEntity::class, ReviewStateEntity::class, ReviewLogEntity::class, SyncMetaEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -260,5 +269,47 @@ val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
         db.execSQL("ALTER TABLE words ADD COLUMN jlpt INTEGER")
         db.execSQL("ALTER TABLE words ADD COLUMN quizExclusions TEXT NOT NULL DEFAULT ''")
         db.execSQL("DELETE FROM sync_meta")
+    }
+}
+
+/**
+ * Kanji readings are scheduled per reading. The state of each (kanji, kind) is copied to every reading card of that kanji and kind
+ * (no progress lost); the old per-kind rows go away. Also adds the review_log indexes.
+ */
+val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE review_state_new (sourceId TEXT NOT NULL, stack TEXT NOT NULL, kanji TEXT NOT NULL, mode TEXT NOT NULL, " +
+                "phase TEXT NOT NULL, stability REAL NOT NULL, difficulty REAL NOT NULL, dueMs INTEGER NOT NULL, lastReviewMs INTEGER, " +
+                "reps INTEGER NOT NULL, lapses INTEGER NOT NULL, reading TEXT NOT NULL DEFAULT '', PRIMARY KEY(sourceId, stack, kanji, mode, reading))",
+        )
+        db.execSQL(
+            "INSERT INTO review_state_new SELECT sourceId, stack, kanji, mode, phase, stability, difficulty, dueMs, lastReviewMs, reps, lapses, '' " +
+                "FROM review_state WHERE mode NOT IN ('KanjiOn', 'KanjiKun')",
+        )
+        val legacy = ArrayList<Array<Any?>>()
+        db.query(
+            "SELECT s.sourceId, s.stack, s.kanji, s.mode, s.phase, s.stability, s.difficulty, s.dueMs, s.lastReviewMs, s.reps, s.lapses, k.onyomi, k.kunyomi " +
+                "FROM review_state s JOIN kanji k ON k.sourceId = s.sourceId AND k.kanji = s.kanji WHERE s.mode IN ('KanjiOn', 'KanjiKun')",
+        ).use { c ->
+            while (c.moveToNext()) {
+                val kind = if (c.getString(3) == "KanjiOn") ReadingKind.On else ReadingKind.Kun
+                val card = ReadingCard(c.getString(2), c.getString(11).splitSep(), c.getString(12).splitSep())
+                for (key in card.quizKeys(kind)) {
+                    legacy += arrayOf(
+                        c.getString(0), c.getString(1), c.getString(2), c.getString(3), c.getString(4), c.getDouble(5), c.getDouble(6),
+                        c.getLong(7), if (c.isNull(8)) null else c.getLong(8), c.getInt(9), c.getInt(10), key,
+                    )
+                }
+            }
+        }
+        legacy.forEach {
+            db.execSQL("INSERT OR REPLACE INTO review_state_new VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", it)
+        }
+        db.execSQL("DROP TABLE review_state")
+        db.execSQL("ALTER TABLE review_state_new RENAME TO review_state")
+        db.execSQL("ALTER TABLE review_log ADD COLUMN reading TEXT NOT NULL DEFAULT ''")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_review_log_sourceId_stack_kanji_mode ON review_log (sourceId, stack, kanji, mode)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_review_log_atMs ON review_log (atMs)")
     }
 }

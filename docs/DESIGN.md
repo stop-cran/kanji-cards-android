@@ -84,12 +84,14 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   key is the reading (`WordQuizUi.Answer.key`), unlike the other directions where it is the written word. Tap only for now (voice: issue #5).
   Meaning-based `quiz_exclusions` do not filter reading options; reading uniqueness is checked independently.
 - Kanji readings quiz (`core/reading`): "Pick the on'yomi / kun'yomi of 生" — one mode on the home page, two kinds scheduled separately
-  (`StudyMode.KanjiOn`/`KanjiKun`, so (kanji, kind) is the review item). **Exactly one option is valid:** the correct reading is of the asked kind;
+  (`StudyMode.KanjiOn`/`KanjiKun`), and **each reading is its own card**: the review item is (kanji, kind, reading), where the reading is the match key (`review_state.reading`, '' for all other modes), so failing ショウ never hides behind succeeding on セイ. **Exactly one option is valid:** the correct reading is of the asked kind;
   no other option may be any reading of the target in either kind (readings are shared between kinds, e.g. 気 キ/き) or a voicing / long-vowel /
   small-っ variant of one (`ReadingKey`: raw form from the card, kana-folded match key without `.`/`-`, display form: on in katakana, kun in
   hiragana). Fewer than two safe options means the question is skipped, never shown with a doubtful answer; a test builds questions for every
   card of the content snapshot. A kanji's readings are asked once its meaning has been answered without "Again" on two different days (or that kind was already
-  started). The new-item allowance is shared: a kanji costs one unit however many kinds it brings, and its second kind is free the same day. The same
+  started). Only the first three distinct kana stems of a kind become cards (`ReadingCard.quizReadings`: い.きる and い.かす are one reading); a further reading
+  is introduced only after the previous one of that kind has reached the Review phase. Each new reading card costs one unit of the shared new-item
+  allowance, counted per card (`review_log.reading`). The same
   kanji is kept apart in the queue so its kinds do not cue each other. Not part of N4 advancement (yet); tap only (voice: later).
 - Font variety grows with memory stability (Gothic only when young, then Mincho, Textbook, Brush; a lapse drops it back) so recognition does not depend on one glyph shape (`FontPolicy`).
 - Each session screen is keyed by its route (`quiz:<ts>[:extra]`, `wquiz:<ts>:<jp|en|rd>[:extra]`, `draw:<ts>[:extra]`, `kreading:<ts>[:extra]`) so a ViewModel
@@ -172,7 +174,7 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 
 ## 8. Invariants (don't break these; tests cover most)
 
-1. Review state is keyed by (sourceId, stack, item, mode), where item is the kanji character or word string, never a title, position or reading.
+1. Review state is keyed by (sourceId, stack, item, mode, reading), where item is the kanji character or word string, never a title or position; the kanji readings modes add the reading match key (`ReadingId`).
    Review-state reads are scoped by source, stack and mode; the new-item allowance is shared across stacks and modes of a source (reminder-history queries are global).
 2. A failed sync (fatal error) leaves the previous content intact; the swap is atomic.
 3. A hash mismatch or malformed manifest file skips that file only; an unsafe zip entry or limit violation aborts the whole sync.

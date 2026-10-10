@@ -40,7 +40,7 @@ class DatabaseMigrationTest {
     }
 
     private fun openDatabase() = Room.databaseBuilder(context, AppDatabase::class.java, name)
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
         .allowMainThreadQueries()
         .build()
 
@@ -141,8 +141,8 @@ class DatabaseMigrationTest {
         checkUpgrade(2)
         withDatabase { db ->
             val source = sources.first()
-            val stateQuery = "SELECT * FROM review_state ORDER BY sourceId, stack, kanji, mode"
-            val logQuery = "SELECT * FROM review_log ORDER BY id"
+            val stateQuery = "SELECT sourceId, stack, kanji, mode, phase, stability, difficulty, dueMs, lastReviewMs, reps, lapses FROM review_state ORDER BY sourceId, stack, kanji, mode"
+            val logQuery = "SELECT id, sourceId, stack, kanji, mode, grade, atMs FROM review_log ORDER BY id"
             val states = rows(db.openHelper.writableDatabase.query(stateQuery))
             val logs = rows(db.openHelper.writableDatabase.query(logQuery))
             val words = db.content().words(source).map { word ->
@@ -164,6 +164,56 @@ class DatabaseMigrationTest {
                 assertEquals("", it.quizExclusions)
                 assertEquals(5, it.jlpt)
             }
+        }
+    }
+
+    @Test
+    fun migratesVersion3CopyingReadingStateToEveryReadingCard() = runBlocking {
+        val source = sources.first()
+        context.openOrCreateDatabase(name, Context.MODE_PRIVATE, null).use { db ->
+            listOf(
+                """CREATE TABLE kanji (sourceId TEXT NOT NULL, kanji TEXT NOT NULL, title TEXT NOT NULL, jlpt INTEGER,
+                    tags TEXT NOT NULL, strokeCount INTEGER, radical TEXT, phonetic TEXT, onyomi TEXT NOT NULL,
+                    kunyomi TEXT NOT NULL, distractors TEXT NOT NULL, body TEXT NOT NULL, strokesJson TEXT,
+                    position INTEGER NOT NULL, PRIMARY KEY(sourceId, kanji))""",
+                """CREATE TABLE words (sourceId TEXT NOT NULL, word TEXT NOT NULL, reading TEXT NOT NULL, title TEXT NOT NULL,
+                    type TEXT, kanji TEXT NOT NULL, tags TEXT NOT NULL, body TEXT NOT NULL, jlpt INTEGER,
+                    quizExclusions TEXT NOT NULL DEFAULT '', PRIMARY KEY(sourceId, word))""",
+                """CREATE TABLE articles (sourceId TEXT NOT NULL, slug TEXT NOT NULL, title TEXT NOT NULL,
+                    body TEXT NOT NULL, PRIMARY KEY(sourceId, slug))""",
+                """CREATE TABLE review_state (sourceId TEXT NOT NULL, stack TEXT NOT NULL, kanji TEXT NOT NULL, mode TEXT NOT NULL,
+                    phase TEXT NOT NULL, stability REAL NOT NULL, difficulty REAL NOT NULL, dueMs INTEGER NOT NULL,
+                    lastReviewMs INTEGER, reps INTEGER NOT NULL, lapses INTEGER NOT NULL, PRIMARY KEY(sourceId, stack, kanji, mode))""",
+                """CREATE TABLE review_log (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceId TEXT NOT NULL,
+                    stack TEXT NOT NULL DEFAULT 'all', kanji TEXT NOT NULL, mode TEXT NOT NULL, grade INTEGER NOT NULL, atMs INTEGER NOT NULL)""",
+                """CREATE TABLE sync_meta (sourceId TEXT NOT NULL, contentVersion TEXT NOT NULL,
+                    syncedAtMs INTEGER NOT NULL, problems INTEGER NOT NULL, PRIMARY KEY(sourceId))""",
+            ).forEach { db.execSQL(it) }
+            val on = listOf("セイ", "ショウ").joinSep()
+            val kun = listOf("い.きる", "い.かす", "う.まれる", "なま", "お.う").joinSep()
+            db.execSQL("INSERT INTO kanji VALUES (?, '生', 'life', 5, 'tag', 5, NULL, NULL, ?, ?, '', 'body', NULL, 0)", arrayOf(source, on, kun))
+            for ((mode, reps) in listOf("Quiz" to 7, "KanjiOn" to 4, "KanjiKun" to 3)) {
+                db.execSQL("INSERT INTO review_state VALUES (?, 'all', '生', ?, 'Review', 12.5, 5.0, 999, 500, ?, 1)", arrayOf(source, mode, reps))
+                db.execSQL("INSERT INTO review_log (sourceId, stack, kanji, mode, grade, atMs) VALUES (?, 'all', '生', ?, 3, 500)", arrayOf(source, mode))
+            }
+            // A state whose kanji is no longer in the content cannot be assigned to any reading.
+            db.execSQL("INSERT INTO review_state VALUES (?, 'all', 'gone', 'KanjiOn', 'Review', 1.0, 5.0, 999, 500, 1, 0)", arrayOf(source))
+            db.version = 3
+        }
+        withDatabase { db ->
+            val sqlite = db.openHelper.writableDatabase
+            assertEquals(
+                listOf(
+                    listOf("KanjiKun", "いきる", "3", "12.5"), listOf("KanjiKun", "うまれる", "3", "12.5"), listOf("KanjiKun", "なま", "3", "12.5"),
+                    listOf("KanjiOn", "しょう", "4", "12.5"), listOf("KanjiOn", "せい", "4", "12.5"),
+                    listOf("Quiz", "", "7", "12.5"),
+                ),
+                rows(sqlite.query("SELECT mode, reading, reps, stability FROM review_state ORDER BY mode, reading")),
+            )
+            assertEquals(listOf(listOf("3")), rows(sqlite.query("SELECT COUNT(*) FROM review_log WHERE reading = ''")))
+            val indexes = rows(sqlite.query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'review_log'")).flatten()
+            assertTrue(indexes.toString(), "index_review_log_atMs" in indexes && "index_review_log_sourceId_stack_kanji_mode" in indexes)
+            assertEquals(3, db.reviews().states(source, "all", "KanjiKun").size)
         }
     }
 
@@ -240,8 +290,8 @@ class DatabaseMigrationTest {
             """CREATE TABLE sync_meta (sourceId TEXT NOT NULL, contentVersion TEXT NOT NULL,
                 syncedAtMs INTEGER NOT NULL, problems INTEGER NOT NULL, PRIMARY KEY(sourceId))""",
         )
-        val stateColumns = if (version == 2) "*" else "sourceId, kanji, mode, phase, stability, difficulty, dueMs, lastReviewMs, reps, lapses"
-        val logColumns = if (version == 2) "*" else "id, sourceId, kanji, mode, grade, atMs"
+        val stateColumns = if (version == 2) "sourceId, stack, kanji, mode, phase, stability, difficulty, dueMs, lastReviewMs, reps, lapses" else "sourceId, kanji, mode, phase, stability, difficulty, dueMs, lastReviewMs, reps, lapses"
+        val logColumns = if (version == 2) "id, sourceId, stack, kanji, mode, grade, atMs" else "id, sourceId, kanji, mode, grade, atMs"
         val queries = listOf(
             "SELECT sourceId, word, reading, title, type, kanji, tags, body FROM words ORDER BY sourceId, word",
             "SELECT * FROM kanji ORDER BY sourceId, kanji",

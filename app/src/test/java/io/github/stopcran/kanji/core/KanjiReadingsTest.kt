@@ -4,6 +4,7 @@ import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.core.reading.KanjiReadingQuiz
 import io.github.stopcran.kanji.core.reading.KanjiReadingQueue
 import io.github.stopcran.kanji.core.reading.ReadingCard
+import io.github.stopcran.kanji.core.reading.ReadingId
 import io.github.stopcran.kanji.core.reading.ReadingKey
 import io.github.stopcran.kanji.core.reading.ReadingKind
 import io.github.stopcran.kanji.core.srs.CardPhase
@@ -78,40 +79,78 @@ class KanjiReadingsTest {
         assertEquals(2, two!!.options.size)
     }
 
+    private fun id(k: String, r: String) = ReadingId.of(k, r)
+    private fun review(due: Instant = now.plusSeconds(86400 * 5), phase: CardPhase = CardPhase.Review) =
+        SrsState(phase = phase, stability = 3.0, difficulty = 5.0, due = due, lastReview = now.minusSeconds(86400 * 3), reps = 3)
+
     @Test
-    fun queueOffersOnlyUnlockedOrStartedAndSharesBudget() {
-        val noStates = emptyMap<ReadingKind, Map<String, SrsState>>()
-        assertTrue(KanjiReadingQueue.build(cards, noStates, emptySet(), emptySet(), 10, now, noise = 0.0).isEmpty())
-
-        val unlocked = setOf("生", "日", "月")
-        val q = KanjiReadingQueue.build(cards, noStates, unlocked, emptySet(), 2, now, noise = 0.0)
-        // Two new kanji cost two units of budget, whichever kinds they bring.
-        assertEquals(2, q.map { it.kanji }.distinct().size)
-        assertTrue(q.all { it.isNew })
-        assertEquals(4, q.size)
-
-        // A kanji introduced today brings its other kind for free even with no budget left.
-        val free = KanjiReadingQueue.build(cards, noStates, unlocked, setOf("生"), 1, now, noise = 0.0)
-        assertEquals(setOf("生"), free.map { it.kanji }.toSet())
-        assertEquals(2, free.size)
+    fun onlyTheFirstDistinctStemsBecomeCards() {
+        val sei = cards.first { it.kanji == "生" }
+        assertEquals(listOf("いきる", "うまれる", "なま"), sei.quizKeys(ReadingKind.Kun))
+        val many = card("行", listOf("コウ", "ギョウ", "アン", "ゴウ"), listOf("い.く", "い.かす", "ゆ.く", "おこな.う", "おこ.なう"))
+        assertEquals(listOf("こう", "ぎょう", "あん"), many.quizKeys(ReadingKind.On))
+        assertEquals(listOf("いく", "ゆく", "おこなう"), many.quizKeys(ReadingKind.Kun))
     }
 
     @Test
-    fun dueItemsComeWithoutBudgetAndKindsAreIndependent() {
-        val due = SrsState(phase = CardPhase.Review, stability = 3.0, difficulty = 5.0, due = now.minusSeconds(3600), lastReview = now.minusSeconds(86400 * 3), reps = 3)
-        val states = mapOf(ReadingKind.On to mapOf("生" to due), ReadingKind.Kun to emptyMap())
-        val q = KanjiReadingQueue.build(cards, states, emptySet(), emptySet(), 0, now, noise = 0.0)
-        assertEquals(listOf("生" to ReadingKind.On), q.map { it.kanji to it.kind })
+    fun queueOffersOnlyUnlockedOrStartedAndChargesEachNewReading() {
+        val noStates = emptyMap<ReadingKind, Map<String, SrsState>>()
+        assertTrue(KanjiReadingQueue.build(cards, noStates, emptySet(), 0, 10, now, noise = 0.0).isEmpty())
+
+        val unlocked = setOf("生", "日", "月")
+        val q = KanjiReadingQueue.build(cards, noStates, unlocked, 0, 2, now, noise = 0.0)
+        // One unit per new reading card, whichever kanji or kind it belongs to.
+        assertEquals(2, q.size)
+        assertTrue(q.all { it.isNew })
+        // A reading card started today has already used its unit.
+        assertEquals(1, KanjiReadingQueue.build(cards, noStates, unlocked, 1, 2, now, noise = 0.0).size)
+        assertEquals(0, KanjiReadingQueue.build(cards, noStates, unlocked, 2, 2, now, noise = 0.0).size)
+        // Each unlocked kanji offers one reading per kind at first, never all its readings.
+        assertEquals(6, KanjiReadingQueue.build(cards, noStates, unlocked, 0, 99, now, noise = 0.0).size)
+    }
+
+    @Test
+    fun anotherReadingIsIntroducedOnlyAfterThePreviousOneIsLearned() {
+        fun on(state: SrsState?) = KanjiReadingQueue.build(
+            cards.filter { it.kanji == "生" }, mapOf(ReadingKind.On to listOfNotNull(state?.let { id("生", "せい") to it }).toMap()),
+            setOf("生"), 0, 99, now, noise = 0.0,
+        ).filter { it.kind == ReadingKind.On }
+        assertEquals(listOf("せい"), on(null).map { it.reading })
+        // The first reading is still being learned: ショウ waits.
+        assertTrue(on(review(phase = CardPhase.Learning)).none { it.reading == "しょう" })
+        val learned = on(review())
+        assertEquals(listOf("しょう"), learned.filter { it.isNew }.map { it.reading })
+        assertTrue(learned.none { it.reading == "せい" && it.isNew })
+    }
+
+    @Test
+    fun lapsingOneReadingLeavesTheOthersScheduleAlone() {
+        val sei = cards.first { it.kanji == "生" }
+        val states = mapOf(
+            ReadingKind.On to mapOf(id("生", "せい") to review(due = now.minusSeconds(60)), id("生", "しょう") to review()),
+            ReadingKind.Kun to emptyMap(),
+        )
+        val q = KanjiReadingQueue.build(listOf(sei), states, emptySet(), 0, 0, now, noise = 0.0)
+        assertEquals(listOf("せい"), q.map { it.reading })
         assertFalse(q.single().isNew)
     }
 
     @Test
-    fun sameKanjiIsNotAskedBackToBackWhenAvoidable() {
-        val q = KanjiReadingQueue.build(cards, emptyMap(), setOf("生", "日", "月"), emptySet(), 3, now, noise = 0.0)
-        assertEquals(6, q.size)
-        assertTrue(q.zipWithNext().none { (a, b) -> a.kanji == b.kanji })
+    fun questionAsksTheCardsReading() {
+        val sei = cards.first { it.kanji == "生" }
+        repeat(50) { seed ->
+            val q = KanjiReadingQuiz.question(sei, ReadingKind.On, cards, Random(seed), reading = "しょう")!!
+            assertEquals("しょう", q.correctKey)
+            assertEquals("ショウ", q.options.first { it.key == q.correctKey }.label)
+        }
     }
 
+    @Test
+    fun sameKanjiIsNotAskedBackToBackWhenAvoidable() {
+        val q = KanjiReadingQueue.build(cards, emptyMap(), setOf("生", "日", "月"), 0, 3, now, noise = 0.0)
+        assertEquals(3, q.size)
+        assertTrue(q.zipWithNext().none { (a, b) -> a.kanji == b.kanji })
+    }
     @Test
     fun modeStatePicksOneState() {
         assertEquals(ModeState.Unavailable("x"), ModeState.of(false, "x", 5, 5, true, "l"))
@@ -122,7 +161,7 @@ class KanjiReadingsTest {
     }
 
     @Test
-    fun everyKanjiInTheContentSnapshotHasOneValidOption() {
+    fun everyReadingCardInTheContentSnapshotHasOneValidOption() {
         val dir = File("../../learning-japanese/kanji")
         assumeTrue(dir.exists())
         fun list(text: String, key: String) = Regex("^$key:\\s*\\[(.*)]\\s*$", RegexOption.MULTILINE).find(text)?.groupValues?.get(1)
@@ -134,10 +173,10 @@ class KanjiReadingsTest {
         assertTrue(all.size > 100)
         var skipped = 0
         for (c in all) for (kind in ReadingKind.entries) {
-            if (c.ask(kind).isEmpty()) continue
-            repeat(3) { seed ->
-                val q = KanjiReadingQuiz.question(c, kind, all, Random(seed))
+            for (reading in c.quizKeys(kind)) repeat(3) { seed ->
+                val q = KanjiReadingQuiz.question(c, kind, all, Random(seed), reading = reading)
                 if (q == null) { skipped++; return@repeat }
+                assertEquals("${c.kanji} $kind", reading, q.correctKey)
                 assertTrue("${c.kanji} $kind", q.options.size >= 2)
                 val excluded = KanjiReadingQuiz.excludedKeys(c)
                 val own = (c.on + c.kun).map { ReadingKey.key(it) }.toSet()
@@ -147,7 +186,7 @@ class KanjiReadingsTest {
                 assertEquals(q.options.size, q.options.map { it.key }.distinct().size)
             }
         }
-        println("skipped questions: $skipped")
+        assertEquals("reading cards without a safe question", 0, skipped)
         assertNotNull(all.firstOrNull())
     }
 }

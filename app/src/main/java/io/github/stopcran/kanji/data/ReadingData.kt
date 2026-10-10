@@ -16,15 +16,15 @@ class ReadingData(val cards: List<ReadingCard>, val states: Map<ReadingKind, Map
 
 suspend fun AppDatabase.readingData(sourceId: String, stack: String, kanji: List<KanjiEntity>, newRemaining: Int, now: Instant, extra: Boolean): ReadingData {
     val cards = kanji.map { it.toReadingCard() }
-    val states = ReadingKind.entries.associateWith { kind -> reviews().states(sourceId, stack, kind.mode.name).associate { it.kanji to it.toSrs() } }
+    val states = ReadingKind.entries.associateWith { kind -> reviews().states(sourceId, stack, kind.mode.name).toReadingStates() }
     val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    val introducedToday = reviews().readingKanjiIntroducedSince(sourceId, stack, startOfDay).toSet()
+    val introducedToday = reviews().readingCardsIntroducedSince(sourceId, stack, startOfDay)
     val items = KanjiReadingQueue.build(
         cards, states,
         unlocked = reviews().meaningLearned(sourceId, stack).toSet(),
         introducedToday = introducedToday,
-        // The queue subtracts kanji already started today; the shared allowance has already accounted for them.
-        dailyNew = newRemaining + introducedToday.size, now = now, extra = extra,
+        // The queue subtracts the reading cards already started today; the shared allowance has already accounted for them.
+        dailyNew = newRemaining + introducedToday, now = now, extra = extra,
     )
     return ReadingData(cards, states, items)
 }

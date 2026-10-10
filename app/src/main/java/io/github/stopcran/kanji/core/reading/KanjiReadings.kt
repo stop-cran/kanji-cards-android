@@ -24,11 +24,22 @@ object ReadingKey {
     /** Kana-folded, with the okurigana dot and attachment dashes removed: used only to compare and de-duplicate. */
     fun key(raw: String) = fold(raw).filter { it != '.' && it != '-' && it != '・' && !it.isWhitespace() }
 
+    /** The kana stem before the okurigana dot (`い.きる` and `い.かす` share `い`): variants of one stem are one reading to learn. */
+    fun stem(raw: String) = key(raw.substringBefore('.'))
+
     /** On'yomi in katakana, kun'yomi in hiragana; the dot goes away and a dash (prefix or suffix form) stays. */
     fun display(raw: String, kind: ReadingKind): String {
         val plain = raw.replace(".", "").trim()
         return if (kind == ReadingKind.On) String(CharArray(plain.length) { unfoldChar(plain[it]) }) else fold(plain)
     }
+}
+
+/** Identity of one reading card inside the per-kind state maps: the kanji plus the reading's match key. */
+object ReadingId {
+    private const val SEP = '\u001F'
+    fun of(kanji: String, key: String) = "$kanji$SEP$key"
+    fun kanji(id: String) = id.substringBefore(SEP)
+    fun key(id: String) = id.substringAfter(SEP, "")
 }
 
 /** [on] and [kun] are all the card's readings (used to rule out wrong options); [askOn]/[askKun] are the ones worth asking. */
@@ -41,6 +52,16 @@ data class ReadingCard(
     val distractors: List<String> = emptyList(),
 ) {
     fun ask(kind: ReadingKind) = if (kind == ReadingKind.On) askOn else askKun
+
+    /** The readings that become cards: the first [MAX_PER_KIND] distinct stems as listed, in order. */
+    fun quizReadings(kind: ReadingKind): List<String> =
+        ask(kind).filter { ReadingKey.key(it).isNotEmpty() }.distinctBy { ReadingKey.stem(it) }.distinctBy { ReadingKey.key(it) }.take(MAX_PER_KIND)
+
+    fun quizKeys(kind: ReadingKind): List<String> = quizReadings(kind).map { ReadingKey.key(it) }
+
+    companion object {
+        const val MAX_PER_KIND = 3
+    }
 }
 
 data class ReadingOption(val key: String, val label: String)
@@ -65,8 +86,9 @@ object KanjiReadingQuiz {
         return out
     }
 
-    fun question(target: ReadingCard, kind: ReadingKind, all: List<ReadingCard>, random: Random, count: Int = 4): ReadingQuestion? {
-        val correctRaw = target.ask(kind).randomOrNull(random) ?: return null
+    /** [reading] is the match key of the card's reading; when null (or unknown) a random reading of the kind is asked. */
+    fun question(target: ReadingCard, kind: ReadingKind, all: List<ReadingCard>, random: Random, count: Int = 4, reading: String? = null): ReadingQuestion? {
+        val correctRaw = reading?.let { r -> target.ask(kind).firstOrNull { ReadingKey.key(it) == r } } ?: target.ask(kind).randomOrNull(random) ?: return null
         val correctKey = ReadingKey.key(correctRaw)
         if (correctKey.isEmpty()) return null
         val excluded = excludedKeys(target)
@@ -93,48 +115,58 @@ object KanjiReadingQuiz {
     }
 }
 
-data class ReadingItem(val kanji: String, val kind: ReadingKind, val isNew: Boolean)
+/** One reading card: [reading] is the match key (see [ReadingKey.key]). */
+data class ReadingItem(val kanji: String, val kind: ReadingKind, val reading: String, val isNew: Boolean) {
+    val id: String get() = ReadingId.of(kanji, reading)
+}
 
 /**
- * One queue over both kinds. A kanji's reading is offered once its meaning has been answered well a couple of times (the
- * caller passes those as `unlocked`) or once that kind was already started. The daily new budget is shared: a kanji with
- * any reading introduced today (`introducedToday`) already used a unit, and its other kind is free; a new kanji costs one unit
- * however many kinds it brings.
+ * One queue over both kinds, with one card per (kanji, kind, reading). A kanji's readings are offered once its meaning has
+ * been answered well a couple of times (the caller passes those as `unlocked`) or once a reading of that kind was already
+ * started. A further reading of a kanji is introduced only after the previous reading of that kind has passed learning (been
+ * answered well), so a kanji never brings all its readings at once. Every new reading card costs one unit of the daily budget;
+ * `introducedToday` is how many reading cards already used a unit today.
  */
 object KanjiReadingQueue {
     const val EXTRA_LIMIT = 10
+
+    /** The reading cards of [card] that may be asked now: all started ones, plus the next one when the previous is learned. */
+    fun eligible(card: ReadingCard, kind: ReadingKind, states: Map<String, SrsState>, unlocked: Boolean): List<ReadingItem> {
+        val keys = card.quizKeys(kind)
+        fun phase(k: String) = states[ReadingId.of(card.kanji, k)]?.phase ?: CardPhase.New
+        val started = keys.filter { phase(it) != CardPhase.New }
+        if (started.isEmpty() && !unlocked) return emptyList()
+        val nextIndex = keys.indexOfFirst { phase(it) == CardPhase.New }
+        val next = keys.getOrNull(nextIndex)?.takeIf { nextIndex == 0 || phase(keys[nextIndex - 1]) == CardPhase.Review }
+        return started.map { ReadingItem(card.kanji, kind, it, false) } + listOfNotNull(next?.let { ReadingItem(card.kanji, kind, it, true) })
+    }
 
     fun build(
         cards: List<ReadingCard>,
         states: Map<ReadingKind, Map<String, SrsState>>,
         unlocked: Set<String>,
-        introducedToday: Set<String>,
+        introducedToday: Int,
         dailyNew: Int,
         now: Instant,
         extra: Boolean = false,
         noise: Double = QueueBuilder.DEFAULT_NOISE,
         rnd: Random = Random.Default,
     ): List<ReadingItem> {
-        fun started(kind: ReadingKind, k: String) = states[kind]?.get(k)?.phase.let { it != null && it != CardPhase.New }
-        fun eligible(kind: ReadingKind) = cards.filter { it.ask(kind).isNotEmpty() && (it.kanji in unlocked || started(kind, it.kanji)) }.map { it.kanji }
+        fun eligible(kind: ReadingKind) = cards.flatMap { eligible(it, kind, states[kind].orEmpty(), it.kanji in unlocked) }
+        fun item(kind: ReadingKind, id: String, isNew: Boolean) = ReadingItem(ReadingId.kanji(id), kind, ReadingId.key(id), isNew)
         val kinds = ReadingKind.entries
         val shuffle = noise > 0
         if (extra) {
             val lists = kinds.map { kind ->
-                QueueBuilder.extra(eligible(kind), states[kind].orEmpty(), now, EXTRA_LIMIT, noise, rnd).map { ReadingItem(it.kanji, kind, it.isNew) }
+                QueueBuilder.extra(eligible(kind).map { it.id }, states[kind].orEmpty(), now, EXTRA_LIMIT, noise, rnd).map { item(kind, it.kanji, it.isNew) }
             }
             return separate(merge(lists, rnd, shuffle)).take(EXTRA_LIMIT)
         }
         val due = kinds.map { kind ->
-            QueueBuilder.build(eligible(kind), states[kind].orEmpty(), now, 0, noise = noise, rnd = rnd).map { ReadingItem(it.kanji, kind, false) }
+            QueueBuilder.build(eligible(kind).filter { !it.isNew }.map { it.id }, states[kind].orEmpty(), now, 0, noise = noise, rnd = rnd).map { item(kind, it.kanji, false) }
         }
-        val candidates = kinds.flatMap { kind ->
-            eligible(kind).filter { states[kind]?.get(it)?.phase.let { p -> p == null || p == CardPhase.New } }.map { ReadingItem(it, kind, true) }
-        }
-        val (free, costly) = candidates.partition { it.kanji in introducedToday }
-        val costlyKanji = costly.map { it.kanji }.distinct().let { if (shuffle) it.shuffled(rnd) else it }
-        val picked = costlyKanji.take(maxOf(0, dailyNew - introducedToday.size)).toSet()
-        val fresh = (free + costly.filter { it.kanji in picked }).let { if (shuffle) it.shuffled(rnd) else it }
+        val candidates = kinds.flatMap { kind -> eligible(kind).filter { it.isNew } }.let { if (shuffle) it.shuffled(rnd) else it }
+        val fresh = candidates.take(maxOf(0, dailyNew - introducedToday))
         return separate(merge(listOf(merge(due, rnd, shuffle), fresh), rnd, shuffle))
     }
 
@@ -153,7 +185,7 @@ object KanjiReadingQueue {
         }
     }
 
-    /** Keeps the same kanji from appearing back to back (its two kinds would cue each other) when possible. */
+    /** Keeps the same kanji from appearing back to back (its readings would cue each other) when possible. */
     private fun separate(items: List<ReadingItem>): List<ReadingItem> {
         val out = items.toMutableList()
         for (i in 1 until out.size) {

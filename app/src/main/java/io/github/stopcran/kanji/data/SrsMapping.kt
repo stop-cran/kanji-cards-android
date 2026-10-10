@@ -1,6 +1,7 @@
 package io.github.stopcran.kanji.data
 
 import io.github.stopcran.kanji.core.content.WordArticle
+import io.github.stopcran.kanji.core.reading.ReadingId
 import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.Stack
@@ -17,9 +18,12 @@ fun ReviewStateEntity.toSrs() = SrsState(
     CardPhase.valueOf(phase), stability, difficulty, Instant.ofEpochMilli(dueMs), lastReviewMs?.let(Instant::ofEpochMilli), reps, lapses,
 )
 
-fun SrsState.toEntity(source: String, stack: String, kanji: String, mode: StudyMode) = ReviewStateEntity(
-    source, stack, kanji, mode.name, phase.name, stability, difficulty, due.toEpochMilli(), lastReview?.toEpochMilli(), reps, lapses,
+fun SrsState.toEntity(source: String, stack: String, kanji: String, mode: StudyMode, reading: String = "") = ReviewStateEntity(
+    source, stack, kanji, mode.name, phase.name, stability, difficulty, due.toEpochMilli(), lastReview?.toEpochMilli(), reps, lapses, reading,
 )
+
+/** Reading-mode states keyed by [ReadingId] (kanji + reading); other modes by kanji or word. */
+fun List<ReviewStateEntity>.toReadingStates(): Map<String, SrsState> = associate { ReadingId.of(it.kanji, it.reading) to it.toSrs() }
 
 fun List<KanjiEntity>.stacks(): List<Stack> = Stacks.available(map { it.tags.splitSep() })
 

@@ -10,6 +10,7 @@ import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.core.reading.KanjiReadingQuiz
 import io.github.stopcran.kanji.core.reading.ReadingCard
 import io.github.stopcran.kanji.core.reading.ReadingItem
+import io.github.stopcran.kanji.core.reading.ReadingId
 import io.github.stopcran.kanji.core.reading.ReadingKey
 import io.github.stopcran.kanji.core.reading.ReadingKind
 import io.github.stopcran.kanji.core.reading.ReadingQuestion
@@ -40,7 +41,7 @@ sealed interface ReadingUi {
     data class Done(val answered: Int, val correct: Int) : ReadingUi
 }
 
-/** Kanji readings session over on'yomi and kun'yomi; each (kanji, kind) has its own scheduling state. */
+/** Kanji readings session over on'yomi and kun'yomi; each (kanji, kind, reading) has its own scheduling state. */
 class KanjiReadingViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as KanjiApp
     private val fsrs = Fsrs()
@@ -82,9 +83,9 @@ class KanjiReadingViewModel(application: Application) : AndroidViewModel(applica
         showNext()
     }
 
-    private fun nextFont(kanji: String, kind: ReadingKind): KanjiFont {
+    private fun nextFont(id: String, kind: ReadingKind): KanjiFont {
         if (!app.settings.varyFonts.value) return KanjiFont.Gothic
-        val stability = states.getValue(kind)[kanji]?.takeIf { it.phase != CardPhase.New }?.stability ?: 0.0
+        val stability = states.getValue(kind)[id]?.takeIf { it.phase != CardPhase.New }?.stability ?: 0.0
         return FontPolicy.pick(stability, random, lastFont).also { lastFont = it }
     }
 
@@ -97,8 +98,8 @@ class KanjiReadingViewModel(application: Application) : AndroidViewModel(applica
             }
             val target = readingCards.first { it.kanji == item.kanji }
             // A question with too few safe options is skipped rather than shown with a doubtful answer.
-            val q = KanjiReadingQuiz.question(target, item.kind, readingCards, random) ?: continue
-            ui = ReadingUi.Question(cards.getValue(item.kanji), q, queue.size + 1, nextFont(item.kanji, item.kind))
+            val q = KanjiReadingQuiz.question(target, item.kind, readingCards, random, reading = item.reading) ?: continue
+            ui = ReadingUi.Question(cards.getValue(item.kanji), q, queue.size + 1, nextFont(item.id, item.kind))
             return
         }
     }
@@ -116,6 +117,7 @@ class KanjiReadingViewModel(application: Application) : AndroidViewModel(applica
         val a = ui as? ReadingUi.Answer ?: return
         val kind = a.question.kind
         val kanji = a.card.kanji
+        val id = ReadingId.of(kanji, a.question.correctKey)
         val grade = when {
             !a.correct -> Grade.Again
             guessed -> Grade.Hard
@@ -123,15 +125,15 @@ class KanjiReadingViewModel(application: Application) : AndroidViewModel(applica
         }
         val now = Instant.now()
         val updated = fsrs.review(
-            states.getValue(kind)[kanji] ?: SrsState(), grade, now,
-            firstSuccessCapDays = Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS, fuzzSeed = Fsrs.seed(kanji, kind.mode.name, states.getValue(kind)[kanji]?.reps ?: 0),
+            states.getValue(kind)[id] ?: SrsState(), grade, now,
+            firstSuccessCapDays = Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS, fuzzSeed = Fsrs.seed(id, kind.mode.name, states.getValue(kind)[id]?.reps ?: 0),
         )
-        states.getValue(kind)[kanji] = updated
+        states.getValue(kind)[id] = updated
         answered++
         if (a.correct) correct++
-        if (grade == Grade.Again) queue.add(minOf(3, queue.size), ReadingItem(kanji, kind, false))
+        if (grade == Grade.Again) queue.add(minOf(3, queue.size), ReadingItem(kanji, kind, a.question.correctKey, false))
         viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
-            app.db.reviews().record(updated.toEntity(sourceId, stack, kanji, kind.mode), ReviewLogEntity(0, sourceId, stack, kanji, kind.mode.name, grade.value, now.toEpochMilli()))
+            app.db.reviews().record(updated.toEntity(sourceId, stack, kanji, kind.mode, a.question.correctKey), ReviewLogEntity(0, sourceId, stack, kanji, kind.mode.name, grade.value, now.toEpochMilli(), a.question.correctKey))
         }
         showNext()
     }
