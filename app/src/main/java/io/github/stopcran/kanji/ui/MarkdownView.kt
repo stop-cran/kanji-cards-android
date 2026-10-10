@@ -126,10 +126,10 @@ private fun annotated(spans: List<Span>, onLink: (LinkTarget) -> Unit, linkColor
             )
             val link = s.link
             if (link == null) {
-                withStyle(style) { append(s.text) }
+                withStyle(style) { with(RareHan) { appendWithRare(s.text) } }
             } else {
                 val linkStyles = TextLinkStyles(style.merge(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)))
-                withLink(LinkAnnotation.Clickable("link", linkStyles) { onLink(link) }) { append(s.text) }
+                withLink(LinkAnnotation.Clickable("link", linkStyles) { onLink(link) }) { with(RareHan) { appendWithRare(s.text) } }
             }
         }
     }
