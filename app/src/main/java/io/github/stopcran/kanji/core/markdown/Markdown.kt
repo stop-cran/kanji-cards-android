@@ -102,7 +102,8 @@ object Markdown {
                     val body = StringBuilder(item.second)
                     i++
                     while (i < lines.size && lines[i].isNotBlank() && !bullet.matches(lines[i]) && !numbered.matches(lines[i]) &&
-                        !lines[i].trim().startsWith("|") && !lines[i].trim().startsWith(">") && heading.matchEntire(lines[i].trim()) == null
+                        !lines[i].trim().startsWith("|") && !lines[i].trim().startsWith(">") && heading.matchEntire(lines[i].trim()) == null &&
+                        !lines[i].trim().startsWith("```") && !lines[i].trim().let { it.length >= 3 && it.all { c -> c == '-' } }
                     ) body.append(' ').append(lines[i++].trim())
                     out += Block.ListItem(numberedMatch?.groupValues?.get(2)?.toIntOrNull(), (indent / 2).coerceAtMost(3), inline(body.toString(), path))
                 }

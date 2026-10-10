@@ -73,6 +73,26 @@ class ContentTest {
     }
 
     @Test
+    fun frontMatterEdgeCases() {
+        assertEquals("body", FrontMatter.parse("---\n---\nbody")!!.body)
+        assertNull(FrontMatter.parse("---\ntitle: x\n---suffix\nbody"))
+        assertEquals(listOf("a, b", "c"), FrontMatter.parse("---\nt: [\"a, b\", c]\n---\n")!!.fields["t"])
+        assertEquals(listOf("a, b", "c"), FrontMatter.parse("---\nt: ['a, b', c]\n---\n")!!.fields["t"])
+        assertEquals("[\"a, c]", FrontMatter.parse("---\nt: [\"a, c]\n---\n")!!.fields["t"])
+        assertNull(FrontMatter.parseStringList("[\"a, c]"))
+    }
+
+    @Test
+    fun scalarInListFieldIsRejected() {
+        val md = "---\nkanji: 日\ntitle: sun\ntags: jlpt-n5\n---\nbody"
+        try {
+            ContentParser.parseKanji("kanji/日.md", md)
+            fail()
+        } catch (_: ContentException) {
+        }
+    }
+
+    @Test
     fun parsesValidSnapshot() {
         val files = sample()
         val parsed = ContentParser.parse(files + ("manifest.json" to manifest(files)))
@@ -242,7 +262,7 @@ class ContentTest {
             "", "null", "~", "other", "'other'", "\"[]\"", "{}", "[5]", "[+5]", "[-5]", "[5.0]", "[1e3]", "[0x10]",
             "[0b10]", "[0o10]", "[.nan]", "[-.Inf]", "[true]", "[FALSE]", "[yes]", "[Off]", "[null]", "[~]",
             "[2026-10-09]", "[[]]", "[{}]", "[other,]", "[,other]", "[other,,good]", "[\"unterminated]",
-            "['other\", good]", "[\"a,b\"]", "[\"bad\\escape\"]", "[&id other]", "[*id]", "[!!str other]",
+            "['other\", good]", "[\"bad\\escape\"]", "[&id other]", "[*id]", "[!!str other]",
             "[other # comment]", "[other] # comment", "|", ">-",
         )) {
             assertEquals(

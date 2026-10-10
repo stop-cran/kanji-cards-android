@@ -83,6 +83,16 @@ class MarkdownTest {
     }
 
     @Test
+    fun listItemContinuationStopsAtFenceAndRule() {
+        val b = Markdown.parse("- item\n```\ncode\n```\n- two\n---\nafter", "articles/a.md")
+        assertTrue(b[0] is Block.ListItem)
+        assertTrue(b[1] is Block.Code)
+        assertTrue(b[2] is Block.ListItem)
+        assertTrue(b[3] is Block.Rule)
+        assertEquals("item", (b[0] as Block.ListItem).spans.single().text)
+    }
+
+    @Test
     fun rendersEveryRealDocumentWithoutRawMarkers() {
         val root = File("../../learning-japanese")
         assumeTrue(File(root, "manifest.json").exists())

@@ -187,5 +187,10 @@ object ContentParser {
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun Map<String, Any>.list(key: String): List<String> = (this[key] as? List<String>) ?: emptyList()
+    private fun Map<String, Any>.list(key: String): List<String> = when (val v = this[key]) {
+        null -> emptyList()
+        is List<*> -> v as List<String>
+        is String -> if (v.isEmpty()) emptyList() else throw ContentException("'$key' must be an inline list like [a, b]")
+        else -> emptyList()
+    }
 }

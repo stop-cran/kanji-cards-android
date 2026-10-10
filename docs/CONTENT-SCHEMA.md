@@ -10,7 +10,9 @@ What the app enforces when importing (`core/content/ContentParser.kt`, `FrontMat
   files over 2 MB or 50 MB in total are rejected.
 - Every file listed in the manifest must match its SHA-256 (computed over LF-normalised bytes); mismatching, missing or malformed files are
   skipped and counted as problems instead of failing the sync. Duplicate kanji titles are rejected (titles are quiz answers).
-- Front matter is a restricted subset: `key: value` scalars and inline `[a, b]` lists.
+- Front matter is a restricted subset: `key: value` scalars and inline `[a, b]` lists (commas inside quotes are kept; an unterminated quote
+  makes the value a scalar). A scalar in a list field (`tags`, `onyomi`, `kunyomi`, `distractors`, word `kanji`/`tags`) rejects the file.
+  The closing `---` must be a standalone line; `---\n---` is a valid empty header.
 - All word front-matter keys, including unknown fields, must be unquoted, unindented ASCII identifiers matching
   `[A-Za-z_][A-Za-z0-9_-]*`; whitespace before `:` is allowed. All raw keys are validated before duplicate-key collapse.
   Quoted/escaped, tagged, anchored/alias and complex keys are rejected with a path-specific import problem. Whole-line

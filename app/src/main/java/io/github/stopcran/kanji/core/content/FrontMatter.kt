@@ -9,9 +9,17 @@ object FrontMatter {
     fun parse(text: String, requirePlainKeys: Boolean = false): Parsed? {
         val normalized = text.removePrefix("\uFEFF").replace("\r\n", "\n")
         if (!normalized.startsWith("---\n")) return null
-        val end = normalized.indexOf("\n---", 4)
+        // Search from the newline that ends the opening delimiter so an empty header (`---\n---`) is recognised.
+        var end = normalized.indexOf("\n---", 3)
+        if (!requirePlainKeys) {
+            while (end >= 0) {
+                val lineEnd = normalized.indexOf('\n', end + 1).let { if (it < 0) normalized.length else it }
+                if (normalized.substring(end + 4, lineEnd).isBlank()) break
+                end = normalized.indexOf("\n---", end + 1)
+            }
+        }
         if (end < 0) return null
-        val header = normalized.substring(4, end)
+        val header = if (end <= 4) "" else normalized.substring(4, end)
         val markerEnd = normalized.indexOf('\n', end + 1).let { if (it < 0) normalized.length else it }
         if (requirePlainKeys) {
             // A delimiter prefix must not conceal unsupported keys from word-header validation.
@@ -41,7 +49,7 @@ object FrontMatter {
 
     private fun parseValue(raw: String): Any {
         if (raw.startsWith("[") && raw.endsWith("]")) {
-            return listItems(raw).map(::unquote)
+            return listItems(raw)?.map(::unquote) ?: raw
         }
         return unquote(raw)
     }
@@ -49,7 +57,7 @@ object FrontMatter {
     /** Strict string lists do not coerce YAML scalars or accept syntax this flat reader cannot interpret. */
     fun parseStringList(raw: String): List<String>? {
         if (!raw.startsWith("[") || !raw.endsWith("]")) return null
-        return listItems(raw).map { item ->
+        return (listItems(raw) ?: return null).map { item ->
             val quoted = item.length >= 2 && (item.first() == '\'' && item.last() == '\'' || item.first() == '"' && item.last() == '"')
             if (quoted) {
                 val value = unquote(item)
@@ -62,9 +70,29 @@ object FrontMatter {
         }
     }
 
-    private fun listItems(raw: String): List<String> {
+    /** Splits on commas outside quotes; null when a quote is unterminated or text follows a closing quote. */
+    private fun listItems(raw: String): List<String>? {
         val inner = raw.substring(1, raw.length - 1)
-        return if (inner.isBlank()) emptyList() else inner.split(',').map { it.trim() }
+        if (inner.isBlank()) return emptyList()
+        val items = mutableListOf<String>()
+        val cur = StringBuilder()
+        var quote: Char? = null
+        var closed = false
+        for (c in inner) {
+            when {
+                quote != null -> {
+                    cur.append(c)
+                    if (c == quote) { quote = null; closed = true }
+                }
+                c == ',' -> { items += cur.toString().trim(); cur.clear(); closed = false }
+                (c == '"' || c == '\'') && cur.isBlank() && !closed -> { quote = c; cur.append(c) }
+                closed && !c.isWhitespace() -> return null
+                else -> cur.append(c)
+            }
+        }
+        if (quote != null) return null
+        items += cur.toString().trim()
+        return items
     }
 
     private val nonStringScalar = Regex(
