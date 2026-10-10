@@ -277,6 +277,7 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
         )
         if (exportStatus.isNotEmpty()) Text(exportStatus, style = MaterialTheme.typography.bodySmall)
         TextButton(onClick = onAbout) { Text(stringResource(R.string.about_sources_and_licences)) }
+        Text("App version ${io.github.stopcran.kanji.BuildConfig.VERSION_NAME} (${io.github.stopcran.kanji.BuildConfig.GIT_SHA})", style = MaterialTheme.typography.bodySmall)
         Text(source.id + (meta?.let { " — content version ${it.contentVersion}" } ?: " — not synced yet"), style = MaterialTheme.typography.bodySmall)
     }
 }

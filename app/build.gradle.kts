@@ -25,6 +25,11 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        val sha = runCatching {
+            ProcessBuilder("git", "rev-parse", "--short", "HEAD").directory(rootDir).redirectErrorStream(true).start()
+                .inputStream.bufferedReader().readText().trim()
+        }.getOrDefault("").ifEmpty { "unknown" }
+        buildConfigField("String", "GIT_SHA", "\"$sha\"")
     }
 
     val keystoreFile = rootProject.file("keystore.properties")
@@ -54,6 +59,7 @@ android {
         jvmTarget = "17"
     }
     buildFeatures {
+        buildConfig = true
         compose = true
     }
     testOptions {
