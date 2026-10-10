@@ -127,6 +127,18 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             })
         }
         if (remind) {
+            val notificationsBlocked = android.os.Build.VERSION.SDK_INT >= 33 &&
+                androidx.core.content.ContextCompat.checkSelfPermission(appContext, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (notificationsBlocked) {
+                Text("Notifications are blocked for this app, so no reminder will appear.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = {
+                    appContext.startActivity(
+                        android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, appContext.packageName)
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }) { Text("Open notification settings") }
+            }
             var hourText by rememberSaveable { mutableStateOf(remindHour.toString()) }
             OutlinedTextField(
                 hourText,

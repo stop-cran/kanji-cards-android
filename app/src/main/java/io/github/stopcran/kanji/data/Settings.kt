@@ -119,6 +119,10 @@ class Settings(context: Context) {
     /** Commit SHA of the content branch at the last successful sync, per source id (lets syncs skip an unchanged archive). */
     fun syncedCommit(sourceId: String): String? = prefs.getString("sha:$sourceId", null)
     fun setSyncedCommit(sourceId: String, sha: String) = prefs.edit().putString("sha:$sourceId", sha).apply()
+    /** ETag of the head-commit response with the SHA it returned, so an unchanged branch costs a 304. */
+    fun headEtag(sourceId: String): Pair<String, String>? = prefs.getString("etag:$sourceId", null)?.split('|')?.takeIf { it.size == 2 }?.let { it[0] to it[1] }
+    fun setHeadEtag(sourceId: String, etag: String, sha: String) = prefs.edit().putString("etag:$sourceId", "$etag|$sha").apply()
+
     fun clearSyncedCommit(sourceId: String) = prefs.edit().remove("sha:$sourceId").apply()
     var lastCheckMs: Long
         get() = prefs.getLong(KEY_LAST_CHECK, 0)

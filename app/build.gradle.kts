@@ -13,7 +13,7 @@ ksp {
 
 android {
     namespace = "io.github.stopcran.kanji"
-    compileSdk = 35
+    compileSdk = 36
 
     lint {
         // Reports produceState blocks that do assign `value` (false positive with this lint/Compose pair).
@@ -22,7 +22,7 @@ android {
     defaultConfig {
         applicationId = "io.github.stopcran.kanji"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
     }

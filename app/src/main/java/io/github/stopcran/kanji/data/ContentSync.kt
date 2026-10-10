@@ -9,7 +9,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -34,13 +33,22 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings) {
 
     /** Head commit of the branch via the GitHub API (one tiny request); null when unavailable, e.g. offline or rate limited. */
     private fun headCommit(source: RepoSource): String? {
+        val key = "${source.id}@${source.branch}"
         val conn = URL("https://api.github.com/repos/${source.owner}/${source.repo}/commits/${source.branch}").openConnection() as HttpURLConnection
         return try {
             conn.connectTimeout = 8_000
             conn.readTimeout = 8_000
             conn.setRequestProperty("Accept", "application/vnd.github.sha")
             conn.setRequestProperty("User-Agent", USER_AGENT)
-            if (conn.responseCode != 200) null else conn.inputStream.bufferedReader().use { it.readText() }.trim().takeIf { it.matches(Regex("[0-9a-f]{40}")) }
+            // A 304 does not count against the API rate limit.
+            val known = settings.headEtag(key)
+            if (known != null) conn.setRequestProperty("If-None-Match", known.first)
+            if (conn.responseCode == 304) return known?.second
+            if (conn.responseCode != 200) return null
+            val sha = conn.inputStream.bufferedReader().use { it.readText() }.trim().takeIf { it.matches(Regex("[0-9a-f]{40}")) }
+            val etag = conn.getHeaderField("ETag")
+            if (sha != null && etag != null) settings.setHeadEtag(key, etag, sha)
+            sha
         } catch (e: java.io.IOException) {
             null
         } finally {
@@ -59,7 +67,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings) {
             if (!force && head != null && head == settings.syncedCommit(commitKey) && db.content().meta(source.id) != null) {
                 return@withContext SyncResult.UpToDate
             }
-            val files = SafeZip.read(download(source.zipUrl).inputStream())
+            val files = download(source.zipUrl) { SafeZip.read(it) }
             val parsed = ContentParser.parse(files)
             val dao = db.content()
             if (!force && dao.meta(source.id)?.contentVersion == parsed.manifest.contentVersion) {
@@ -101,7 +109,8 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings) {
         }
     } }
 
-    private fun download(url: String): ByteArrayOutputStream {
+    /** Streams the archive to [block] without holding it in memory; the compressed size is capped. */
+    private fun <T> download(url: String, block: (java.io.InputStream) -> T): T {
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.setRequestProperty("User-Agent", USER_AGENT)
         conn.connectTimeout = 15_000
@@ -111,26 +120,22 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings) {
             val code = conn.responseCode
             if (code == 404) throw ContentException("Repository or branch not found (or private)")
             if (code !in 200..299) throw java.io.IOException("HTTP $code")
-            val out = ByteArrayOutputStream()
-            conn.inputStream.use { input ->
-                val buffer = ByteArray(16 * 1024)
-                var total = 0L
-                while (true) {
-                    val n = input.read(buffer)
-                    if (n < 0) break
-                    total += n
-                    if (total > MAX_DOWNLOAD_BYTES) throw ContentException("Archive is too large")
-                    out.write(buffer, 0, n)
-                }
-            }
-            return out
+            return conn.inputStream.use { block(CappedInputStream(it, MAX_DOWNLOAD_BYTES)) }
         } finally {
             conn.disconnect()
         }
     }
 
-    private fun ByteArrayOutputStream.inputStream() = java.io.ByteArrayInputStream(toByteArray())
+    private class CappedInputStream(private val inner: java.io.InputStream, private val max: Long) : java.io.FilterInputStream(inner) {
+        private var total = 0L
 
+        override fun read(): Int = inner.read().also { if (it >= 0) count(1) }
+        override fun read(b: ByteArray, off: Int, len: Int): Int = inner.read(b, off, len).also { if (it > 0) count(it) }
+        private fun count(n: Int) {
+            total += n
+            if (total > max) throw ContentException("Archive is too large")
+        }
+    }
     private companion object {
         const val MAX_DOWNLOAD_BYTES = 30L * 1024 * 1024
         const val USER_AGENT = "KanjiCards-Android"
