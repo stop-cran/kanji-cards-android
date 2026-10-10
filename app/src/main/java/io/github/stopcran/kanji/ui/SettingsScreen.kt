@@ -17,6 +17,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -198,19 +199,25 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             style = MaterialTheme.typography.bodySmall,
         )
         val context = androidx.compose.ui.platform.LocalContext.current
-        var saved by remember { mutableStateOf(io.github.stopcran.kanji.data.DrawingLog.count(context)) }
+        var saved by remember { mutableStateOf(0) }
+        LaunchedEffect(Unit) { saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { io.github.stopcran.kanji.data.DrawingLog.count(context) } }
+        val scope = rememberCoroutineScope()
         var exportStatus by rememberSaveable { mutableStateOf("") }
         val exporter = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip")) { uri ->
             if (uri != null) {
-                exportStatus = runCatching {
-                    val n = context.contentResolver.openOutputStream(uri, "wt")?.use { io.github.stopcran.kanji.data.DrawingLog.exportZip(context, it) } ?: error("Cannot open the file")
-                    "Exported $n drawings at ${java.time.LocalTime.now().withNano(0)}"
-                }.getOrElse { "Export failed: ${it.message}" }
+                scope.launch {
+                    exportStatus = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        runCatching {
+                            val n = context.contentResolver.openOutputStream(uri, "wt")?.use { io.github.stopcran.kanji.data.DrawingLog.exportZip(context, it) } ?: error("Cannot open the file")
+                            "Exported $n drawings at ${java.time.LocalTime.now().withNano(0)}"
+                        }.getOrElse { "Export failed: ${it.message}" }
+                    }
+                    saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { io.github.stopcran.kanji.data.DrawingLog.count(context) }
+                }
             }
         }
         OutlinedButton(
             onClick = {
-                saved = io.github.stopcran.kanji.data.DrawingLog.count(context)
                 val stamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
                 exporter.launch("kanji-drawings-$stamp.zip")
             },

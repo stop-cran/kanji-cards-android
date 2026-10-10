@@ -41,7 +41,7 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
             val now = System.currentTimeMillis()
             val source = app.settings.source.value
             val stack = app.settings.stack.value
-            val cards = app.db.content().kanji(source.id).inStack(stack)
+            val cards = app.db.content().kanjiLite(source.id).inStack(stack)
             val newRemaining = app.db.newAllowance(app.settings, source.id, Instant.ofEpochMilli(now)).remaining
             var due = 0
             val learned = app.db.reviews().meaningLearned(source.id, stack).toSet()
@@ -52,7 +52,7 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 due += QueueBuilder.build(ids, states, Instant.ofEpochMilli(now), newRemaining).size
             }
             val wordStack = WordStacks.find(app.settings.wordStack.value, WordStacks.offered(app.settings.n4Unlocked.value))
-            val wordEntities = app.db.content().words(source.id).inWordStack(wordStack, app.db.content().kanji(source.id).levels())
+            val wordEntities = app.db.content().words(source.id).inWordStack(wordStack, app.db.content().kanjiLite(source.id).levels())
             val wordStates = WordDirection.entries.associateWith { d -> app.db.reviews().states(source.id, wordStack.id, d.mode.name).associate { it.kanji to it.toSrs() } }
             due += app.db.readingData(source.id, stack, cards, newRemaining, Instant.ofEpochMilli(now), false).items.size
             for (d in WordDirection.entries) {
@@ -75,7 +75,7 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
         manager.createNotificationChannel(NotificationChannel(CHANNEL, "Study reminders", NotificationManager.IMPORTANCE_DEFAULT))
         val open = PendingIntent.getActivity(ctx, 0, Intent(ctx, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val n = NotificationCompat.Builder(ctx, CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_menu_edit)
+            .setSmallIcon(io.github.stopcran.kanji.R.drawable.ic_stat_reminder)
             .setContentTitle("Time for your kanji")
             .setContentText("$due cards are waiting for you.")
             .setContentIntent(open)

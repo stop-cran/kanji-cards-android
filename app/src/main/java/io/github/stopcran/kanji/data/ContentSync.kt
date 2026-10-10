@@ -39,6 +39,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings) {
             conn.connectTimeout = 8_000
             conn.readTimeout = 8_000
             conn.setRequestProperty("Accept", "application/vnd.github.sha")
+            conn.setRequestProperty("User-Agent", USER_AGENT)
             if (conn.responseCode != 200) null else conn.inputStream.bufferedReader().use { it.readText() }.trim().takeIf { it.matches(Regex("[0-9a-f]{40}")) }
         } catch (e: java.io.IOException) {
             null
@@ -51,6 +52,10 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings) {
         try {
             val commitKey = "${source.id}@${source.branch}"
             val head = headCommit(source)
+            // Rate-limited or offline: keep what we have rather than downloading the whole archive on every check.
+            if (!force && head == null && db.content().meta(source.id) != null) {
+                return@withContext SyncResult.Failed("Could not check for updates", retryable = true)
+            }
             if (!force && head != null && head == settings.syncedCommit(commitKey) && db.content().meta(source.id) != null) {
                 return@withContext SyncResult.UpToDate
             }
@@ -98,6 +103,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings) {
 
     private fun download(url: String): ByteArrayOutputStream {
         val conn = URL(url).openConnection() as HttpURLConnection
+        conn.setRequestProperty("User-Agent", USER_AGENT)
         conn.connectTimeout = 15_000
         conn.readTimeout = 30_000
         conn.instanceFollowRedirects = true
@@ -127,6 +133,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings) {
 
     private companion object {
         const val MAX_DOWNLOAD_BYTES = 30L * 1024 * 1024
+        const val USER_AGENT = "KanjiCards-Android"
         const val LAUNCH_INTERVAL_MS = 6L * 60 * 60 * 1000
     }
 }

@@ -15,6 +15,7 @@
         android:icon="@mipmap/ic_launcher"
         android:name=".KanjiApp"
         android:allowBackup="true"
+        android:enableOnBackInvokedCallback="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:label="@string/app_name"

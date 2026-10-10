@@ -111,6 +111,14 @@ interface ContentDao {
     )
     fun observeWordsLite(sourceId: String): Flow<List<WordEntity>>
 
+    /** Same as [kanji] without the article body or stroke data (used by background work). */
+    @Query(
+        "SELECT sourceId, kanji, title, jlpt, tags, strokeCount, radical, phonetic, onyomi, kunyomi, distractors, " +
+            "'' AS body, CASE WHEN strokesJson IS NULL THEN NULL ELSE '' END AS strokesJson, position " +
+            "FROM kanji WHERE sourceId = :sourceId ORDER BY position",
+    )
+    suspend fun kanjiLite(sourceId: String): List<KanjiEntity>
+
     @Query("SELECT * FROM kanji WHERE sourceId = :sourceId ORDER BY position")
     suspend fun kanji(sourceId: String): List<KanjiEntity>
 

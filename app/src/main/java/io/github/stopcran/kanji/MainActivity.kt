@@ -29,7 +29,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as KanjiApp
-        lifecycleScope.launch { app.contentSync.syncOnLaunch(app.settings.source.value) }
+        // Not again after rotation or process-recreation; the interval check inside also throttles it.
+        if (savedInstanceState == null) lifecycleScope.launch { app.contentSync.syncOnLaunch(app.settings.source.value) }
         enableEdgeToEdge()
         setContent { KanjiTheme { AppNav(app) } }
     }
