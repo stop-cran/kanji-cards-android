@@ -105,6 +105,32 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             Switch(vary, { app.settings.setVaryFonts(it) })
         }
         HorizontalDivider()
+        val rule by app.settings.unlockRule.collectAsState()
+        Text("Unlock Draw and readings", style = MaterialTheme.typography.titleSmall)
+        io.github.stopcran.kanji.core.unlock.UnlockRule.entries.forEach { r ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.RadioButton(rule == r, { app.settings.setUnlockRule(r) })
+                Column { Text(r.label); Text(r.hint, style = MaterialTheme.typography.bodySmall) }
+            }
+        }
+        val focusOn by app.settings.focusEnabled.collectAsState()
+        val focusSize by app.settings.focusSize.collectAsState()
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Limit kanji in learning at once", modifier = Modifier.weight(1f))
+            Switch(focusOn, { app.settings.setFocusEnabled(it) })
+        }
+        if (focusOn) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Batch size: $focusSize", modifier = Modifier.weight(1f))
+                OutlinedButton({ app.settings.setFocusSize(focusSize - 1) }) { Text("−") }
+                OutlinedButton({ app.settings.setFocusSize(focusSize + 1) }) { Text("+") }
+            }
+        }
+        Text(
+            "New kanji wait until the current batch is learned in every mode. Kanji you already started are not counted.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        HorizontalDivider()
         val n4 by app.settings.n4Unlocked.collectAsState()
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.offer_n4_and_all_word_decks), modifier = Modifier.weight(1f))

@@ -3,7 +3,9 @@ package io.github.stopcran.kanji.data
 import android.content.Context
 import io.github.stopcran.kanji.Defaults
 import io.github.stopcran.kanji.core.content.RepoSource
+import io.github.stopcran.kanji.core.focus.FocusBatch
 import io.github.stopcran.kanji.core.srs.Stacks
+import io.github.stopcran.kanji.core.unlock.UnlockRule
 import io.github.stopcran.kanji.core.words.WordStacks
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -56,6 +58,42 @@ class Settings(context: Context) {
     fun setVoiceInput(v: Boolean) {
         prefs.edit().putBoolean(KEY_VOICE_INPUT, v).apply()
         _voiceInput.value = v
+    }
+
+    private val _unlockRule = MutableStateFlow(UnlockRule.parse(prefs.getString(KEY_UNLOCK, null)))
+    /** When Draw and the readings open for a kanji; the default keeps the original two-day rule. */
+    val unlockRule: StateFlow<UnlockRule> = _unlockRule
+
+    fun setUnlockRule(r: UnlockRule) {
+        prefs.edit().putString(KEY_UNLOCK, r.name).apply()
+        _unlockRule.value = r
+    }
+
+    private val _focusEnabled = MutableStateFlow(prefs.getBoolean(KEY_FOCUS, false))
+    val focusEnabled: StateFlow<Boolean> = _focusEnabled
+
+    /** Turning it off forgets every cutoff, so switching it on again counts only kanji introduced from then on. */
+    fun setFocusEnabled(v: Boolean) {
+        prefs.edit().apply {
+            putBoolean(KEY_FOCUS, v)
+            if (!v) prefs.all.keys.filter { it.startsWith(FOCUS_SINCE) }.forEach { remove(it) }
+        }.apply()
+        _focusEnabled.value = v
+    }
+
+    private val _focusSize = MutableStateFlow(prefs.getInt(KEY_FOCUS_SIZE, FocusBatch.DEFAULT_SIZE).coerceIn(FocusBatch.SIZE_RANGE))
+    val focusSize: StateFlow<Int> = _focusSize
+
+    fun setFocusSize(n: Int) {
+        val v = n.coerceIn(FocusBatch.SIZE_RANGE)
+        prefs.edit().putInt(KEY_FOCUS_SIZE, v).apply()
+        _focusSize.value = v
+    }
+
+    /** Start of the focus batch for one source and stack, set the first time that scope is used while the batch is on. */
+    fun focusSince(sourceId: String, stack: String, nowMs: Long): Long {
+        val key = "$FOCUS_SINCE$sourceId|$stack"
+        return if (prefs.contains(key)) prefs.getLong(key, nowMs) else nowMs.also { prefs.edit().putLong(key, it).apply() }
     }
 
     private val _stack = MutableStateFlow(prefs.getString(KEY_STACK, Stacks.ALL) ?: Stacks.ALL)
@@ -162,6 +200,10 @@ class Settings(context: Context) {
         const val KEY_FONTS = "varyFonts"
         const val KEY_SAVE_DRAWINGS = "saveDrawings"
         const val KEY_VOICE_INPUT = "voiceInput"
+        const val KEY_UNLOCK = "unlockRule"
+        const val KEY_FOCUS = "focusBatch"
+        const val KEY_FOCUS_SIZE = "focusBatchSize"
+        const val FOCUS_SINCE = "focusSince:"
         const val KEY_BRUSH = "brush"
         const val KEY_STACK = "stack"
         const val KEY_WORD_STACK = "wordStack"

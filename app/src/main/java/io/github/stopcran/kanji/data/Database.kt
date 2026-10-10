@@ -231,12 +231,13 @@ interface ReviewDao {
     @Query("SELECT COUNT(*) FROM (SELECT 1 FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode IN ('KanjiOn', 'KanjiKun') AND reading != '' GROUP BY mode, kanji, reading HAVING MIN(atMs) >= :sinceMs)")
     suspend fun readingCardsIntroducedSince(sourceId: String, stack: String, sinceMs: Long): Int
 
-    /** Kanji whose meaning was answered without "Again" on at least two different days: their readings become askable. */
-    @Query(
-        "SELECT kanji FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode = 'Quiz' AND grade > 1 " +
-            "GROUP BY kanji HAVING COUNT(DISTINCT date(atMs / 1000, 'unixepoch', 'localtime')) >= 2",
-    )
-    suspend fun meaningLearned(sourceId: String, stack: String): List<String>
+    /** Every answer of one source and stack in any mode, oldest first: the input of [io.github.stopcran.kanji.core.unlock.MeaningUnlock]. */
+    @Query("SELECT id, atMs, kanji, mode, grade FROM review_log WHERE sourceId = :sourceId AND stack = :stack ORDER BY atMs, id")
+    suspend fun unlockLog(sourceId: String, stack: String): List<io.github.stopcran.kanji.core.unlock.LogEvent>
+
+    /** Kanji whose first meaning answer (any grade) was logged at or after [sinceMs]: the ones a focus batch counts. */
+    @Query("SELECT kanji FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode = 'Quiz' GROUP BY kanji HAVING MIN(atMs) >= :sinceMs")
+    suspend fun meaningIntroducedSince(sourceId: String, stack: String, sinceMs: Long): List<String>
 
     @Transaction
     suspend fun record(state: ReviewStateEntity, log: ReviewLogEntity) {

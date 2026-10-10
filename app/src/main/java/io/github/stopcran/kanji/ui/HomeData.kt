@@ -28,6 +28,8 @@ import io.github.stopcran.kanji.data.inStack
 import io.github.stopcran.kanji.data.inWordStack
 import io.github.stopcran.kanji.data.levels
 import io.github.stopcran.kanji.data.newAllowance
+import io.github.stopcran.kanji.data.focusStatus
+import io.github.stopcran.kanji.data.meaningLearned
 import io.github.stopcran.kanji.data.weekProgress
 import io.github.stopcran.kanji.data.stacks
 import io.github.stopcran.kanji.data.toReadingCard
@@ -53,6 +55,7 @@ class HomeData(
     val n4Offer: Boolean,
     val pacing: NewAllowance? = null,
     val week: WeekProgress? = null,
+    val focus: io.github.stopcran.kanji.data.FocusStatus? = null,
 ) {
     fun mode(m: HomeMode): ModeState = if (loading) ModeState.Loading else modes[m] ?: ModeState.Loading
 
@@ -66,7 +69,10 @@ class HomeData(
     }
 }
 
-private class Extras(val stackId: String, val wordStackId: String, val allowance: NewAllowance, val week: WeekProgress, val unlocked: Set<String>, val introducedReadings: Int)
+private class Extras(
+    val stackId: String, val wordStackId: String, val allowance: NewAllowance, val week: WeekProgress, val unlocked: Set<String>, val introducedReadings: Int,
+    val focus: io.github.stopcran.kanji.data.FocusStatus?, val rule: io.github.stopcran.kanji.core.unlock.UnlockRule,
+)
 
 /** All seven scheduling-state maps, each non-null; exists so loading is decided once instead of with !! at each use. */
 internal data class StateSet(
@@ -145,11 +151,17 @@ fun rememberHomeData(app: KanjiApp): HomeData {
 
     val stateSet = remember(quiz, draw, on, kun, jp, en, rd) { StateSet.of(quiz, draw, on, kun, jp, en, rd) }
     val statesReady = kanjiOrNull != null && wordsOrNull != null && stateSet != null
-    val extras by produceState<Extras?>(null, source.id, stack.id, wordStack.id, startOfDay, dailyNew, weekPlan, statesReady, quiz, draw, on, kun, jp, en, rd) {
+    val unlockRule by app.settings.unlockRule.collectAsState()
+    val focusOn by app.settings.focusEnabled.collectAsState()
+    val focusSize by app.settings.focusSize.collectAsState()
+    // The 10-minute spacing and a freshly emptied batch both change with time, not only with review states.
+    val minuteKey = if (focusOn || unlockRule != io.github.stopcran.kanji.core.unlock.UnlockRule.NextDay) tick else null
+    val extras by produceState<Extras?>(null, source.id, stack.id, wordStack.id, startOfDay, dailyNew, weekPlan, statesReady, quiz, draw, on, kun, jp, en, rd, unlockRule, focusOn, focusSize, minuteKey) {
         if (!statesReady) return@produceState
         val r = app.db.reviews()
         val allowance = app.db.newAllowance(app.settings, source.id, Instant.now())
-        value = Extras(stack.id, wordStack.id, allowance, app.db.weekProgress(app.settings, source.id, Instant.now()), r.meaningLearned(source.id, stack.id).toSet(), r.readingCardsIntroducedSince(source.id, stack.id, startOfDay))
+        val focus = app.db.focusStatus(app.settings, source.id, stack.id, inStack, System.currentTimeMillis())
+        value = Extras(stack.id, wordStack.id, allowance, app.db.weekProgress(app.settings, source.id, Instant.now()), app.db.meaningLearned(app.settings, source.id, stack.id), r.readingCardsIntroducedSince(source.id, stack.id, startOfDay), focus, unlockRule)
     }
     val ex = extras?.takeIf { it.stackId == stack.id && it.wordStackId == wordStack.id }
     val loading = !statesReady || ex == null
@@ -161,7 +173,7 @@ fun rememberHomeData(app: KanjiApp): HomeData {
     val n4Offer = remember(loading, stateSet, kanji, words, levels, wordStack, n4Unlocked, dismissedMs) {
         stateSet != null && !loading && shouldOfferN4(inStack, words, levels, wordStack, stateSet, n4Unlocked, dismissedMs, Instant.now(), System.currentTimeMillis())
     }
-    return HomeData(loading, source.id, kanji, stacks, stack, wordStacks, wordStack, wordsInStack.size, modes, n4Offer, ex?.allowance, ex?.week)
+    return HomeData(loading, source.id, kanji, stacks, stack, wordStacks, wordStack, wordsInStack.size, modes, n4Offer, ex?.allowance, ex?.week, ex?.focus)
 }
 
 /** Counts use strict (noise-free) queues so the numbers are stable; sessions build their own randomised queues. */
@@ -184,12 +196,18 @@ private fun computeModes(
     val readingStates = mapOf(ReadingKind.On to on, ReadingKind.Kun to kun)
     fun readings(extra: Boolean) = KanjiReadingQueue.build(cards, readingStates, ex.unlocked, ex.introducedReadings, newLeft + ex.introducedReadings, now, extra, noise = 0.0)
     val rq = readings(false)
+    val locked = ex.rule.hint
+    val meaningNew = ex.focus?.let { minOf(newLeft, it.capacity) } ?: newLeft
+    val meaning = run {
+        val q = QueueBuilder.build(inStack.map { it.kanji }, quiz, now, meaningNew, noise = 0.0)
+        ModeState.of(inStack.size >= 2, "Needs at least 2 kanji in this stack", q.count { !it.isNew }, q.count { it.isNew }, inStack.size >= 2, "")
+    }
     return mapOf(
-        HomeMode.Meaning to plain(inStack.map { it.kanji }, quiz, 2, "kanji in this stack"),
+        HomeMode.Meaning to meaning,
         HomeMode.Drawing to inStack.filter { it.strokesJson != null }.map { it.kanji }.let { strokeIds ->
-            plain(DrawGate.eligible(strokeIds, draw, ex.unlocked), draw, 1, "kanji with stroke data", "Unlocks after you answer a kanji's meaning well twice", pool = strokeIds.size)
+            plain(DrawGate.eligible(strokeIds, draw, ex.unlocked), draw, 1, "kanji with stroke data", locked, pool = strokeIds.size)
         },
-        HomeMode.Readings to ModeState.of(cards.size >= 2, "Needs at least 2 kanji in this stack", rq.count { !it.isNew }, rq.count { it.isNew }, readings(true).isNotEmpty(), "Unlocks after you answer a kanji's meaning well twice"),
+        HomeMode.Readings to ModeState.of(cards.size >= 2, "Needs at least 2 kanji in this stack", rq.count { !it.isNew }, rq.count { it.isNew }, readings(true).isNotEmpty(), locked),
         HomeMode.WordJp to word(WordDirection.JpToEn, jp, en, ""),
         HomeMode.WordEn to word(WordDirection.EnToJp, en, jp, "Unlocks as you learn words"),
         HomeMode.WordReading to word(WordDirection.Reading, rd, jp, "Unlocks as you learn words"),

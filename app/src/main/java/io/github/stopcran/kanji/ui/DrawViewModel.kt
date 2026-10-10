@@ -29,6 +29,7 @@ import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.inStack
 import io.github.stopcran.kanji.data.toEntity
 import io.github.stopcran.kanji.data.newAllowance
+import io.github.stopcran.kanji.data.meaningLearned
 import io.github.stopcran.kanji.data.toSrs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -109,9 +110,9 @@ class DrawViewModel(private val app: Services) : ViewModel() {
         }
         cards = drawable.associateBy { it.kanji }
         app.db.reviews().states(sourceId, stack, StudyMode.Draw.name).forEach { states[it.kanji] = it.toSrs() }
-        val ids = DrawGate.eligible(drawable.map { it.kanji }, states, app.db.reviews().meaningLearned(sourceId, stack).toSet())
+        val ids = DrawGate.eligible(drawable.map { it.kanji }, states, app.db.meaningLearned(app.settings, sourceId, stack))
         if (ids.isEmpty() && !extra) {
-            ui = DrawUi.Empty("Drawing unlocks after a kanji's meaning is answered well on two days in the Quiz.")
+            ui = DrawUi.Empty("Drawing: ${app.settings.unlockRule.value.hint.replace("Unlocks", "unlocks")}.")
             return
         }
         val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining

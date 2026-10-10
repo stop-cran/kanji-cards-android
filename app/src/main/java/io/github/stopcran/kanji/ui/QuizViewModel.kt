@@ -26,6 +26,7 @@ import io.github.stopcran.kanji.data.inStack
 import io.github.stopcran.kanji.data.splitSep
 import io.github.stopcran.kanji.data.toEntity
 import io.github.stopcran.kanji.data.newAllowance
+import io.github.stopcran.kanji.data.focusStatus
 import io.github.stopcran.kanji.data.toSrs
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -83,7 +84,13 @@ class QuizViewModel(private val app: Services) : ViewModel() {
         app.db.reviews().states(sourceId, stack, StudyMode.Quiz.name).forEach { states[it.kanji] = it.toSrs() }
 
         val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
-        val items = if (extra) QueueBuilder.extra(all.map { it.kanji }, states, Instant.now()) else QueueBuilder.build(all.map { it.kanji }, states, Instant.now(), budget)
+        val capacity = app.db.focusStatus(app.settings, sourceId, stack, all, System.currentTimeMillis())?.capacity
+        val items = if (extra) {
+            var room = capacity ?: Int.MAX_VALUE
+            QueueBuilder.extra(all.map { it.kanji }, states, Instant.now()).filter { !it.isNew || room-- > 0 }
+        } else {
+            QueueBuilder.build(all.map { it.kanji }, states, Instant.now(), minOf(budget, capacity ?: budget))
+        }
         session = QuizSession(items.map { it.kanji }, { it })
         showNext()
     }

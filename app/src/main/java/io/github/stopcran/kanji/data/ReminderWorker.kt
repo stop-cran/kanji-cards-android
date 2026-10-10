@@ -44,17 +44,19 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
             val cards = app.db.content().kanjiLite(source.id).inStack(stack)
             val newRemaining = app.db.newAllowance(app.settings, source.id, Instant.ofEpochMilli(now)).remaining
             var due = 0
-            val learned = app.db.reviews().meaningLearned(source.id, stack).toSet()
+            val learned = app.db.meaningLearned(app.settings, source.id, stack)
+            val focus = app.db.focusStatus(app.settings, source.id, stack, cards, now)
             for (mode in listOf(StudyMode.Quiz, StudyMode.Draw)) {
                 val states = app.db.reviews().states(source.id, stack, mode.name).associate { it.kanji to it.toSrs() }
                 val ids = cards.filter { mode == StudyMode.Quiz || it.strokesJson != null }.map { it.kanji }
                     .let { if (mode == StudyMode.Draw) DrawGate.eligible(it, states, learned) else it }
-                due += QueueBuilder.build(ids, states, Instant.ofEpochMilli(now), newRemaining).size
+                val newLeft = if (mode == StudyMode.Quiz) minOf(newRemaining, focus?.capacity ?: newRemaining) else newRemaining
+                due += QueueBuilder.build(ids, states, Instant.ofEpochMilli(now), newLeft).size
             }
             val wordStack = WordStacks.find(app.settings.wordStack.value, WordStacks.offered(app.settings.n4Unlocked.value))
             val wordEntities = app.db.content().words(source.id).inWordStack(wordStack, app.db.content().kanjiLite(source.id).levels())
             val wordStates = WordDirection.entries.associateWith { d -> app.db.reviews().states(source.id, wordStack.id, d.mode.name).associate { it.kanji to it.toSrs() } }
-            due += app.db.readingData(source.id, stack, cards, newRemaining, Instant.ofEpochMilli(now), false).items.size
+            due += app.db.readingData(app.settings, source.id, stack, cards, newRemaining, Instant.ofEpochMilli(now), false).items.size
             for (d in WordDirection.entries) {
                 due += WordQueues.build(d, wordEntities.forDirection(d).map { it.word }, wordStates.getValue(d), wordStates.getValue(d.other), Instant.ofEpochMilli(now), newRemaining).size
             }

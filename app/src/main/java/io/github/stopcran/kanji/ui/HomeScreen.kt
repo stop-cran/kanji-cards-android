@@ -176,7 +176,11 @@ private fun PacingHint(data: HomeData) {
         val tail = if (w.studied >= w.goal) " — goal reached" else ""
         Text(stringResource(R.string.this_week_of_study_days, w.studied, w.goal, tail), style = MaterialTheme.typography.bodySmall)
     }
-    val p = data.pacing ?: return
+    val p = data.pacing
+    data.focus?.takeIf { it.full }?.let {
+        Text("Finish your current ${it.occupancy} kanji first: new kanji come in as they are learned in every mode.", style = MaterialTheme.typography.bodySmall)
+    }
+    if (p == null) return
     val text = when (p.note) {
         PacingNote.None -> return
         PacingNote.RestDay -> "Rest day in your weekly rhythm: no new items today, reviews are still available."

@@ -73,7 +73,7 @@ class KanjiReadingViewModel(private val app: Services) : ViewModel() {
             return
         }
         cards = all.associateBy { it.kanji }
-        val data = app.db.readingData(sourceId, stack, all, app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining, Instant.now(), extra)
+        val data = app.db.readingData(app.settings, sourceId, stack, all, app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining, Instant.now(), extra)
         readingCards = data.cards
         data.states.forEach { (kind, m) -> states.getValue(kind) += m }
         session = QuizSession(data.items, { it.id })
@@ -90,7 +90,7 @@ class KanjiReadingViewModel(private val app: Services) : ViewModel() {
         while (true) {
             val item = session.take()
             if (item == null) {
-                ui = if (session.answered == 0) ReadingUi.Empty("Nothing to practise yet. Readings unlock after a kanji's meaning is answered well twice in the Quiz.") else ReadingUi.Done(session.answered, session.correct)
+                ui = if (session.answered == 0) ReadingUi.Empty("Nothing to practise yet. ${app.settings.unlockRule.value.hint.replace("Unlocks", "Readings unlock")}.") else ReadingUi.Done(session.answered, session.correct)
                 return
             }
             val target = readingCards.first { it.kanji == item.kanji }
