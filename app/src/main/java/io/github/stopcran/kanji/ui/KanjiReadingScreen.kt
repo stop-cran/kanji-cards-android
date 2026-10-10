@@ -25,7 +25,7 @@ private val Red = Color(0xFFC62828)
 
 /** Session key: "kreading:<timestamp>[:extra]". */
 @Composable
-fun KanjiReadingScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit, onPracticeMore: () -> Unit, vm: KanjiReadingViewModel = viewModel(key = sessionKey)) {
+fun KanjiReadingScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit, onPracticeMore: () -> Unit, vm: KanjiReadingViewModel = serviceViewModel(sessionKey) { KanjiReadingViewModel(it) }) {
     LaunchedEffect(sessionKey) { vm.ensureStarted(sessionKey.endsWith(":extra")) }
     Page("Kanji readings", onBack) {
         when (val s = vm.ui) {

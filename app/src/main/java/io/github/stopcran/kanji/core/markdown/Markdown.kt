@@ -62,6 +62,10 @@ object Markdown {
         while (i < lines.size) {
             val line = lines[i]
             val trimmed = line.trim()
+            val headingMatch = heading.matchEntire(trimmed)
+            val numberedMatch = numbered.matchEntire(line)
+            // (indent, text) of a bullet or numbered item
+            val item = bullet.matchEntire(line)?.groupValues?.let { it[1] to it[2] } ?: numberedMatch?.groupValues?.let { it[1] to it[3] }
             when {
                 trimmed.isEmpty() -> { flush(); i++ }
                 trimmed.startsWith("```") -> {
@@ -73,10 +77,9 @@ object Markdown {
                     out += Block.Code(code.joinToString("\n"))
                 }
                 trimmed.length >= 3 && trimmed.all { it == '-' } -> { flush(); out += Block.Rule; i++ }
-                heading.matches(trimmed) -> {
+                headingMatch != null -> {
                     flush()
-                    val m = heading.matchEntire(trimmed)!!
-                    out += Block.Heading(m.groupValues[1].length, inline(m.groupValues[2], path))
+                    out += Block.Heading(headingMatch.groupValues[1].length, inline(headingMatch.groupValues[2], path))
                     i++
                 }
                 trimmed.startsWith(">") && depth < MAX_DEPTH -> {
@@ -93,17 +96,15 @@ object Markdown {
                     while (i < lines.size && lines[i].trim().startsWith("|")) rows += cells(lines[i++].trim()).map { inline(it, path) }
                     out += Block.Table(header, rows)
                 }
-                bullet.matches(line) || numbered.matches(line) -> {
+                item != null -> {
                     flush()
-                    val b = bullet.matchEntire(line)
-                    val n = numbered.matchEntire(line)
-                    val indent = (b?.groupValues?.get(1) ?: n!!.groupValues[1]).length
-                    val body = StringBuilder(b?.groupValues?.get(2) ?: n!!.groupValues[3])
+                    val indent = item.first.length
+                    val body = StringBuilder(item.second)
                     i++
                     while (i < lines.size && lines[i].isNotBlank() && !bullet.matches(lines[i]) && !numbered.matches(lines[i]) &&
-                        !lines[i].trim().startsWith("|") && !lines[i].trim().startsWith(">") && !heading.matches(lines[i].trim())
+                        !lines[i].trim().startsWith("|") && !lines[i].trim().startsWith(">") && heading.matchEntire(lines[i].trim()) == null
                     ) body.append(' ').append(lines[i++].trim())
-                    out += Block.ListItem(n?.groupValues?.get(2)?.toIntOrNull(), (indent / 2).coerceAtMost(3), inline(body.toString(), path))
+                    out += Block.ListItem(numberedMatch?.groupValues?.get(2)?.toIntOrNull(), (indent / 2).coerceAtMost(3), inline(body.toString(), path))
                 }
                 else -> { para += line; i++ }
             }

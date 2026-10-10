@@ -64,7 +64,7 @@ fun DrawScreen(
     onBack: () -> Unit,
     onOpenDoc: (String) -> Unit,
     onPracticeMore: () -> Unit,
-    vm: DrawViewModel = viewModel(key = sessionKey),
+    vm: DrawViewModel = serviceViewModel(sessionKey) { DrawViewModel(it) },
 ) {
     LaunchedEffect(sessionKey) { vm.ensureStarted(sessionKey.endsWith(":extra")) }
     val app = LocalContext.current.applicationContext as KanjiApp

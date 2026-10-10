@@ -89,6 +89,10 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings) {
             SyncResult.Failed(e.message ?: "Invalid content", retryable = false)
         } catch (e: java.io.IOException) {
             SyncResult.Failed(e.message ?: "Network error", retryable = true)
+        } catch (e: Exception) {
+            // Parse, database or security failures must not crash the caller (a worker or the UI); cancellation still propagates.
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            SyncResult.Failed(e.message ?: e.javaClass.simpleName, retryable = false)
         }
     } }
 

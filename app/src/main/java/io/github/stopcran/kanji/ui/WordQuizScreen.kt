@@ -29,7 +29,7 @@ private val originTags = setOf("wago", "kango", "gairaigo")
 
 /** Session key: "wquiz:<timestamp>:<jp|en|rd>[:extra]". */
 @Composable
-fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit, onPracticeMore: () -> Unit, vm: WordQuizViewModel = viewModel(key = sessionKey)) {
+fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit, onPracticeMore: () -> Unit, vm: WordQuizViewModel = serviceViewModel(sessionKey) { WordQuizViewModel(it) }) {
     val parts = sessionKey.split(':')
     val direction = when (parts.getOrNull(2)) {
         "en" -> WordDirection.EnToJp

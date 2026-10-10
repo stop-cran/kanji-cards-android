@@ -1,12 +1,11 @@
 package io.github.stopcran.kanji.ui
 
-import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.content.StrokeData
 import io.github.stopcran.kanji.core.draw.DrawGate
 import io.github.stopcran.kanji.core.draw.DrawGrader
@@ -20,7 +19,7 @@ import io.github.stopcran.kanji.core.draw.StrokeMatcher
 import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.QueueBuilder
-import io.github.stopcran.kanji.core.srs.Relearn
+import io.github.stopcran.kanji.core.quiz.QuizSession
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.srs.StudyMode
@@ -62,8 +61,7 @@ sealed interface DrawUi {
 }
 
 /** Drawing session: caption + canvas -> check (recogniser gate + stroke matcher) -> graded answer with overlay. */
-class DrawViewModel(application: Application) : AndroidViewModel(application) {
-    private val app = application as KanjiApp
+class DrawViewModel(private val app: Services) : ViewModel() {
     private val fsrs = Fsrs()
     private val matcher = StrokeMatcher()
     private val recognizer = InkRecognizer()
@@ -83,11 +81,8 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
     private val references = mutableMapOf<String, List<Stroke>>()
     private val orderVariants = mutableMapOf<String, List<List<Int>>>()
     private val states = mutableMapOf<String, SrsState>()
-    private val queue = ArrayDeque<String>()
-    private var answered = 0
-    private var clean = 0
+    private var session = QuizSession<String>(emptyList(), { it }, confirm = false)
     private var started = false
-    private val relearn = Relearn(confirm = false)
 
     fun ensureStarted(extra: Boolean) {
         if (started) return
@@ -121,17 +116,17 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
         }
         val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
         val items = if (extra) QueueBuilder.extra(ids, states, Instant.now()) else QueueBuilder.build(ids, states, Instant.now(), budget)
-        queue.addAll(items.map { it.kanji })
+        session = QuizSession(items.map { it.kanji }, { it }, confirm = false)
         showNext()
     }
 
     private fun showNext() {
-        val kanji = queue.removeFirstOrNull()
+        val kanji = session.take()
         ui = if (kanji == null) {
-            if (answered == 0) DrawUi.Empty("Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings.") else DrawUi.Done(answered, clean)
+            if (session.answered == 0) DrawUi.Empty("Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings.") else DrawUi.Done(session.answered, session.correct)
         } else {
             look = BrushLook.random()
-            DrawUi.Question(cards.getValue(kanji), queue.size + 1, answered)
+            DrawUi.Question(cards.getValue(kanji), session.pending + 1, session.answered)
         }
     }
 
@@ -150,7 +145,7 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
             val outcome = DrawGrader.outcome(candidates, q.card.kanji, match, strokeLookalike = byStrokes)
             val guess = byStrokes ?: if (outcome == DrawOutcome.NotRecognized && strokes.isNotEmpty()) lookalikeFromCandidates(candidates, q.card.kanji) else null
             val lookalike = guess?.let { g -> app.db.content().kanji(sourceId).firstOrNull { it.kanji == g }.let { Lookalike(g, it?.title, it != null) } }
-            if (app.settings.saveDrawings.value) DrawingLog.save(app, q.card.kanji, canvasPx, strokes, outcome, match, candidates)
+            if (app.settings.saveDrawings.value) DrawingLog.save(app.context, q.card.kanji, canvasPx, strokes, outcome, match, candidates)
             ui = DrawUi.Answer(q.card, q.remaining, ref, strokes, canvasPx, outcome, match, candidates != null, lookalike)
         }
     }
@@ -168,15 +163,7 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
     /** Not recognised = Again (relearned), recognised with stroke mistakes = Hard (asked once more), clean = Good. */
     fun next() {
         val a = ui as? DrawUi.Answer ?: return
-        val grade = when (a.outcome) {
-            DrawOutcome.NotRecognized -> Grade.Again
-            DrawOutcome.Mistakes -> Grade.Hard
-            DrawOutcome.Clean -> Grade.Good
-        }
-        val step = relearn.answered(a.card.kanji, a.outcome != DrawOutcome.NotRecognized, queue.size, weak = a.outcome == DrawOutcome.Mistakes)
-        answered++
-        if (a.outcome == DrawOutcome.Clean) clean++
-        step.reinsertAt?.let { queue.add(it, a.card.kanji) }
+        val grade = session.answer(a.card.kanji, a.outcome != DrawOutcome.NotRecognized, weak = a.outcome == DrawOutcome.Mistakes, countsAsCorrect = a.outcome == DrawOutcome.Clean).grade
         val now = Instant.now()
         val updated = fsrs.review(states[a.card.kanji] ?: SrsState(), grade, now, fuzzSeed = Fsrs.seed(a.card.kanji, StudyMode.Draw.name, states[a.card.kanji]?.reps ?: 0))
         states[a.card.kanji] = updated

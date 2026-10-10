@@ -68,6 +68,39 @@ class HomeData(
 
 private class Extras(val stackId: String, val wordStackId: String, val allowance: NewAllowance, val week: WeekProgress, val unlocked: Set<String>, val introducedReadings: Int)
 
+/** All seven scheduling-state maps, each non-null; exists so loading is decided once instead of with !! at each use. */
+internal data class StateSet(
+    val quiz: Map<String, SrsState>, val draw: Map<String, SrsState>, val on: Map<String, SrsState>, val kun: Map<String, SrsState>,
+    val jp: Map<String, SrsState>, val en: Map<String, SrsState>, val rd: Map<String, SrsState>,
+) {
+    companion object {
+        fun of(
+            quiz: Map<String, SrsState>?, draw: Map<String, SrsState>?, on: Map<String, SrsState>?, kun: Map<String, SrsState>?,
+            jp: Map<String, SrsState>?, en: Map<String, SrsState>?, rd: Map<String, SrsState>?,
+        ): StateSet? = if (quiz == null || draw == null || on == null || kun == null || jp == null || en == null || rd == null) null else StateSet(quiz, draw, on, kun, jp, en, rd)
+    }
+}
+
+/** Whether to suggest unlocking N4: enough of the N5 kanji, drawings and words are firm, and the offer was not dismissed recently. */
+internal fun shouldOfferN4(
+    inStack: List<KanjiEntity>, words: List<io.github.stopcran.kanji.data.WordEntity>, levels: Map<String, Int?>, wordStack: WordStack,
+    s: StateSet, n4Unlocked: Boolean, dismissedMs: Long, now: Instant, nowMs: Long,
+): Boolean {
+    val n5Kanji = inStack.filter { it.jlpt == 5 }
+    val n5Words = words.inWordStack(WordStacks.n5, levels)
+    val onN5 = wordStack.id == WordStacks.n5.id
+    val ready = Advancement.ready(
+        listOf(
+            n5Kanji.map { s.quiz[it.kanji] },
+            n5Kanji.filter { it.strokesJson != null }.map { s.draw[it.kanji] },
+            if (onN5) n5Words.map { s.jp[it.word] } else emptyList(),
+            if (onN5) n5Words.map { s.en[it.word] } else emptyList(),
+            if (onN5) n5Words.forDirection(WordDirection.Reading).map { s.rd[it.word] } else emptyList(),
+        ),
+        now,
+    )
+    return Advancement.shouldOffer(ready, n4Unlocked, dismissedMs, nowMs)
+}
 /** Null until the first emission, so the screen can tell "still loading" from "nothing yet". */
 @Composable
 private fun rememberStates(app: KanjiApp, sourceId: String, stack: String, mode: StudyMode, byReading: Boolean = false): Map<String, SrsState>? {
@@ -110,7 +143,8 @@ fun rememberHomeData(app: KanjiApp): HomeData {
     val en = rememberStates(app, source.id, wordStack.id, StudyMode.WordEnJp)
     val rd = rememberStates(app, source.id, wordStack.id, StudyMode.WordReading)
 
-    val statesReady = kanjiOrNull != null && wordsOrNull != null && listOf(quiz, draw, on, kun, jp, en, rd).all { it != null }
+    val stateSet = remember(quiz, draw, on, kun, jp, en, rd) { StateSet.of(quiz, draw, on, kun, jp, en, rd) }
+    val statesReady = kanjiOrNull != null && wordsOrNull != null && stateSet != null
     val extras by produceState<Extras?>(null, source.id, stack.id, wordStack.id, startOfDay, dailyNew, weekPlan, statesReady, quiz, draw, on, kun, jp, en, rd) {
         if (!statesReady) return@produceState
         val r = app.db.reviews()
@@ -120,38 +154,21 @@ fun rememberHomeData(app: KanjiApp): HomeData {
     val ex = extras?.takeIf { it.stackId == stack.id && it.wordStackId == wordStack.id }
     val loading = !statesReady || ex == null
 
-    val modes = remember(loading, ex, tick, inStack, wordsInStack, quiz, draw, on, kun, jp, en, rd) {
-        if (loading || ex == null) emptyMap() else computeModes(inStack, wordsInStack, ex, tick, quiz!!, draw!!, on!!, kun!!, jp!!, en!!, rd!!)
+    val modes = remember(loading, ex, tick, inStack, wordsInStack, stateSet) {
+        if (loading || ex == null || stateSet == null) emptyMap() else computeModes(inStack, wordsInStack, ex, tick, stateSet)
     }
 
-    val n4Offer = remember(loading, quiz, draw, jp, en, rd, kanji, words, levels, wordStack, n4Unlocked, dismissedMs) {
-        if (loading) false else {
-            val n5Kanji = inStack.filter { it.jlpt == 5 }
-            val n5Words = words.inWordStack(WordStacks.n5, levels)
-            val n5Readable = n5Words.forDirection(WordDirection.Reading)
-            val onN5 = wordStack.id == WordStacks.n5.id
-            val ready = Advancement.ready(
-                listOf(
-                    n5Kanji.map { quiz!![it.kanji] },
-                    n5Kanji.filter { it.strokesJson != null }.map { draw!![it.kanji] },
-                    if (onN5) n5Words.map { jp!![it.word] } else emptyList(),
-                    if (onN5) n5Words.map { en!![it.word] } else emptyList(),
-                    if (onN5) n5Readable.map { rd!![it.word] } else emptyList(),
-                ),
-                Instant.now(),
-            )
-            Advancement.shouldOffer(ready, n4Unlocked, dismissedMs, System.currentTimeMillis())
-        }
+    val n4Offer = remember(loading, stateSet, kanji, words, levels, wordStack, n4Unlocked, dismissedMs) {
+        stateSet != null && !loading && shouldOfferN4(inStack, words, levels, wordStack, stateSet, n4Unlocked, dismissedMs, Instant.now(), System.currentTimeMillis())
     }
     return HomeData(loading, source.id, kanji, stacks, stack, wordStacks, wordStack, wordsInStack.size, modes, n4Offer, ex?.allowance, ex?.week)
 }
 
 /** Counts use strict (noise-free) queues so the numbers are stable; sessions build their own randomised queues. */
 private fun computeModes(
-    inStack: List<KanjiEntity>, words: List<io.github.stopcran.kanji.data.WordEntity>, ex: Extras, now: Instant,
-    quiz: Map<String, SrsState>, draw: Map<String, SrsState>, on: Map<String, SrsState>, kun: Map<String, SrsState>,
-    jp: Map<String, SrsState>, en: Map<String, SrsState>, rd: Map<String, SrsState>,
+    inStack: List<KanjiEntity>, words: List<io.github.stopcran.kanji.data.WordEntity>, ex: Extras, now: Instant, states: StateSet,
 ): Map<HomeMode, ModeState> {
+    val (quiz, draw, on, kun, jp, en, rd) = states
     val newLeft = ex.allowance.remaining
     fun plain(ids: List<String>, states: Map<String, SrsState>, min: Int, what: String, locked: String = "", pool: Int = ids.size): ModeState {
         val q = QueueBuilder.build(ids, states, now, newLeft, noise = 0.0)

@@ -25,7 +25,7 @@ fun StrokeIssue.describe(): String {
         IssueType.Reversed -> "Stroke $r was drawn in the wrong direction"
         IssueType.WrongOrder -> "Stroke $r was drawn out of order (you drew it as number $d)"
         IssueType.WrongShape -> "Stroke $r has the wrong shape, position or length"
-        IssueType.Joined -> "Strokes $r and ${r!! + 1} were joined into one"
+        IssueType.Joined -> "Strokes $r and ${r?.plus(1)} were joined into one"
         IssueType.Broken -> "Stroke $r was broken into two"
         IssueType.Missing -> "Stroke $r is missing"
         IssueType.Extra -> "Extra stroke (your number $d)"

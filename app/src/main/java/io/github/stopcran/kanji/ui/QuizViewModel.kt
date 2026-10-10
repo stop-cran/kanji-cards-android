@@ -1,12 +1,11 @@
 package io.github.stopcran.kanji.ui
 
-import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.quiz.QuizBuilder
 import io.github.stopcran.kanji.core.quiz.QuizCard
 import io.github.stopcran.kanji.core.quiz.QuizOption
@@ -16,7 +15,7 @@ import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.KanjiFont
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.QueueBuilder
-import io.github.stopcran.kanji.core.srs.Relearn
+import io.github.stopcran.kanji.core.quiz.QuizSession
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.srs.StudyMode
@@ -47,8 +46,7 @@ sealed interface QuizUi {
 }
 
 /** Quiz session: question state -> answer-check state per card; wrong answers are asked again a few cards later. */
-class QuizViewModel(application: Application) : AndroidViewModel(application) {
-    private val app = application as KanjiApp
+class QuizViewModel(private val app: Services) : ViewModel() {
     private val fsrs = Fsrs()
     private val random = Random.Default
 
@@ -60,11 +58,8 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     private var cards: Map<String, KanjiEntity> = emptyMap()
     private var quizCards: List<QuizCard> = emptyList()
     private val states = mutableMapOf<String, SrsState>()
-    private val queue = ArrayDeque<String>()
+    private var session = QuizSession<String>(emptyList(), { it })
     private val studied = mutableSetOf<String>()
-    private val relearn = Relearn()
-    private var answered = 0
-    private var correct = 0
 
     private var started = false
 
@@ -89,7 +84,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
 
         val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
         val items = if (extra) QueueBuilder.extra(all.map { it.kanji }, states, Instant.now()) else QueueBuilder.build(all.map { it.kanji }, states, Instant.now(), budget)
-        queue.addAll(items.map { it.kanji })
+        session = QuizSession(items.map { it.kanji }, { it })
         showNext()
     }
 
@@ -102,18 +97,18 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun showNext() {
-        val kanji = queue.removeFirstOrNull()
+        val kanji = session.take()
         if (kanji == null) {
-            ui = if (answered == 0) QuizUi.Empty("Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings.") else QuizUi.Done(answered, correct)
+            ui = if (session.answered == 0) QuizUi.Empty("Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings.") else QuizUi.Done(session.answered, session.correct)
             return
         }
         val card = cards.getValue(kanji)
         if (kanji !in studied && states[kanji]?.phase.let { it == null || it == CardPhase.New }) {
             studied += kanji
-            ui = QuizUi.Study(card, queue.size + 1, nextFont(kanji))
+            ui = QuizUi.Study(card, session.pending + 1, nextFont(kanji))
             return
         }
-        ask(card, queue.size + 1, nextFont(kanji))
+        ask(card, session.pending + 1, nextFont(kanji))
     }
 
     private fun ask(card: KanjiEntity, remaining: Int, font: KanjiFont) {
@@ -141,16 +136,9 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     /** Wrong answers (and "don't know") are graded Again and relearned in-session; right ones Good, or Hard when the user admits guessing. */
     fun next(guessed: Boolean = false) {
         val a = ui as? QuizUi.Answer ?: return
-        val grade = when {
-            !a.correct -> Grade.Again
-            guessed -> Grade.Hard
-            else -> Grade.Good
-        }
-        val step = relearn.answered(a.card.kanji, a.correct, queue.size)
-        answered++
-        if (a.correct) correct++
-        step.reinsertAt?.let { queue.add(it, a.card.kanji) }
-        if (step.record) {
+        val result = session.answer(a.card.kanji, a.correct, guessed)
+        val grade = result.grade
+        if (result.record) {
             val now = Instant.now()
             val updated = fsrs.review(
                 states[a.card.kanji] ?: SrsState(), grade, now,

@@ -203,7 +203,7 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
         val exporter = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip")) { uri ->
             if (uri != null) {
                 exportStatus = runCatching {
-                    val n = context.contentResolver.openOutputStream(uri, "wt")!!.use { io.github.stopcran.kanji.data.DrawingLog.exportZip(context, it) }
+                    val n = context.contentResolver.openOutputStream(uri, "wt")?.use { io.github.stopcran.kanji.data.DrawingLog.exportZip(context, it) } ?: error("Cannot open the file")
                     "Exported $n drawings at ${java.time.LocalTime.now().withNano(0)}"
                 }.getOrElse { "Export failed: ${it.message}" }
             }

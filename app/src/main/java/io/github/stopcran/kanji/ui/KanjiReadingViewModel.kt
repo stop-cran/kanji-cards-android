@@ -1,12 +1,11 @@
 package io.github.stopcran.kanji.ui
 
-import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.reading.KanjiReadingQuiz
 import io.github.stopcran.kanji.core.reading.ReadingCard
 import io.github.stopcran.kanji.core.reading.ReadingItem
@@ -19,7 +18,7 @@ import io.github.stopcran.kanji.core.srs.FontPolicy
 import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.KanjiFont
-import io.github.stopcran.kanji.core.srs.Relearn
+import io.github.stopcran.kanji.core.quiz.QuizSession
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.data.KanjiEntity
@@ -43,8 +42,7 @@ sealed interface ReadingUi {
 }
 
 /** Kanji readings session over on'yomi and kun'yomi; each (kanji, kind, reading) has its own scheduling state. */
-class KanjiReadingViewModel(application: Application) : AndroidViewModel(application) {
-    private val app = application as KanjiApp
+class KanjiReadingViewModel(private val app: Services) : ViewModel() {
     private val fsrs = Fsrs()
     private val random = Random.Default
 
@@ -56,12 +54,9 @@ class KanjiReadingViewModel(application: Application) : AndroidViewModel(applica
     private var cards: Map<String, KanjiEntity> = emptyMap()
     private var readingCards: List<ReadingCard> = emptyList()
     private val states = ReadingKind.entries.associateWith { mutableMapOf<String, SrsState>() }
-    private val queue = ArrayDeque<ReadingItem>()
-    private var answered = 0
-    private var correct = 0
+    private var session = QuizSession<ReadingItem>(emptyList(), { it.id })
     private var lastFont: KanjiFont? = null
     private var started = false
-    private val relearn = Relearn()
 
     fun ensureStarted(extra: Boolean) {
         if (started) return
@@ -81,7 +76,7 @@ class KanjiReadingViewModel(application: Application) : AndroidViewModel(applica
         val data = app.db.readingData(sourceId, stack, all, app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining, Instant.now(), extra)
         readingCards = data.cards
         data.states.forEach { (kind, m) -> states.getValue(kind) += m }
-        queue.addAll(data.items)
+        session = QuizSession(data.items, { it.id })
         showNext()
     }
 
@@ -93,15 +88,15 @@ class KanjiReadingViewModel(application: Application) : AndroidViewModel(applica
 
     private fun showNext() {
         while (true) {
-            val item = queue.removeFirstOrNull()
+            val item = session.take()
             if (item == null) {
-                ui = if (answered == 0) ReadingUi.Empty("Nothing to practise yet. Readings unlock after a kanji's meaning is answered well twice in the Quiz.") else ReadingUi.Done(answered, correct)
+                ui = if (session.answered == 0) ReadingUi.Empty("Nothing to practise yet. Readings unlock after a kanji's meaning is answered well twice in the Quiz.") else ReadingUi.Done(session.answered, session.correct)
                 return
             }
             val target = readingCards.first { it.kanji == item.kanji }
             // A question with too few safe options is skipped rather than shown with a doubtful answer.
             val q = KanjiReadingQuiz.question(target, item.kind, readingCards, random, reading = item.reading) ?: continue
-            ui = ReadingUi.Question(cards.getValue(item.kanji), q, queue.size + 1, nextFont(item.id, item.kind))
+            ui = ReadingUi.Question(cards.getValue(item.kanji), q, session.pending + 1, nextFont(item.id, item.kind))
             return
         }
     }
@@ -123,16 +118,9 @@ class KanjiReadingViewModel(application: Application) : AndroidViewModel(applica
         val kind = a.question.kind
         val kanji = a.card.kanji
         val id = ReadingId.of(kanji, a.question.correctKey)
-        val grade = when {
-            !a.correct -> Grade.Again
-            guessed -> Grade.Hard
-            else -> Grade.Good
-        }
-        val step = relearn.answered(id, a.correct, queue.size)
-        answered++
-        if (a.correct) correct++
-        step.reinsertAt?.let { queue.add(it, ReadingItem(kanji, kind, a.question.correctKey, false)) }
-        if (step.record) {
+        val result = session.answer(ReadingItem(kanji, kind, a.question.correctKey, false), a.correct, guessed)
+        val grade = result.grade
+        if (result.record) {
             val now = Instant.now()
             val updated = fsrs.review(
                 states.getValue(kind)[id] ?: SrsState(), grade, now,

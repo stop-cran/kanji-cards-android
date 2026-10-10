@@ -143,9 +143,10 @@ class Settings(context: Context) {
 
     private fun load(): RepoSource =
         RepoSource.parse(prefs.getString(KEY_URL, null) ?: Defaults.CONTENT_REPO_URL, prefs.getString(KEY_BRANCH, null) ?: Defaults.CONTENT_BRANCH)
-            ?: RepoSource.parse(Defaults.CONTENT_REPO_URL, Defaults.CONTENT_BRANCH)!!
+            ?: defaultSource
 
     private companion object {
+        val defaultSource = RepoSource("stop-cran", "learning-japanese", Defaults.CONTENT_BRANCH)
         const val KEY_URL = "repoUrl"
         const val KEY_BRANCH = "branch"
         const val KEY_NEW = "dailyNewCards"

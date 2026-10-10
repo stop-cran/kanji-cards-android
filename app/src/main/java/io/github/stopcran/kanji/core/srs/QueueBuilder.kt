@@ -29,7 +29,7 @@ object QueueBuilder {
             val s = states[k] ?: return@mapNotNull null
             if (s.phase != CardPhase.New && !s.due.isAfter(now)) QueueItem(k, s, false) else null
         }.let { byUrgency(it, now, noise, rnd, urgencyFactor) }
-        val fresh = allKanji.filter { states[it] == null || states[it]!!.phase == CardPhase.New }
+        val fresh = allKanji.filter { states[it]?.phase.let { p -> p == null || p == CardPhase.New } }
             .let { if (noise > 0) it.shuffled(rnd) else it }
             .take(maxOf(0, newCardsRemainingToday))
             .map { QueueItem(it, states[it] ?: SrsState(), true) }

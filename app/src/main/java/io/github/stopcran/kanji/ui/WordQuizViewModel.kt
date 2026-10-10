@@ -1,18 +1,17 @@
 package io.github.stopcran.kanji.ui
 
-import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.FontPolicy
 import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.KanjiFont
-import io.github.stopcran.kanji.core.srs.Relearn
+import io.github.stopcran.kanji.core.quiz.QuizSession
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.words.WordCard
 import io.github.stopcran.kanji.core.words.WordDirection
@@ -50,8 +49,7 @@ sealed interface WordQuizUi {
 }
 
 /** Word quiz session in one direction; only that direction's scheduling state is updated. */
-class WordQuizViewModel(application: Application) : AndroidViewModel(application) {
-    private val app = application as KanjiApp
+class WordQuizViewModel(private val app: Services) : ViewModel() {
     private val fsrs = Fsrs()
     private val random = Random.Default
 
@@ -64,11 +62,8 @@ class WordQuizViewModel(application: Application) : AndroidViewModel(application
     private var words: Map<String, WordEntity> = emptyMap()
     private var cards: List<WordCard> = emptyList()
     private val states = mutableMapOf<String, SrsState>()
-    private val queue = ArrayDeque<String>()
-    private var answered = 0
-    private var correct = 0
+    private var session = QuizSession<String>(emptyList(), { it })
     private var started = false
-    private val relearn = Relearn()
     private var lastFont: KanjiFont? = null
 
     fun ensureStarted(direction: WordDirection, extra: Boolean) {
@@ -96,7 +91,7 @@ class WordQuizViewModel(application: Application) : AndroidViewModel(application
         val other = app.db.reviews().states(sourceId, stackId, direction.other.mode.name).associate { it.kanji to it.toSrs() }
 
         val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
-        queue.addAll(WordQueues.build(direction, all.forDirection(direction).map { it.word }, states, other, Instant.now(), budget, extra).map { it.kanji })
+        session = QuizSession(WordQueues.build(direction, all.forDirection(direction).map { it.word }, states, other, Instant.now(), budget, extra).map { it.kanji }, { it })
         showNext()
     }
 
@@ -107,9 +102,9 @@ class WordQuizViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun showNext() {
-        val word = queue.removeFirstOrNull()
+        val word = session.take()
         if (word == null) {
-            ui = if (answered == 0) {
+            ui = if (session.answered == 0) {
                 WordQuizUi.Empty(
                     when (direction) {
                         WordDirection.EnToJp -> "Nothing is due. English → Japanese opens for words you have answered twice in Japanese → English."
@@ -117,11 +112,11 @@ class WordQuizViewModel(application: Application) : AndroidViewModel(application
                         WordDirection.JpToEn -> "Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings."
                     },
                 )
-            } else WordQuizUi.Done(answered, correct)
+            } else WordQuizUi.Done(session.answered, session.correct)
             return
         }
         val entity = words.getValue(word)
-        ui = WordQuizUi.Question(entity, direction, WordQuizBuilder.options(entity.toCard(), cards, direction, random), queue.size + 1, nextFont(word))
+        ui = WordQuizUi.Question(entity, direction, WordQuizBuilder.options(entity.toCard(), cards, direction, random), session.pending + 1, nextFont(word))
     }
 
     fun pick(word: String, heard: String? = null) {
@@ -138,16 +133,9 @@ class WordQuizViewModel(application: Application) : AndroidViewModel(application
     /** Wrong answers (and "don't know") are graded Again and relearned in-session; right ones Good, or Hard when guessed. */
     fun next(guessed: Boolean = false) {
         val a = ui as? WordQuizUi.Answer ?: return
-        val grade = when {
-            !a.correct -> Grade.Again
-            guessed -> Grade.Hard
-            else -> Grade.Good
-        }
-        val step = relearn.answered(a.word.word, a.correct, queue.size)
-        answered++
-        if (a.correct) correct++
-        step.reinsertAt?.let { queue.add(it, a.word.word) }
-        if (step.record) {
+        val result = session.answer(a.word.word, a.correct, guessed)
+        val grade = result.grade
+        if (result.record) {
             val now = Instant.now()
             val updated = fsrs.review(
                 states[a.word.word] ?: SrsState(), grade, now,

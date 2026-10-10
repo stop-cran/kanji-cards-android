@@ -289,7 +289,7 @@ class StrokeMatcher(private val cfg: MatcherConfig = MatcherConfig()) {
         val len = IntArray(a.size) { 1 }
         val prev = IntArray(a.size) { -1 }
         for (i in a.indices) for (j in 0 until i) if (a[j] < a[i] && len[j] + 1 > len[i]) { len[i] = len[j] + 1; prev[i] = j }
-        var best = len.indices.maxByOrNull { len[it] }!!
+        var best = len.indices.maxByOrNull { len[it] } ?: return emptySet()
         val out = HashSet<Int>()
         while (best >= 0) { out += best; best = prev[best] }
         return out
