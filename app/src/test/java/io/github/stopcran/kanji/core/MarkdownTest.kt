@@ -14,6 +14,13 @@ import java.io.File
 
 class MarkdownTest {
     @Test
+    fun hostileNestingDoesNotOverflowTheStack() {
+        Markdown.parse(">".repeat(50_000) + " x", "kanji/a.md")
+        Markdown.parse("[".repeat(50_000), "kanji/a.md")
+        Markdown.parse("[".repeat(30_000) + "](x)", "kanji/a.md")
+    }
+
+    @Test
     fun resolvesRelativeLinks() {
         assertEquals(LinkTarget.Doc("words/上下.md"), Links.resolve("kanji/上.md", "../words/上下.md"))
         assertEquals(LinkTarget.Doc("kanji/下.md"), Links.resolve("kanji/上.md", "下.md"))

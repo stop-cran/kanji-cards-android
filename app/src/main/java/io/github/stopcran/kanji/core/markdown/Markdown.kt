@@ -43,14 +43,14 @@ object Links {
 
 /** Small Markdown subset used by the content repo: headings, paragraphs, lists, quotes, tables, code fences, rules, emphasis, code, links. No HTML. */
 object Markdown {
-    fun parse(text: String, path: String): List<Block> = parseLines(text.replace("\r\n", "\n").split('\n'), path)
+    fun parse(text: String, path: String): List<Block> = parseLines(text.replace("\r\n", "\n").split('\n'), path, 0)
 
     private val heading = Regex("""^(#{1,6})\s+(.*?)\s*#*\s*$""")
     private val bullet = Regex("""^(\s*)[-*+]\s+(.*)$""")
     private val numbered = Regex("""^(\s*)(\d+)[.)]\s+(.*)$""")
     private val tableSep = Regex("""^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$""")
 
-    private fun parseLines(lines: List<String>, path: String): List<Block> {
+    private fun parseLines(lines: List<String>, path: String, depth: Int): List<Block> {
         val out = mutableListOf<Block>()
         val para = mutableListOf<String>()
         fun flush() {
@@ -79,11 +79,11 @@ object Markdown {
                     out += Block.Heading(m.groupValues[1].length, inline(m.groupValues[2], path))
                     i++
                 }
-                trimmed.startsWith(">") -> {
+                trimmed.startsWith(">") && depth < MAX_DEPTH -> {
                     flush()
                     val inner = mutableListOf<String>()
                     while (i < lines.size && lines[i].trim().startsWith(">")) inner += lines[i++].trim().removePrefix(">").removePrefix(" ")
-                    out += Block.Quote(parseLines(inner, path))
+                    out += Block.Quote(parseLines(inner, path, depth + 1))
                 }
                 trimmed.startsWith("|") && i + 1 < lines.size && tableSep.matches(lines[i + 1]) -> {
                     flush()
@@ -129,7 +129,7 @@ object Markdown {
 
     fun inline(text: String, path: String): List<Span> {
         val out = mutableListOf<Span>()
-        parseInline(text, path, bold = false, italic = false, out)
+        parseInline(text, path, bold = false, italic = false, out, 0)
         return out.fold(mutableListOf()) { acc, s ->
             val last = acc.lastOrNull()
             if (last != null && last.link == null && s.link == null && last.bold == s.bold && last.italic == s.italic && last.code == s.code) {
@@ -139,7 +139,7 @@ object Markdown {
         }
     }
 
-    private fun parseInline(s: String, path: String, bold: Boolean, italic: Boolean, out: MutableList<Span>) {
+    private fun parseInline(s: String, path: String, bold: Boolean, italic: Boolean, out: MutableList<Span>, depth: Int) {
         val buf = StringBuilder()
         fun flushText() {
             if (buf.isNotEmpty()) out += Span(buf.toString(), bold, italic)
@@ -150,20 +150,20 @@ object Markdown {
             val c = s[i]
             when {
                 c == '\\' && i + 1 < s.length && s[i + 1] in "\\`*_{}[]()#+-.!|>" -> { buf.append(s[i + 1]); i += 2 }
-                s.startsWith("**", i) -> {
+                depth < MAX_DEPTH && s.startsWith("**", i) -> {
                     val end = s.indexOf("**", i + 2)
-                    if (end > i + 2) { flushText(); parseInline(s.substring(i + 2, end), path, true, italic, out); i = end + 2 } else { buf.append(c); i++ }
+                    if (end > i + 2) { flushText(); parseInline(s.substring(i + 2, end), path, true, italic, out, depth + 1); i = end + 2 } else { buf.append(c); i++ }
                 }
-                c == '*' && i + 1 < s.length && !s[i + 1].isWhitespace() -> {
+                depth < MAX_DEPTH && c == '*' && i + 1 < s.length && !s[i + 1].isWhitespace() -> {
                     var end = i + 1
                     while (end < s.length && !(s[end] == '*' && !s[end - 1].isWhitespace() && !s.startsWith("**", end))) end++
-                    if (end < s.length) { flushText(); parseInline(s.substring(i + 1, end), path, bold, true, out); i = end + 1 } else { buf.append(c); i++ }
+                    if (end < s.length) { flushText(); parseInline(s.substring(i + 1, end), path, bold, true, out, depth + 1); i = end + 1 } else { buf.append(c); i++ }
                 }
                 c == '`' -> {
                     val end = s.indexOf('`', i + 1)
                     if (end > i) { flushText(); out += Span(s.substring(i + 1, end), code = true); i = end + 1 } else { buf.append(c); i++ }
                 }
-                c == '[' -> {
+                depth < MAX_DEPTH && c == '[' -> {
                     val close = findClosingBracket(s, i)
                     if (close > 0 && close + 1 < s.length && s[close + 1] == '(') {
                         val end = s.indexOf(')', close + 2)
@@ -172,7 +172,7 @@ object Markdown {
                             val label = s.substring(i + 1, close)
                             val target = Links.resolve(path, s.substring(close + 2, end))
                             val inner = mutableListOf<Span>()
-                            parseInline(label, path, bold, italic, inner)
+                            parseInline(label, path, bold, italic, inner, depth + 1)
                             if (target == null) out += inner else out += inner.map { it.copy(link = target) }
                             i = end + 1
                             continue
@@ -188,7 +188,7 @@ object Markdown {
 
     private fun findClosingBracket(s: String, open: Int): Int {
         var depth = 0
-        for (k in open until s.length) {
+        for (k in open until minOf(s.length, open + MAX_LABEL)) {
             when (s[k]) {
                 '[' -> depth++
                 ']' -> if (--depth == 0) return k
@@ -196,4 +196,7 @@ object Markdown {
         }
         return -1
     }
+
+    private const val MAX_DEPTH = 8
+    private const val MAX_LABEL = 2_000
 }

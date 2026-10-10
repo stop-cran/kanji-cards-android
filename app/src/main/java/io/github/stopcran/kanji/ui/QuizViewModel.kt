@@ -133,7 +133,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         answered++
         if (a.correct) correct++
         if (grade == Grade.Again) queue.add(minOf(3, queue.size), a.card.kanji)
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
             app.db.reviews().record(updated.toEntity(sourceId, stack, a.card.kanji, StudyMode.Quiz), ReviewLogEntity(0, sourceId, stack, a.card.kanji, StudyMode.Quiz.name, grade.value, now.toEpochMilli()))
         }
         showNext()

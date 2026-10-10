@@ -34,6 +34,7 @@ class Fsrs(
 ) {
     fun retrievability(state: SrsState, now: Instant): Double {
         val last = state.lastReview ?: return 0.0
+        if (state.stability <= 0.0) return 0.0
         val elapsed = max(0.0, Duration.between(last, now).toMillis() / MILLIS_PER_DAY)
         return (1 + FACTOR * elapsed / state.stability).pow(DECAY)
     }

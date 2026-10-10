@@ -148,7 +148,7 @@ class WordQuizViewModel(application: Application) : AndroidViewModel(application
         if (a.correct) correct++
         if (grade == Grade.Again) queue.add(minOf(3, queue.size), a.word.word)
         val mode = direction.mode
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
             app.db.reviews().record(updated.toEntity(sourceId, stackId, a.word.word, mode), ReviewLogEntity(0, sourceId, stackId, a.word.word, mode.name, grade.value, now.toEpochMilli()))
         }
         showNext()

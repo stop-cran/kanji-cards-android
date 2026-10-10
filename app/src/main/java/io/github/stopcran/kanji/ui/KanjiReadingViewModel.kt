@@ -126,7 +126,7 @@ class KanjiReadingViewModel(application: Application) : AndroidViewModel(applica
         answered++
         if (a.correct) correct++
         if (grade == Grade.Again) queue.add(minOf(3, queue.size), ReadingItem(kanji, kind, false))
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
             app.db.reviews().record(updated.toEntity(sourceId, stack, kanji, kind.mode), ReviewLogEntity(0, sourceId, stack, kanji, kind.mode.name, grade.value, now.toEpochMilli()))
         }
         showNext()

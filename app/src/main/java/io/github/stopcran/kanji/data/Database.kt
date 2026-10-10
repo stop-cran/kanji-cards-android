@@ -123,6 +123,12 @@ interface ContentDao {
     @Query("SELECT COUNT(*) FROM words WHERE sourceId = :sourceId")
     fun observeWordCount(sourceId: String): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM words WHERE sourceId = :sourceId")
+    suspend fun wordCount(sourceId: String): Int
+
+    @Query("SELECT COUNT(*) FROM kanji WHERE sourceId = :sourceId")
+    suspend fun kanjiCount(sourceId: String): Int
+
     @Query("SELECT * FROM sync_meta WHERE sourceId = :sourceId")
     fun observeMeta(sourceId: String): Flow<SyncMetaEntity?>
 
@@ -193,7 +199,7 @@ interface ReviewDao {
     suspend fun newCardsIntroducedSince(sourceId: String, stack: String, mode: String, sinceMs: Long): Int
 
     /** Kanji whose first reading review (of either kind) happened since [sinceMs]; they have already used a unit of the daily budget. */
-    @Query("SELECT DISTINCT kanji FROM (SELECT kanji, mode FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode IN ('KanjiOn', 'KanjiKun') GROUP BY kanji, mode HAVING MIN(atMs) >= :sinceMs)")
+    @Query("SELECT kanji FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode IN ('KanjiOn', 'KanjiKun') GROUP BY kanji HAVING MIN(atMs) >= :sinceMs")
     suspend fun readingKanjiIntroducedSince(sourceId: String, stack: String, sinceMs: Long): List<String>
 
     /** Kanji whose meaning was answered without "Again" at least twice: their readings become askable. */

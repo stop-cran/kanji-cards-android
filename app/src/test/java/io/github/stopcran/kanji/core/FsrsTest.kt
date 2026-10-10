@@ -15,6 +15,12 @@ class FsrsTest {
     private val t0 = Instant.parse("2026-01-01T10:00:00Z")
 
     @Test
+    fun zeroStabilityHasZeroRetrievability() {
+        val s = SrsState(phase = CardPhase.Learning, stability = 0.0, lastReview = t0)
+        assertEquals(0.0, fsrs.retrievability(s, t0), 0.0)
+    }
+
+    @Test
     fun firstReviewIntervalsMatchInitialStability() {
         assertEquals(3L, fsrs.intervalDays(fsrs.review(SrsState(), Grade.Good, t0).stability))
         assertEquals(16L, fsrs.intervalDays(fsrs.review(SrsState(), Grade.Easy, t0).stability))

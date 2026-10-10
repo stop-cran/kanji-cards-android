@@ -61,8 +61,15 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings) {
                 head?.let { settings.setSyncedCommit(commitKey, it) }
                 return@withContext SyncResult.UpToDate
             }
-            if (parsed.kanji.isEmpty() && parsed.problems.isNotEmpty()) {
-                return@withContext SyncResult.Failed("No valid cards: ${parsed.problems.first()}", retryable = false)
+            if (parsed.kanji.isEmpty()) {
+                return@withContext SyncResult.Failed("No valid cards: ${parsed.problems.firstOrNull() ?: "empty manifest"}", retryable = false)
+            }
+            if (!force && parsed.problems.isNotEmpty() && dao.meta(source.id) != null &&
+                (parsed.kanji.size < dao.kanjiCount(source.id) || parsed.words.size < dao.wordCount(source.id))
+            ) {
+                return@withContext SyncResult.Failed(
+                    "${parsed.problems.size} files rejected (${parsed.problems.first()}); keeping previous cards", retryable = true,
+                )
             }
             val kanji = parsed.kanji.mapIndexed { i, c ->
                 KanjiEntity(
