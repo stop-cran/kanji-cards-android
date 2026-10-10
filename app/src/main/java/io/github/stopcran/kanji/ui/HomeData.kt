@@ -12,6 +12,7 @@ import io.github.stopcran.kanji.core.reading.ReadingKind
 import io.github.stopcran.kanji.core.srs.NewAllowance
 import io.github.stopcran.kanji.core.srs.QueueBuilder
 import io.github.stopcran.kanji.core.srs.SrsState
+import io.github.stopcran.kanji.core.srs.WeekProgress
 import io.github.stopcran.kanji.core.srs.Stack
 import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.srs.StudyMode
@@ -26,6 +27,7 @@ import io.github.stopcran.kanji.data.inStack
 import io.github.stopcran.kanji.data.inWordStack
 import io.github.stopcran.kanji.data.levels
 import io.github.stopcran.kanji.data.newAllowance
+import io.github.stopcran.kanji.data.weekProgress
 import io.github.stopcran.kanji.data.stacks
 import io.github.stopcran.kanji.data.toReadingCard
 import io.github.stopcran.kanji.data.toSrs
@@ -48,6 +50,7 @@ class HomeData(
     val modes: Map<HomeMode, ModeState>,
     val n4Offer: Boolean,
     val pacing: NewAllowance? = null,
+    val week: WeekProgress? = null,
 ) {
     fun mode(m: HomeMode): ModeState = if (loading) ModeState.Loading else modes[m] ?: ModeState.Loading
 
@@ -56,11 +59,12 @@ class HomeData(
         if (loading) return null
         val starts = ms.mapNotNull { mode(it) as? ModeState.Start }
         if (starts.isEmpty()) return if (ms.any { mode(it) == ModeState.PracticeMore }) "All caught up" else "Nothing to study yet"
-        return "${starts.sumOf { it.due }} due, ${starts.sumOf { it.new }} new"
+        val new = starts.sumOf { it.new }.let { n -> pacing?.let { minOf(n, it.remaining) } ?: n }
+        return "${starts.sumOf { it.due }} due, $new new"
     }
 }
 
-private class Extras(val stackId: String, val wordStackId: String, val allowance: NewAllowance, val unlocked: Set<String>, val introducedReadings: Set<String>)
+private class Extras(val stackId: String, val wordStackId: String, val allowance: NewAllowance, val week: WeekProgress, val unlocked: Set<String>, val introducedReadings: Set<String>)
 
 /** Null until the first emission, so the screen can tell "still loading" from "nothing yet". */
 @Composable
@@ -109,7 +113,7 @@ fun rememberHomeData(app: KanjiApp): HomeData {
         if (!statesReady) return@produceState
         val r = app.db.reviews()
         val allowance = app.db.newAllowance(app.settings, source.id, Instant.now())
-        value = Extras(stack.id, wordStack.id, allowance, r.meaningLearned(source.id, stack.id).toSet(), r.readingKanjiIntroducedSince(source.id, stack.id, startOfDay).toSet())
+        value = Extras(stack.id, wordStack.id, allowance, app.db.weekProgress(app.settings, source.id, Instant.now()), r.meaningLearned(source.id, stack.id).toSet(), r.readingKanjiIntroducedSince(source.id, stack.id, startOfDay).toSet())
     }
     val ex = extras?.takeIf { it.stackId == stack.id && it.wordStackId == wordStack.id }
     val loading = !statesReady || ex == null
@@ -137,7 +141,7 @@ fun rememberHomeData(app: KanjiApp): HomeData {
             Advancement.shouldOffer(ready, n4Unlocked, dismissedMs, System.currentTimeMillis())
         }
     }
-    return HomeData(loading, source.id, kanji, stacks, stack, wordStacks, wordStack, wordsInStack.size, modes, n4Offer, ex?.allowance)
+    return HomeData(loading, source.id, kanji, stacks, stack, wordStacks, wordStack, wordsInStack.size, modes, n4Offer, ex?.allowance, ex?.week)
 }
 
 /** Counts use strict (noise-free) queues so the numbers are stable; sessions build their own randomised queues. */

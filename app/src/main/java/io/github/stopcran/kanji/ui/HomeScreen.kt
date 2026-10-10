@@ -170,6 +170,10 @@ private fun ModeRow(title: String, state: ModeState, onStart: (extra: Boolean) -
 /** Explains a reduced or empty new-item allowance; reviews are never limited, the backlog case only warns. */
 @Composable
 private fun PacingHint(data: HomeData) {
+    data.week?.let { w ->
+        val tail = if (w.studied >= w.goal) " — goal reached" else ""
+        Text("This week: ${w.studied} of ${w.goal} study days$tail", style = MaterialTheme.typography.bodySmall)
+    }
     val p = data.pacing ?: return
     val text = when (p.note) {
         PacingNote.None -> return

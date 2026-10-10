@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.stopcran.kanji.Defaults
 import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.core.srs.Commitment
 import io.github.stopcran.kanji.core.srs.DayLevel
 import io.github.stopcran.kanji.data.SyncResult
 import kotlinx.coroutines.launch
@@ -56,6 +57,16 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
 
     Page("Settings", onBack) {
         Text("Studying", style = MaterialTheme.typography.titleMedium)
+        val committed = Commitment.of(dailyNew.toIntOrNull() ?: -1)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Commitment.entries.forEach { c ->
+                androidx.compose.material3.FilterChip(
+                    selected = committed == c,
+                    onClick = { dailyNew = c.perDay.toString(); app.settings.setDailyNewCards(c.perDay) },
+                    label = { Text("${c.label} (${c.perDay})") },
+                )
+            }
+        }
         OutlinedTextField(
             dailyNew,
             { text ->

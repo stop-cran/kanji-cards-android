@@ -20,6 +20,18 @@ enum class DayLevel(val code: Char, val factor: Double) {
 
 enum class PacingNote { None, RestDay, LightDay, BacklogReduced, BacklogPaused }
 
+/** Days studied so far in the current week (Monday first) against a goal; missing a day never resets anything. */
+data class WeekProgress(val studied: Int, val goal: Int)
+
+/** Named choices for the base amount of new items per day. */
+enum class Commitment(val label: String, val perDay: Int) {
+    Light("Light", 5), Steady("Steady", 10), Intensive("Intensive", 20);
+
+    companion object {
+        fun of(perDay: Int): Commitment? = entries.firstOrNull { it.perDay == perDay }
+    }
+}
+
 /** [total] is today's allowance of new items across every mode; [remaining] is what is left after those already started today. */
 data class NewAllowance(val total: Int, val remaining: Int, val note: PacingNote, val due: Int, val capacity: Int)
 
@@ -30,6 +42,9 @@ data class NewAllowance(val total: Int, val remaining: Int, val note: PacingNote
 object Pacing {
     /** Reviews per day assumed when there is little history, and the floor for a measured capacity. */
     const val MIN_CAPACITY = 40
+
+    /** Five study days a week is a sustainable goal; fewer when the rhythm already has more rest days. */
+    fun weeklyGoal(week: List<DayLevel>): Int = week.count { it != DayLevel.Off }.coerceAtMost(5)
 
     /** Typical reviews on a day the learner studied: the median of the days with any, never below [MIN_CAPACITY]. */
     fun capacity(recentDailyReviews: List<Int>): Int {

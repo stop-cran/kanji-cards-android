@@ -59,8 +59,9 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - **Pacing** (`core/srs/Pacing.kt`, `data/Pacing.kt`): one shared pool of new items per day for all modes, kanji and words (distinct stack+item whose
   first log entry is today, `itemsIntroducedSince`). Allowance = base (`dailyNewCards`) x weekday level (Full 1, Light 0.5, Rest 0; default Sat/Sun
   Light, editable in Settings) x backlog factor. Backlog factor is 1 while due reviews <= capacity and falls linearly to 0 at twice capacity;
-  capacity = median reviews on active days of the last 14 days, at least 40. Reviews are never capped; the home page only explains a reduced
-  allowance. Every consumer (home counts, sessions, reminder) calls `AppDatabase.newAllowance` so the numbers agree.
+  capacity = median reviews on active days of the last 14 days, at least 40. Reviews are never capped; the home page explains a reduced
+  allowance and shows "This week: X of Y study days" (Y = non-rest days, max 5; a hint, not a streak: missing a day never resets anything). Settings offers commitment presets (Light 5, Steady 10, Intensive 20 new a day; the
+  number field stays for custom values). Allowance is shared by every consumer through `AppDatabase.newAllowance`.
 - Scheduling tweaks: a new card's first non-Again answer in a multiple-choice mode (meaning, words, readings) is capped at 1 day, because a lucky guess
   is possible (drawing keeps FSRS' default); intervals of 3+ days get deterministic fuzz (+-10%, +-5% from a week, seeded by item, mode and
   reps) so cards learned together spread out. `FsrsTest` checks a sequence against py-fsrs 5.1.0.

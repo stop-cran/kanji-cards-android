@@ -1,5 +1,6 @@
 package io.github.stopcran.kanji.core
 
+import io.github.stopcran.kanji.core.srs.Commitment
 import io.github.stopcran.kanji.core.srs.DayLevel
 import io.github.stopcran.kanji.core.srs.Pacing
 import io.github.stopcran.kanji.core.srs.PacingNote
@@ -45,6 +46,20 @@ class PacingTest {
     @Test
     fun itemsAlreadyStartedNeverGoNegative() {
         assertEquals(0, Pacing.allowance(10, DayLevel.Full, introducedToday = 12, due = 0, capacity = 40).remaining)
+    }
+
+    @Test
+    fun weeklyGoalIsFiveDaysAtMostAndShrinksWithRestDays() {
+        assertEquals(5, Pacing.weeklyGoal(DayLevel.parseWeek("FFFFFLL")))
+        assertEquals(4, Pacing.weeklyGoal(DayLevel.parseWeek("FFFFOOO")))
+        assertEquals(0, Pacing.weeklyGoal(DayLevel.parseWeek("OOOOOOO")))
+    }
+
+    @Test
+    fun commitmentPresetsMapToTheBaseAmount() {
+        assertEquals(Commitment.Steady, Commitment.of(10))
+        assertEquals(null, Commitment.of(12))
+        assertEquals(listOf(5, 10, 20), Commitment.entries.map { it.perDay })
     }
 
     @Test
