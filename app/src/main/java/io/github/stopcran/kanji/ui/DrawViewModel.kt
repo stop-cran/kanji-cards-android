@@ -25,6 +25,7 @@ import io.github.stopcran.kanji.data.KanjiEntity
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.inStack
 import io.github.stopcran.kanji.data.toEntity
+import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.toSrs
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -103,8 +104,7 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
         cards = drawable.associateBy { it.kanji }
         app.db.reviews().states(sourceId, stack, StudyMode.Draw.name).forEach { states[it.kanji] = it.toSrs() }
         val ids = drawable.map { it.kanji }
-        val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val budget = app.settings.dailyNewCards.value - app.db.reviews().newCardsIntroducedSince(sourceId, stack, StudyMode.Draw.name, startOfDay)
+        val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
         val items = if (extra) QueueBuilder.extra(ids, states, Instant.now()) else QueueBuilder.build(ids, states, Instant.now(), budget)
         queue.addAll(items.map { it.kanji })
         showNext()
@@ -143,7 +143,7 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
             DrawOutcome.Clean -> Grade.Good
         }
         val now = Instant.now()
-        val updated = fsrs.review(states[a.card.kanji] ?: SrsState(), grade, now)
+        val updated = fsrs.review(states[a.card.kanji] ?: SrsState(), grade, now, fuzzSeed = Fsrs.seed(a.card.kanji, StudyMode.Draw.name, states[a.card.kanji]?.reps ?: 0))
         states[a.card.kanji] = updated
         answered++
         if (a.outcome == DrawOutcome.Clean) clean++

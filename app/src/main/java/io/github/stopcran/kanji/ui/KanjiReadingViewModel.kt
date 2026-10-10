@@ -23,6 +23,7 @@ import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.data.KanjiEntity
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.inStack
+import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.readingData
 import io.github.stopcran.kanji.data.toEntity
 import kotlinx.coroutines.launch
@@ -74,7 +75,7 @@ class KanjiReadingViewModel(application: Application) : AndroidViewModel(applica
             return
         }
         cards = all.associateBy { it.kanji }
-        val data = app.db.readingData(sourceId, stack, all, app.settings.dailyNewCards.value, Instant.now(), extra)
+        val data = app.db.readingData(sourceId, stack, all, app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining, Instant.now(), extra)
         readingCards = data.cards
         data.states.forEach { (kind, m) -> states.getValue(kind) += m }
         queue.addAll(data.items)
@@ -121,7 +122,10 @@ class KanjiReadingViewModel(application: Application) : AndroidViewModel(applica
             else -> Grade.Good
         }
         val now = Instant.now()
-        val updated = fsrs.review(states.getValue(kind)[kanji] ?: SrsState(), grade, now)
+        val updated = fsrs.review(
+            states.getValue(kind)[kanji] ?: SrsState(), grade, now,
+            firstSuccessCapDays = Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS, fuzzSeed = Fsrs.seed(kanji, kind.mode.name, states.getValue(kind)[kanji]?.reps ?: 0),
+        )
         states.getValue(kind)[kanji] = updated
         answered++
         if (a.correct) correct++

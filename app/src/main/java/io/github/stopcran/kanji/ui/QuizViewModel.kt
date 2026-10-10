@@ -25,6 +25,7 @@ import io.github.stopcran.kanji.data.ReviewStateEntity
 import io.github.stopcran.kanji.data.inStack
 import io.github.stopcran.kanji.data.splitSep
 import io.github.stopcran.kanji.data.toEntity
+import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.toSrs
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -81,9 +82,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         quizCards = all.map { QuizCard(it.kanji, it.title, it.tags.splitSep(), it.distractors.splitSep()) }
         app.db.reviews().states(sourceId, stack, StudyMode.Quiz.name).forEach { states[it.kanji] = it.toSrs() }
 
-        val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val introduced = app.db.reviews().newCardsIntroducedSince(sourceId, stack, StudyMode.Quiz.name, startOfDay)
-        val budget = app.settings.dailyNewCards.value - introduced
+        val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
         val items = if (extra) QueueBuilder.extra(all.map { it.kanji }, states, Instant.now()) else QueueBuilder.build(all.map { it.kanji }, states, Instant.now(), budget)
         queue.addAll(items.map { it.kanji })
         showNext()
@@ -128,7 +127,10 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
             else -> Grade.Good
         }
         val now = Instant.now()
-        val updated = fsrs.review(states[a.card.kanji] ?: SrsState(), grade, now)
+        val updated = fsrs.review(
+            states[a.card.kanji] ?: SrsState(), grade, now,
+            firstSuccessCapDays = Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS, fuzzSeed = Fsrs.seed(a.card.kanji, StudyMode.Quiz.name, states[a.card.kanji]?.reps ?: 0),
+        )
         states[a.card.kanji] = updated
         answered++
         if (a.correct) correct++

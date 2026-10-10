@@ -17,6 +17,15 @@ class Settings(context: Context) {
     private val _dailyNewCards = MutableStateFlow(prefs.getInt(KEY_NEW, 10))
     val dailyNewCards: StateFlow<Int> = _dailyNewCards
 
+    private val _weekPlan = MutableStateFlow(prefs.getString(KEY_WEEK, null) ?: DEFAULT_WEEK)
+    /** New-item level for each weekday, Monday first, as [io.github.stopcran.kanji.core.srs.DayLevel] codes. */
+    val weekPlan: StateFlow<String> = _weekPlan
+
+    fun setWeekPlan(plan: String) {
+        prefs.edit().putString(KEY_WEEK, plan).apply()
+        _weekPlan.value = plan
+    }
+
     private val _varyFonts = MutableStateFlow(prefs.getBoolean(KEY_FONTS, true))
     val varyFonts: StateFlow<Boolean> = _varyFonts
 
@@ -140,6 +149,8 @@ class Settings(context: Context) {
         const val KEY_URL = "repoUrl"
         const val KEY_BRANCH = "branch"
         const val KEY_NEW = "dailyNewCards"
+        const val KEY_WEEK = "weekPlan"
+        const val DEFAULT_WEEK = "FFFFFLL"
         const val KEY_FONTS = "varyFonts"
         const val KEY_SAVE_DRAWINGS = "saveDrawings"
         const val KEY_VOICE_INPUT = "voiceInput"

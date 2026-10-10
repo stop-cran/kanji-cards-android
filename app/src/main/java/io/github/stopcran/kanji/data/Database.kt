@@ -198,12 +198,26 @@ interface ReviewDao {
     @Query("SELECT COUNT(*) FROM (SELECT kanji FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode = :mode GROUP BY kanji HAVING MIN(atMs) >= :sinceMs)")
     suspend fun newCardsIntroducedSince(sourceId: String, stack: String, mode: String, sinceMs: Long): Int
 
+    /** Distinct items (kanji or words, across every mode) whose first-ever review happened since [sinceMs]: the shared daily new-item pool. */
+    @Query("SELECT COUNT(*) FROM (SELECT 1 FROM review_log WHERE sourceId = :sourceId GROUP BY stack, kanji HAVING MIN(atMs) >= :sinceMs)")
+    suspend fun itemsIntroducedSince(sourceId: String, sinceMs: Long): Int
+
+    /** Cards that were reviewed before and are due at [nowMs], in any mode. */
+    @Query("SELECT COUNT(*) FROM review_state WHERE sourceId = :sourceId AND phase != 'New' AND dueMs <= :nowMs")
+    suspend fun dueCount(sourceId: String, nowMs: Long): Int
+
+    @Query("SELECT atMs FROM review_log WHERE sourceId = :sourceId AND atMs >= :sinceMs")
+    suspend fun reviewTimesSince(sourceId: String, sinceMs: Long): List<Long>
+
     /** Kanji whose first reading review (of either kind) happened since [sinceMs]; they have already used a unit of the daily budget. */
     @Query("SELECT kanji FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode IN ('KanjiOn', 'KanjiKun') GROUP BY kanji HAVING MIN(atMs) >= :sinceMs")
     suspend fun readingKanjiIntroducedSince(sourceId: String, stack: String, sinceMs: Long): List<String>
 
-    /** Kanji whose meaning was answered without "Again" at least twice: their readings become askable. */
-    @Query("SELECT kanji FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode = 'Quiz' AND grade > 1 GROUP BY kanji HAVING COUNT(*) >= 2")
+    /** Kanji whose meaning was answered without "Again" on at least two different days: their readings become askable. */
+    @Query(
+        "SELECT kanji FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode = 'Quiz' AND grade > 1 " +
+            "GROUP BY kanji HAVING COUNT(DISTINCT date(atMs / 1000, 'unixepoch', 'localtime')) >= 2",
+    )
     suspend fun meaningLearned(sourceId: String, stack: String): List<String>
 
     @Transaction

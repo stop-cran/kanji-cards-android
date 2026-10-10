@@ -56,7 +56,14 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   fast answer is often luck). Drawing: clean = Good, recognised with stroke mistakes = Hard, not recognised or given up = Again.
 - Queue order (`QueueBuilder`): due cards by urgency (how overdue relative to the card's own interval) **plus noise** (default 0.3 of an
   interval), mixed with new cards drawn at random. Noise stops the same sequence acting as a cue. Whether a card is *due* never depends on noise.
-- Daily new-card budget counts items whose first log entry is today, per stack and mode (`newCardsIntroducedSince`).
+- **Pacing** (`core/srs/Pacing.kt`, `data/Pacing.kt`): one shared pool of new items per day for all modes, kanji and words (distinct stack+item whose
+  first log entry is today, `itemsIntroducedSince`). Allowance = base (`dailyNewCards`) x weekday level (Full 1, Light 0.5, Rest 0; default Sat/Sun
+  Light, editable in Settings) x backlog factor. Backlog factor is 1 while due reviews <= capacity and falls linearly to 0 at twice capacity;
+  capacity = median reviews on active days of the last 14 days, at least 40. Reviews are never capped; the home page only explains a reduced
+  allowance. Every consumer (home counts, sessions, reminder) calls `AppDatabase.newAllowance` so the numbers agree.
+- Scheduling tweaks: a new card's first non-Again answer in a multiple-choice mode (meaning, words, readings) is capped at 1 day, because a lucky guess
+  is possible (drawing keeps FSRS' default); intervals of 3+ days get deterministic fuzz (+-10%, +-5% from a week, seeded by item, mode and
+  reps) so cards learned together spread out. `FsrsTest` checks a sequence against py-fsrs 5.1.0.
 - Extra practice (`QueueBuilder.extra`) goes through the normal FSRS update; there is no "practice doesn't count" path. FSRS itself handles
   sub-day reviews with the short-term stability formula (don't remove it).
 - Review state and its log entry are written in one transaction (`ReviewDao.record`). Reminders back off at growing gaps (1/2/4/7/14 days)
@@ -80,8 +87,8 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   no other option may be any reading of the target in either kind (readings are shared between kinds, e.g. 気 キ/き) or a voicing / long-vowel /
   small-っ variant of one (`ReadingKey`: raw form from the card, kana-folded match key without `.`/`-`, display form: on in katakana, kun in
   hiragana). Fewer than two safe options means the question is skipped, never shown with a doubtful answer; a test builds questions for every
-  card of the content snapshot. A kanji's readings are asked once its meaning has been answered without "Again" twice (or that kind was already
-  started). The daily new budget is shared: a kanji costs one unit however many kinds it brings, and its second kind is free the same day. The same
+  card of the content snapshot. A kanji's readings are asked once its meaning has been answered without "Again" on two different days (or that kind was already
+  started). The new-item allowance is shared: a kanji costs one unit however many kinds it brings, and its second kind is free the same day. The same
   kanji is kept apart in the queue so its kinds do not cue each other. Not part of N4 advancement (yet); tap only (voice: later).
 - Font variety grows with memory stability (Gothic only when young, then Mincho, Textbook, Brush; a lapse drops it back) so recognition does not depend on one glyph shape (`FontPolicy`).
 - Each session screen is keyed by its route (`quiz:<ts>[:extra]`, `wquiz:<ts>:<jp|en|rd>[:extra]`, `draw:<ts>[:extra]`, `kreading:<ts>[:extra]`) so a ViewModel
@@ -149,7 +156,7 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - Home reads only slim rows (`observeKanjiLite`/`observeWordsLite`: no article body, `strokesJson` reduced to `''` or NULL). Screens that need bodies
   or strokes load a single card (`kanjiCard`, `word`). Slim word rows retain `jlpt` and `quizExclusions`; omitting metadata from a projection must
   not turn explicit levels into the legacy fallback or drop curated exclusions. Never observe whole content rows in a list that recomposes on every state change.
-- **Settings order: basic to advanced, grouped with dividers.** Groups: Studying (daily new cards, fonts, reminder), Drawing (brush), then Advanced
+- **Settings order: basic to advanced, grouped with dividers.** Groups: Studying (new items per day and weekly rhythm, fonts, reminder), Drawing (brush), then Advanced
   (content repository, handwriting data), then About. Put new settings in the group they belong to by how often a typical learner needs them;
   anything that can break or reset the user's content or privacy posture goes under Advanced. Settings that are a single value apply
   immediately (no Save button); only the repository URL/branch need an explicit "Save & sync" because they trigger a download.
@@ -158,7 +165,7 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 ## 8. Invariants (don't break these; tests cover most)
 
 1. Review state is keyed by (sourceId, stack, item, mode), where item is the kanji character or word string, never a title, position or reading.
-   Review-state reads and daily-new counts are scoped by source, stack and mode (reminder-history queries are global).
+   Review-state reads are scoped by source, stack and mode; the new-item allowance is shared across stacks and modes of a source (reminder-history queries are global).
 2. A failed sync (fatal error) leaves the previous content intact; the swap is atomic.
 3. A hash mismatch or malformed manifest file skips that file only; an unsafe zip entry or limit violation aborts the whole sync.
 4. Each quiz grades one designated target. Meaning-quiz word options enforce exact title/form deduplication and curated exclusions; these
@@ -167,7 +174,7 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 6. Grading uses raw/regularised drawn points and the unmodified reference; display jitter and brush smoothing never leak into grading.
 7. No network use beyond: GitHub (`api.github.com` head lookup, `codeload.github.com` download), the one-off ML Kit model download, and links the
    user taps (any `https://` link opens the browser; repo links must be exactly `kanji|words|articles/<file>.md`).
-8. Room schema changes need a migration; there is no destructive fallback and `exportSchema` is off, so a missing migration crashes.
+8. Room schema changes need a migration; there is no destructive fallback and `exportSchema` is on (schemas in `app/schemas`), so a missing migration crashes.
 9. Source files have mixed LF/CRLF: check before multi-line text replacements.
 
 ## 9. Known gaps and evolution

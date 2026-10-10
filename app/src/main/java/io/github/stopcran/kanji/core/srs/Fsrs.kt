@@ -39,11 +39,16 @@ class Fsrs(
         return (1 + FACTOR * elapsed / state.stability).pow(DECAY)
     }
 
-    fun review(state: SrsState, grade: Grade, now: Instant): SrsState {
+    /**
+     * [firstSuccessCapDays] limits the stability of a new card's first non-"Again" answer (for modes where a lucky guess is possible).
+     * [fuzzSeed] spreads long intervals slightly, deterministically, so cards learned together do not all fall due on the same day.
+     */
+    fun review(state: SrsState, grade: Grade, now: Instant, firstSuccessCapDays: Double? = null, fuzzSeed: Long? = null): SrsState {
         val g = grade.value
         val last = state.lastReview
         val next = if (state.phase == CardPhase.New || last == null) {
-            state.copy(stability = initStability(g), difficulty = initDifficulty(g))
+            val s0 = initStability(g)
+            state.copy(stability = if (g > 1 && firstSuccessCapDays != null) min(s0, firstSuccessCapDays) else s0, difficulty = initDifficulty(g))
         } else {
             val elapsedDays = max(0.0, Duration.between(last, now).toMillis() / MILLIS_PER_DAY)
             val r = retrievability(state, now)
@@ -61,8 +66,16 @@ class Fsrs(
         return if (g == 1) {
             result.copy(phase = CardPhase.Learning, due = now.plus(againStep))
         } else {
-            result.copy(phase = CardPhase.Review, due = now.plus(Duration.ofDays(intervalDays(result.stability))))
+            result.copy(phase = CardPhase.Review, due = now.plus(Duration.ofDays(fuzzed(intervalDays(result.stability), fuzzSeed))))
         }
+    }
+
+    /** Intervals of 3+ days move by up to ±10% (±5% from a week), chosen from [seed] so the same review always yields the same date. */
+    fun fuzzed(days: Long, seed: Long?): Long {
+        if (seed == null || days < 3) return days
+        val spread = if (days < 7) 0.10 else 0.05
+        val unit = ((seed * -7046029254386353131L) ushr 11).toDouble() / (1L shl 53).toDouble()
+        return (days * (1 + spread * (2 * unit - 1))).roundToLong().coerceIn(2L, maxIntervalDays.toLong())
     }
 
     fun intervalDays(stability: Double): Long {
@@ -101,6 +114,11 @@ class Fsrs(
     companion object {
         const val DECAY = -0.5
         const val FACTOR = 19.0 / 81.0
+
+        /** A first correct answer from a multiple-choice list may be a guess, so such a card is seen again after about a day. */
+        const val GUESSABLE_FIRST_SUCCESS_DAYS = 1.0
+
+        fun seed(id: String, mode: String, reps: Int): Long = "$id|$mode|$reps".hashCode().toLong()
         private const val MILLIS_PER_DAY = 86_400_000.0
 
         val DEFAULT_WEIGHTS = doubleArrayOf(

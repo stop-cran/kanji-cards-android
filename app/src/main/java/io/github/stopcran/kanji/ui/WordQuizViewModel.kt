@@ -26,6 +26,7 @@ import io.github.stopcran.kanji.data.inWordStack
 import io.github.stopcran.kanji.data.levels
 import io.github.stopcran.kanji.data.toCard
 import io.github.stopcran.kanji.data.toEntity
+import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.toSrs
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -91,9 +92,7 @@ class WordQuizViewModel(application: Application) : AndroidViewModel(application
         app.db.reviews().states(sourceId, stackId, direction.mode.name).forEach { states[it.kanji] = it.toSrs() }
         val other = app.db.reviews().states(sourceId, stackId, direction.other.mode.name).associate { it.kanji to it.toSrs() }
 
-        val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val introduced = app.db.reviews().newCardsIntroducedSince(sourceId, stackId, direction.mode.name, startOfDay)
-        val budget = app.settings.dailyNewCards.value - introduced
+        val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
         queue.addAll(WordQueues.build(direction, all.forDirection(direction).map { it.word }, states, other, Instant.now(), budget, extra).map { it.kanji })
         showNext()
     }
@@ -142,7 +141,10 @@ class WordQuizViewModel(application: Application) : AndroidViewModel(application
             else -> Grade.Good
         }
         val now = Instant.now()
-        val updated = fsrs.review(states[a.word.word] ?: SrsState(), grade, now)
+        val updated = fsrs.review(
+            states[a.word.word] ?: SrsState(), grade, now,
+            firstSuccessCapDays = Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS, fuzzSeed = Fsrs.seed(a.word.word, direction.mode.name, states[a.word.word]?.reps ?: 0),
+        )
         states[a.word.word] = updated
         answered++
         if (a.correct) correct++

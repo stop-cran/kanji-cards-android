@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import io.github.stopcran.kanji.Defaults
 import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.core.srs.PacingNote
 import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.core.words.WordDirection
@@ -77,6 +78,7 @@ private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeA
         val defaultId = remember { RepoSource.parse(Defaults.CONTENT_REPO_URL, Defaults.CONTENT_BRANCH)?.id }
         if (data.sourceId != defaultId) Text("Cards from ${data.sourceId}")
         N4Offer(app, data)
+        PacingHint(data)
         val kanjiStack = if (data.stacks.size > 1) " · ${data.stack.label}" else ""
         Entry("Kanji", (data.summary(HomeMode.Meaning, HomeMode.Drawing, HomeMode.Readings) ?: "Loading…") + kanjiStack, a.onKanjiPage)
         val wordStack = if (data.wordStacks.size > 1) " · ${data.wordStack.label}" else ""
@@ -163,6 +165,20 @@ private fun ModeRow(title: String, state: ModeState, onStart: (extra: Boolean) -
             Button(onClick = { onStart(false) }, enabled = state.enabled, modifier = Modifier.fillMaxWidth()) { Text("Start") }
         }
     }
+}
+
+/** Explains a reduced or empty new-item allowance; reviews are never limited, the backlog case only warns. */
+@Composable
+private fun PacingHint(data: HomeData) {
+    val p = data.pacing ?: return
+    val text = when (p.note) {
+        PacingNote.None -> return
+        PacingNote.RestDay -> "Rest day in your weekly rhythm: no new items today, reviews are still available."
+        PacingNote.LightDay -> "Light day: ${p.total} new items today."
+        PacingNote.BacklogReduced -> "${p.due} reviews are waiting, so new items are reduced to ${p.total} today."
+        PacingNote.BacklogPaused -> "${p.due} reviews are waiting, so new items are paused. A short review session now keeps things from piling up."
+    }
+    Text(text, style = MaterialTheme.typography.bodySmall)
 }
 
 @Composable

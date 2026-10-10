@@ -67,6 +67,7 @@ class WordsTest {
         assertFalse(WordGate.reverseUnlocked(null))
         assertFalse(WordGate.reverseUnlocked(review(2.0, reps = 1)))
         assertTrue(WordGate.reverseUnlocked(review(2.0, reps = 2)))
+        assertFalse(WordGate.reverseUnlocked(review(1.4, reps = 3)))
         val words = listOf("a", "b", "c")
         val jp = mapOf("a" to review(2.0, reps = 2, dueOffsetSec = 99999), "b" to review(2.0, reps = 1))
         val en = mapOf("c" to review(1.0, reps = 1, dueOffsetSec = -10))

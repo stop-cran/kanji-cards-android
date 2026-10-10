@@ -72,8 +72,11 @@ object WordStacks {
 object WordGate {
     const val MIN_FORWARD_REPS = 2
 
+    /** Stability that a card only reaches after a successful review on a later day (same-day reviews grow it far less). */
+    const val MIN_FORWARD_STABILITY = 2.0
+
     fun reverseUnlocked(forward: SrsState?): Boolean =
-        forward != null && forward.phase != CardPhase.New && forward.reps >= MIN_FORWARD_REPS
+        forward != null && forward.phase == CardPhase.Review && forward.reps >= MIN_FORWARD_REPS && forward.stability >= MIN_FORWARD_STABILITY
 }
 
 /**

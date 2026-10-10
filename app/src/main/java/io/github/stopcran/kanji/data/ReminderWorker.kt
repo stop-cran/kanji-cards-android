@@ -41,22 +41,19 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
             val source = app.settings.source.value
             val stack = app.settings.stack.value
             val cards = app.db.content().kanji(source.id).inStack(stack)
+            val newRemaining = app.db.newAllowance(app.settings, source.id, Instant.ofEpochMilli(now)).remaining
             var due = 0
             for (mode in listOf(StudyMode.Quiz, StudyMode.Draw)) {
                 val ids = cards.filter { mode == StudyMode.Quiz || it.strokesJson != null }.map { it.kanji }
                 val states = app.db.reviews().states(source.id, stack, mode.name).associate { it.kanji to it.toSrs() }
-                val startOfDay = LocalDate.now().atStartOfDay(zone).toInstant().toEpochMilli()
-                val budget = app.settings.dailyNewCards.value - app.db.reviews().newCardsIntroducedSince(source.id, stack, mode.name, startOfDay)
-                due += QueueBuilder.build(ids, states, Instant.ofEpochMilli(now), budget).size
+                due += QueueBuilder.build(ids, states, Instant.ofEpochMilli(now), newRemaining).size
             }
             val wordStack = WordStacks.find(app.settings.wordStack.value, WordStacks.offered(app.settings.n4Unlocked.value))
             val wordEntities = app.db.content().words(source.id).inWordStack(wordStack, app.db.content().kanji(source.id).levels())
             val wordStates = WordDirection.entries.associateWith { d -> app.db.reviews().states(source.id, wordStack.id, d.mode.name).associate { it.kanji to it.toSrs() } }
-            val startOfDay = LocalDate.now().atStartOfDay(zone).toInstant().toEpochMilli()
-            due += app.db.readingData(source.id, stack, cards, app.settings.dailyNewCards.value, Instant.ofEpochMilli(now), false).items.size
+            due += app.db.readingData(source.id, stack, cards, newRemaining, Instant.ofEpochMilli(now), false).items.size
             for (d in WordDirection.entries) {
-                val budget = app.settings.dailyNewCards.value - app.db.reviews().newCardsIntroducedSince(source.id, wordStack.id, d.mode.name, startOfDay)
-                due += WordQueues.build(d, wordEntities.forDirection(d).map { it.word }, wordStates.getValue(d), wordStates.getValue(d.other), Instant.ofEpochMilli(now), budget).size
+                due += WordQueues.build(d, wordEntities.forDirection(d).map { it.word }, wordStates.getValue(d), wordStates.getValue(d.other), Instant.ofEpochMilli(now), newRemaining).size
             }
             val decision = ReminderPolicy.decide(
                 now, LocalDate.now().atStartOfDay(zone).toInstant().toEpochMilli(), app.db.reviews().lastReviewMs(),

@@ -9,6 +9,7 @@ import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.core.reading.KanjiReadingQueue
 import io.github.stopcran.kanji.core.reading.ReadingKind
+import io.github.stopcran.kanji.core.srs.NewAllowance
 import io.github.stopcran.kanji.core.srs.QueueBuilder
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.Stack
@@ -24,6 +25,7 @@ import io.github.stopcran.kanji.data.forDirection
 import io.github.stopcran.kanji.data.inStack
 import io.github.stopcran.kanji.data.inWordStack
 import io.github.stopcran.kanji.data.levels
+import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.stacks
 import io.github.stopcran.kanji.data.toReadingCard
 import io.github.stopcran.kanji.data.toSrs
@@ -45,6 +47,7 @@ class HomeData(
     val wordCount: Int,
     val modes: Map<HomeMode, ModeState>,
     val n4Offer: Boolean,
+    val pacing: NewAllowance? = null,
 ) {
     fun mode(m: HomeMode): ModeState = if (loading) ModeState.Loading else modes[m] ?: ModeState.Loading
 
@@ -57,7 +60,7 @@ class HomeData(
     }
 }
 
-private class Extras(val stackId: String, val wordStackId: String, val introduced: Map<StudyMode, Int>, val unlocked: Set<String>, val introducedReadings: Set<String>)
+private class Extras(val stackId: String, val wordStackId: String, val allowance: NewAllowance, val unlocked: Set<String>, val introducedReadings: Set<String>)
 
 /** Null until the first emission, so the screen can tell "still loading" from "nothing yet". */
 @Composable
@@ -70,6 +73,7 @@ private fun rememberStates(app: KanjiApp, sourceId: String, stack: String, mode:
 fun rememberHomeData(app: KanjiApp): HomeData {
     val source by app.settings.source.collectAsState()
     val dailyNew by app.settings.dailyNewCards.collectAsState()
+    val weekPlan by app.settings.weekPlan.collectAsState()
     val stackId by app.settings.stack.collectAsState()
     val n4Unlocked by app.settings.n4Unlocked.collectAsState()
     val dismissedMs by app.settings.advanceDismissedMs.collectAsState()
@@ -101,18 +105,17 @@ fun rememberHomeData(app: KanjiApp): HomeData {
     val rd = rememberStates(app, source.id, wordStack.id, StudyMode.WordReading)
 
     val statesReady = kanjiOrNull != null && wordsOrNull != null && listOf(quiz, draw, on, kun, jp, en, rd).all { it != null }
-    val extras by produceState<Extras?>(null, source.id, stack.id, wordStack.id, startOfDay, statesReady, quiz, draw, on, kun, jp, en, rd) {
+    val extras by produceState<Extras?>(null, source.id, stack.id, wordStack.id, startOfDay, dailyNew, weekPlan, statesReady, quiz, draw, on, kun, jp, en, rd) {
         if (!statesReady) return@produceState
         val r = app.db.reviews()
-        val introduced = listOf(StudyMode.Quiz, StudyMode.Draw).associateWith { r.newCardsIntroducedSince(source.id, stack.id, it.name, startOfDay) } +
-            listOf(StudyMode.WordJpEn, StudyMode.WordEnJp, StudyMode.WordReading).associateWith { r.newCardsIntroducedSince(source.id, wordStack.id, it.name, startOfDay) }
-        value = Extras(stack.id, wordStack.id, introduced, r.meaningLearned(source.id, stack.id).toSet(), r.readingKanjiIntroducedSince(source.id, stack.id, startOfDay).toSet())
+        val allowance = app.db.newAllowance(app.settings, source.id, Instant.now())
+        value = Extras(stack.id, wordStack.id, allowance, r.meaningLearned(source.id, stack.id).toSet(), r.readingKanjiIntroducedSince(source.id, stack.id, startOfDay).toSet())
     }
     val ex = extras?.takeIf { it.stackId == stack.id && it.wordStackId == wordStack.id }
     val loading = !statesReady || ex == null
 
-    val modes = remember(loading, ex, tick, dailyNew, inStack, wordsInStack, quiz, draw, on, kun, jp, en, rd) {
-        if (loading || ex == null) emptyMap() else computeModes(inStack, wordsInStack, ex, dailyNew, tick, quiz!!, draw!!, on!!, kun!!, jp!!, en!!, rd!!)
+    val modes = remember(loading, ex, tick, inStack, wordsInStack, quiz, draw, on, kun, jp, en, rd) {
+        if (loading || ex == null) emptyMap() else computeModes(inStack, wordsInStack, ex, tick, quiz!!, draw!!, on!!, kun!!, jp!!, en!!, rd!!)
     }
 
     val n4Offer = remember(loading, quiz, draw, jp, en, rd, kanji, words, levels, wordStack, n4Unlocked, dismissedMs) {
@@ -134,32 +137,33 @@ fun rememberHomeData(app: KanjiApp): HomeData {
             Advancement.shouldOffer(ready, n4Unlocked, dismissedMs, System.currentTimeMillis())
         }
     }
-    return HomeData(loading, source.id, kanji, stacks, stack, wordStacks, wordStack, wordsInStack.size, modes, n4Offer)
+    return HomeData(loading, source.id, kanji, stacks, stack, wordStacks, wordStack, wordsInStack.size, modes, n4Offer, ex?.allowance)
 }
 
 /** Counts use strict (noise-free) queues so the numbers are stable; sessions build their own randomised queues. */
 private fun computeModes(
-    inStack: List<KanjiEntity>, words: List<io.github.stopcran.kanji.data.WordEntity>, ex: Extras, dailyNew: Int, now: Instant,
+    inStack: List<KanjiEntity>, words: List<io.github.stopcran.kanji.data.WordEntity>, ex: Extras, now: Instant,
     quiz: Map<String, SrsState>, draw: Map<String, SrsState>, on: Map<String, SrsState>, kun: Map<String, SrsState>,
     jp: Map<String, SrsState>, en: Map<String, SrsState>, rd: Map<String, SrsState>,
 ): Map<HomeMode, ModeState> {
-    fun plain(ids: List<String>, states: Map<String, SrsState>, mode: StudyMode, min: Int, what: String): ModeState {
-        val q = QueueBuilder.build(ids, states, now, dailyNew - (ex.introduced[mode] ?: 0), noise = 0.0)
+    val newLeft = ex.allowance.remaining
+    fun plain(ids: List<String>, states: Map<String, SrsState>, min: Int, what: String): ModeState {
+        val q = QueueBuilder.build(ids, states, now, newLeft, noise = 0.0)
         return ModeState.of(ids.size >= min, "Needs at least $min $what", q.count { !it.isNew }, q.count { it.isNew }, ids.size >= min, "")
     }
     fun word(d: WordDirection, own: Map<String, SrsState>, other: Map<String, SrsState>, locked: String): ModeState {
         val ids = words.forDirection(d).map { it.word }
-        val q = WordQueues.build(d, ids, own, other, now, dailyNew - (ex.introduced[d.mode] ?: 0), noise = 0.0)
+        val q = WordQueues.build(d, ids, own, other, now, newLeft, noise = 0.0)
         val extra = WordQueues.build(d, ids, own, other, now, 0, extra = true, noise = 0.0)
         return ModeState.of(ids.size >= 2, "Needs at least 2 words", q.count { !it.isNew }, q.count { it.isNew }, extra.isNotEmpty(), locked)
     }
     val cards = inStack.map { it.toReadingCard() }
     val readingStates = mapOf(ReadingKind.On to on, ReadingKind.Kun to kun)
-    fun readings(extra: Boolean) = KanjiReadingQueue.build(cards, readingStates, ex.unlocked, ex.introducedReadings, dailyNew, now, extra, noise = 0.0)
+    fun readings(extra: Boolean) = KanjiReadingQueue.build(cards, readingStates, ex.unlocked, ex.introducedReadings, newLeft + ex.introducedReadings.size, now, extra, noise = 0.0)
     val rq = readings(false)
     return mapOf(
-        HomeMode.Meaning to plain(inStack.map { it.kanji }, quiz, StudyMode.Quiz, 2, "kanji in this stack"),
-        HomeMode.Drawing to plain(inStack.filter { it.strokesJson != null }.map { it.kanji }, draw, StudyMode.Draw, 1, "kanji with stroke data"),
+        HomeMode.Meaning to plain(inStack.map { it.kanji }, quiz, 2, "kanji in this stack"),
+        HomeMode.Drawing to plain(inStack.filter { it.strokesJson != null }.map { it.kanji }, draw, 1, "kanji with stroke data"),
         HomeMode.Readings to ModeState.of(cards.size >= 2, "Needs at least 2 kanji in this stack", rq.count { !it.isNew }, rq.count { it.isNew }, readings(true).isNotEmpty(), "Unlocks after you answer a kanji's meaning well twice"),
         HomeMode.WordJp to word(WordDirection.JpToEn, jp, en, ""),
         HomeMode.WordEn to word(WordDirection.EnToJp, en, jp, "Unlocks as you learn words"),

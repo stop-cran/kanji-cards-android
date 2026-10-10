@@ -1,6 +1,7 @@
 package io.github.stopcran.kanji.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Button
@@ -24,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.stopcran.kanji.Defaults
 import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.core.srs.DayLevel
 import io.github.stopcran.kanji.data.SyncResult
 import kotlinx.coroutines.launch
 
@@ -60,7 +62,28 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
                 dailyNew = text.filter(Char::isDigit).take(3)
                 dailyNew.toIntOrNull()?.takeIf { it in 0..200 }?.let { app.settings.setDailyNewCards(it) }
             },
-            label = { Text("New cards per day (0-200)") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+            label = { Text("New items per day (0-200)") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+        )
+        val weekPlan by app.settings.weekPlan.collectAsState()
+        val week = DayLevel.parseWeek(weekPlan)
+        val dayNames = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+        Text("Weekly rhythm: tap a day to switch between full, light (half) and rest", style = MaterialTheme.typography.bodySmall)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            week.forEachIndexed { i, level ->
+                OutlinedButton(
+                    onClick = { app.settings.setWeekPlan(DayLevel.encode(week.toMutableList().also { it[i] = level.next() })) },
+                    modifier = Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(dayNames[i], style = MaterialTheme.typography.labelSmall)
+                        Text(when (level) { DayLevel.Full -> "Full"; DayLevel.Light -> "Light"; DayLevel.Off -> "Rest" }, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+        Text(
+            "New items are shared by all quizzes, and pause automatically while many reviews are waiting. Reviews are never limited.",
+            style = MaterialTheme.typography.bodySmall,
         )
         val vary by app.settings.varyFonts.collectAsState()
         Row(verticalAlignment = Alignment.CenterVertically) {

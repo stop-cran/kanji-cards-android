@@ -76,6 +76,50 @@ class FsrsTest {
     }
 
     @Test
+    fun matchesPyFsrsReferenceSequence() {
+        // Generated with py-fsrs 5.1.0 (FSRS-5 defaults, no fuzz, no learning steps), reviewing each card exactly when due.
+        val expected = listOf(
+            Triple(Grade.Good, 3.173, 5.2824 to 3L),
+            Triple(Grade.Good, 10.7389, 5.273 to 11L),
+            Triple(Grade.Hard, 16.2576, 6.0271 to 16L),
+            Triple(Grade.Good, 45.0303, 6.0142 to 45L),
+        )
+        var s = SrsState()
+        var now = t0
+        for ((grade, stability, dd) in expected) {
+            s = fsrs.review(s, grade, now)
+            assertEquals(stability, s.stability, 1e-3)
+            assertEquals(dd.first, s.difficulty, 1e-3)
+            assertEquals(dd.second, Duration.between(now, s.due).toDays())
+            now = s.due
+        }
+    }
+
+    @Test
+    fun guessableFirstSuccessIsCappedToADayButOtherGradesAreNot() {
+        val good = fsrs.review(SrsState(), Grade.Good, t0, firstSuccessCapDays = 1.0)
+        assertEquals(Duration.ofDays(1), Duration.between(t0, good.due))
+        assertEquals(1.0, good.stability, 0.0)
+        val again = fsrs.review(SrsState(), Grade.Again, t0, firstSuccessCapDays = 1.0)
+        assertEquals(Duration.ofMinutes(10), Duration.between(t0, again.due))
+        val second = fsrs.review(good, Grade.Good, good.due, firstSuccessCapDays = 1.0)
+        assertTrue(Duration.between(good.due, second.due).toDays() > 1)
+    }
+
+    @Test
+    fun fuzzIsDeterministicBoundedAndSkipsShortIntervals() {
+        assertEquals(1L, fsrs.fuzzed(1, 42))
+        assertEquals(2L, fsrs.fuzzed(2, 42))
+        val seeds = (1L..500L).map { Fsrs.seed("水", "Quiz", it.toInt()) }
+        assertEquals(fsrs.fuzzed(30, seeds[0]), fsrs.fuzzed(30, seeds[0]))
+        val spread = seeds.map { fsrs.fuzzed(100, it) }
+        assertTrue(spread.all { it in 95L..105L })
+        assertTrue(spread.toSet().size > 5)
+        assertTrue(seeds.map { fsrs.fuzzed(5, it) }.all { it in 4L..6L })
+        assertEquals(30L, fsrs.fuzzed(30, null))
+    }
+
+    @Test
     fun lapseStabilityNeverExceedsReferenceCap() {
         val w = Fsrs.DEFAULT_WEIGHTS
         var s = fsrs.review(SrsState(), Grade.Good, t0)
