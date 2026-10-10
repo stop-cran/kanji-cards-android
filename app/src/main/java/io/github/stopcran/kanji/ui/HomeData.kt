@@ -7,6 +7,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.core.home.ModeState
+import io.github.stopcran.kanji.core.draw.DrawGate
 import io.github.stopcran.kanji.core.reading.KanjiReadingQueue
 import io.github.stopcran.kanji.core.reading.ReadingKind
 import io.github.stopcran.kanji.core.srs.NewAllowance
@@ -152,9 +153,9 @@ private fun computeModes(
     jp: Map<String, SrsState>, en: Map<String, SrsState>, rd: Map<String, SrsState>,
 ): Map<HomeMode, ModeState> {
     val newLeft = ex.allowance.remaining
-    fun plain(ids: List<String>, states: Map<String, SrsState>, min: Int, what: String): ModeState {
+    fun plain(ids: List<String>, states: Map<String, SrsState>, min: Int, what: String, locked: String = "", pool: Int = ids.size): ModeState {
         val q = QueueBuilder.build(ids, states, now, newLeft, noise = 0.0)
-        return ModeState.of(ids.size >= min, "Needs at least $min $what", q.count { !it.isNew }, q.count { it.isNew }, ids.size >= min, "")
+        return ModeState.of(pool >= min, "Needs at least $min $what", q.count { !it.isNew }, q.count { it.isNew }, ids.size >= min, locked)
     }
     fun word(d: WordDirection, own: Map<String, SrsState>, other: Map<String, SrsState>, locked: String): ModeState {
         val ids = words.forDirection(d).map { it.word }
@@ -168,7 +169,9 @@ private fun computeModes(
     val rq = readings(false)
     return mapOf(
         HomeMode.Meaning to plain(inStack.map { it.kanji }, quiz, 2, "kanji in this stack"),
-        HomeMode.Drawing to plain(inStack.filter { it.strokesJson != null }.map { it.kanji }, draw, 1, "kanji with stroke data"),
+        HomeMode.Drawing to inStack.filter { it.strokesJson != null }.map { it.kanji }.let { strokeIds ->
+            plain(DrawGate.eligible(strokeIds, draw, ex.unlocked), draw, 1, "kanji with stroke data", "Unlocks after you answer a kanji's meaning well twice", pool = strokeIds.size)
+        },
         HomeMode.Readings to ModeState.of(cards.size >= 2, "Needs at least 2 kanji in this stack", rq.count { !it.isNew }, rq.count { it.isNew }, readings(true).isNotEmpty(), "Unlocks after you answer a kanji's meaning well twice"),
         HomeMode.WordJp to word(WordDirection.JpToEn, jp, en, ""),
         HomeMode.WordEn to word(WordDirection.EnToJp, en, jp, "Unlocks as you learn words"),

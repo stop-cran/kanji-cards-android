@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.core.content.StrokeData
+import io.github.stopcran.kanji.core.draw.DrawGate
 import io.github.stopcran.kanji.core.draw.DrawGrader
 import io.github.stopcran.kanji.core.draw.DrawOutcome
 import io.github.stopcran.kanji.core.draw.LookalikeGate
@@ -111,7 +112,11 @@ class DrawViewModel(application: Application) : AndroidViewModel(application) {
         }
         cards = drawable.associateBy { it.kanji }
         app.db.reviews().states(sourceId, stack, StudyMode.Draw.name).forEach { states[it.kanji] = it.toSrs() }
-        val ids = drawable.map { it.kanji }
+        val ids = DrawGate.eligible(drawable.map { it.kanji }, states, app.db.reviews().meaningLearned(sourceId, stack).toSet())
+        if (ids.isEmpty() && !extra) {
+            ui = DrawUi.Empty("Drawing unlocks after a kanji's meaning is answered well on two days in the Quiz.")
+            return
+        }
         val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
         val items = if (extra) QueueBuilder.extra(ids, states, Instant.now()) else QueueBuilder.build(ids, states, Instant.now(), budget)
         queue.addAll(items.map { it.kanji })

@@ -41,6 +41,7 @@ fun QuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Un
                 Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Done") }
                 OutlinedButton(onClick = onPracticeMore, modifier = Modifier.fillMaxWidth()) { Text("Practice more") }
             }
+            is QuizUi.Study -> StudyState(s, vm, onOpenDoc)
             is QuizUi.Question -> {
                 Text("${s.remaining} left", style = MaterialTheme.typography.labelMedium)
                 Text(s.card.kanji, fontSize = 120.sp, fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
@@ -53,6 +54,19 @@ fun QuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Un
             is QuizUi.Answer -> AnswerState(s, vm, onOpenDoc)
         }
     }
+}
+
+@Composable
+private fun StudyState(s: QuizUi.Study, vm: QuizViewModel, onOpenDoc: (String) -> Unit) {
+    Text("New kanji · ${s.remaining} left", style = MaterialTheme.typography.labelMedium)
+    Text(s.card.kanji, fontSize = 120.sp, fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    Text(s.card.title, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    val readings = listOf(s.card.onyomi.splitSep().take(3), s.card.kunyomi.splitSep().take(3)).filter { it.isNotEmpty() }.joinToString("  ·  ") { it.joinToString("  ") }
+    if (readings.isNotEmpty()) Text(readings, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    Text("Take a moment with it, then you will be asked what it means.", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    Button(onClick = vm::startQuestion, modifier = Modifier.fillMaxWidth()) { Text("Got it — quiz me") }
+    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+    MarkdownView(s.card.body, "kanji/${s.card.kanji}.md", onOpenDoc)
 }
 
 @Composable

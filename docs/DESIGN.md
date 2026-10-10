@@ -72,6 +72,11 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 
 ## 4. Quiz mechanics
 
+- **Exposure before testing:** a kanji with no review state is first shown on a study view (`QuizUi.Study`: kanji, title, main readings, the article, "Got it — quiz me"), then
+  asked. Showing it is not a review and records nothing; it is skipped for cards already started and not repeated after an "Again". **Drawing is gated behind
+  recognition** (`DrawGate`): a kanji enters Draw once its meaning was answered well on two days (the readings' unlock) or was already drawn; home counts, the session
+  and reminders all use the same predicate.
+
 - Meaning quiz options are titles, unique by title, so exactly one answer is correct. Preference for wrong options: the card's own
   `distractors`, then most shared tags, then random.
 - Word quiz: `JpToEn` shows the word and asks for the meaning; `EnToJp` shows the meaning (+ tags as a hint) and asks for `word (reading)`.

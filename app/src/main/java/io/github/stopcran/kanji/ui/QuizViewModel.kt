@@ -36,6 +36,8 @@ import kotlin.random.Random
 sealed interface QuizUi {
     data object Loading : QuizUi
     data class Empty(val message: String) : QuizUi
+    /** First sight of a new kanji: shown before it is ever tested (not a review). */
+    data class Study(val card: KanjiEntity, val remaining: Int, val font: KanjiFont) : QuizUi
     data class Question(val card: KanjiEntity, val options: List<QuizOption>, val remaining: Int, val font: KanjiFont) : QuizUi
     data class Answer(val card: KanjiEntity, val options: List<QuizOption>, val picked: String, val remaining: Int, val font: KanjiFont, val heard: String? = null) : QuizUi {
         val correct: Boolean get() = picked == card.kanji
@@ -58,6 +60,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     private var quizCards: List<QuizCard> = emptyList()
     private val states = mutableMapOf<String, SrsState>()
     private val queue = ArrayDeque<String>()
+    private val studied = mutableSetOf<String>()
     private var answered = 0
     private var correct = 0
 
@@ -103,8 +106,23 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val card = cards.getValue(kanji)
-        val target = quizCards.first { it.kanji == kanji }
-        ui = QuizUi.Question(card, QuizBuilder.options(target, quizCards, random), queue.size + 1, nextFont(kanji))
+        if (kanji !in studied && states[kanji]?.phase.let { it == null || it == CardPhase.New }) {
+            studied += kanji
+            ui = QuizUi.Study(card, queue.size + 1, nextFont(kanji))
+            return
+        }
+        ask(card, queue.size + 1, nextFont(kanji))
+    }
+
+    private fun ask(card: KanjiEntity, remaining: Int, font: KanjiFont) {
+        val target = quizCards.first { it.kanji == card.kanji }
+        ui = QuizUi.Question(card, QuizBuilder.options(target, quizCards, random), remaining, font)
+    }
+
+    /** The study view is done: the same card is now tested. */
+    fun startQuestion() {
+        val s = ui as? QuizUi.Study ?: return
+        ask(s.card, s.remaining, s.font)
     }
 
     fun pick(kanji: String, heard: String? = null) {

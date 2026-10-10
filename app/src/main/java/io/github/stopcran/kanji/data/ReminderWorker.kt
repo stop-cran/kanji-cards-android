@@ -27,6 +27,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import io.github.stopcran.kanji.core.draw.DrawGate
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 
@@ -43,9 +44,11 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
             val cards = app.db.content().kanji(source.id).inStack(stack)
             val newRemaining = app.db.newAllowance(app.settings, source.id, Instant.ofEpochMilli(now)).remaining
             var due = 0
+            val learned = app.db.reviews().meaningLearned(source.id, stack).toSet()
             for (mode in listOf(StudyMode.Quiz, StudyMode.Draw)) {
-                val ids = cards.filter { mode == StudyMode.Quiz || it.strokesJson != null }.map { it.kanji }
                 val states = app.db.reviews().states(source.id, stack, mode.name).associate { it.kanji to it.toSrs() }
+                val ids = cards.filter { mode == StudyMode.Quiz || it.strokesJson != null }.map { it.kanji }
+                    .let { if (mode == StudyMode.Draw) DrawGate.eligible(it, states, learned) else it }
                 due += QueueBuilder.build(ids, states, Instant.ofEpochMilli(now), newRemaining).size
             }
             val wordStack = WordStacks.find(app.settings.wordStack.value, WordStacks.offered(app.settings.n4Unlocked.value))
