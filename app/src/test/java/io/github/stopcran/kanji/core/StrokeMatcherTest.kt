@@ -237,7 +237,9 @@ class StrokeMatcherTest {
     @Test
     fun otherKanjiIsNotAccepted() {
         // Pairwise cost is quadratic and the recognition gate was tuned on the N5/N4 baseline: compare those kanji only.
-        val base = File("../../learning-japanese/kanji").listFiles { f -> f.extension == "md" }!!
+        val kanjiDir = File("../../learning-japanese/kanji")
+        org.junit.Assume.assumeTrue("content repo not checked out", kanjiDir.isDirectory)
+        val base = kanjiDir.listFiles { f -> f.extension == "md" }!!
             .filter { f -> f.useLines { l -> l.firstOrNull { it.startsWith("jlpt:") }?.substringAfter(":")?.trim() in setOf("4", "5") } }
             .map { it.nameWithoutExtension }.toSet()
         val keys = refs.keys.filter { it in base }.sorted()
