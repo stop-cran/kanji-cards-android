@@ -24,6 +24,8 @@ private val credits = listOf(
     Credit("Font: Noto Serif JP", "© Google Inc.", "SIL Open Font License 1.1", "https://github.com/notofonts/noto-cjk"),
     Credit("Font: Klee One", "© The Klee Project Authors", "SIL Open Font License 1.1", "https://github.com/fontworks-fonts/Klee"),
     Credit("Font: Yuji Syuku", "© The Yuji Project Authors", "SIL Open Font License 1.1", "https://github.com/Kinutafontfactory/Yuji"),
+    Credit("Font: HanaMin (rare characters only, a few glyphs)", "© GlyphWiki", "GlyphWiki licence", "https://github.com/cjkvi/HanaMinAFDKO"),
+    Credit("Libraries: AndroidX (Compose, Room, WorkManager, Navigation, Lifecycle), Kotlin and kotlinx", "© The Android Open Source Project, JetBrains and contributors", "Apache License 2.0", "https://www.apache.org/licenses/LICENSE-2.0"),
     Credit("Handwriting recognition: ML Kit Digital Ink", "© Google", "ML Kit terms; recognition runs on the device", "https://developers.google.com/ml-kit/terms"),
     Credit("Scheduling algorithm: FSRS-5 (own implementation)", "Open Spaced Repetition project", "reference implementations are MIT", "https://github.com/open-spaced-repetition"),
 )

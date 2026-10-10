@@ -10,3 +10,14 @@ captures/
 *.keystore
 google-services.json
 keystore.properties
+.kotlin/
+*.apk
+*.aab
+*.hprof
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+local.properties.bak
+/app/release/
+/app/debug/

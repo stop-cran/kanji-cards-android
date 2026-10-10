@@ -6,15 +6,16 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
 
 ## Layout
 
-- `core/` – pure Kotlin, no Android imports, unit-tested on the JVM: `content` (front matter, parser, safe zip, repo URL), `srs` (FSRS-5,
-  queue builder), `quiz` (option builder). Put new logic here whenever possible (the stroke matcher too).
-- `data/` – Room entities/DAOs (`Database.kt`), `Settings` (SharedPreferences), `ContentSync`, `SyncWorker`.
-- `ui/` – Compose screens and view models. `MainActivity` holds a tiny string-route back stack (`home`, `settings`, `cards`, `quiz`, `card:<kanji>`).
-- `KanjiApp` is the service locator (`db`, `settings`, `contentSync`).
+- `core/` – pure Kotlin, no Android imports, unit-tested on the JVM. Packages: `content` (front matter, parser, safe zip, repo URL, search), `srs` (FSRS-5, queue builder, stacks, pacing, font policy, reminders),
+  `quiz` (option builder, `QuizSession`), `words` (word queues/stacks/search), `draw` (stroke matcher, grader, regularisation, brush geometry), `markdown` (own parser).
+  Put new logic here whenever possible.
+- `data/` – Room entities/DAOs (`Database.kt`) and migrations, `Settings` (SharedPreferences), `ContentSync` (all network goes through the `ContentHttp` seam; tests use a fake), `SyncWorker`, `ReminderWorker`, `DrawingLog`.
+- `ui/` – Compose screens and view models. `MainActivity` holds a tiny string-route back stack (see Gotchas).
+- `KanjiApp` is the service locator (`db`, `settings`, `contentSync`, `services`). View models receive `Services` through `ui/ServiceViewModel.kt` (`serviceViewModel(key) { ... }`), never the Application.
 
 ## Build and test (Windows)
 
-- Needs `JAVA_HOME` = JDK 17 and `ANDROID_HOME` (see `docs/PLAN.md`). Android Studio's Gradle JVM must be JDK 17 (Gradle 8.9 rejects JDK 25).
+- Needs `JAVA_HOME` = JDK 17 and `ANDROID_HOME` (see `docs/PLAN.md`). Android Studio's Gradle JVM must be JDK 17 (this Gradle version rejects newer JDKs).
 - `./gradlew assembleDebug testDebugUnitTest`. `ContentTest.parsesRealContentRepoWhenPresent` reads `../../learning-japanese` if that
   clone sits next to this repo, and is skipped otherwise.
 - Emulator: Pixel 9, API 35. UI can be driven from the shell with `adb shell uiautomator dump` + `adb shell input tap`; read element bounds
@@ -27,8 +28,7 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
 
 One GitHub issue per work item (file it, get an independent review of the plan, post the outcome as a comment), then implement, run the
 unit tests, check the UI on the emulator, update `docs/DESIGN.md`, commit with the Co-authored-by trailer, push, close the issue with the
-commit. Say plainly what was not tested on a real device. Release APK: `assembleRelease`, then copy to the phone's `Download` over MTP
-(`Shell.Application` COM; deleting an existing file prompts, so copy under a new name; the MTP listing can be stale until the cable is replugged).
+commit. Say plainly what was not tested on a real device. Release build: `assembleRelease`.
 
 ## Gotchas
 
@@ -38,7 +38,7 @@ commit. Say plainly what was not tested on a real device. Release APK: `assemble
 - **ViewModel scope:** `viewModel()` is scoped to the Activity, not to a route, so a quiz VM outlives leaving the screen and would resume
   mid-answer. The quiz route is `quiz:<timestamp>` and the VM is created with that key, giving each start a fresh session while still
   surviving rotation. Do the same for any new session-like screen.
-- **Back stack route strings:** `home`, `settings`, `cards`, `quiz:<id>`, `card:<kanji>`.
+- **Back stack route strings:** `home`, `kanji-home`, `words-home`, `settings`, `about`, `cards`, `word-cards`, `doc:<repo path>`, and session routes `quiz:<ts>[:extra]`, `wquiz:<ts>:<jp|en|rd>[:extra]`, `kreading:<ts>[:extra]`, `draw:<ts>[:extra]`. Wire new routes in `MainActivity`.
 - **Manifest hashes** are computed over LF-normalised bytes (`tools/build_manifest.py` in the content repo and `ContentParser.sha256`). Keep
   both in sync, otherwise files fail with "hash mismatch" on Windows checkouts with CRLF.
 - **Content is untrusted.** Parse defensively, skip bad files instead of failing the sync, never render raw HTML, cap archive sizes.
@@ -54,10 +54,6 @@ commit. Say plainly what was not tested on a real device. Release APK: `assemble
 ## Tooling gotchas (Windows / PowerShell)
 
 - Run Gradle with `$env:JAVA_HOME` set explicitly; new shells don't inherit it.
-- Commits to `stop-cran/*` repos must be GPG-signed (identity comes from the global `includeIf`). If signing hangs on the passphrase
-  popup, the user is AFK: stop and ask them to sign again.
-- Pushing needs the stop-cran token: `git -c credential.helper= -c "http.extraheader=Authorization: Basic <base64 x-access-token:TOKEN>" push`
-  with `TOKEN = gh auth token --user stop-cran`.
 - Non-ASCII output from Python/PowerShell needs `$env:PYTHONIOENCODING='utf-8'`.
 - The file `create` tool refuses existing files and missing parent directories; create folders first.
 
@@ -84,7 +80,7 @@ commit. Say plainly what was not tested on a real device. Release APK: `assemble
 - shapeLimit is 0.13: real hands drew 亻's slash ~30% short and the 0.10 limit rejected it (shorterSlashIsAccepted). Prefer relaxing shape tolerance over strictness; order, direction and join/break checks stay strict.
 - MarkdownView is wrapped in SelectionContainer (copy/search works, links still clickable). The answer overlay shows the regularised drawing (core/draw/Regularize.kt, shared with the matcher).
 - The correct-strokes panel is jittered per display (core/draw/Variation.kt: shift, rotation, scale, bow; display only, grading uses the unmodified reference). Follow-up for real variants and rules: issue #1.
-- Opt-in drawing log (Settings, off by default): DrawingLog writes one JSON per checked drawing to app-private iles/drawings/ (strokes as [x,y,t] canvas px, outcome, issues, ML candidates). Never uploaded. Pull from a debug build: `adb shell run-as io.github.stopcran.kanji cat files/drawings/<file>.json`. Turn these into matcher fixtures. Play data-safety: local-only, nothing collected.
+- Opt-in drawing log (Settings, off by default): DrawingLog writes one JSON per checked drawing to app-private files/drawings/ (strokes as [x,y,t] canvas px, outcome, issues, ML candidates). Never uploaded. Pull from a debug build: `adb shell run-as io.github.stopcran.kanji cat files/drawings/<file>.json`. Turn these into matcher fixtures. Play data-safety: local-only, nothing collected.
 - Emulator gotcha: drawing 'I don't remember' always grades Again, so a session of only give-ups never reaches Done.
 - Brushes (`ui/Brush.kt`, setting `Settings.brush`, default Chisel): Dot, Chisel nib, Soft, Ink. Used for the pad, the answer drawing and the reference via `LocalBrush`; sizes are fractions of the canvas width so panels look alike. Width comes from direction (chisel) or position along the stroke (soft/ink); grading always uses the raw points. Gotcha: filled path quads with NonZero cancel where orientations differ, so the chisel normalises quad orientation. Speed/pressure-based width is not implemented (a finger has no pressure; the answer view loses timing after regularising).
 - Fast strokes: DrawingPad also keeps change.historical touch samples (denser data for grading). drawBrushStroke runs smoothLongSegments (display only, Catmull-Rom for segments over 1.2% of canvas width); grading always uses the raw points.
