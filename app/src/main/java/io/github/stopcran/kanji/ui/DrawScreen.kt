@@ -130,7 +130,7 @@ private fun AnswerState(s: DrawUi.Answer, vm: DrawViewModel, onOpenDoc: (String)
     s.lookalike?.takeIf { it.hasCard }?.let { TextButton(onClick = { onOpenDoc("kanji/${it.kanji}.md") }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.read_about, it.kanji)) } }
     val flaggedDrawn = if (showIssues) s.match.issues.mapNotNull { it.drawnIndex }.toSet() else emptySet()
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Overlay(Modifier.weight(1f)) { YourDrawing(s.drawn, s.canvasPx, flaggedDrawn) }
+        Overlay(Modifier.weight(1f)) { YourDrawing(s.drawn, s.canvasPx, flaggedDrawn, rejected = s.outcome == DrawOutcome.NotRecognized) }
         Overlay(Modifier.weight(1f)) { Reference(s.reference, if (showIssues) s.match.flaggedRefStrokes else emptySet(), numbers = true) }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -187,7 +187,7 @@ private fun DrawingPad(strokes: List<List<TimedPt>>, onStroke: (List<TimedPt>) -
 }
 
 @Composable
-private fun YourDrawing(drawn: List<List<TimedPt>>, canvasPx: Float, flagged: Set<Int>) {
+private fun YourDrawing(drawn: List<List<TimedPt>>, canvasPx: Float, flagged: Set<Int>, rejected: Boolean) {
     // Show the slightly regularised strokes: kinks too small to matter in writing are dropped.
     val tidy = remember(drawn) { regularize(drawn.map { s -> s.map { Pt(it.x.toDouble(), it.y.toDouble()) } }, 0.02, 48, curved = true) }
     val brush = LocalBrush.current
@@ -195,7 +195,7 @@ private fun YourDrawing(drawn: List<List<TimedPt>>, canvasPx: Float, flagged: Se
     Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
         val k = size.width / canvasPx
         tidy.forEachIndexed { i, s ->
-            drawBrushStroke(s.map { Offset(it.x.toFloat() * k, it.y.toFloat() * k) }, if (i in flagged) Bad else Ink, brush, look = look)
+            drawBrushStroke(s.map { Offset(it.x.toFloat() * k, it.y.toFloat() * k) }, if (rejected || i in flagged) Bad else Ink, brush, look = look)
         }
     }
 }
