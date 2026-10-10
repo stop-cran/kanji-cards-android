@@ -1,6 +1,9 @@
 package io.github.stopcran.kanji.ui
 
 import androidx.compose.material3.Text
+import io.github.stopcran.kanji.R
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.Modifier
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -19,12 +22,20 @@ suspend fun loadDoc(app: KanjiApp, sourceId: String, path: String): Pair<String,
     }
 }
 
+/** The article body for [path]; lazy, so it must not sit inside a scrolling parent. */
+@Composable
+fun DocBody(app: KanjiApp, path: String, onOpenDoc: (String) -> Unit, modifier: Modifier = Modifier) {
+    val source by app.settings.source.collectAsState()
+    val doc by produceState<Pair<String, String>?>(null, source, path) { value = loadDoc(app, source.id, path) }
+    val d = doc
+    if (d == null) Text(stringResource(R.string.not_found_in_the_current), modifier) else LazyMarkdownView(d.second, path, onOpenDoc, modifier)
+}
+
 @Composable
 fun DocScreen(app: KanjiApp, path: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit) {
     val source by app.settings.source.collectAsState()
     val doc by produceState<Pair<String, String>?>(null, source, path) { value = loadDoc(app, source.id, path) }
-    val d = doc
-    Page(d?.first ?: path.substringAfter('/').removeSuffix(".md"), onBack) {
-        if (d == null) Text("Not found in the current content.") else MarkdownView(d.second, path, onOpenDoc)
+    Page(doc?.first ?: path.substringAfter('/').removeSuffix(".md"), onBack, scrollable = false) {
+        DocBody(app, path, onOpenDoc, Modifier.weight(1f))
     }
 }

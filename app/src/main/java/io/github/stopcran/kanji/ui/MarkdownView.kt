@@ -2,162 +2,80 @@ package io.github.stopcran.kanji.ui
 
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import android.content.Intent
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import android.net.Uri
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Column
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Row
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.width
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.Text
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.remember
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.LinkAnnotation
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextLinkStyles
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.withLink
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import io.github.stopcran.kanji.core.markdown.Block
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import io.github.stopcran.kanji.core.markdown.LinkTarget
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import io.github.stopcran.kanji.core.markdown.Markdown
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import io.github.stopcran.kanji.core.markdown.Span
 
 /** Renders content Markdown. In-repo links call [onOpenDoc] with the repo-relative path; https links open the browser. */
 @Composable
 fun MarkdownView(text: String, path: String, onOpenDoc: (String) -> Unit, modifier: Modifier = Modifier) {
     val blocks = remember(text, path) { Markdown.parse(text, path) }
-    val context = LocalContext.current
-    val onLink: (LinkTarget) -> Unit = { t ->
-        when (t) {
-            is LinkTarget.Doc -> onOpenDoc(t.path)
-            is LinkTarget.Web -> runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(t.url))) }
-        }
-    }
+    val onLink = rememberLinkHandler(onOpenDoc)
     val linkColor = MaterialTheme.colorScheme.primary
     val codeBg = MaterialTheme.colorScheme.surfaceVariant
 
     SelectionContainer {
         Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             blocks.forEach { RenderBlock(it, onLink, linkColor, codeBg) }
+        }
+    }
+}
+
+/** Same rendering as [MarkdownView] but lazy: only visible blocks are composed. For a full-page article; do not nest in a scrolling parent. */
+@Composable
+fun LazyMarkdownView(text: String, path: String, onOpenDoc: (String) -> Unit, modifier: Modifier = Modifier) {
+    val blocks = remember(text, path) { Markdown.parse(text, path) }
+    val onLink = rememberLinkHandler(onOpenDoc)
+    val linkColor = MaterialTheme.colorScheme.primary
+    val codeBg = MaterialTheme.colorScheme.surfaceVariant
+    SelectionContainer(modifier) {
+        androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(blocks.size) { RenderBlock(blocks[it], onLink, linkColor, codeBg) }
+        }
+    }
+}
+
+@Composable
+private fun rememberLinkHandler(onOpenDoc: (String) -> Unit): (LinkTarget) -> Unit {
+    val context = LocalContext.current
+    return { t ->
+        when (t) {
+            is LinkTarget.Doc -> onOpenDoc(t.path)
+            is LinkTarget.Web -> runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(t.url))) }
         }
     }
 }

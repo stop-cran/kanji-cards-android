@@ -1,6 +1,8 @@
 package io.github.stopcran.kanji.ui
 
 import androidx.compose.foundation.layout.Column
+import io.github.stopcran.kanji.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -32,17 +34,17 @@ fun AboutScreen(onBack: () -> Unit) {
     val version = remember(context) { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "" }
     val uri = LocalUriHandler.current
     Page("About", onBack) {
-        Text("Kanji Cards $version", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.kanji_cards, version), style = MaterialTheme.typography.titleMedium)
         Text(
             "A personal kanji trainer: guess meanings, draw kanji with stroke checks, and read articles that live in a GitHub repository " +
                 "you can fork. Your progress and drawings stay on this device; the app only downloads the public content repository.",
             style = MaterialTheme.typography.bodyMedium,
         )
-        Text("Sources and licences", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.sources_and_licences), style = MaterialTheme.typography.titleMedium)
         credits.forEach { c ->
             Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
                 Text(c.name, style = MaterialTheme.typography.bodyLarge)
-                Text("${c.by} · ${c.license}", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.author_and_license, c.by, c.license), style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = { uri.openUri(c.url) }) { Text(c.url.removePrefix("https://")) }
             }
         }
@@ -51,6 +53,6 @@ fun AboutScreen(onBack: () -> Unit) {
                 "if you fork the content repository, keep the attributions in its NOTICE file.",
             style = MaterialTheme.typography.bodySmall,
         )
-        TextButton(onClick = { uri.openUri("https://github.com/stop-cran/kanji-cards-android/blob/main/docs/PRIVACY.md") }) { Text("Privacy policy") }
+        TextButton(onClick = { uri.openUri("https://github.com/stop-cran/kanji-cards-android/blob/main/docs/PRIVACY.md") }) { Text(stringResource(R.string.privacy_policy)) }
     }
 }

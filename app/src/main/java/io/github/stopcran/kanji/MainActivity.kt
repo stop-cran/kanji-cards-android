@@ -66,8 +66,8 @@ private fun AppNav(app: KanjiApp) {
     when (val route = stack.last()) {
         "settings" -> SettingsScreen(app, onBack = ::pop, onAbout = { push("about") })
         "about" -> AboutScreen(onBack = ::pop)
-        "cards" -> CardsScreen(app, onBack = ::pop, onOpen = { push("doc:kanji/$it.md") })
-        "word-cards" -> WordCardsScreen(app, onBack = ::pop, onOpen = { push("doc:words/$it.md") })
+        "cards" -> CardsScreen(app, onBack = ::pop, onOpen = { push("doc:kanji/$it.md") }, onOpenDoc = { push("doc:$it") })
+        "word-cards" -> WordCardsScreen(app, onBack = ::pop, onOpen = { push("doc:words/$it.md") }, onOpenDoc = { push("doc:$it") })
         else -> if (route.startsWith("quiz:")) {
             QuizScreen(
                 sessionKey = route,

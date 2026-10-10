@@ -1,136 +1,31 @@
 package io.github.stopcran.kanji.ui
 
 import androidx.compose.ui.semantics.liveRegion
+import io.github.stopcran.kanji.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.layout.Row
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.Button
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.Text
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import io.github.stopcran.kanji.core.words.WordDirection
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import io.github.stopcran.kanji.data.WordEntity
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import io.github.stopcran.kanji.data.splitSep
 
 private val originTags = setOf("wago", "kango", "gairaigo")
@@ -154,16 +49,16 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
         onBack,
     ) {
         when (val s = vm.ui) {
-            WordQuizUi.Loading -> Text("Loading…", Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
+            WordQuizUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
             is WordQuizUi.Empty -> Text(s.message)
             is WordQuizUi.Done -> {
-                Text("Session complete", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
-                Text("${s.correct} of ${s.answered} answers correct.")
-                Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Done") }
-                OutlinedButton(onClick = onPracticeMore, modifier = Modifier.fillMaxWidth()) { Text("Practice more") }
+                Text(stringResource(R.string.session_complete), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+                Text(stringResource(R.string.of_answers_correct, s.correct, s.answered))
+                Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.done)) }
+                OutlinedButton(onClick = onPracticeMore, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.practice_more)) }
             }
             is WordQuizUi.Question -> {
-                Text("${s.remaining} left", style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(R.string.left, s.remaining), style = MaterialTheme.typography.labelMedium)
                 Prompt(s.word, s.direction, s.font, big = true)
                 Text(
                     when (s.direction) {
@@ -199,7 +94,7 @@ private fun Prompt(word: WordEntity, direction: WordDirection, font: io.github.s
 @Composable
 private fun Answer(s: WordQuizUi.Answer, vm: WordQuizViewModel, onOpenDoc: (String) -> Unit) {
     Text(s.word.word, fontSize = 56.sp, fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-    Text("${s.word.reading} — ${s.word.title}", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    Text(stringResource(R.string.value_dash_detail, s.word.reading, s.word.title), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Text(
         when {
             s.correct -> "Correct!"
@@ -212,7 +107,7 @@ private fun Answer(s: WordQuizUi.Answer, vm: WordQuizViewModel, onOpenDoc: (Stri
         textAlign = TextAlign.Center,
     )
     s.pickedWord?.takeIf { !s.correct && s.direction != WordDirection.Reading }?.let {
-        Text("You chose ${it.word} (${it.reading}) — ${it.title}.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+        Text(stringResource(R.string.you_chose, it.word, it.reading, it.title), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     }
     s.options.forEach { o ->
         AnswerOption(o.label, when {
@@ -224,7 +119,7 @@ private fun Answer(s: WordQuizUi.Answer, vm: WordQuizViewModel, onOpenDoc: (Stri
     s.heard?.let { VoiceHeard(it, vm::retry) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
         Button(onClick = { vm.next() }, modifier = Modifier.weight(1f)) { Text(if (s.correct) "Next" else "Next (will repeat)") }
-        if (s.correct) OutlinedButton(onClick = { vm.next(guessed = true) }) { Text("I guessed") }
+        if (s.correct) OutlinedButton(onClick = { vm.next(guessed = true) }) { Text(stringResource(R.string.i_guessed)) }
     }
     ArticleSection(s.correct, "w:${s.word.word}:${s.picked}:${s.remaining}", s.word.body, "words/${s.word.word}.md", onOpenDoc)
 }

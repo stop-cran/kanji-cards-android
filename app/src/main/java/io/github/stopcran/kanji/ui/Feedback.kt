@@ -20,3 +20,7 @@ fun bigKanjiSize(base: Int): TextUnit {
     val c = LocalConfiguration.current
     return if (c.screenHeightDp < 480) (base * 0.55f).sp else base.sp
 }
+/** Window wide enough for list and detail side by side (Material expanded width class). */
+@Composable
+fun isExpandedWidth(): Boolean = LocalConfiguration.current.screenWidthDp >= 840
+

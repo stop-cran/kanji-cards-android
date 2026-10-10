@@ -1,148 +1,33 @@
 package io.github.stopcran.kanji.ui
 
 import androidx.compose.ui.semantics.liveRegion
+import io.github.stopcran.kanji.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.layout.Row
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.Button
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.Text
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import io.github.stopcran.kanji.data.splitSep
 
 
@@ -151,19 +36,19 @@ fun QuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Un
     LaunchedEffect(sessionKey) { vm.ensureStarted(sessionKey.endsWith(":extra")) }
     Page("Quiz", onBack) {
         when (val s = vm.ui) {
-            QuizUi.Loading -> Text("Loading…", Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
+            QuizUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
             is QuizUi.Empty -> Text(s.message)
             is QuizUi.Done -> {
-                Text("Session complete", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
-                Text("${s.correct} of ${s.answered} answers correct.")
-                Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Done") }
-                OutlinedButton(onClick = onPracticeMore, modifier = Modifier.fillMaxWidth()) { Text("Practice more") }
+                Text(stringResource(R.string.session_complete), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+                Text(stringResource(R.string.of_answers_correct, s.correct, s.answered))
+                Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.done)) }
+                OutlinedButton(onClick = onPracticeMore, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.practice_more)) }
             }
             is QuizUi.Study -> StudyState(s, vm, onOpenDoc)
             is QuizUi.Question -> {
-                Text("${s.remaining} left", style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(R.string.left, s.remaining), style = MaterialTheme.typography.labelMedium)
                 Text(s.card.kanji, fontSize = bigKanjiSize(120), fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-                Text("What does it mean?", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                Text(stringResource(R.string.what_does_it_mean), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 s.options.forEach { o ->
                     OutlinedButton(onClick = { vm.pick(o.kanji) }, modifier = Modifier.fillMaxWidth()) { Text(o.title) }
                 }
@@ -177,13 +62,13 @@ fun QuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Un
 
 @Composable
 private fun StudyState(s: QuizUi.Study, vm: QuizViewModel, onOpenDoc: (String) -> Unit) {
-    Text("New kanji · ${s.remaining} left", style = MaterialTheme.typography.labelMedium)
+    Text(stringResource(R.string.new_kanji_left, s.remaining), style = MaterialTheme.typography.labelMedium)
     Text(s.card.kanji, fontSize = bigKanjiSize(120), fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Text(s.card.title, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().semantics { heading() })
     val readings = listOf(s.card.onyomi.splitSep().take(3), s.card.kunyomi.splitSep().take(3)).filter { it.isNotEmpty() }.joinToString("  ·  ") { it.joinToString("  ") }
     if (readings.isNotEmpty()) Text(readings, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-    Text("Take a moment with it, then you will be asked what it means.", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-    Button(onClick = vm::startQuestion, modifier = Modifier.fillMaxWidth()) { Text("Got it — quiz me") }
+    Text(stringResource(R.string.take_a_moment_with_it), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    Button(onClick = vm::startQuestion, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.got_it_quiz_me)) }
     HorizontalDivider(Modifier.padding(vertical = 4.dp))
     MarkdownView(s.card.body, "kanji/${s.card.kanji}.md", onOpenDoc)
 }
@@ -203,7 +88,7 @@ private fun AnswerState(s: QuizUi.Answer, vm: QuizViewModel, onOpenDoc: (String)
         textAlign = TextAlign.Center,
     )
     s.options.firstOrNull { it.kanji == s.picked && !s.correct }?.let {
-        Text("You chose “${it.title}” — that is ${it.kanji}.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+        Text(stringResource(R.string.you_chose_that_is, it.title, it.kanji), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     }
     s.options.forEach { o ->
         AnswerOption(o.title, when {
@@ -213,10 +98,10 @@ private fun AnswerState(s: QuizUi.Answer, vm: QuizViewModel, onOpenDoc: (String)
         })
     }
     s.heard?.let { VoiceHeard(it, vm::retry) }
-    Text("${s.card.title}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 4.dp))
+    Text(stringResource(R.string.plain_value, s.card.title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 4.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Button(onClick = { vm.next() }, modifier = Modifier.weight(1f)) { Text(if (s.correct) "Next" else "Next (will repeat)") }
-        if (s.correct) OutlinedButton(onClick = { vm.next(guessed = true) }) { Text("I guessed") }
+        if (s.correct) OutlinedButton(onClick = { vm.next(guessed = true) }) { Text(stringResource(R.string.i_guessed)) }
     }
     ArticleSection(s.correct, "q:${s.card.kanji}:${s.picked}:${s.remaining}", s.card.body, "kanji/${s.card.kanji}.md", onOpenDoc)
 }

@@ -1,6 +1,8 @@
 package io.github.stopcran.kanji.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import io.github.stopcran.kanji.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -57,14 +59,14 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
     }
 
     Page("Settings", onBack) {
-        Text("Studying", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.studying), style = MaterialTheme.typography.titleMedium)
         val committed = Commitment.of(dailyNew.toIntOrNull() ?: -1)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Commitment.entries.forEach { c ->
                 androidx.compose.material3.FilterChip(
                     selected = committed == c,
                     onClick = { dailyNew = c.perDay.toString(); app.settings.setDailyNewCards(c.perDay) },
-                    label = { Text("${c.label} (${c.perDay})") },
+                    label = { Text(stringResource(R.string.label_with_count, c.label, c.perDay)) },
                 )
             }
         }
@@ -74,12 +76,12 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
                 dailyNew = text.filter(Char::isDigit).take(3)
                 dailyNew.toIntOrNull()?.takeIf { it in 0..200 }?.let { app.settings.setDailyNewCards(it) }
             },
-            label = { Text("New items per day (0-200)") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+            label = { Text(stringResource(R.string.new_items_per_day_0)) }, modifier = Modifier.fillMaxWidth(), singleLine = true,
         )
         val weekPlan by app.settings.weekPlan.collectAsState()
         val week = DayLevel.parseWeek(weekPlan)
         val dayNames = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-        Text("Weekly rhythm: tap a day to switch between full, light (half) and rest", style = MaterialTheme.typography.bodySmall)
+        Text(stringResource(R.string.weekly_rhythm_tap_a_day), style = MaterialTheme.typography.bodySmall)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             week.forEachIndexed { i, level ->
                 OutlinedButton(
@@ -99,7 +101,7 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
         )
         val vary by app.settings.varyFonts.collectAsState()
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Vary kanji fonts as cards mature", modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.vary_kanji_fonts_as_cards), modifier = Modifier.weight(1f))
             Switch(vary, { app.settings.setVaryFonts(it) })
         }
         HorizontalDivider()
@@ -114,7 +116,7 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             if (granted) enableReminder() else status = "Notifications are blocked for this app, so reminders stay off."
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Daily study reminder", modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.daily_study_reminder), modifier = Modifier.weight(1f))
             Switch(remind, { on ->
                 if (!on) {
                     app.settings.setReminderEnabled(false)
@@ -130,14 +132,14 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             val notificationsBlocked = android.os.Build.VERSION.SDK_INT >= 33 &&
                 androidx.core.content.ContextCompat.checkSelfPermission(appContext, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
             if (notificationsBlocked) {
-                Text("Notifications are blocked for this app, so no reminder will appear.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Text(stringResource(R.string.notifications_are_blocked_for_this), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 TextButton(onClick = {
                     appContext.startActivity(
                         android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                             .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, appContext.packageName)
                             .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
                     )
-                }) { Text("Open notification settings") }
+                }) { Text(stringResource(R.string.open_notification_settings)) }
             }
             var hourText by rememberSaveable { mutableStateOf(remindHour.toString()) }
             OutlinedTextField(
@@ -149,7 +151,7 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
                         io.github.stopcran.kanji.data.ReminderWorker.schedule(appContext, it, replace = true)
                     }
                 },
-                label = { Text("Reminder hour (0-23)") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+                label = { Text(stringResource(R.string.reminder_hour_0_23)) }, modifier = Modifier.fillMaxWidth(), singleLine = true,
             )
         }
         Text(
@@ -157,7 +159,7 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             style = MaterialTheme.typography.bodySmall,
         )
         HorizontalDivider()
-        Text("Drawing", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.drawing), style = MaterialTheme.typography.titleMedium)
         val brush by app.settings.brush.collectAsState()
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             BrushStyle.entries.forEach { b ->
@@ -167,30 +169,30 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
         Text(brush.hint, style = MaterialTheme.typography.bodySmall)
         BrushPreview(brush)
         HorizontalDivider()
-        Text("Advanced", style = MaterialTheme.typography.titleMedium)
-        Text("Content repository", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.advanced), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.content_repository), style = MaterialTheme.typography.titleSmall)
         Text(
             "Cards, words and articles are downloaded from a public GitHub repository, so they can be corrected without an app update. " +
                 "The default is the author's repository. Fork it on GitHub, edit the cards and articles in your fork, " +
                 "and enter your fork's URL here to study your own version. Each repository keeps its own review progress.",
             style = MaterialTheme.typography.bodyMedium,
         )
-        OutlinedTextField(url, { url = it }, label = { Text("Repository URL") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(branch, { branch = it }, label = { Text("Branch") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(url, { url = it }, label = { Text(stringResource(R.string.repository_url)) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(branch, { branch = it }, label = { Text(stringResource(R.string.branch)) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = ::saveAndSync) { Text("Save & sync") }
-            OutlinedButton(onClick = { url = Defaults.CONTENT_REPO_URL; branch = Defaults.CONTENT_BRANCH }) { Text("Use default repo") }
+            Button(onClick = ::saveAndSync) { Text(stringResource(R.string.save_sync)) }
+            OutlinedButton(onClick = { url = Defaults.CONTENT_REPO_URL; branch = Defaults.CONTENT_BRANCH }) { Text(stringResource(R.string.use_default_repo)) }
         }
         if (status.isNotEmpty()) Text(status)
         HorizontalDivider()
-        Text("Voice input", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.voice_input), style = MaterialTheme.typography.titleSmall)
         val voiceOn by app.settings.voiceInput.collectAsState()
         val voiceStatus by rememberVoiceStatus()
         when (val v = voiceStatus) {
-            VoiceStatus.Checking -> Text("Checking this device…", style = MaterialTheme.typography.bodySmall)
-            is VoiceStatus.Unavailable -> Text("Not available on this device: ${v.reason}.", style = MaterialTheme.typography.bodySmall)
+            VoiceStatus.Checking -> Text(stringResource(R.string.checking_this_device), style = MaterialTheme.typography.bodySmall)
+            is VoiceStatus.Unavailable -> Text(stringResource(R.string.not_available_on_this_device, v.reason), style = MaterialTheme.typography.bodySmall)
             VoiceStatus.Available -> Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Say the English meaning to answer", modifier = Modifier.weight(1f))
+                Text(stringResource(R.string.say_the_english_meaning_to), modifier = Modifier.weight(1f))
                 Switch(voiceOn, { app.settings.setVoiceInput(it) })
             }
         }
@@ -200,10 +202,10 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
                 "The option appears only when the device has an on-device English speech recognizer.",
             style = MaterialTheme.typography.bodySmall,
         )
-        Text("Handwriting data", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.handwriting_data), style = MaterialTheme.typography.titleSmall)
         val save by app.settings.saveDrawings.collectAsState()
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Save my drawings on this device to help tune handwriting checks", modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.save_my_drawings_on_this), modifier = Modifier.weight(1f))
             Switch(save, { app.settings.setSaveDrawings(it) })
         }
         Text(
@@ -235,14 +237,14 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             },
             enabled = saved > 0 || exportStatus.isEmpty(),
         ) {
-            Text("Export saved drawings ($saved)")
+            Text(stringResource(R.string.export_saved_drawings, saved))
         }
         Text(
             "Drawings are also included in Android's automatic backup, but uninstalling the app deletes them, so export a copy first.",
             style = MaterialTheme.typography.bodySmall,
         )
         if (exportStatus.isNotEmpty()) Text(exportStatus, style = MaterialTheme.typography.bodySmall)
-        TextButton(onClick = onAbout) { Text("About, sources and licences") }
+        TextButton(onClick = onAbout) { Text(stringResource(R.string.about_sources_and_licences)) }
         Text(source.id + (meta?.let { " — content version ${it.contentVersion}" } ?: " — not synced yet"), style = MaterialTheme.typography.bodySmall)
     }
 }

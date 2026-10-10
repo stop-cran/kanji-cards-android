@@ -1,112 +1,63 @@
 package io.github.stopcran.kanji.ui
 
 import androidx.compose.ui.semantics.liveRegion
+import io.github.stopcran.kanji.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.Canvas
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.background
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.border
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.gestures.drag
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.layout.Row
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.Button
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.TextButton
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.material3.Text
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.runtime.remember
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.runtime.collectAsState
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.liveRegion
 import io.github.stopcran.kanji.KanjiApp
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.graphics.drawscope.Stroke as DrawStroke
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.text.drawText
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.semantics.liveRegion
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.ui.semantics.liveRegion
 import io.github.stopcran.kanji.core.draw.DrawOutcome
-import androidx.compose.ui.semantics.liveRegion
 import io.github.stopcran.kanji.core.draw.Pt
-import androidx.compose.ui.semantics.liveRegion
 import io.github.stopcran.kanji.core.draw.regularize
-import androidx.compose.ui.semantics.liveRegion
 import io.github.stopcran.kanji.core.draw.varyReference
-import androidx.compose.ui.semantics.liveRegion
 import io.github.stopcran.kanji.core.draw.Stroke
-import androidx.compose.ui.semantics.liveRegion
 import io.github.stopcran.kanji.core.draw.describe
 
 private val Good = Color(0xFF2E7D32)
@@ -127,16 +78,16 @@ fun DrawScreen(
     androidx.compose.runtime.CompositionLocalProvider(LocalBrush provides brush, LocalBrushLook provides vm.look) {
     Page("Drawing", onBack) {
         when (val s = vm.ui) {
-            DrawUi.Loading -> Text("Loading…", Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
+            DrawUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
             is DrawUi.Empty -> Text(s.message)
             is DrawUi.Done -> {
-                Text("Session complete", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
-                Text("${s.clean} of ${s.answered} drawn cleanly.")
-                Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Done") }
-                OutlinedButton(onClick = onPracticeMore, modifier = Modifier.fillMaxWidth()) { Text("Practice more") }
+                Text(stringResource(R.string.session_complete), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+                Text(stringResource(R.string.of_drawn_cleanly, s.clean, s.answered))
+                Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.done)) }
+                OutlinedButton(onClick = onPracticeMore, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.practice_more)) }
             }
             is DrawUi.Question -> QuestionState(s, vm)
-            is DrawUi.Checking -> Text("Checking…")
+            is DrawUi.Checking -> Text(stringResource(R.string.checking))
             is DrawUi.Answer -> AnswerState(s, vm, onOpenDoc)
         }
     }
@@ -146,21 +97,21 @@ fun DrawScreen(
 @Composable
 private fun QuestionState(s: DrawUi.Question, vm: DrawViewModel) {
     val strokes = vm.ink
-    Text("${s.remaining} left", style = MaterialTheme.typography.labelMedium)
-    Text("Draw the kanji for", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    Text(stringResource(R.string.left, s.remaining), style = MaterialTheme.typography.labelMedium)
+    Text(stringResource(R.string.draw_the_kanji_for), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     Text(s.card.title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     DrawingPad(strokes, onStroke = { strokes += it }, onSize = { vm.padSized(it) }, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
     when (vm.modelState) {
-        ModelState.Downloading -> Text("Downloading the handwriting model (first use only)…", style = MaterialTheme.typography.bodySmall)
-        ModelState.Unavailable -> Text("Handwriting model unavailable: graded by stroke shapes only.", style = MaterialTheme.typography.bodySmall)
+        ModelState.Downloading -> Text(stringResource(R.string.downloading_the_handwriting_model_first), style = MaterialTheme.typography.bodySmall)
+        ModelState.Unavailable -> Text(stringResource(R.string.handwriting_model_unavailable_graded_by), style = MaterialTheme.typography.bodySmall)
         else -> {}
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = { if (strokes.isNotEmpty()) strokes.removeAt(strokes.lastIndex) }, enabled = strokes.isNotEmpty()) { Text("Undo") }
-        OutlinedButton(onClick = { strokes.clear() }, enabled = strokes.isNotEmpty()) { Text("Clear") }
-        Button(onClick = { vm.check(strokes.toList(), vm.inkSize) }, enabled = strokes.isNotEmpty(), modifier = Modifier.weight(1f)) { Text("Check") }
+        OutlinedButton(onClick = { if (strokes.isNotEmpty()) strokes.removeAt(strokes.lastIndex) }, enabled = strokes.isNotEmpty()) { Text(stringResource(R.string.undo)) }
+        OutlinedButton(onClick = { strokes.clear() }, enabled = strokes.isNotEmpty()) { Text(stringResource(R.string.clear)) }
+        Button(onClick = { vm.check(strokes.toList(), vm.inkSize) }, enabled = strokes.isNotEmpty(), modifier = Modifier.weight(1f)) { Text(stringResource(R.string.check)) }
     }
-    OutlinedButton(onClick = { vm.check(emptyList(), vm.inkSize) }, modifier = Modifier.fillMaxWidth()) { Text("I don't remember") }
+    OutlinedButton(onClick = { vm.check(emptyList(), vm.inkSize) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.i_don_t_remember)) }
 }
 
 @Composable
@@ -176,18 +127,18 @@ private fun AnswerState(s: DrawUi.Answer, vm: DrawViewModel, onOpenDoc: (String)
     }
     Text(s.card.kanji + "  " + s.card.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     Text(headline, color = color, style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-    s.lookalike?.takeIf { it.hasCard }?.let { TextButton(onClick = { onOpenDoc("kanji/${it.kanji}.md") }, modifier = Modifier.fillMaxWidth()) { Text("Read about ${it.kanji}") } }
+    s.lookalike?.takeIf { it.hasCard }?.let { TextButton(onClick = { onOpenDoc("kanji/${it.kanji}.md") }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.read_about, it.kanji)) } }
     val flaggedDrawn = if (showIssues) s.match.issues.mapNotNull { it.drawnIndex }.toSet() else emptySet()
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Overlay(Modifier.weight(1f)) { YourDrawing(s.drawn, s.canvasPx, flaggedDrawn) }
         Overlay(Modifier.weight(1f)) { Reference(s.reference, if (showIssues) s.match.flaggedRefStrokes else emptySet(), numbers = true) }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Your drawing", Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)
-        Text("Correct strokes", Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.your_drawing), Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.correct_strokes), Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)
     }
-    if (showIssues) s.match.issues.forEach { Text("• " + it.describe(), color = wrongTextColor()) }
-    if (!s.recognizerUsed && s.drawn.isNotEmpty()) Text("Graded by stroke shapes only (handwriting model not available).", style = MaterialTheme.typography.bodySmall)
+    if (showIssues) s.match.issues.forEach { Text(stringResource(R.string.bullet_prefix) + it.describe(), color = wrongTextColor()) }
+    if (!s.recognizerUsed && s.drawn.isNotEmpty()) Text(stringResource(R.string.graded_by_stroke_shapes_only), style = MaterialTheme.typography.bodySmall)
     Button(onClick = { vm.next() }, modifier = Modifier.fillMaxWidth()) { Text(if (s.outcome == DrawOutcome.NotRecognized) "Next (will repeat)" else "Next") }
     HorizontalDivider(Modifier.padding(vertical = 4.dp))
     MarkdownView(s.card.body, "kanji/${s.card.kanji}.md", onOpenDoc)

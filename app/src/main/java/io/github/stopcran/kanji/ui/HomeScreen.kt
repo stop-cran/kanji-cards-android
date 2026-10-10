@@ -1,6 +1,8 @@
 package io.github.stopcran.kanji.ui
 
 import androidx.compose.foundation.clickable
+import io.github.stopcran.kanji.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -72,11 +74,11 @@ fun HomePages(app: KanjiApp, route: String, onBack: () -> Unit, actions: HomeAct
 
 @Composable
 private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeActions) {
-    Page("Kanji Cards", actions = { TextButton(onClick = a.onSettings, modifier = Modifier.semantics { contentDescription = "Settings" }) { Text("⚙") } }) {
+    Page("Kanji Cards", actions = { TextButton(onClick = a.onSettings, modifier = Modifier.semantics { contentDescription = "Settings" }) { Text(stringResource(R.string.settings_icon)) } }) {
         if (syncStatus.isNotEmpty()) Text(syncStatus)
         LoadingBar(data)
         val defaultId = remember { RepoSource.parse(Defaults.CONTENT_REPO_URL, Defaults.CONTENT_BRANCH)?.id }
-        if (data.sourceId != defaultId) Text("Cards from ${data.sourceId}")
+        if (data.sourceId != defaultId) Text(stringResource(R.string.cards_from, data.sourceId))
         N4Offer(app, data)
         PacingHint(data)
         val kanjiStack = if (data.stacks.size > 1) " · ${data.stack.label}" else ""
@@ -90,19 +92,19 @@ private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeA
 private fun KanjiPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: HomeActions) {
     Page("Kanji", onBack) {
         LoadingBar(data)
-        Text("${data.kanji.size} cards")
+        Text(stringResource(R.string.cards, data.kanji.size))
         if (data.stacks.size > 1) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 data.stacks.forEach { s ->
-                    FilterChip(selected = s.id == data.stack.id, onClick = { app.settings.setStack(s.id) }, label = { Text("${s.label} (${data.kanji.inStack(s.id).size})") })
+                    FilterChip(selected = s.id == data.stack.id, onClick = { app.settings.setStack(s.id) }, label = { Text(stringResource(R.string.label_with_count, s.label, data.kanji.inStack(s.id).size)) })
                 }
             }
-            Text("Each stack keeps its own review schedule.", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.each_stack_keeps_its_own), style = MaterialTheme.typography.bodySmall)
         }
         ModeRow("Meaning quiz", data.mode(HomeMode.Meaning), a.onQuiz)
         ModeRow("Drawing", data.mode(HomeMode.Drawing), a.onDraw)
         ModeRow("Readings (on'yomi and kun'yomi)", data.mode(HomeMode.Readings), a.onReadings)
-        OutlinedButton(onClick = a.onCards, enabled = data.kanji.isNotEmpty(), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Browse cards") }
+        OutlinedButton(onClick = a.onCards, enabled = data.kanji.isNotEmpty(), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text(stringResource(R.string.browse_cards)) }
     }
 }
 
@@ -110,7 +112,7 @@ private fun KanjiPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: Home
 private fun WordsPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: HomeActions) {
     Page("Words", onBack) {
         LoadingBar(data)
-        Text("${data.wordCount} words")
+        Text(stringResource(R.string.words, data.wordCount))
         N4Offer(app, data)
         if (data.wordStacks.size > 1) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -122,7 +124,7 @@ private fun WordsPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: Home
         ModeRow("Japanese → English", data.mode(HomeMode.WordJp)) { a.onWords(WordDirection.JpToEn, it) }
         ModeRow("English → Japanese", data.mode(HomeMode.WordEn)) { a.onWords(WordDirection.EnToJp, it) }
         ModeRow("Reading", data.mode(HomeMode.WordReading)) { a.onWords(WordDirection.Reading, it) }
-        OutlinedButton(onClick = a.onWordCards, enabled = data.wordCount > 0, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Browse words") }
+        OutlinedButton(onClick = a.onWordCards, enabled = data.wordCount > 0, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text(stringResource(R.string.browse_words)) }
     }
 }
 
@@ -130,7 +132,7 @@ private fun WordsPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: Home
 private fun LoadingBar(data: HomeData) {
     if (!data.loading) return
     LinearProgressIndicator(Modifier.fillMaxWidth())
-    Text("Loading your cards…", style = MaterialTheme.typography.bodySmall)
+    Text(stringResource(R.string.loading_your_cards), style = MaterialTheme.typography.bodySmall)
 }
 
 @Composable
@@ -141,7 +143,7 @@ private fun Entry(title: String, summary: String, onClick: () -> Unit) {
                 Text(title, style = MaterialTheme.typography.titleMedium)
                 Text(summary, style = MaterialTheme.typography.bodyMedium)
             }
-            Text("›", modifier = Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(R.string.chevron), modifier = Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.headlineMedium)
         }
     }
 }
@@ -160,9 +162,9 @@ private fun ModeRow(title: String, state: ModeState, onStart: (extra: Boolean) -
         Text(title, style = MaterialTheme.typography.titleMedium)
         Text(summary, style = MaterialTheme.typography.bodyMedium)
         if (state == ModeState.PracticeMore) {
-            OutlinedButton(onClick = { onStart(true) }, modifier = Modifier.fillMaxWidth()) { Text("Practice more") }
+            OutlinedButton(onClick = { onStart(true) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.practice_more)) }
         } else {
-            Button(onClick = { onStart(false) }, enabled = state.enabled, modifier = Modifier.fillMaxWidth()) { Text("Start") }
+            Button(onClick = { onStart(false) }, enabled = state.enabled, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.start)) }
         }
     }
 }
@@ -172,7 +174,7 @@ private fun ModeRow(title: String, state: ModeState, onStart: (extra: Boolean) -
 private fun PacingHint(data: HomeData) {
     data.week?.let { w ->
         val tail = if (w.studied >= w.goal) " — goal reached" else ""
-        Text("This week: ${w.studied} of ${w.goal} study days$tail", style = MaterialTheme.typography.bodySmall)
+        Text(stringResource(R.string.this_week_of_study_days, w.studied, w.goal, tail), style = MaterialTheme.typography.bodySmall)
     }
     val p = data.pacing ?: return
     val text = when (p.note) {
@@ -190,11 +192,11 @@ private fun N4Offer(app: KanjiApp, data: HomeData) {
     if (!data.n4Offer) return
     Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("You know N5 well!", style = MaterialTheme.typography.titleMedium)
-            Text("Most N5 kanji and words are solid across quizzes and drawing. Ready to add N4 words?")
+            Text(stringResource(R.string.you_know_n5_well), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.most_n5_kanji_and_words))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { app.settings.setN4Unlocked(true); app.settings.setWordStack(WordStacks.n4.id) }) { Text("Add N4 words") }
-                TextButton(onClick = { app.settings.dismissAdvance(System.currentTimeMillis()) }) { Text("Not yet") }
+                Button(onClick = { app.settings.setN4Unlocked(true); app.settings.setWordStack(WordStacks.n4.id) }) { Text(stringResource(R.string.add_n4_words)) }
+                TextButton(onClick = { app.settings.dismissAdvance(System.currentTimeMillis()) }) { Text(stringResource(R.string.not_yet)) }
             }
         }
     }

@@ -1,6 +1,8 @@
 package io.github.stopcran.kanji.ui
 
 import androidx.compose.foundation.layout.Box
+import io.github.stopcran.kanji.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -55,7 +57,7 @@ const val NO_ANSWER = ""
 
 @Composable
 fun DontKnowButton(onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) { Text("I don't know") }
+    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.i_don_t_know)) }
 }
 
 /** The article behind a tap after a miss, so the feedback is read before the page; [key] resets the state for each question. */
@@ -63,5 +65,5 @@ fun DontKnowButton(onClick: () -> Unit) {
 fun ArticleSection(openByDefault: Boolean, key: String, body: String, path: String, onOpenDoc: (String) -> Unit) {
     var open by rememberSaveable(key) { mutableStateOf(openByDefault) }
     HorizontalDivider(Modifier.padding(vertical = 4.dp))
-    if (open) MarkdownView(body, path, onOpenDoc) else OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) { Text("Read the article") }
+    if (open) MarkdownView(body, path, onOpenDoc) else OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.read_the_article)) }
 }
