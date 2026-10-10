@@ -59,14 +59,19 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
         try {
             val commitKey = "${source.id}@${source.branch}"
             val head = headCommit(source)
-            // Rate-limited or offline: keep what we have rather than downloading the whole archive on every check.
+            // Rate-limited or offline: fall back to the branch archive, but at most once per interval so launches and worker retries cannot hammer codeload.
+            val url = head?.let { source.commitZipUrl(it) } ?: source.zipUrl
             if (!force && head == null && db.content().meta(source.id) != null) {
-                return@withContext SyncResult.Failed("Could not check for updates", retryable = true)
+                val now = System.currentTimeMillis()
+                if (now - settings.fallbackAttemptMs(commitKey) < LAUNCH_INTERVAL_MS) {
+                    return@withContext SyncResult.Failed("Could not check for updates", retryable = false)
+                }
+                settings.setFallbackAttemptMs(commitKey, now)
             }
             if (!force && head != null && head == settings.syncedCommit(commitKey) && db.content().meta(source.id) != null) {
                 return@withContext SyncResult.UpToDate
             }
-            val files = download(source.zipUrl) { SafeZip.read(it) }
+            val files = download(url) { SafeZip.read(it) }
             val parsed = ContentParser.parse(files)
             val dao = db.content()
             if (!force && dao.meta(source.id)?.contentVersion == parsed.manifest.contentVersion) {

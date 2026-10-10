@@ -459,6 +459,23 @@ class ContentTest {
     }
 
     @Test
+    fun zipCountsSkippedEntriesAgainstTheInflatedCap() {
+        val big = zip("repo/.github/big.bin" to "0".repeat(10_000))
+        try {
+            SafeZip.read(ByteArrayInputStream(big), SafeZip.Limits(maxInflatedBytes = 1_000))
+            fail()
+        } catch (_: ContentException) {
+        }
+        val mixed = zip("repo/.github/a.bin" to "0".repeat(600), "repo/kanji/a.md" to "x".repeat(600))
+        try {
+            SafeZip.read(ByteArrayInputStream(mixed), SafeZip.Limits(maxInflatedBytes = 1_000))
+            fail()
+        } catch (_: ContentException) {
+        }
+        assertEquals(setOf("kanji/a.md"), SafeZip.read(ByteArrayInputStream(mixed)).keys)
+    }
+
+    @Test
     fun parsesRealContentRepoWhenPresent() {
         val root = File("../../learning-japanese")
         assumeTrue(File(root, "manifest.json").exists())

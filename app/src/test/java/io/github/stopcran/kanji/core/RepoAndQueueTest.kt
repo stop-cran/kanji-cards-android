@@ -25,6 +25,7 @@ class RepoAndQueueTest {
         val s = RepoSource.parse("https://github.com/stop-cran/learning-japanese", "main")!!
         assertEquals("stop-cran/learning-japanese", s.id)
         assertEquals("https://codeload.github.com/stop-cran/learning-japanese/zip/refs/heads/main", s.zipUrl)
+        assertEquals("https://codeload.github.com/stop-cran/learning-japanese/zip/" + "a".repeat(40), s.commitZipUrl("a".repeat(40)))
         assertEquals("a/b", RepoSource.parse("https://github.com/A/B.git/", "dev/x")!!.id)
     }
 

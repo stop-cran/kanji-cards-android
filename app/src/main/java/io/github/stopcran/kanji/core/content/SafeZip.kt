@@ -10,6 +10,8 @@ object SafeZip {
         val maxEntries: Int = 5_000,
         val maxFileBytes: Long = 2L * 1024 * 1024,
         val maxTotalBytes: Long = 50L * 1024 * 1024,
+        /** Everything inflated from the archive, including entries we skip; bounds CPU spent on a hostile zip. */
+        val maxInflatedBytes: Long = 100L * 1024 * 1024,
     )
 
     private val allowedFolders = setOf("kanji", "words", "articles", "strokes")
@@ -18,6 +20,7 @@ object SafeZip {
     fun read(input: InputStream, limits: Limits = Limits()): Map<String, ByteArray> {
         val result = LinkedHashMap<String, ByteArray>()
         var total = 0L
+        var inflated = 0L
         var entries = 0
         ZipInputStream(input).use { zip ->
             while (true) {
@@ -29,8 +32,9 @@ object SafeZip {
                     throw ContentException("Unsafe path in archive: $name")
                 }
                 val relative = name.substringAfter('/', missingDelimiterValue = "")
-                if (relative.isEmpty() || !isWanted(relative)) continue
-                val bytes = readLimited(zip, limits.maxFileBytes)
+                val wanted = relative.isNotEmpty() && isWanted(relative)
+                val bytes = readLimited(zip, if (wanted) limits.maxFileBytes else Long.MAX_VALUE, keep = wanted) { inflated += it; if (inflated > limits.maxInflatedBytes) throw ContentException("Archive is too large") }
+                if (!wanted) continue
                 total += bytes.size
                 if (total > limits.maxTotalBytes) throw ContentException("Archive is too large")
                 result[relative] = bytes
@@ -45,16 +49,18 @@ object SafeZip {
         return parts.size == 2 && parts[0] in allowedFolders && parts[1].isNotEmpty()
     }
 
-    private fun readLimited(zip: ZipInputStream, max: Long): ByteArray {
+    /** Drains the current entry; the bytes are kept only when [keep], and [onBytes] sees every inflated chunk. */
+    private fun readLimited(zip: ZipInputStream, max: Long, keep: Boolean, onBytes: (Int) -> Unit): ByteArray {
         val out = ByteArrayOutputStream()
         val buffer = ByteArray(8192)
         var size = 0L
         while (true) {
             val n = zip.read(buffer)
             if (n < 0) break
+            onBytes(n)
             size += n
             if (size > max) throw ContentException("File in archive exceeds size limit")
-            out.write(buffer, 0, n)
+            if (keep) out.write(buffer, 0, n)
         }
         return out.toByteArray()
     }

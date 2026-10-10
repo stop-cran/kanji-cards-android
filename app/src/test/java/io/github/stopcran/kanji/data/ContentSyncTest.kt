@@ -149,12 +149,22 @@ class ContentSyncTest {
     }
 
     @Test
-    fun rateLimitedHeadKeepsExistingContentWithoutDownloading() {
+    fun rateLimitedHeadFallsBackToTheArchiveOnlyOncePerInterval() {
         run()
         http.headCode = 403
-        val r = run()
-        assertEquals(SyncResult.Failed("Could not check for updates", retryable = true), r)
-        assertEquals(1, http.downloads)
+        val r1 = run()
+        assertEquals(SyncResult.UpToDate, r1)
+        assertEquals(2, http.downloads)
+        assertTrue(http.requests.last().first.endsWith("/refs/heads/main"))
+        val r2 = run()
+        assertEquals(SyncResult.Failed("Could not check for updates", retryable = false), r2)
+        assertEquals(2, http.downloads)
+    }
+
+    @Test
+    fun knownHeadDownloadsTheArchivePinnedToThatCommit() {
+        run()
+        assertTrue(http.requests.last().first.endsWith("/zip/$SHA_A"))
     }
 
     @Test

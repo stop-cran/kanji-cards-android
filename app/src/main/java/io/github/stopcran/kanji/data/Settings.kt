@@ -124,6 +124,9 @@ class Settings(context: Context) {
     fun setHeadEtag(sourceId: String, etag: String, sha: String) = prefs.edit().putString("etag:$sourceId", "$etag|$sha").apply()
 
     fun clearSyncedCommit(sourceId: String) = prefs.edit().remove("sha:$sourceId").apply()
+    /** Last time an archive was downloaded without a successful head check (API rate-limited or failing), per source and branch. */
+    fun fallbackAttemptMs(key: String): Long = prefs.getLong("fallback:$key", 0)
+    fun setFallbackAttemptMs(key: String, ms: Long) = prefs.edit().putLong("fallback:$key", ms).apply()
     var lastCheckMs: Long
         get() = prefs.getLong(KEY_LAST_CHECK, 0)
         set(v) = prefs.edit().putLong(KEY_LAST_CHECK, v).apply()

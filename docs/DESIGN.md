@@ -34,9 +34,12 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - `articles/*.md` free-form; `strokes/<char>.json` KanjiVG-derived geometry in a 109-unit box with optional `orderVariants`.
 - `manifest.json` maps path to SHA-256 over LF-normalised bytes; files failing the hash are skipped. The content repo's
   `tools/build_manifest.py` and `ContentParser.sha256` must stay in sync.
-- Sync checks the branch head via `api.github.com`, then downloads the zip. It is skipped when the head SHA equals the stored one, and the
+- Sync checks the branch head via `api.github.com`, then downloads the zip pinned to that commit SHA (`RepoSource.commitZipUrl`), so the
+  archive cannot differ from the checked head. It is skipped when the head SHA equals the stored one, and the
   import is also skipped when `manifest.contentVersion` is unchanged, so **content changes must bump `contentVersion`** (`force` bypasses
-  both). If the head lookup fails the zip is downloaded anyway.
+  both). If the head lookup fails and content exists, the branch archive is downloaded at most once per 6h per source/branch (persisted
+  `fallback:` timestamp; throttled calls return a non-retryable failure so the worker does not loop); with no content it downloads at once.
+  `SafeZip` drains skipped entries too and caps total inflated bytes (100 MB) besides the wanted-file cap.
 - Import is one Room `@Transaction` (`replaceContent`) that replaces the whole snapshot: readers never see a half-imported snapshot.
   Consequences: a *fatal* failure (exception, no valid kanji, unsafe zip entry or archive limits in `SafeZip`) keeps the previous content;
   a *successful partial* import (some manifest files skipped for hash/parse errors) replaces it, so a skipped file disappears until fixed.

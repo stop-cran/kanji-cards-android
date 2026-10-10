@@ -47,6 +47,7 @@ list separator). The version 2-to-3 migration keeps all content, word IDs, revie
 level or exclusions. It clears only sync metadata so normal home-screen sync reimports even an unchanged content revision and fills in metadata
 that older app versions ignored. Cached content remains usable with legacy behavior while offline. Version 1 databases upgrade through both
 registered migrations. The content manifest remains schema version 1; regenerate hashes and `contentVersion` when changing word metadata.
+`contentVersion` is the update contract: a new commit with an unchanged `contentVersion` is treated as up to date and not imported.
 
 `DatabaseMigrationTest` uses Robolectric with native SQLite to check Room read/write round trips across a database reopen, upgrades from
 versions 1 and 2, and content replacement without losing existing review state or history.

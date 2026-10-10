@@ -7,6 +7,12 @@ data class RepoSource(val owner: String, val repo: String, val branch: String) {
     /** Archive endpoint; branch names with slashes are allowed. */
     val zipUrl: String get() = "https://codeload.github.com/$owner/$repo/zip/refs/heads/$branch"
 
+    /** Archive of one commit; the SHA must be 40 hex digits so it cannot alter the URL. */
+    fun commitZipUrl(sha: String): String {
+        require(Regex("[0-9a-f]{40}").matches(sha)) { "Not a commit SHA" }
+        return "https://codeload.github.com/$owner/$repo/zip/$sha"
+    }
+
     companion object {
         private val urlRegex = Regex("""^https://github\.com/([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))/([A-Za-z0-9._-]{1,100}?)(?:\.git)?/?$""")
         private val branchRegex = Regex("""^[A-Za-z0-9._][A-Za-z0-9._/-]{0,99}$""")
