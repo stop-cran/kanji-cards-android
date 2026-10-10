@@ -35,6 +35,7 @@ commit. Say plainly what was not tested on a real device. Release build: `assemb
 - **Edge-to-edge on API 35:** content draws under the status/navigation bars; a button there is visible but untouchable. Every screen goes
   through `ui/Page`, which applies `statusBarsPadding`/`navigationBarsPadding` and a scroll container. Don't build screens without it.
 - **System back:** `BackHandler` in `AppNav` pops the route stack; without it back closes the app.
+- **Screen state across navigation:** `AppNav` composes only the top route, wrapped in `SaveableStateProvider` keyed `<index>:<route>`; `pop()` calls `removeState` so popped routes don't leak. Without it `rememberSaveable` state (search text, scroll) is lost when a screen pushes another. Lists that must keep scroll use an explicit `rememberLazyListState()`.
 - **ViewModel scope:** `viewModel()` is scoped to the Activity, not to a route, so a quiz VM outlives leaving the screen and would resume
   mid-answer. The quiz route is `quiz:<timestamp>` and the VM is created with that key, giving each start a fresh session while still
   surviving rotation. Do the same for any new session-like screen.

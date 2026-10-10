@@ -42,6 +42,7 @@ fun WordCardsScreen(app: KanjiApp, onBack: () -> Unit, onOpen: (String) -> Unit,
     val wide = isExpandedWidth()
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     Page("Words ($count)", onBack, scrollable = false, maxWidth = if (wide) 1400.dp else 720.dp, ime = true) {
       Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
        Column(Modifier.weight(if (wide) 0.4f else 1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -55,7 +56,7 @@ fun WordCardsScreen(app: KanjiApp, onBack: () -> Unit, onOpen: (String) -> Unit,
             trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text(stringResource(R.string.clear)) } },
         )
         if (shown.isEmpty() && words.isNotEmpty()) Text(stringResource(R.string.no_words_match), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        LazyColumn(Modifier.weight(1f)) {
+        LazyColumn(Modifier.weight(1f), state = listState) {
             items(shown, key = { it.word }) { w ->
                 Row(Modifier.fillMaxWidth().clickable { if (wide) selected = w.word else { focusManager.clearFocus(); onOpen(w.word) } }.padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text(w.word, fontSize = 22.sp, modifier = Modifier.weight(0.4f))

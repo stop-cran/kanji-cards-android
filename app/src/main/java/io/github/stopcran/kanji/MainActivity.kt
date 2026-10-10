@@ -11,6 +11,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.toMutableStateList
 import io.github.stopcran.kanji.ui.AboutScreen
 import io.github.stopcran.kanji.ui.DocScreen
@@ -58,52 +59,68 @@ private fun AppNav(app: KanjiApp) {
     ) {
         listOf("home").toMutableStateList()
     }
+    val holder = rememberSaveableStateHolder()
     fun push(route: String) { stack.add(route) }
-    fun pop() { if (stack.size > 1) stack.removeAt(stack.lastIndex) }
+    fun pop() {
+        if (stack.size > 1) {
+            holder.removeState(stateKey(stack.lastIndex, stack.last()))
+            stack.removeAt(stack.lastIndex)
+        }
+    }
 
     BackHandler(enabled = stack.size > 1) { pop() }
 
-    when (val route = stack.last()) {
-        "settings" -> SettingsScreen(app, onBack = ::pop, onAbout = { push("about") })
-        "about" -> AboutScreen(onBack = ::pop)
-        "cards" -> CardsScreen(app, onBack = ::pop, onOpen = { push("doc:kanji/$it.md") }, onOpenDoc = { push("doc:$it") })
-        "word-cards" -> WordCardsScreen(app, onBack = ::pop, onOpen = { push("doc:words/$it.md") }, onOpenDoc = { push("doc:$it") })
+    // Screens below the top leave composition; the holder keeps their rememberSaveable state (search text, selection, scroll) for Back.
+    val top = stack.last()
+    holder.SaveableStateProvider(stateKey(stack.lastIndex, top)) { RouteContent(app, top, { stack.add(it) }, { pop() }) }
+}
+
+/** Index in the key so the same document opened twice in one stack keeps separate scroll state. */
+private fun stateKey(index: Int, route: String) = "$index:$route"
+
+@Composable
+private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, pop: () -> Unit) {
+    when (route) {
+        "settings" -> SettingsScreen(app, onBack = pop, onAbout = { push("about") })
+        "about" -> AboutScreen(onBack = pop)
+        "cards" -> CardsScreen(app, onBack = pop, onOpen = { push("doc:kanji/$it.md") }, onOpenDoc = { push("doc:$it") })
+        "word-cards" -> WordCardsScreen(app, onBack = pop, onOpen = { push("doc:words/$it.md") }, onOpenDoc = { push("doc:$it") })
         else -> if (route.startsWith("quiz:")) {
             QuizScreen(
                 sessionKey = route,
-                onBack = ::pop,
+                onBack = pop,
                 onOpenDoc = { push("doc:$it") },
                 onPracticeMore = { pop(); push("quiz:${System.currentTimeMillis()}:extra") },
             )
         } else if (route.startsWith("wquiz:")) {
             WordQuizScreen(
                 sessionKey = route,
-                onBack = ::pop,
+                onBack = pop,
                 onOpenDoc = { push("doc:$it") },
                 onPracticeMore = { pop(); push("wquiz:${System.currentTimeMillis()}:${route.split(":")[2]}:extra") },
             )
         } else if (route.startsWith("kreading:")) {
             KanjiReadingScreen(
                 sessionKey = route,
-                onBack = ::pop,
+                onBack = pop,
                 onOpenDoc = { push("doc:$it") },
                 onPracticeMore = { pop(); push("kreading:${System.currentTimeMillis()}:extra") },
             )
         } else if (route.startsWith("draw:")) {
             DrawScreen(
                 sessionKey = route,
-                onBack = ::pop,
+                onBack = pop,
                 onOpenDoc = { push("doc:$it") },
                 onPracticeMore = { pop(); push("draw:${System.currentTimeMillis()}:extra") },
             )
         } else if (route.startsWith("doc:")) {
             val path = route.removePrefix("doc:")
-            DocScreen(app, path, onBack = ::pop, onOpenDoc = { push("doc:$it") })
+            DocScreen(app, path, onBack = pop, onOpenDoc = { push("doc:$it") })
         } else {
             HomePages(
                 app,
                 route,
-                onBack = ::pop,
+                onBack = pop,
                 actions = HomeActions(
                     onSettings = { push("settings") },
                     onCards = { push("cards") },
