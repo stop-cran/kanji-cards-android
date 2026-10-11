@@ -2,6 +2,7 @@ package io.github.stopcran.kanji.core
 
 import io.github.stopcran.kanji.core.content.ContentException
 import io.github.stopcran.kanji.core.content.ContentParser
+import io.github.stopcran.kanji.core.content.CounterFile
 import io.github.stopcran.kanji.core.content.FrontMatter
 import io.github.stopcran.kanji.core.content.SafeZip
 import org.junit.Assert.assertEquals
@@ -493,6 +494,8 @@ class ContentTest {
         } catch (_: ContentException) {
         }
         assertEquals(setOf("kanji/a.md"), SafeZip.read(ByteArrayInputStream(mixed)).keys)
+        val withCounters = zip("repo/manifest.json" to "{}", "repo/counters/mai.json" to "{}", "repo/docs/x.md" to "x")
+        assertEquals(setOf("manifest.json", "counters/mai.json"), SafeZip.read(ByteArrayInputStream(withCounters)).keys)
     }
 
     @Test
@@ -509,5 +512,10 @@ class ContentTest {
         assertEquals(10, parsed.counters.size)
         assertEquals(120, parsed.counters.sumOf { it.cards.size })
         assertEquals(20, parsed.counters.sumOf { it.reverse.size })
+        val j = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val again = parsed.counters.map { j.decodeFromString(CounterFile.serializer(), j.encodeToString(CounterFile.serializer(), it)) }
+        assertEquals(parsed.counters, again)
+        val index = io.github.stopcran.kanji.core.counters.CounterIndex(again)
+        assertEquals(120, index.ids(io.github.stopcran.kanji.core.counters.CounterMode.Choose).size)
     }
 }
