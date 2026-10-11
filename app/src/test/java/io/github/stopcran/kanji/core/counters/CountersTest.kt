@@ -35,6 +35,13 @@ class CountersTest {
     private val hiki = CounterFile(1, "hiki", "匹", "ひき", "small animals", cards = listOf(cat))
     private val index = CounterIndex(listOf(hon, hiki))
 
+    @Test
+    fun filledSentenceDoesNotRepeatTheNumber() {
+        assertEquals("机の上にペンが三本あります。", index.sentence(pen))
+        assertEquals("机の上にペンが三本あります。", index.sentence(pen.copy(text = "机の上にペンが{}あります。")))
+        assertEquals("何本あります。", index.sentence(pen.copy(text = "何{}あります。", phrase = "何本")))
+    }
+
     private fun solid() = SrsState(CardPhase.Review, stability = 3.0, difficulty = 5.0, due = Instant.EPOCH, lastReview = Instant.EPOCH, reps = 3, lapses = 0)
 
     @Test

@@ -52,7 +52,13 @@ class CounterIndex(val files: List<CounterFile>) {
     fun nounLabel(card: CounterCard): String = vocabulary[card.noun]?.takeIf { it.reading.isNotEmpty() }
         ?.let { "${card.noun} (${it.reading})" } ?: card.noun
 
-    fun sentence(card: CounterCard): String = card.text.replace("{}", card.phrase)
+    /** The text may already carry the number before "{}" (e.g. 二{}), while the phrase repeats it; drop the shared part. */
+    fun sentence(card: CounterCard): String {
+        val at = card.text.indexOf("{}")
+        val before = card.text.substring(0, at)
+        val shared = (minOf(before.length, card.phrase.length) downTo 0).first { before.endsWith(card.phrase.take(it)) }
+        return before.dropLast(shared) + card.phrase + card.text.substring(at + 2)
+    }
 }
 
 /** Number-aware normalization so 三本, ３本 and 3本 are the same answer while 二本 and 三本 stay different. */

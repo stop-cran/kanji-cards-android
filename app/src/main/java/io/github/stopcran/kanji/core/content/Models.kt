@@ -74,7 +74,7 @@ data class CounterFile(
 data class CounterCard(
     val id: String,
     val kind: String = "plain",
-    /** Sentence with exactly one "{}" where the number and counter go. */
+    /** Sentence with exactly one "{}" where the counter goes; any number stays in the text before it. */
     val text: String,
     val en: String,
     val noun: String,
