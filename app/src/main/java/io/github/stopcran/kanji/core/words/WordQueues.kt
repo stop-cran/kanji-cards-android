@@ -9,8 +9,9 @@ import kotlin.random.Random
 
 object WordQueues {
     /**
-     * Queue for one direction. English to Japanese only includes words unlocked by the forward direction (or already started),
-     * and the other direction's memory slightly defers urgency (see [WordBlend]).
+     * Queue for one direction. Gated directions only include words unlocked by their [WordDirection.gate] direction (or already
+     * started); [other] is that gate direction's state (the caller passes the states of `direction.gate`). The other direction's
+     * memory slightly defers urgency (see [WordBlend]).
      */
     fun build(
         direction: WordDirection,
@@ -27,7 +28,7 @@ object WordQueues {
         val eligible = if (!direction.gated) words else words.filter { w -> WordGate.reverseUnlocked(other[w]) || own[w]?.phase.let { it != null && it != CardPhase.New } }
         return if (extra) QueueBuilder.extra(eligible, own, now, limit, noise, rnd)
         else QueueBuilder.build(eligible, own, now, newBudget, limit, noise, rnd) { w ->
-            if (direction == WordDirection.Reading) 1.0 else WordBlend.urgencyFactor(other[w], now)
+            if (direction == WordDirection.Reading || direction == WordDirection.Type) 1.0 else WordBlend.urgencyFactor(other[w], now)
         }
     }
 }

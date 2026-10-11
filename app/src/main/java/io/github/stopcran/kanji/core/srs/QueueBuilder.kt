@@ -4,7 +4,7 @@ import java.time.Duration
 import java.time.Instant
 import kotlin.random.Random
 
-enum class StudyMode { Quiz, Draw, WordJpEn, WordEnJp, WordReading, KanjiOn, KanjiKun }
+enum class StudyMode { Quiz, Draw, WordJpEn, WordEnJp, WordReading, WordType, KanjiOn, KanjiKun }
 
 data class QueueItem(val kanji: String, val state: SrsState, val isNew: Boolean)
 

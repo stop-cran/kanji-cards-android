@@ -130,7 +130,15 @@ private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, p
                     onQuiz = { extra -> push("quiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
                     onDraw = { extra -> push("draw:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
                     onReadings = { extra -> push("kreading:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
-                    onWords = { dir, extra -> push("wquiz:${System.currentTimeMillis()}:${when (dir) { WordDirection.JpToEn -> "jp"; WordDirection.EnToJp -> "en"; WordDirection.Reading -> "rd" }}" + if (extra) ":extra" else "") },
+                    onWords = { dir, extra ->
+                        val code = when (dir) {
+                            WordDirection.JpToEn -> "jp"
+                            WordDirection.EnToJp -> "en"
+                            WordDirection.Reading -> "rd"
+                            WordDirection.Type -> "ty"
+                        }
+                        push("wquiz:${System.currentTimeMillis()}:$code" + if (extra) ":extra" else "")
+                    },
                 ),
             )
         }

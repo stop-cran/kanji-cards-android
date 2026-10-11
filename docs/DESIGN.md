@@ -52,8 +52,11 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   position. `sourceId` is the lower-case `owner/repo`, so switching to a fork keeps separate progress.
 - **Stacks have independent state** on purpose: a kanji learned in a small set may be confused in a larger one and must be re-learned there.
   Kanji stacks are tag filters (`all`, `starter`, `jlpt-n5`...). Word stacks are `words-n5`, `words-n4`, `words-all` (cumulative by level).
-- **Modes** are `Quiz`, `Draw`, `WordJpEn`, `WordEnJp`, `WordReading`; each mode has its own state for the same item. Recognition and recall are different
+- **Modes** are `Quiz`, `Draw`, `WordJpEn`, `WordEnJp`, `WordReading`, `WordType`; each mode has its own state for the same item. Recognition and recall are different
   memories and must not share a schedule.
+- **Typed words** (`WordType`, `core/words/TypedAnswer.kt`): English prompt, free-text answer, no options. Gate is `WordDirection.gate` (EnToJp, twice answered).
+  Exact written form or a same-title/same-type synonym = Good; kana reading of a kanji word = Hard (re-asked); else Again. IME conversion is accepted as typed;
+  kana-to-kanji recall is left to other modes. No first-success cap. Its new items share the daily `newBudget`.
 - Grades: wrong = Again (FSRS schedules it about 10 minutes later in a learning state; the quiz view models also re-insert it about 3 cards
   later in the same session, and that re-insert is session-only); right = Good; "I guessed" = Hard. Easy is never used (with 4 options a
   fast answer is often luck). Drawing: clean = Good, recognised with stroke mistakes = Hard, not recognised or given up = Again.
@@ -109,7 +112,7 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   not recur within `SIBLING_GAP` (2) cards while others remain (its readings would cue each other; interleaving also aids discrimination). A new card
   never jumps a due card skipped only for spacing; extra practice keeps its 10-card selection and is interleaved. Not part of N4 advancement (yet); tap only (voice: later).
 - Font variety grows with memory stability (Gothic only when young, then Mincho, Textbook, Brush; a lapse drops it back) so recognition does not depend on one glyph shape (`FontPolicy`).
-- Each session screen is keyed by its route (`quiz:<ts>[:extra]`, `wquiz:<ts>:<jp|en|rd>[:extra]`, `draw:<ts>[:extra]`, `kreading:<ts>[:extra]`) so a ViewModel
+- Each session screen is keyed by its route (`quiz:<ts>[:extra]`, `wquiz:<ts>:<jp|en|rd|ty>[:extra]`, `draw:<ts>[:extra]`, `kreading:<ts>[:extra]`) so a ViewModel
   survives rotation and following a doc link, but a new start is a fresh session. Start sessions from `LaunchedEffect`, not `init`.
 
 ## 5. Words, levels and advancement

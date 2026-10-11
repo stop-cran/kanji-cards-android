@@ -58,7 +58,8 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
             val wordStates = WordDirection.entries.associateWith { d -> app.db.reviews().states(source.id, wordStack.id, d.mode.name).associate { it.kanji to it.toSrs() } }
             due += app.db.readingData(app.settings, cards, ReadingRequest(source.id, stack, newRemaining, Instant.ofEpochMilli(now))).items.size
             for (d in WordDirection.entries) {
-                due += WordQueues.build(d, wordEntities.forDirection(d).map { it.word }, wordStates.getValue(d), wordStates.getValue(d.other), Instant.ofEpochMilli(now), newRemaining).size
+                val ids = wordEntities.forDirection(d).map { it.word }
+                due += WordQueues.build(d, ids, wordStates.getValue(d), wordStates.getValue(d.gate), Instant.ofEpochMilli(now), newRemaining).size
             }
             val decision = ReminderPolicy.decide(
                 now, LocalDate.now().atStartOfDay(zone).toInstant().toEpochMilli(), app.db.reviews().lastReviewMs(),

@@ -25,18 +25,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.stopcran.kanji.core.words.WordDirection
+import io.github.stopcran.kanji.core.words.TypedVerdict
+import androidx.compose.ui.focus.focusRequester
 import io.github.stopcran.kanji.data.WordEntity
 import io.github.stopcran.kanji.data.splitSep
 
 private val originTags = setOf("wago", "kango", "gairaigo")
 
-/** Session key: "wquiz:<timestamp>:<jp|en|rd>[:extra]". */
+/** Session key: "wquiz:<timestamp>:<jp|en|rd|ty>[:extra]". */
 @Composable
 fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit, onPracticeMore: () -> Unit, vm: WordQuizViewModel = serviceViewModel(sessionKey) { WordQuizViewModel(it) }) {
     val parts = sessionKey.split(':')
     val direction = when (parts.getOrNull(2)) {
         "en" -> WordDirection.EnToJp
         "rd" -> WordDirection.Reading
+        "ty" -> WordDirection.Type
         else -> WordDirection.JpToEn
     }
     LaunchedEffect(sessionKey) { vm.ensureStarted(direction, sessionKey.endsWith(":extra")) }
@@ -45,12 +48,15 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
             WordDirection.JpToEn -> "Words: Japanese → English"
             WordDirection.EnToJp -> "Words: English → Japanese"
             WordDirection.Reading -> "Words: reading"
+            WordDirection.Type -> "Words: type it"
         },
         onBack,
     ) {
         when (val s = vm.ui) {
             WordQuizUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
             is WordQuizUi.Empty -> Text(s.message)
+            is WordQuizUi.TypeQuestion -> TypeQuestion(s, vm)
+            is WordQuizUi.TypeAnswer -> TypeAnswer(s, vm, onOpenDoc)
             is WordQuizUi.Done -> {
                 Text(stringResource(R.string.session_complete), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
                 Text(stringResource(R.string.of_answers_correct, s.correct, s.answered))
@@ -65,6 +71,7 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
                         WordDirection.JpToEn -> "What does it mean?"
                         WordDirection.EnToJp -> "Which word is it?"
                         WordDirection.Reading -> "How is it read?"
+                        WordDirection.Type -> ""
                     },
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center,
@@ -82,13 +89,62 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
 
 @Composable
 private fun Prompt(word: WordEntity, direction: WordDirection, font: io.github.stopcran.kanji.core.srs.KanjiFont, big: Boolean) {
-    if (direction != WordDirection.EnToJp || !big) {
+    if (direction == WordDirection.JpToEn || direction == WordDirection.Reading || !big) {
         Text(word.word, fontSize = if (big) 64.sp else 48.sp, fontFamily = font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     } else {
         Text(word.title, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         val hint = (listOfNotNull(word.type) + word.tags.splitSep()).filter { it !in originTags }.distinct().joinToString(" · ")
         if (hint.isNotEmpty()) Text(hint, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     }
+}
+
+@Composable
+private fun TypeQuestion(s: WordQuizUi.TypeQuestion, vm: WordQuizViewModel) {
+    val focus = androidx.compose.runtime.remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(s) { runCatching { focus.requestFocus() } }
+    Text(stringResource(R.string.left, s.remaining), style = MaterialTheme.typography.labelMedium)
+    Prompt(s.word, WordDirection.Type, s.font, big = true)
+    Text("Type it in Japanese", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    androidx.compose.material3.OutlinedTextField(
+        value = vm.draft,
+        onValueChange = vm::onDraft,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.headlineSmall,
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+            autoCorrectEnabled = false, imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+        ),
+        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { vm.submit() }),
+        modifier = Modifier.fillMaxWidth().focusRequester(focus),
+    )
+    Button(onClick = { vm.submit() }, enabled = vm.draft.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Check") }
+    DontKnowButton { vm.submit(giveUp = true) }
+}
+
+@Composable
+private fun TypeAnswer(s: WordQuizUi.TypeAnswer, vm: WordQuizViewModel, onOpenDoc: (String) -> Unit) {
+    val verdict = s.result.verdict
+    Text(s.word.word, fontSize = 56.sp, fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    Text(stringResource(R.string.value_dash_detail, s.word.reading, s.word.title), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    Text(
+        when {
+            s.gaveUp -> "No problem — here it is"
+            verdict == TypedVerdict.Exact -> "Correct!"
+            verdict == TypedVerdict.KanaOnly -> "Right word — now recall the kanji"
+            else -> "Not quite"
+        },
+        color = if (verdict == TypedVerdict.Wrong) wrongTextColor() else correctTextColor(),
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = TextAlign.Center,
+    )
+    if (!s.gaveUp) {
+        val matched = s.result.matched?.takeIf { verdict == TypedVerdict.Wrong }
+        val text = if (matched != null) "You typed ${s.typed} — ${matched.reading}, ${matched.title}" else "You typed ${s.typed}"
+        Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    }
+    val ok = verdict != TypedVerdict.Wrong
+    Button(onClick = { vm.next() }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) { Text(if (ok) "Next" else "Next (will repeat)") }
+    ArticleSection(ok, "t:${s.word.word}:${s.typed}:${s.remaining}", s.word.body, "words/${s.word.word}.md", onOpenDoc)
 }
 
 @Composable

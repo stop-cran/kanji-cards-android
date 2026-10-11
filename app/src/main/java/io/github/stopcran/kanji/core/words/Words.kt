@@ -15,11 +15,17 @@ enum class WordDirection(val mode: StudyMode) {
     JpToEn(StudyMode.WordJpEn),
     EnToJp(StudyMode.WordEnJp),
     Reading(StudyMode.WordReading),
+
+    /** English prompt, free-text Japanese answer (no options). */
+    Type(StudyMode.WordType),
     ;
 
     val other: WordDirection get() = if (this == JpToEn) EnToJp else JpToEn
 
-    /** Directions other than the forward one open only after the forward direction has been answered a couple of times. */
+    /** The direction whose memory opens this one: typing is offered once the word is known as a choice from English. */
+    val gate: WordDirection get() = if (this == Type) EnToJp else other
+
+    /** Directions other than the forward one open only after their [gate] direction has been answered a couple of times. */
     val gated: Boolean get() = this != JpToEn
 }
 
@@ -133,7 +139,7 @@ object WordQuizBuilder {
 
     fun label(c: WordCard, direction: WordDirection): String = when (direction) {
         WordDirection.JpToEn -> c.title
-        WordDirection.EnToJp -> if (c.word == c.reading) c.word else "${c.word} (${c.reading})"
+        WordDirection.EnToJp, WordDirection.Type -> if (c.word == c.reading) c.word else "${c.word} (${c.reading})"
         WordDirection.Reading -> c.reading
     }
 }

@@ -14,6 +14,9 @@ import io.github.stopcran.kanji.core.srs.KanjiFont
 import io.github.stopcran.kanji.core.quiz.QuizSession
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.words.WordCard
+import io.github.stopcran.kanji.core.words.TypedAnswer
+import io.github.stopcran.kanji.core.words.TypedResult
+import io.github.stopcran.kanji.core.words.TypedVerdict
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.WordOption
 import io.github.stopcran.kanji.core.words.WordQuizBuilder
@@ -46,6 +49,12 @@ sealed interface WordQuizUi {
         val correct: Boolean get() = picked == key
     }
     data class Done(val answered: Int, val correct: Int) : WordQuizUi
+
+    /** Typed mode: the English prompt and a free-text answer; the draft text lives in the view model. */
+    data class TypeQuestion(val word: WordEntity, val remaining: Int, val font: KanjiFont) : WordQuizUi
+    data class TypeAnswer(
+        val word: WordEntity, val typed: String, val result: TypedResult, val remaining: Int, val font: KanjiFont, val gaveUp: Boolean,
+    ) : WordQuizUi
 }
 
 /** Word quiz session in one direction; only that direction's scheduling state is updated. */
@@ -88,7 +97,7 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
         words = all.associateBy { it.word }
         cards = all.map { it.toCard() }
         app.db.reviews().states(sourceId, stackId, direction.mode.name).forEach { states[it.kanji] = it.toSrs() }
-        val other = app.db.reviews().states(sourceId, stackId, direction.other.mode.name).associate { it.kanji to it.toSrs() }
+        val other = app.db.reviews().states(sourceId, stackId, direction.gate.mode.name).associate { it.kanji to it.toSrs() }
 
         val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
         session = QuizSession(WordQueues.build(direction, all.forDirection(direction).map { it.word }, states, other, Instant.now(), budget, extra).map { it.kanji }, { it })
@@ -110,13 +119,56 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
                         WordDirection.EnToJp -> "Nothing is due. English → Japanese opens for words you have answered twice in Japanese → English."
                         WordDirection.Reading -> "Nothing is due. The reading quiz opens for words with kanji that you have answered twice in Japanese → English."
                         WordDirection.JpToEn -> "Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings."
+                        WordDirection.Type -> "Nothing is due. Typing opens for words you have answered twice in English → Japanese."
                     },
                 )
             } else WordQuizUi.Done(session.answered, session.correct)
             return
         }
         val entity = words.getValue(word)
+        if (direction == WordDirection.Type) {
+            draft = ""
+            ui = WordQuizUi.TypeQuestion(entity, session.pending + 1, nextFont(word))
+            return
+        }
         ui = WordQuizUi.Question(entity, direction, WordQuizBuilder.options(entity.toCard(), cards, direction, random), session.pending + 1, nextFont(word))
+    }
+
+    /** The typed text of the current question; cleared whenever a new question (including a re-ask) is shown. */
+    var draft: String by mutableStateOf("")
+        private set
+
+    fun onDraft(text: String) {
+        if (ui is WordQuizUi.TypeQuestion) draft = text
+    }
+
+    /** Checks the typed text, or marks the question as not known when [giveUp]. */
+    fun submit(giveUp: Boolean = false) {
+        val q = ui as? WordQuizUi.TypeQuestion ?: return
+        val typed = if (giveUp) "" else draft
+        if (!giveUp && typed.isBlank()) return
+        ui = WordQuizUi.TypeAnswer(q.word, typed, TypedAnswer.grade(typed, q.word.toCard(), cards), q.remaining, q.font, giveUp)
+    }
+
+    private fun nextTyped(a: WordQuizUi.TypeAnswer) {
+        val verdict = a.result.verdict
+        val result = session.answer(a.word.word, a.result.ok, weak = verdict == TypedVerdict.KanaOnly, countsAsCorrect = verdict == TypedVerdict.Exact)
+        if (result.record) record(a.word.word, result.grade, null)
+        showNext()
+    }
+
+    private fun record(word: String, grade: Grade, firstSuccessCapDays: Double?) {
+        val now = Instant.now()
+        val updated = fsrs.review(
+            states[word] ?: SrsState(), grade, now,
+            firstSuccessCapDays = firstSuccessCapDays, fuzzSeed = Fsrs.seed(word, direction.mode.name, states[word]?.reps ?: 0),
+        )
+        states[word] = updated
+        val mode = direction.mode
+        viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
+            val log = ReviewLogEntity(0, sourceId, stackId, word, mode.name, grade.value, now.toEpochMilli())
+            app.db.reviews().record(updated.toEntity(sourceId, stackId, word, mode), log)
+        }
     }
 
     fun pick(word: String, heard: String? = null) {
@@ -132,21 +184,10 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
 
     /** Wrong answers (and "don't know") are graded Again and relearned in-session; right ones Good, or Hard when guessed. */
     fun next(guessed: Boolean = false) {
+        (ui as? WordQuizUi.TypeAnswer)?.let { return nextTyped(it) }
         val a = ui as? WordQuizUi.Answer ?: return
         val result = session.answer(a.word.word, a.correct, guessed)
-        val grade = result.grade
-        if (result.record) {
-            val now = Instant.now()
-            val updated = fsrs.review(
-                states[a.word.word] ?: SrsState(), grade, now,
-                firstSuccessCapDays = Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS, fuzzSeed = Fsrs.seed(a.word.word, direction.mode.name, states[a.word.word]?.reps ?: 0),
-            )
-            states[a.word.word] = updated
-            val mode = direction.mode
-            viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
-                app.db.reviews().record(updated.toEntity(sourceId, stackId, a.word.word, mode), ReviewLogEntity(0, sourceId, stackId, a.word.word, mode.name, grade.value, now.toEpochMilli()))
-            }
-        }
+        if (result.record) record(a.word.word, result.grade, Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS)
         showNext()
     }
 }
