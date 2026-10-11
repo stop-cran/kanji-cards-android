@@ -44,6 +44,15 @@ class Settings(context: Context) {
         _brush.value = b
     }
 
+    private val _traceNew = MutableStateFlow(prefs.getBoolean(KEY_TRACE_NEW, true))
+    /** Show a light reference to draw over the first time a kanji is asked in Draw. */
+    val traceNew: StateFlow<Boolean> = _traceNew
+
+    fun setTraceNew(v: Boolean) {
+        prefs.edit().putBoolean(KEY_TRACE_NEW, v).apply()
+        _traceNew.value = v
+    }
+
     private val _saveDrawings = MutableStateFlow(prefs.getBoolean(KEY_SAVE_DRAWINGS, false))
     val saveDrawings: StateFlow<Boolean> = _saveDrawings
 
@@ -199,6 +208,7 @@ class Settings(context: Context) {
         const val DEFAULT_WEEK = "FFFFFLL"
         const val KEY_FONTS = "varyFonts"
         const val KEY_SAVE_DRAWINGS = "saveDrawings"
+        const val KEY_TRACE_NEW = "traceNewKanji"
         const val KEY_VOICE_INPUT = "voiceInput"
         const val KEY_UNLOCK = "unlockRule"
         const val KEY_FOCUS = "focusBatch"

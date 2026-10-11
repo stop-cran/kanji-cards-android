@@ -45,7 +45,7 @@ data class Lookalike(val kanji: String, val title: String?, val hasCard: Boolean
 sealed interface DrawUi {
     data object Loading : DrawUi
     data class Empty(val message: String) : DrawUi
-    data class Question(val card: KanjiEntity, val remaining: Int, val seq: Int) : DrawUi
+    data class Question(val card: KanjiEntity, val remaining: Int, val seq: Int, val trace: Boolean = false) : DrawUi
     data class Checking(val card: KanjiEntity) : DrawUi
     data class Answer(
         val card: KanjiEntity,
@@ -57,6 +57,7 @@ sealed interface DrawUi {
         val match: MatchResult,
         val recognizerUsed: Boolean,
         val lookalike: Lookalike? = null,
+        val trace: Boolean = false,
     ) : DrawUi
     data class Done(val answered: Int, val clean: Int) : DrawUi
 }
@@ -136,6 +137,8 @@ class DrawViewModel(private val app: Services) : ViewModel() {
         inkSize = px
     }
 
+    fun reference(kanji: String): List<Stroke>? = references[kanji]
+
     private fun showNext() {
         ink.clear()
         val kanji = session.take()
@@ -143,9 +146,14 @@ class DrawViewModel(private val app: Services) : ViewModel() {
             if (session.answered == 0) DrawUi.Empty("Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings.") else DrawUi.Done(session.answered, session.correct)
         } else {
             look = BrushLook.random()
-            DrawUi.Question(cards.getValue(kanji), session.pending + 1, session.answered)
+            val trace = DrawGate.shouldTrace(app.settings.traceNew.value, states[kanji], traced, kanji)
+            if (trace) traced += kanji
+            DrawUi.Question(cards.getValue(kanji), session.pending + 1, session.answered, trace)
         }
     }
+
+    /** Kanji already traced in this session; not persisted, so an unfinished session traces them again. */
+    private val traced = mutableSetOf<String>()
 
     /** [strokes] are in canvas pixels; an empty list means the user gave up. */
     fun check(strokes: List<List<TimedPt>>, canvasPx: Float) {
@@ -162,8 +170,8 @@ class DrawViewModel(private val app: Services) : ViewModel() {
             val outcome = DrawGrader.outcome(candidates, q.card.kanji, match, strokeLookalike = byStrokes)
             val guess = byStrokes ?: if (outcome == DrawOutcome.NotRecognized && strokes.isNotEmpty()) lookalikeFromCandidates(candidates, q.card.kanji) else null
             val lookalike = guess?.let { g -> app.db.content().kanji(sourceId).firstOrNull { it.kanji == g }.let { Lookalike(g, it?.title, it != null) } }
-            if (app.settings.saveDrawings.value) DrawingLog.save(app.context, q.card.kanji, canvasPx, strokes, outcome, match, candidates)
-            ui = DrawUi.Answer(q.card, q.remaining, ref, strokes, canvasPx, outcome, match, candidates != null, lookalike)
+            if (app.settings.saveDrawings.value && !q.trace) DrawingLog.save(app.context, q.card.kanji, canvasPx, strokes, outcome, match, candidates)
+            ui = DrawUi.Answer(q.card, q.remaining, ref, strokes, canvasPx, outcome, match, candidates != null, lookalike, q.trace)
         }
     }
 
@@ -180,7 +188,13 @@ class DrawViewModel(private val app: Services) : ViewModel() {
     /** Not recognised = Again (relearned), recognised with stroke mistakes = Hard (asked once more), clean = Good. */
     fun next() {
         val a = ui as? DrawUi.Answer ?: return
-        val grade = session.answer(a.card.kanji, a.outcome != DrawOutcome.NotRecognized, weak = a.outcome == DrawOutcome.Mistakes, countsAsCorrect = a.outcome == DrawOutcome.Clean).grade
+        if (a.trace) {
+            session.defer(a.card.kanji, 3)
+            showNext()
+            return
+        }
+        val ok = a.outcome != DrawOutcome.NotRecognized
+        val grade = session.answer(a.card.kanji, ok, weak = a.outcome == DrawOutcome.Mistakes, countsAsCorrect = a.outcome == DrawOutcome.Clean).grade
         val now = Instant.now()
         val updated = fsrs.review(states[a.card.kanji] ?: SrsState(), grade, now, fuzzSeed = Fsrs.seed(a.card.kanji, StudyMode.Draw.name, states[a.card.kanji]?.reps ?: 0))
         states[a.card.kanji] = updated

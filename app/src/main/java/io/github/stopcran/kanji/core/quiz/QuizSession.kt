@@ -26,6 +26,11 @@ class QuizSession<T : Any>(items: List<T>, private val idOf: (T) -> String, conf
     /** The next card to ask, or null when the session is over. */
     fun take(): T? = queue.removeFirstOrNull()
 
+    /** Puts [item] back [after] cards from now (or last, if fewer remain) without counting an answer, e.g. after a practice-only attempt. */
+    fun defer(item: T, after: Int) {
+        queue.add(after.coerceIn(0, queue.size), item)
+    }
+
     /**
      * Records the answer to [item]: wrong is Again, [weak] (right but flawed, e.g. stroke mistakes) and [guessed] are Hard, otherwise Good.
      * [ok] is "recalled at all"; [countsAsCorrect] is what the final score counts (defaults to [ok]).

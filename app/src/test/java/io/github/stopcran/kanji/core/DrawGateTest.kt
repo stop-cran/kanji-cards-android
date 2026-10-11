@@ -16,4 +16,13 @@ class DrawGateTest {
         assertEquals(listOf("a", "b"), DrawGate.eligible(ids, states, learned = setOf("a")))
         assertEquals(emptyList<String>(), DrawGate.eligible(ids, emptyMap(), emptySet()))
     }
+
+    @Test
+    fun traceOnlyForNewKanjiOncePerSession() {
+        assertEquals(true, DrawGate.shouldTrace(true, null, emptySet(), "a"))
+        assertEquals(true, DrawGate.shouldTrace(true, SrsState(), emptySet(), "a"))
+        assertEquals(false, DrawGate.shouldTrace(true, started, emptySet(), "a"))
+        assertEquals(false, DrawGate.shouldTrace(true, null, setOf("a"), "a"))
+        assertEquals(false, DrawGate.shouldTrace(false, null, emptySet(), "a"))
+    }
 }

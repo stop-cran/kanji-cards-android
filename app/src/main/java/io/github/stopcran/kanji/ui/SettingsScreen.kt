@@ -234,6 +234,11 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
                 "The option appears only when the device has an on-device English speech recognizer.",
             style = MaterialTheme.typography.bodySmall,
         )
+        val traceNew by app.settings.traceNew.collectAsState()
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Trace new kanji first (light reference, practice only)", modifier = Modifier.weight(1f))
+            Switch(traceNew, { app.settings.setTraceNew(it) })
+        }
         Text(stringResource(R.string.handwriting_data), style = MaterialTheme.typography.titleSmall)
         val save by app.settings.saveDrawings.collectAsState()
         Row(verticalAlignment = Alignment.CenterVertically) {

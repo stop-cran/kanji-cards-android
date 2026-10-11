@@ -98,9 +98,15 @@ fun DrawScreen(
 private fun QuestionState(s: DrawUi.Question, vm: DrawViewModel) {
     val strokes = vm.ink
     Text(stringResource(R.string.left, s.remaining), style = MaterialTheme.typography.labelMedium)
-    Text(stringResource(R.string.draw_the_kanji_for), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    Text(if (s.trace) "Trace the kanji for" else stringResource(R.string.draw_the_kanji_for), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     Text(s.card.title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-    DrawingPad(strokes, onStroke = { strokes += it }, onSize = { vm.padSized(it) }, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
+    DrawingPad(
+        strokes,
+        onStroke = { strokes += it },
+        onSize = { vm.padSized(it) },
+        modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+        ghost = if (s.trace) vm.reference(s.card.kanji) else null,
+    )
     when (vm.modelState) {
         ModelState.Downloading -> Text(stringResource(R.string.downloading_the_handwriting_model_first), style = MaterialTheme.typography.bodySmall)
         ModelState.Unavailable -> Text(stringResource(R.string.handwriting_model_unavailable_graded_by), style = MaterialTheme.typography.bodySmall)
@@ -111,7 +117,11 @@ private fun QuestionState(s: DrawUi.Question, vm: DrawViewModel) {
         OutlinedButton(onClick = { strokes.clear() }, enabled = strokes.isNotEmpty()) { Text(stringResource(R.string.clear)) }
         Button(onClick = { vm.check(strokes.toList(), vm.inkSize) }, enabled = strokes.isNotEmpty(), modifier = Modifier.weight(1f)) { Text(stringResource(R.string.check)) }
     }
-    OutlinedButton(onClick = { vm.check(emptyList(), vm.inkSize) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.i_don_t_remember)) }
+    if (!s.trace) {
+        OutlinedButton(onClick = { vm.check(emptyList(), vm.inkSize) }, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.i_don_t_remember))
+        }
+    }
 }
 
 @Composable
@@ -126,6 +136,14 @@ private fun AnswerState(s: DrawUi.Answer, vm: DrawViewModel, onOpenDoc: (String)
             ) to wrongTextColor()
     }
     Text(s.card.kanji + "  " + s.card.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    if (s.trace) {
+        Text(
+            "Practice only: this attempt is not graded.",
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+        )
+    }
     Text(headline, color = color, style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     s.lookalike?.takeIf { it.hasCard }?.let { TextButton(onClick = { onOpenDoc("kanji/${it.kanji}.md") }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.read_about, it.kanji)) } }
     val flaggedDrawn = if (showIssues) s.match.issues.mapNotNull { it.drawnIndex }.toSet() else emptySet()
@@ -139,7 +157,12 @@ private fun AnswerState(s: DrawUi.Answer, vm: DrawViewModel, onOpenDoc: (String)
     }
     if (showIssues) s.match.issues.forEach { Text(stringResource(R.string.bullet_prefix) + it.describe(), color = wrongTextColor()) }
     if (!s.recognizerUsed && s.drawn.isNotEmpty()) Text(stringResource(R.string.graded_by_stroke_shapes_only), style = MaterialTheme.typography.bodySmall)
-    Button(onClick = { vm.next() }, modifier = Modifier.fillMaxWidth()) { Text(if (s.outcome == DrawOutcome.NotRecognized) "Next (will repeat)" else "Next") }
+    val nextLabel = when {
+        s.trace -> "Next (now from memory)"
+        s.outcome == DrawOutcome.NotRecognized -> "Next (will repeat)"
+        else -> "Next"
+    }
+    Button(onClick = { vm.next() }, modifier = Modifier.fillMaxWidth()) { Text(nextLabel) }
     HorizontalDivider(Modifier.padding(vertical = 4.dp))
     MarkdownView(s.card.body, "kanji/${s.card.kanji}.md", onOpenDoc)
 }
@@ -151,10 +174,18 @@ private fun Overlay(modifier: Modifier, draw: @Composable () -> Unit) {
 
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
-private fun DrawingPad(strokes: List<List<TimedPt>>, onStroke: (List<TimedPt>) -> Unit, onSize: (Float) -> Unit, modifier: Modifier) {
+private fun DrawingPad(
+    strokes: List<List<TimedPt>>,
+    onStroke: (List<TimedPt>) -> Unit,
+    onSize: (Float) -> Unit,
+    modifier: Modifier,
+    ghost: List<Stroke>? = null,
+) {
     val current = remember { mutableStateListOf<TimedPt>() }
     val brush = LocalBrush.current
     val look = LocalBrushLook.current
+    val measurer = rememberTextMeasurer()
+    val labels = remember(ghost) { ghost?.let { strokeNumberPositions(it) } }
     Canvas(
         modifier
             .border(2.dp, MaterialTheme.colorScheme.outline)
@@ -182,6 +213,15 @@ private fun DrawingPad(strokes: List<List<TimedPt>>, onStroke: (List<TimedPt>) -
         val guide = Color(0xFFE0E0E0)
         drawLine(guide, Offset(size.width / 2, 0f), Offset(size.width / 2, size.height), 2f)
         drawLine(guide, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 2f)
+        if (ghost != null && labels != null) {
+            val k = size.width / 109f
+            val faint = Color(0xFFC5CAE9)
+            ghost.forEachIndexed { i, s ->
+                drawBrushStroke(s.map { Offset(it.x.toFloat() * k, it.y.toFloat() * k) }, faint, brush, look = look)
+                val layout = measurer.measure("${i + 1}", TextStyle(color = Color(0xFF9FA8DA), fontSize = 15.sp))
+                drawText(layout, topLeft = labels[i] * k - Offset(layout.size.width / 2f, layout.size.height / 2f))
+            }
+        }
         (strokes + listOf(current.toList())).forEach { s -> drawBrushStroke(s.map { Offset(it.x, it.y) }, Ink, brush, look = look) }
     }
 }

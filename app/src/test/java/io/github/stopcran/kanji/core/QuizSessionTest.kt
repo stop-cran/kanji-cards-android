@@ -10,6 +10,18 @@ class QuizSessionTest {
     private fun session(vararg items: String, confirm: Boolean = true) = QuizSession(items.toList(), { it }, confirm)
 
     @Test
+    fun deferReinsertsWithoutCountingAnAnswer() {
+        val s = session("a", "b", "c", "d", "e")
+        s.defer(s.take()!!, after = 3)
+        assertEquals(0, s.answered)
+        assertEquals(listOf("b", "c", "d", "a", "e"), generateSequence { s.take() }.toList())
+        val one = session("x")
+        one.defer(one.take()!!, after = 3)
+        assertEquals("x", one.take())
+        assertEquals(0, one.correct)
+    }
+
+    @Test
     fun gradesFollowTheAnswer() {
         val s = session("a", "b", "c", "d")
         assertEquals(Grade.Good, s.answer(s.take()!!, ok = true).grade)
