@@ -2,6 +2,7 @@ package io.github.stopcran.kanji.core
 
 import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.SrsState
+import io.github.stopcran.kanji.core.words.PracticeSuggestion
 import io.github.stopcran.kanji.core.words.TypedAnswer
 import io.github.stopcran.kanji.core.words.TypedVerdict
 import io.github.stopcran.kanji.core.words.WordCard
@@ -59,6 +60,16 @@ class TypedAnswerTest {
         assertFalse(r.ok)
         assertEquals(TypedVerdict.Wrong, verdict("", joke))
         assertEquals(TypedVerdict.Wrong, verdict("xyz", joke))
+    }
+
+    @Test
+    fun suggestsBetterStockedDirectionOnlyWhenCurrentIsShort() {
+        val ty = WordDirection.Type
+        val jp = WordDirection.JpToEn
+        assertEquals(null, PracticeSuggestion.alternative(ty, mapOf(ty to 6, jp to 10)))
+        assertEquals(jp, PracticeSuggestion.alternative(ty, mapOf(ty to 1, jp to 10, WordDirection.EnToJp to 6)))
+        assertEquals(null, PracticeSuggestion.alternative(ty, mapOf(ty to 1, jp to 4)))
+        assertEquals(null, PracticeSuggestion.alternative(ty, emptyMap()))
     }
 
     @Test

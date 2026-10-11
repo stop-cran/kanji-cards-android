@@ -34,14 +34,9 @@ private val originTags = setOf("wago", "kango", "gairaigo")
 
 /** Session key: "wquiz:<timestamp>:<jp|en|rd|ty>[:extra]". */
 @Composable
-fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit, onPracticeMore: () -> Unit, vm: WordQuizViewModel = serviceViewModel(sessionKey) { WordQuizViewModel(it) }) {
+fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit, onPracticeMore: (WordDirection?) -> Unit, vm: WordQuizViewModel = serviceViewModel(sessionKey) { WordQuizViewModel(it) }) {
     val parts = sessionKey.split(':')
-    val direction = when (parts.getOrNull(2)) {
-        "en" -> WordDirection.EnToJp
-        "rd" -> WordDirection.Reading
-        "ty" -> WordDirection.Type
-        else -> WordDirection.JpToEn
-    }
+    val direction = WordDirection.fromCode(parts.getOrNull(2))
     LaunchedEffect(sessionKey) { vm.ensureStarted(direction, sessionKey.endsWith(":extra")) }
     Page(
         when (direction) {
@@ -61,7 +56,9 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
                 Text(stringResource(R.string.session_complete), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
                 Text(stringResource(R.string.of_answers_correct, s.correct, s.answered))
                 Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.done)) }
-                OutlinedButton(onClick = onPracticeMore, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.practice_more)) }
+                OutlinedButton(onClick = { onPracticeMore(s.suggestion) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (s.suggestion == null) stringResource(R.string.practice_more) else "Practice more: ${s.suggestion.label}")
+                }
             }
             is WordQuizUi.Question -> {
                 Text(stringResource(R.string.left, s.remaining), style = MaterialTheme.typography.labelMedium)

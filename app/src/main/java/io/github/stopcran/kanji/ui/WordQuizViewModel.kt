@@ -14,6 +14,7 @@ import io.github.stopcran.kanji.core.srs.KanjiFont
 import io.github.stopcran.kanji.core.quiz.QuizSession
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.words.WordCard
+import io.github.stopcran.kanji.core.words.PracticeSuggestion
 import io.github.stopcran.kanji.core.words.TypedAnswer
 import io.github.stopcran.kanji.core.words.TypedResult
 import io.github.stopcran.kanji.core.words.TypedVerdict
@@ -53,7 +54,7 @@ sealed interface WordQuizUi {
         val key: String get() = if (direction == WordDirection.Reading) word.reading else word.word
         val correct: Boolean get() = picked == key
     }
-    data class Done(val answered: Int, val correct: Int) : WordQuizUi
+    data class Done(val answered: Int, val correct: Int, val suggestion: WordDirection? = null) : WordQuizUi
 
     /** Typed mode: the English prompt and a free-text answer; the draft text lives in the view model. */
     data class TypeQuestion(val word: WordEntity, val remaining: Int, val font: KanjiFont) : WordQuizUi
@@ -73,6 +74,7 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
     private var direction = WordDirection.JpToEn
     private var sourceId = ""
     private var stackId = WordStacks.n5.id
+    private var wordList: List<WordEntity> = emptyList()
     private var words: Map<String, WordEntity> = emptyMap()
     private var cards: List<WordCard> = emptyList()
     private val states = mutableMapOf<String, SrsState>()
@@ -99,6 +101,7 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
             ui = WordQuizUi.Empty("No words yet. Sync the content first (⚙ settings).")
             return
         }
+        wordList = all
         words = all.associateBy { it.word }
         cards = all.map { it.toCard() }
         app.db.reviews().states(sourceId, stackId, direction.mode.name).forEach { states[it.kanji] = it.toSrs() }
@@ -148,6 +151,7 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
                     },
                 )
             } else WordQuizUi.Done(session.answered, session.correct)
+            if (ui is WordQuizUi.Done) suggest()
             return
         }
         val entity = words.getValue(word)
@@ -206,6 +210,26 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
     fun retry() {
         val a = ui as? WordQuizUi.Answer ?: return
         if (a.heard != null) ui = WordQuizUi.Question(a.word, a.direction, a.options, a.remaining, a.font)
+    }
+
+    /** At the end of a session, offers "Practice more" in a better-stocked direction when this one would give only a few cards. */
+    private fun suggest() {
+        val done = ui as? WordQuizUi.Done ?: return
+        viewModelScope.launch {
+            val minimum = app.settings.practiceMinimum()
+            val now = Instant.now()
+            val stored = WordDirection.entries.associateWith { d ->
+                app.db.reviews().states(sourceId, stackId, d.mode.name).associate { it.kanji to it.toSrs() }
+            }
+            val sizes = WordDirection.entries.associateWith { d ->
+                val ids = wordList.forDirection(d).map { it.word }
+                val own = stored.getValue(d)
+                val n = WordQueues.build(d, ids, own, stored.getValue(d.gate), now, 0, extra = true, limit = minimum).size
+                if (n >= minimum) n else n + app.db.padWordCandidates(sourceId, stackId, d.mode, ids.toSet(), own.keys).size.coerceAtMost(minimum - n)
+            }
+            val alternative = PracticeSuggestion.alternative(direction, sizes)
+            if (alternative != null && ui === done) ui = done.copy(suggestion = alternative)
+        }
     }
 
     /** Wrong answers (and "don't know") are graded Again and relearned in-session; right ones Good, or Hard when guessed. */

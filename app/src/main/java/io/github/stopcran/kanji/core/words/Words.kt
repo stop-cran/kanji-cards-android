@@ -27,6 +27,32 @@ enum class WordDirection(val mode: StudyMode) {
 
     /** Directions other than the forward one open only after their [gate] direction has been answered a couple of times. */
     val gated: Boolean get() = this != JpToEn
+
+    /** Route and display identity of the direction. */
+    val code: String get() = when (this) { JpToEn -> "jp"; EnToJp -> "en"; Reading -> "rd"; Type -> "ty" }
+
+    val label: String get() = when (this) {
+        JpToEn -> "Japanese → English"
+        EnToJp -> "English → Japanese"
+        Reading -> "reading"
+        Type -> "type it"
+    }
+
+    companion object {
+        fun fromCode(code: String?): WordDirection = entries.firstOrNull { it.code == code } ?: JpToEn
+    }
+}
+
+/** What "Practice more" offers at the end of a word session: the same direction, or a better-stocked one when it has too little. */
+object PracticeSuggestion {
+    /** Fewest cards that make a practice session worth offering. */
+    const val WORTHWHILE = 5
+
+    /** Null when the current direction has enough, or nothing else does either; [sizes] is each direction's practice-session size. */
+    fun alternative(current: WordDirection, sizes: Map<WordDirection, Int>): WordDirection? {
+        if ((sizes[current] ?: 0) >= WORTHWHILE) return null
+        return WordDirection.entries.filter { it != current && (sizes[it] ?: 0) >= WORTHWHILE }.maxByOrNull { sizes.getValue(it) }
+    }
 }
 
 data class WordCard(

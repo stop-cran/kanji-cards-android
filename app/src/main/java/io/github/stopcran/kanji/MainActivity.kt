@@ -97,7 +97,7 @@ private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, p
                 sessionKey = route,
                 onBack = pop,
                 onOpenDoc = { push("doc:$it") },
-                onPracticeMore = { pop(); push("wquiz:${System.currentTimeMillis()}:${route.split(":")[2]}:extra") },
+                onPracticeMore = { d -> pop(); push("wquiz:${System.currentTimeMillis()}:${d?.code ?: route.split(":")[2]}:extra") },
             )
         } else if (route.startsWith("kreading:")) {
             KanjiReadingScreen(
@@ -130,15 +130,7 @@ private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, p
                     onQuiz = { extra -> push("quiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
                     onDraw = { extra -> push("draw:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
                     onReadings = { extra -> push("kreading:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
-                    onWords = { dir, extra ->
-                        val code = when (dir) {
-                            WordDirection.JpToEn -> "jp"
-                            WordDirection.EnToJp -> "en"
-                            WordDirection.Reading -> "rd"
-                            WordDirection.Type -> "ty"
-                        }
-                        push("wquiz:${System.currentTimeMillis()}:$code" + if (extra) ":extra" else "")
-                    },
+                    onWords = { dir, extra -> push("wquiz:${System.currentTimeMillis()}:${dir.code}" + if (extra) ":extra" else "") },
                 ),
             )
         }
