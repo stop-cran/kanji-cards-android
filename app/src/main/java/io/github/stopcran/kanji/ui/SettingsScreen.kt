@@ -119,15 +119,14 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             Text("Limit kanji in learning at once", modifier = Modifier.weight(1f))
             Switch(focusOn, { app.settings.setFocusEnabled(it) })
         }
-        if (focusOn) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Batch size: $focusSize", modifier = Modifier.weight(1f))
-                OutlinedButton({ app.settings.setFocusSize(focusSize - 1) }) { Text("−") }
-                OutlinedButton({ app.settings.setFocusSize(focusSize + 1) }) { Text("+") }
-            }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Batch / minimum practice size: $focusSize", modifier = Modifier.weight(1f))
+            OutlinedButton({ app.settings.setFocusSize(focusSize - 1) }) { Text("−") }
+            OutlinedButton({ app.settings.setFocusSize(focusSize + 1) }) { Text("+") }
         }
         Text(
-            "New kanji wait until the current batch is learned in every mode. Kanji you already started are not counted.",
+            "With the limit on, new kanji wait until the current batch is learned in every mode. " +
+                "\"Practice more\" tops up a shorter session with your weakest learned kanji from other stacks.",
             style = MaterialTheme.typography.bodySmall,
         )
         HorizontalDivider()

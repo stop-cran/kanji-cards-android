@@ -27,6 +27,13 @@ import io.github.stopcran.kanji.data.inStack
 import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.ReadingRequest
 import io.github.stopcran.kanji.data.readingData
+import io.github.stopcran.kanji.data.padCandidates
+import io.github.stopcran.kanji.data.practiceMinimum
+import io.github.stopcran.kanji.data.similarityIndex
+import io.github.stopcran.kanji.data.toReadingCard
+import io.github.stopcran.kanji.core.reading.KanjiReadingQueue
+import io.github.stopcran.kanji.core.srs.PadContext
+import io.github.stopcran.kanji.core.srs.PracticePadding
 import io.github.stopcran.kanji.data.toEntity
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -55,6 +62,8 @@ class KanjiReadingViewModel(private val app: Services) : ViewModel() {
     private var cards: Map<String, KanjiEntity> = emptyMap()
     private var readingCards: List<ReadingCard> = emptyList()
     private val states = ReadingKind.entries.associateWith { mutableMapOf<String, SrsState>() }
+    /** Stack that owns a borrowed (padding) reading card, keyed by kind and id; its answers are recorded there. */
+    private val owners = mutableMapOf<String, String>()
     private var session = QuizSession<ReadingItem>(emptyList(), { it.id })
     private var lastFont: KanjiFont? = null
     private var started = false
@@ -75,11 +84,47 @@ class KanjiReadingViewModel(private val app: Services) : ViewModel() {
         }
         cards = all.associateBy { it.kanji }
         val remaining = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
-        val data = app.db.readingData(app.settings, all, ReadingRequest(sourceId, stack, remaining, Instant.now(), extra))
+        val minimum = app.settings.practiceMinimum()
+        val request = ReadingRequest(sourceId, stack, remaining, Instant.now(), extra, maxOf(minimum, KanjiReadingQueue.EXTRA_LIMIT))
+        val data = app.db.readingData(app.settings, all, request)
         readingCards = data.cards
         data.states.forEach { (kind, m) -> states.getValue(kind) += m }
-        session = QuizSession(data.items, { it.id })
+        val items = if (extra && data.items.size < minimum) {
+            KanjiReadingQueue.interleave(data.items + pad(data.items, minimum - data.items.size, all))
+        } else {
+            data.items
+        }
+        session = QuizSession(items, { it.id })
         showNext()
+    }
+
+    private fun padKey(kind: ReadingKind, id: String) = "${kind.name}|$id"
+
+    /** Tops a short extra session up with weak, already-learned readings of other stacks; they keep being scheduled in their own stack. */
+    private suspend fun pad(base: List<ReadingItem>, need: Int, inStack: List<KanjiEntity>): List<ReadingItem> {
+        val content = app.db.content().kanji(sourceId)
+        val inStackKanji = inStack.mapTo(HashSet()) { it.kanji }
+        val byKanji = content.associateBy { it.kanji }
+        val candidates = ReadingKind.entries.flatMap { kind ->
+            app.db.padCandidates(sourceId, stack, kind.mode, content, inStackKanji).filter { c ->
+                byKanji[c.kanji]?.toReadingCard()?.quizKeys(kind)?.contains(ReadingId.key(c.id)) == true
+            }.map { it.copy(id = padKey(kind, it.id)) }
+        }
+        val exclude = base.map { padKey(it.kind, it.id) }.toSet() + states.flatMap { (kind, m) -> m.keys.map { padKey(kind, it) } }
+        val context = PadContext(exclude, base.map { it.kanji }, content.similarityIndex())
+        val fillers = PracticePadding.fill(candidates, context, need, Instant.now())
+        return fillers.map { f ->
+            val kind = ReadingKind.valueOf(f.id.substringBefore('|'))
+            val id = f.id.substringAfter('|')
+            val k = byKanji.getValue(f.kanji)
+            if (cards[k.kanji] == null) {
+                cards = cards + (k.kanji to k)
+                readingCards = readingCards + k.toReadingCard()
+            }
+            states.getValue(kind)[id] = f.state
+            owners[f.id] = f.owner
+            ReadingItem(f.kanji, kind, ReadingId.key(id), false)
+        }
     }
 
     private fun nextFont(id: String, kind: ReadingKind): KanjiFont {
@@ -129,8 +174,10 @@ class KanjiReadingViewModel(private val app: Services) : ViewModel() {
                 firstSuccessCapDays = Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS, fuzzSeed = Fsrs.seed(id, kind.mode.name, states.getValue(kind)[id]?.reps ?: 0),
             )
             states.getValue(kind)[id] = updated
+            val owner = owners[padKey(kind, id)] ?: stack
             viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
-                app.db.reviews().record(updated.toEntity(sourceId, stack, kanji, kind.mode, a.question.correctKey), ReviewLogEntity(0, sourceId, stack, kanji, kind.mode.name, grade.value, now.toEpochMilli(), a.question.correctKey))
+                val log = ReviewLogEntity(0, sourceId, owner, kanji, kind.mode.name, grade.value, now.toEpochMilli(), a.question.correctKey)
+                app.db.reviews().record(updated.toEntity(sourceId, owner, kanji, kind.mode, a.question.correctKey), log)
             }
         }
         showNext()

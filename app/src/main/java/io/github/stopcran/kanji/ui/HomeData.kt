@@ -30,6 +30,7 @@ import io.github.stopcran.kanji.data.levels
 import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.focusStatus
 import io.github.stopcran.kanji.data.meaningLearned
+import io.github.stopcran.kanji.data.padCandidates
 import io.github.stopcran.kanji.data.weekProgress
 import io.github.stopcran.kanji.data.stacks
 import io.github.stopcran.kanji.data.toReadingCard
@@ -83,8 +84,11 @@ class HomeData(
     }
 }
 
-/** Which kanji have Draw and the readings open, under which rule, and how many reading cards started today. */
-private class Unlocks(val learned: Set<String>, val rule: io.github.stopcran.kanji.core.unlock.UnlockRule, val introducedReadings: Int)
+/** Which kanji have Draw and the readings open, under which rule, how many reading cards started today, and which modes other stacks could pad. */
+private class Unlocks(
+    val learned: Set<String>, val rule: io.github.stopcran.kanji.core.unlock.UnlockRule, val introducedReadings: Int,
+    val padModes: Set<StudyMode> = emptySet(),
+)
 
 private class Extras(
     val stackId: String, val wordStackId: String, val allowance: NewAllowance, val week: WeekProgress, val unlocks: Unlocks,
@@ -179,7 +183,11 @@ fun rememberHomeData(app: KanjiApp): HomeData {
         val allowance = app.db.newAllowance(app.settings, source.id, Instant.now())
         val focus = app.db.focusStatus(app.settings, source.id, stack.id, inStack, System.currentTimeMillis())
         val learned = app.db.meaningLearned(app.settings, source.id, stack.id)
-        val unlocks = Unlocks(learned, unlockRule, r.readingCardsIntroducedSince(source.id, stack.id, startOfDay))
+        val padModes = listOf(StudyMode.Quiz, StudyMode.Draw, StudyMode.KanjiOn, StudyMode.KanjiKun).filterTo(HashSet()) { m ->
+            val pool = if (m == StudyMode.Draw) kanji.filter { it.strokesJson != null } else kanji
+            app.db.padCandidates(source.id, stack.id, m, pool, inStack.mapTo(HashSet()) { it.kanji }).isNotEmpty()
+        }
+        val unlocks = Unlocks(learned, unlockRule, r.readingCardsIntroducedSince(source.id, stack.id, startOfDay), padModes)
         value = Extras(stack.id, wordStack.id, allowance, app.db.weekProgress(app.settings, source.id, Instant.now()), unlocks, focus)
     }
     val ex = extras?.takeIf { it.stackId == stack.id && it.wordStackId == wordStack.id }
@@ -204,9 +212,11 @@ private fun computeModes(
 ): Map<HomeMode, ModeState> {
     val (quiz, draw, on, kun, jp, en, rd) = states
     val newLeft = ex.allowance.remaining
-    fun plain(ids: List<String>, states: Map<String, SrsState>, min: Int, what: String, locked: String = "", pool: Int = ids.size): ModeState {
+    fun plain(
+        ids: List<String>, states: Map<String, SrsState>, min: Int, what: String, locked: String = "", pool: Int = ids.size, pad: Boolean = false,
+    ): ModeState {
         val q = QueueBuilder.build(ids, states, now, newLeft, noise = 0.0)
-        return ModeState.of(pool >= min, "Needs at least $min $what", q.count { !it.isNew }, q.count { it.isNew }, ids.size >= min, locked)
+        return ModeState.of(pool >= min, "Needs at least $min $what", q.count { !it.isNew }, q.count { it.isNew }, ids.size >= min || pad, locked)
     }
     fun word(d: WordDirection, own: Map<String, SrsState>, other: Map<String, SrsState>, locked: String): ModeState {
         val ids = words.forDirection(d).map { it.word }
@@ -227,9 +237,15 @@ private fun computeModes(
     return mapOf(
         HomeMode.Meaning to meaning,
         HomeMode.Drawing to inStack.filter { it.strokesJson != null }.map { it.kanji }.let { strokeIds ->
-            plain(DrawGate.eligible(strokeIds, draw, ex.unlocks.learned), draw, 1, "kanji with stroke data", locked, pool = strokeIds.size)
+            plain(
+                DrawGate.eligible(strokeIds, draw, ex.unlocks.learned), draw, 1, "kanji with stroke data", locked,
+                pool = strokeIds.size, pad = StudyMode.Draw in ex.unlocks.padModes,
+            )
         },
-        HomeMode.Readings to ModeState.of(cards.size >= 2, "Needs at least 2 kanji in this stack", rq.count { !it.isNew }, rq.count { it.isNew }, readings(true).isNotEmpty(), locked),
+        HomeMode.Readings to ModeState.of(
+            cards.size >= 2, "Needs at least 2 kanji in this stack", rq.count { !it.isNew }, rq.count { it.isNew },
+            readings(true).isNotEmpty() || StudyMode.KanjiOn in ex.unlocks.padModes || StudyMode.KanjiKun in ex.unlocks.padModes, locked,
+        ),
         HomeMode.WordJp to word(WordDirection.JpToEn, jp, en, ""),
         HomeMode.WordEn to word(WordDirection.EnToJp, en, jp, "Unlocks as you learn words"),
         HomeMode.WordReading to word(WordDirection.Reading, rd, jp, "Unlocks as you learn words"),

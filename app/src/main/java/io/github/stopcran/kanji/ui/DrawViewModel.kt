@@ -19,6 +19,11 @@ import io.github.stopcran.kanji.core.draw.StrokeMatcher
 import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.QueueBuilder
+import io.github.stopcran.kanji.core.srs.PadContext
+import io.github.stopcran.kanji.core.srs.PracticePadding
+import io.github.stopcran.kanji.data.padCandidates
+import io.github.stopcran.kanji.data.practiceMinimum
+import io.github.stopcran.kanji.data.similarityIndex
 import io.github.stopcran.kanji.core.quiz.QuizSession
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.Stacks
@@ -83,6 +88,8 @@ class DrawViewModel(private val app: Services) : ViewModel() {
     private val references = mutableMapOf<String, List<Stroke>>()
     private val orderVariants = mutableMapOf<String, List<List<Int>>>()
     private val states = mutableMapOf<String, SrsState>()
+    /** Stack that owns a borrowed (padding) card; its answers are recorded there, never in the selected stack. */
+    private val owners = mutableMapOf<String, String>()
     private var session = QuizSession<String>(emptyList(), { it }, confirm = false)
     private var started = false
 
@@ -117,9 +124,36 @@ class DrawViewModel(private val app: Services) : ViewModel() {
             return
         }
         val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
-        val items = if (extra) QueueBuilder.extra(ids, states, Instant.now()) else QueueBuilder.build(ids, states, Instant.now(), budget)
-        session = QuizSession(items.map { it.kanji }, { it }, confirm = false)
+        val items = if (extra) {
+            val minimum = app.settings.practiceMinimum()
+            val base = QueueBuilder.extra(ids, states, Instant.now(), minimum).map { it.kanji }
+            base + pad(base, minimum - base.size, all)
+        } else {
+            QueueBuilder.build(ids, states, Instant.now(), budget).map { it.kanji }
+        }
+        session = QuizSession(items, { it }, confirm = false)
         showNext()
+    }
+
+    /** Tops a short extra session up with weak, already-drawn kanji of other stacks; they keep being scheduled in their own stack. */
+    private suspend fun pad(base: List<String>, need: Int, inStack: List<KanjiEntity>): List<String> {
+        if (need <= 0) return emptyList()
+        val content = app.db.content().kanji(sourceId)
+        val candidates = app.db.padCandidates(sourceId, stack, StudyMode.Draw, content.filter { it.strokesJson != null }, inStack.mapTo(HashSet()) { it.kanji })
+        val fillers = PracticePadding.fill(candidates, PadContext(base.toSet() + states.keys, base, content.similarityIndex()), need, Instant.now())
+        val byKanji = content.associateBy { it.kanji }
+        val added = mutableListOf<String>()
+        for (f in fillers) {
+            val k = byKanji.getValue(f.kanji)
+            val data = k.strokesJson?.let { runCatching { json.decodeFromString(StrokeData.serializer(), it) }.getOrNull() } ?: continue
+            references[k.kanji] = data.strokes.map { s -> s.points.map { Pt(it[0], it[1]) } }
+            if (data.orderVariants.isNotEmpty()) orderVariants[k.kanji] = data.orderVariants
+            cards = cards + (k.kanji to k)
+            states[k.kanji] = f.state
+            owners[k.kanji] = f.owner
+            added += k.kanji
+        }
+        return added
     }
 
     /** Strokes of the question being drawn; kept here so they survive rotation. [inkSize] is the pad size they are in. */
@@ -198,10 +232,11 @@ class DrawViewModel(private val app: Services) : ViewModel() {
         val now = Instant.now()
         val updated = fsrs.review(states[a.card.kanji] ?: SrsState(), grade, now, fuzzSeed = Fsrs.seed(a.card.kanji, StudyMode.Draw.name, states[a.card.kanji]?.reps ?: 0))
         states[a.card.kanji] = updated
+        val owner = owners[a.card.kanji] ?: stack
         viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
             app.db.reviews().record(
-                updated.toEntity(sourceId, stack, a.card.kanji, StudyMode.Draw),
-                ReviewLogEntity(0, sourceId, stack, a.card.kanji, StudyMode.Draw.name, grade.value, now.toEpochMilli()),
+                updated.toEntity(sourceId, owner, a.card.kanji, StudyMode.Draw),
+                ReviewLogEntity(0, sourceId, owner, a.card.kanji, StudyMode.Draw.name, grade.value, now.toEpochMilli()),
             )
         }
         showNext()

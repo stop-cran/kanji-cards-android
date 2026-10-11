@@ -15,6 +15,11 @@ import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.KanjiFont
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.QueueBuilder
+import io.github.stopcran.kanji.core.srs.PadContext
+import io.github.stopcran.kanji.core.srs.PracticePadding
+import io.github.stopcran.kanji.data.padCandidates
+import io.github.stopcran.kanji.data.practiceMinimum
+import io.github.stopcran.kanji.data.similarityIndex
 import io.github.stopcran.kanji.core.quiz.QuizSession
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.Stacks
@@ -59,6 +64,8 @@ class QuizViewModel(private val app: Services) : ViewModel() {
     private var cards: Map<String, KanjiEntity> = emptyMap()
     private var quizCards: List<QuizCard> = emptyList()
     private val states = mutableMapOf<String, SrsState>()
+    /** Stack that owns a borrowed (padding) card; its answers are recorded there, never in the selected stack. */
+    private val owners = mutableMapOf<String, String>()
     private var session = QuizSession<String>(emptyList(), { it })
     private val studied = mutableSetOf<String>()
 
@@ -87,12 +94,31 @@ class QuizViewModel(private val app: Services) : ViewModel() {
         val capacity = app.db.focusStatus(app.settings, sourceId, stack, all, System.currentTimeMillis())?.capacity
         val items = if (extra) {
             var room = capacity ?: Int.MAX_VALUE
-            QueueBuilder.extra(all.map { it.kanji }, states, Instant.now()).filter { !it.isNew || room-- > 0 }
+            val minimum = app.settings.practiceMinimum()
+            val base = QueueBuilder.extra(all.map { it.kanji }, states, Instant.now(), minimum).filter { !it.isNew || room-- > 0 }.map { it.kanji }
+            base + pad(base, minimum - base.size, all)
         } else {
-            QueueBuilder.build(all.map { it.kanji }, states, Instant.now(), minOf(budget, capacity ?: budget))
+            QueueBuilder.build(all.map { it.kanji }, states, Instant.now(), minOf(budget, capacity ?: budget)).map { it.kanji }
         }
-        session = QuizSession(items.map { it.kanji }, { it })
+        session = QuizSession(items, { it })
         showNext()
+    }
+
+    /** Tops a short extra session up with weak, already-learned kanji of other stacks; they keep being scheduled in their own stack. */
+    private suspend fun pad(base: List<String>, need: Int, inStack: List<KanjiEntity>): List<String> {
+        if (need <= 0) return emptyList()
+        val content = app.db.content().kanji(sourceId)
+        val candidates = app.db.padCandidates(sourceId, stack, StudyMode.Quiz, content, inStack.mapTo(HashSet()) { it.kanji })
+        val fillers = PracticePadding.fill(candidates, PadContext(base.toSet() + states.keys, base, content.similarityIndex()), need, Instant.now())
+        val byKanji = content.associateBy { it.kanji }
+        for (f in fillers) {
+            val k = byKanji.getValue(f.kanji)
+            cards = cards + (k.kanji to k)
+            quizCards = quizCards + QuizCard(k.kanji, k.title, k.tags.splitSep(), k.distractors.splitSep())
+            states[k.kanji] = f.state
+            owners[k.kanji] = f.owner
+        }
+        return fillers.map { it.kanji }
     }
 
     private var lastFont: KanjiFont? = null
@@ -152,8 +178,10 @@ class QuizViewModel(private val app: Services) : ViewModel() {
                 firstSuccessCapDays = Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS, fuzzSeed = Fsrs.seed(a.card.kanji, StudyMode.Quiz.name, states[a.card.kanji]?.reps ?: 0),
             )
             states[a.card.kanji] = updated
+            val owner = owners[a.card.kanji] ?: stack
             viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
-                app.db.reviews().record(updated.toEntity(sourceId, stack, a.card.kanji, StudyMode.Quiz), ReviewLogEntity(0, sourceId, stack, a.card.kanji, StudyMode.Quiz.name, grade.value, now.toEpochMilli()))
+                val log = ReviewLogEntity(0, sourceId, owner, a.card.kanji, StudyMode.Quiz.name, grade.value, now.toEpochMilli())
+                app.db.reviews().record(updated.toEntity(sourceId, owner, a.card.kanji, StudyMode.Quiz), log)
             }
         }
         showNext()

@@ -201,6 +201,10 @@ interface ReviewDao {
     @Query("SELECT * FROM review_state WHERE sourceId = :sourceId AND stack = :stack AND mode = :mode")
     fun observeStates(sourceId: String, stack: String, mode: String): Flow<List<ReviewStateEntity>>
 
+    /** Started cards of [mode] in the other stacks of the source, ready to fill a short practice session. */
+    @Query("SELECT * FROM review_state WHERE sourceId = :sourceId AND mode = :mode AND stack != :stack AND stack != 'all' AND phase != 'New'")
+    suspend fun borrowable(sourceId: String, mode: String, stack: String): List<ReviewStateEntity>
+
     @Query("SELECT * FROM review_state")
     suspend fun allStates(): List<ReviewStateEntity>
 

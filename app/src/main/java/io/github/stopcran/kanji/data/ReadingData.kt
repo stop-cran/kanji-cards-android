@@ -15,7 +15,11 @@ fun KanjiEntity.toReadingCard() = ReadingCard(kanji, onyomi.splitSep(), kunyomi.
 class ReadingData(val cards: List<ReadingCard>, val states: Map<ReadingKind, Map<String, SrsState>>, val items: List<ReadingItem>)
 
 /** Which stack the readings are built for, how many new cards may start, and whether this is the extra "practice more" queue. */
-data class ReadingRequest(val sourceId: String, val stack: String, val newRemaining: Int, val now: Instant, val extra: Boolean = false)
+/** Which stack the readings are built for, how many new cards may start, and whether this is the extra "practice more" queue (up to [extraLimit] cards). */
+data class ReadingRequest(
+    val sourceId: String, val stack: String, val newRemaining: Int, val now: Instant,
+    val extra: Boolean = false, val extraLimit: Int = KanjiReadingQueue.EXTRA_LIMIT,
+)
 
 suspend fun AppDatabase.readingData(settings: Settings, kanji: List<KanjiEntity>, request: ReadingRequest): ReadingData {
     val sourceId = request.sourceId
@@ -27,12 +31,16 @@ suspend fun AppDatabase.readingData(settings: Settings, kanji: List<KanjiEntity>
     val states = ReadingKind.entries.associateWith { kind -> reviews().states(sourceId, stack, kind.mode.name).toReadingStates() }
     val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
     val introducedToday = reviews().readingCardsIntroducedSince(sourceId, stack, startOfDay)
-    val items = KanjiReadingQueue.build(
-        cards, states,
-        unlocked = meaningLearned(settings, sourceId, stack),
-        introducedToday = introducedToday,
-        // The queue subtracts the reading cards already started today; the shared allowance has already accounted for them.
-        dailyNew = newRemaining + introducedToday, now = now, extra = extra,
-    )
+    val items = if (extra) {
+        KanjiReadingQueue.extraQueue(cards, states, meaningLearned(settings, sourceId, stack), now, request.extraLimit)
+    } else {
+        KanjiReadingQueue.build(
+            cards, states,
+            unlocked = meaningLearned(settings, sourceId, stack),
+            introducedToday = introducedToday,
+            // The queue subtracts the reading cards already started today; the shared allowance has already accounted for them.
+            dailyNew = newRemaining + introducedToday, now = now,
+        )
+    }
     return ReadingData(cards, states, items)
 }

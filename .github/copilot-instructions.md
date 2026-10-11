@@ -61,7 +61,7 @@ commit. Say plainly what was not tested on a real device. Release build: `assemb
 - `core/markdown` is a small own parser (no library, no HTML). `Links.resolve` only allows `https://` and repo-relative `.md` links into `kanji/`, `words/`, `articles/`; anything else stays plain text. Content is untrusted.
 - `ui/MarkdownView` renders blocks; doc links push a `doc:<path>` route (`DocScreen`), so Back returns to the quiz exactly where it was (quiz ViewModel is keyed by its route and survives).
 - Do not call composable helpers from non-composable lambdas (table rows are a separate `@Composable`).
-- Quiz routes: `quiz:<ts>` (due + new) and `quiz:<ts>:extra` (`QueueBuilder.extra`, 10 cards: overdue, unseen, soonest due). The ViewModel starts via `ensureStarted(extra)` from `LaunchedEffect`, never in `init`.
+- Quiz routes: `quiz:<ts>` (due + new) and `quiz:<ts>:extra` (`QueueBuilder.extra`, max(10, batch size) cards: overdue, unseen, soonest due; a short session is padded by `PracticePadding` with weak learned cards of other stacks, which are recorded in their owner stack via the view model's `owners` map, never the selected one). The ViewModel starts via `ensureStarted(extra)` from `LaunchedEffect`, never in `init`.
 
 - Downloadable Google Fonts (`ui-text-google-fonts`) do NOT work for CJK: the provider serves only the Latin subset, and Compose falls back to the system face silently. Bundle subsetted fonts instead (see README "Fonts").
 

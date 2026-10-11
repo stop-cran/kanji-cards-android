@@ -145,6 +145,20 @@ object KanjiReadingQueue {
         return started.map { ReadingItem(card.kanji, kind, it, false) } + listOfNotNull(next?.let { ReadingItem(card.kanji, kind, it, true) })
     }
 
+    /** "Practice more": overdue, unseen and upcoming cards of both kinds, [limit] in total. */
+    fun extraQueue(
+        cards: List<ReadingCard>, states: Map<ReadingKind, Map<String, SrsState>>, unlocked: Set<String>, now: Instant, limit: Int = EXTRA_LIMIT,
+    ): List<ReadingItem> {
+        val rnd = Random.Default
+        val lists = ReadingKind.entries.map { kind ->
+            val ids = cards.flatMap { eligible(it, kind, states[kind].orEmpty(), it.kanji in unlocked) }.map { it.id }
+            QueueBuilder.extra(ids, states[kind].orEmpty(), now, limit, rnd = rnd).map {
+                ReadingItem(ReadingId.kanji(it.kanji), kind, ReadingId.key(it.kanji), it.isNew)
+            }
+        }
+        return interleave(merge(lists, rnd, true).take(limit))
+    }
+
     fun build(
         cards: List<ReadingCard>,
         states: Map<ReadingKind, Map<String, SrsState>>,
@@ -156,16 +170,10 @@ object KanjiReadingQueue {
         noise: Double = QueueBuilder.DEFAULT_NOISE,
         rnd: Random = Random.Default,
     ): List<ReadingItem> {
-        fun eligible(kind: ReadingKind) = cards.flatMap { eligible(it, kind, states[kind].orEmpty(), it.kanji in unlocked) }
-        fun item(kind: ReadingKind, id: String, isNew: Boolean) = ReadingItem(ReadingId.kanji(id), kind, ReadingId.key(id), isNew)
         val kinds = ReadingKind.entries
         val shuffle = noise > 0
-        if (extra) {
-            val lists = kinds.map { kind ->
-                QueueBuilder.extra(eligible(kind).map { it.id }, states[kind].orEmpty(), now, EXTRA_LIMIT, noise, rnd).map { item(kind, it.kanji, it.isNew) }
-            }
-            return interleave(merge(lists, rnd, shuffle).take(EXTRA_LIMIT))
-        }
+        if (extra) return extraQueue(cards, states, unlocked, now)
+        fun eligible(kind: ReadingKind) = cards.flatMap { eligible(it, kind, states[kind].orEmpty(), it.kanji in unlocked) }
         val due = rankDue(
             kinds.flatMap { kind ->
                 val st = states[kind].orEmpty()
