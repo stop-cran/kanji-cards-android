@@ -57,6 +57,10 @@ data class WordEntity(
 @Entity(tableName = "articles", primaryKeys = ["sourceId", "slug"])
 data class ArticleEntity(val sourceId: String, val slug: String, val title: String, val body: String)
 
+/** One counters/<id>.json file stored as its original JSON; decoded by the counter quiz. */
+@Entity(tableName = "counters", primaryKeys = ["sourceId", "id"])
+data class CounterEntity(val sourceId: String, val id: String, val json: String, val position: Int)
+
 /** Scheduling state per (content source, stack, kanji, mode); survives content updates and card edits. */
 @Entity(tableName = "review_state", primaryKeys = ["sourceId", "stack", "kanji", "mode", "reading"])
 data class ReviewStateEntity(
@@ -92,6 +96,14 @@ data class ReviewLogEntity(
 
 @Entity(tableName = "sync_meta", primaryKeys = ["sourceId"])
 data class SyncMetaEntity(val sourceId: String, val contentVersion: String, val syncedAtMs: Long, val problems: Int)
+
+/** Everything a content snapshot stores for one source. */
+data class ContentRows(
+    val kanji: List<KanjiEntity>,
+    val words: List<WordEntity>,
+    val articles: List<ArticleEntity>,
+    val counters: List<CounterEntity> = emptyList(),
+)
 
 @Dao
 interface ContentDao {
@@ -162,6 +174,18 @@ interface ContentDao {
     @Query("DELETE FROM articles WHERE sourceId = :sourceId")
     suspend fun clearArticles(sourceId: String)
 
+    @Query("DELETE FROM counters WHERE sourceId = :sourceId")
+    suspend fun clearCounters(sourceId: String)
+
+    @Query("SELECT * FROM counters WHERE sourceId = :sourceId ORDER BY position")
+    suspend fun counters(sourceId: String): List<CounterEntity>
+
+    @Query("SELECT COUNT(*) FROM counters WHERE sourceId = :sourceId")
+    suspend fun counterCount(sourceId: String): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCounters(items: List<CounterEntity>)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertKanji(items: List<KanjiEntity>)
 
@@ -176,19 +200,15 @@ interface ContentDao {
 
     /** Atomic swap: readers never see a half-imported snapshot, and a failure leaves the last-known-good content. */
     @Transaction
-    suspend fun replaceContent(
-        sourceId: String,
-        kanji: List<KanjiEntity>,
-        words: List<WordEntity>,
-        articles: List<ArticleEntity>,
-        meta: SyncMetaEntity,
-    ) {
+    suspend fun replaceContent(sourceId: String, rows: ContentRows, meta: SyncMetaEntity) {
         clearKanji(sourceId)
         clearWords(sourceId)
         clearArticles(sourceId)
-        insertKanji(kanji)
-        insertWords(words)
-        insertArticles(articles)
+        clearCounters(sourceId)
+        insertKanji(rows.kanji)
+        insertWords(rows.words)
+        insertArticles(rows.articles)
+        insertCounters(rows.counters)
         putMeta(meta)
     }
 }
@@ -257,8 +277,11 @@ interface ReviewDao {
 }
 
 @Database(
-    entities = [KanjiEntity::class, WordEntity::class, ArticleEntity::class, ReviewStateEntity::class, ReviewLogEntity::class, SyncMetaEntity::class],
-    version = 5,
+    entities = [
+        KanjiEntity::class, WordEntity::class, ArticleEntity::class, CounterEntity::class,
+        ReviewStateEntity::class, ReviewLogEntity::class, SyncMetaEntity::class,
+    ],
+    version = 6,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -296,6 +319,17 @@ val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
 val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
     override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE words ADD COLUMN quizDistractors TEXT NOT NULL DEFAULT ''")
+        db.execSQL("DELETE FROM sync_meta")
+    }
+}
+
+/** Counter-usage cards: add their table and reimport an unchanged snapshot so existing installs pick them up. */
+val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS counters (sourceId TEXT NOT NULL, id TEXT NOT NULL, json TEXT NOT NULL, " +
+                "position INTEGER NOT NULL, PRIMARY KEY(sourceId, id))",
+        )
         db.execSQL("DELETE FROM sync_meta")
     }
 }

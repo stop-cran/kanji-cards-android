@@ -81,9 +81,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             if (parsed.kanji.isEmpty()) {
                 return@withContext SyncResult.Failed("No valid cards: ${parsed.problems.firstOrNull() ?: "empty manifest"}", retryable = false)
             }
-            if (!force && parsed.problems.isNotEmpty() && dao.meta(source.id) != null &&
-                (parsed.kanji.size < dao.kanjiCount(source.id) || parsed.words.size < dao.wordCount(source.id))
-            ) {
+            if (!force && parsed.problems.isNotEmpty() && shrinks(parsed, source.id)) {
                 return@withContext SyncResult.Failed(
                     "${parsed.problems.size} files rejected (${parsed.problems.first()}); keeping previous cards", retryable = true,
                 )
@@ -98,8 +96,11 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             }
             val words = parsed.words.map { it.toEntity(source.id) }
             val articles = parsed.articles.map { ArticleEntity(source.id, it.slug, it.title, it.body) }
+            val counters = parsed.counters.mapIndexed { i, c ->
+                CounterEntity(source.id, c.id, json.encodeToString(io.github.stopcran.kanji.core.content.CounterFile.serializer(), c), i)
+            }
             val meta = SyncMetaEntity(source.id, parsed.manifest.contentVersion, System.currentTimeMillis(), parsed.problems.size)
-            dao.replaceContent(source.id, kanji, words, articles, meta)
+            dao.replaceContent(source.id, ContentRows(kanji, words, articles, counters), meta)
             head?.let { settings.setSyncedCommit(commitKey, it) }
             SyncResult.Updated(kanji.size, words.size, parsed.problems)
         } catch (e: ContentException) {
@@ -112,6 +113,14 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             SyncResult.Failed(e.message ?: e.javaClass.simpleName, retryable = false)
         }
     } }
+
+    /** True when a previous snapshot exists and the new one has fewer kanji, words or counters (rejected files must not shrink the corpus). */
+    private suspend fun shrinks(parsed: io.github.stopcran.kanji.core.content.ParsedContent, sourceId: String): Boolean {
+        val dao = db.content()
+        if (dao.meta(sourceId) == null) return false
+        return parsed.kanji.size < dao.kanjiCount(sourceId) || parsed.words.size < dao.wordCount(sourceId) ||
+            parsed.counters.size < dao.counterCount(sourceId)
+    }
 
     /** Streams the archive to [block] without holding it in memory; the compressed size is capped. */
     private fun <T> download(url: String, block: (java.io.InputStream) -> T): T =

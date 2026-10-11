@@ -14,6 +14,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.toMutableStateList
 import io.github.stopcran.kanji.ui.AboutScreen
+import io.github.stopcran.kanji.ui.CounterQuizScreen
 import io.github.stopcran.kanji.ui.DocScreen
 import io.github.stopcran.kanji.ui.DrawScreen
 import io.github.stopcran.kanji.ui.CardsScreen
@@ -39,7 +40,7 @@ class MainActivity : ComponentActivity() {
 
 /** Identifies this process; a saved back stack from another process (process death) must not resume a half-finished session. */
 private val processToken = System.nanoTime().toString()
-private val sessionPrefixes = listOf("quiz:", "wquiz:", "draw:", "kreading:")
+private val sessionPrefixes = listOf("quiz:", "wquiz:", "cquiz:", "draw:", "kreading:")
 
 /**
  * Back stack of route strings: "home", "kanji-home", "words-home", "settings", "cards", "word-cards", "quiz:..", "doc:<path>". Survives rotation via
@@ -99,6 +100,12 @@ private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, p
                 onOpenDoc = { push("doc:$it") },
                 onPracticeMore = { d -> pop(); push("wquiz:${System.currentTimeMillis()}:${d?.code ?: route.split(":")[2]}:extra") },
             )
+        } else if (route.startsWith("cquiz:")) {
+            CounterQuizScreen(
+                sessionKey = route,
+                onBack = pop,
+                onPracticeMore = { pop(); push("cquiz:${System.currentTimeMillis()}:${route.split(":")[2]}:extra") },
+            )
         } else if (route.startsWith("kreading:")) {
             KanjiReadingScreen(
                 sessionKey = route,
@@ -127,6 +134,8 @@ private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, p
                     onWordCards = { push("word-cards") },
                     onKanjiPage = { push("kanji-home") },
                     onWordsPage = { push("words-home") },
+                    onCountersPage = { push("counters-home") },
+                    onCounters = { mode, extra -> push("cquiz:${System.currentTimeMillis()}:${mode.code}" + if (extra) ":extra" else "") },
                     onQuiz = { extra -> push("quiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
                     onDraw = { extra -> push("draw:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
                     onReadings = { extra -> push("kreading:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },

@@ -506,5 +506,8 @@ class ContentTest {
         assertTrue(parsed.kanji.size >= 20)
         assertTrue(parsed.words.size >= 20)
         assertEquals(parsed.kanji.size, parsed.strokes.size)
+        assertEquals(10, parsed.counters.size)
+        assertEquals(120, parsed.counters.sumOf { it.cards.size })
+        assertEquals(20, parsed.counters.sumOf { it.reverse.size })
     }
 }

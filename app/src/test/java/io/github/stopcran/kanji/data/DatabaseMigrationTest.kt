@@ -40,7 +40,7 @@ class DatabaseMigrationTest {
     }
 
     private fun openDatabase() = Room.databaseBuilder(context, AppDatabase::class.java, name)
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
         .allowMainThreadQueries()
         .build()
 
@@ -152,8 +152,9 @@ class DatabaseMigrationTest {
                 ).toEntity(source)
             }
             db.content().replaceContent(
-                source, db.content().kanji(source), words,
-                listOf(requireNotNull(db.content().article(source, "article"))), SyncMetaEntity(source, "new-corpus", 789, 0),
+                source,
+                ContentRows(db.content().kanji(source), words, listOf(requireNotNull(db.content().article(source, "article")))),
+                SyncMetaEntity(source, "new-corpus", 789, 0),
             )
             assertEquals(words, db.content().words(source))
             assertEquals(states, rows(db.openHelper.writableDatabase.query(stateQuery)))
@@ -247,9 +248,7 @@ class DatabaseMigrationTest {
             }
             db.content().replaceContent(
                 source,
-                db.content().kanji(source),
-                words,
-                listOf(requireNotNull(db.content().article(source, "article"))),
+                ContentRows(db.content().kanji(source), words, listOf(requireNotNull(db.content().article(source, "article")))),
                 SyncMetaEntity(source, "unchanged-content-version", 456, 0),
             )
             assertEquals(words, db.content().words(source))

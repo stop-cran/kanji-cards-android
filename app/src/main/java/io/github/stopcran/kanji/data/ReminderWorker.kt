@@ -61,6 +61,15 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 val ids = wordEntities.forDirection(d).map { it.word }
                 due += WordQueues.build(d, ids, wordStates.getValue(d), wordStates.getValue(d.gate), Instant.ofEpochMilli(now), newRemaining).size
             }
+            val counterIndex = app.db.counterIndex(source.id)
+            val counterChoose = app.db.counterStates(source.id, io.github.stopcran.kanji.core.counters.CounterMode.Choose)
+            for (m in io.github.stopcran.kanji.core.counters.CounterMode.entries) {
+                val own = if (m == io.github.stopcran.kanji.core.counters.CounterMode.Choose) counterChoose else app.db.counterStates(source.id, m)
+                due += io.github.stopcran.kanji.core.counters.CounterQueues.build(
+                    counterIndex,
+                    io.github.stopcran.kanji.core.counters.CounterQueueRequest(m, own, counterChoose, Instant.ofEpochMilli(now), newRemaining),
+                ).size
+            }
             val decision = ReminderPolicy.decide(
                 now, LocalDate.now().atStartOfDay(zone).toInstant().toEpochMilli(), app.db.reviews().lastReviewMs(),
                 app.settings.lastReminderMs, app.settings.remindersIgnored, due,

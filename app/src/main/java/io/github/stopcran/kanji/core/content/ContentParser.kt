@@ -27,7 +27,7 @@ object ContentParser {
         val words = mutableListOf<WordArticle>()
         val articles = mutableListOf<Article>()
         val strokes = mutableMapOf<String, StrokeData>()
-
+        val counters = mutableListOf<CounterFile>()
         for ((path, expectedHash) in manifest.files.toSortedMap()) {
             if (!isSafePath(path)) {
                 problems += "$path: unsafe path"
@@ -47,6 +47,7 @@ object ContentParser {
                     path.startsWith("kanji/") && path.endsWith(".md") -> kanji += parseKanji(path, bytes.decodeToString())
                     path.startsWith("words/") && path.endsWith(".md") -> words += parseWord(path, bytes.decodeToString())
                     path.startsWith("articles/") && path.endsWith(".md") -> articles += parseArticle(path, bytes.decodeToString())
+                    path.startsWith("counters/") && path.endsWith(".json") -> counters += parseCounter(path, bytes.decodeToString())
                     path.startsWith("strokes/") && path.endsWith(".json") -> {
                         val data = json.decodeFromString(StrokeData.serializer(), bytes.decodeToString())
                         require(data.schemaVersion == 1) { "unsupported strokes schema ${data.schemaVersion}" }
@@ -88,7 +89,49 @@ object ContentParser {
         val unique = kanji.filter { c ->
             titles.add(c.title).also { if (!it) problems += "kanji/${c.kanji}.md: duplicate title '${c.title}'" }
         }
-        return ParsedContent(manifest, unique, words, articles, strokes, problems)
+        return ParsedContent(manifest, unique, words, articles, strokes, problems, resolveCounters(counters, problems))
+    }
+
+    /** Card IDs are the SRS keys, so a duplicate anywhere drops the later file; reverse cards need all four options. */
+    private fun resolveCounters(files: List<CounterFile>, problems: MutableList<String>): List<CounterFile> {
+        val seen = HashSet<String>()
+        val kept = files.sortedBy { it.id }.filter { f ->
+            val ids = f.cards.map { it.id } + f.reverse.map { it.id }
+            val clash = ids.firstOrNull { it in seen }
+            if (clash != null) problems += "counters/${f.id}.json: duplicate card ID '$clash'"
+            else seen += ids
+            clash == null
+        }
+        val cardIds = kept.flatMapTo(hashSetOf()) { f -> f.cards.map { it.id } }
+        return kept.map { f ->
+            val ok = f.reverse.filter { r ->
+                val missing = r.options.filter { it !in cardIds }
+                if (missing.isNotEmpty()) problems += "counters/${f.id}.json: reverse '${r.id}' references missing cards: ${missing.joinToString(", ")}"
+                missing.isEmpty()
+            }
+            if (ok.size == f.reverse.size) f else f.copy(reverse = ok)
+        }
+    }
+
+    fun parseCounter(path: String, text: String): CounterFile {
+        val f = json.decodeFromString(CounterFile.serializer(), text)
+        require(f.schemaVersion == 1) { "unsupported counters schema ${f.schemaVersion}" }
+        require(f.id == path.substringAfterLast('/').removeSuffix(".json")) { "'id' must match the file name" }
+        require(f.counter.isNotBlank() && f.cards.isNotEmpty()) { "missing counter or cards" }
+        for (c in f.cards) {
+            require(c.id.isNotBlank() && c.text.split("{}").size == 2) { "card '${c.id}' needs exactly one {} blank" }
+            require(c.good.isNotEmpty() && c.reading.isNotBlank() && c.noun.isNotBlank()) { "card '${c.id}' is incomplete" }
+            require(c.distractors.size == MAX_QUIZ_DISTRACTORS && c.distractors.toSet().size == MAX_QUIZ_DISTRACTORS && f.counter !in c.distractors) {
+                "card '${c.id}' needs $MAX_QUIZ_DISTRACTORS distinct distractors other than the counter"
+            }
+        }
+        require(f.cards.map { it.id }.toSet().size == f.cards.size) { "duplicate card IDs" }
+        for (r in f.reverse) {
+            require(r.options.size == 4 && r.options.toSet().size == 4 && r.answer in r.options) {
+                "reverse '${r.id}' needs 4 distinct options including the answer"
+            }
+        }
+        return f
     }
 
     fun parseKanji(path: String, text: String): KanjiCard {

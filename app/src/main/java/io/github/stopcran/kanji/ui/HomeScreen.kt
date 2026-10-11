@@ -46,6 +46,8 @@ class HomeActions(
     val onWordCards: () -> Unit,
     val onKanjiPage: () -> Unit,
     val onWordsPage: () -> Unit,
+    val onCountersPage: () -> Unit,
+    val onCounters: (io.github.stopcran.kanji.core.counters.CounterMode, extra: Boolean) -> Unit,
     val onQuiz: (extra: Boolean) -> Unit,
     val onDraw: (extra: Boolean) -> Unit,
     val onReadings: (extra: Boolean) -> Unit,
@@ -68,6 +70,7 @@ fun HomePages(app: KanjiApp, route: String, onBack: () -> Unit, actions: HomeAct
     when (route) {
         "kanji-home" -> KanjiPage(app, data, onBack, actions)
         "words-home" -> WordsPage(app, data, onBack, actions)
+        "counters-home" -> CountersPage(app, onBack, actions)
         else -> MainPage(app, data, syncStatus, actions)
     }
 }
@@ -85,6 +88,8 @@ private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeA
         Entry("Kanji", (data.summary(HomeMode.Meaning, HomeMode.Drawing, HomeMode.Readings) ?: "Loading…") + kanjiStack, a.onKanjiPage)
         val wordStack = if (data.wordStacks.size > 1) " · ${data.wordStack.label}" else ""
         Entry("Words", (data.summary(HomeMode.WordJp, HomeMode.WordEn, HomeMode.WordReading, HomeMode.WordType) ?: "Loading…") + wordStack, a.onWordsPage)
+        val counters = rememberCounterHome(app)
+        Entry("Counters", counters.summary(), a.onCountersPage)
     }
 }
 
@@ -151,7 +156,7 @@ private fun Entry(title: String, summary: String, onClick: () -> Unit) {
 
 /** One study mode: a title, what is on offer, and a single button whose meaning depends on the state. */
 @Composable
-private fun ModeRow(title: String, state: ModeState, onStart: (extra: Boolean) -> Unit) {
+internal fun ModeRow(title: String, state: ModeState, onStart: (extra: Boolean) -> Unit) {
     val summary = when (state) {
         ModeState.Loading -> "Loading…"
         is ModeState.Start -> "${state.due} due, ${state.new} new today"
