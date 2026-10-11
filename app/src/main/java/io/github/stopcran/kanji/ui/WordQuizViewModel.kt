@@ -27,6 +27,11 @@ import io.github.stopcran.kanji.data.WordEntity
 import io.github.stopcran.kanji.data.forDirection
 import io.github.stopcran.kanji.data.inWordStack
 import io.github.stopcran.kanji.data.levels
+import io.github.stopcran.kanji.core.srs.PadContext
+import io.github.stopcran.kanji.core.srs.PracticePadding
+import io.github.stopcran.kanji.data.padWordCandidates
+import io.github.stopcran.kanji.data.practiceMinimum
+import io.github.stopcran.kanji.data.wordSimilarityIndex
 import io.github.stopcran.kanji.data.toCard
 import io.github.stopcran.kanji.data.toEntity
 import io.github.stopcran.kanji.data.newAllowance
@@ -100,9 +105,29 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
         val other = app.db.reviews().states(sourceId, stackId, direction.gate.mode.name).associate { it.kanji to it.toSrs() }
 
         val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
-        session = QuizSession(WordQueues.build(direction, all.forDirection(direction).map { it.word }, states, other, Instant.now(), budget, extra).map { it.kanji }, { it })
+        val ids = all.forDirection(direction).map { it.word }
+        val minimum = app.settings.practiceMinimum()
+        val base = WordQueues.build(direction, ids, states, other, Instant.now(), budget, extra, limit = if (extra) minimum else Int.MAX_VALUE).map { it.kanji }
+        val items = if (extra) base + pad(base, minimum - base.size, ids, all) else base
+        session = QuizSession(items, { it })
         showNext()
     }
+
+    /** Tops a short extra session up with weak words learned in other word stacks; they keep being scheduled in their own stack. */
+    private suspend fun pad(base: List<String>, need: Int, ids: List<String>, inStack: List<WordEntity>): List<String> {
+        if (need <= 0) return emptyList()
+        val exclude = base.toSet() + states.keys
+        val candidates = app.db.padWordCandidates(sourceId, stackId, direction.mode, ids.toSet(), exclude)
+        val fillers = PracticePadding.fill(candidates, PadContext(exclude, base, inStack.wordSimilarityIndex()), need, Instant.now())
+        for (f in fillers) {
+            states[f.kanji] = f.state
+            owners[f.kanji] = f.owner
+        }
+        return fillers.map { it.kanji }
+    }
+
+    /** Stack that owns a borrowed (padding) word; its answers are recorded there, never in the selected stack. */
+    private val owners = mutableMapOf<String, String>()
 
     private fun nextFont(word: String): KanjiFont {
         if (!app.settings.varyFonts.value) return KanjiFont.Gothic
@@ -165,9 +190,10 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
         )
         states[word] = updated
         val mode = direction.mode
+        val stack = owners[word] ?: stackId
         viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
-            val log = ReviewLogEntity(0, sourceId, stackId, word, mode.name, grade.value, now.toEpochMilli())
-            app.db.reviews().record(updated.toEntity(sourceId, stackId, word, mode), log)
+            val log = ReviewLogEntity(0, sourceId, stack, word, mode.name, grade.value, now.toEpochMilli())
+            app.db.reviews().record(updated.toEntity(sourceId, stack, word, mode), log)
         }
     }
 

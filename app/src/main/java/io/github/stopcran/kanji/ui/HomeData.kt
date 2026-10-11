@@ -31,6 +31,7 @@ import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.focusStatus
 import io.github.stopcran.kanji.data.meaningLearned
 import io.github.stopcran.kanji.data.padCandidates
+import io.github.stopcran.kanji.data.padWordCandidates
 import io.github.stopcran.kanji.data.weekProgress
 import io.github.stopcran.kanji.data.stacks
 import io.github.stopcran.kanji.data.toReadingCard
@@ -187,7 +188,16 @@ fun rememberHomeData(app: KanjiApp): HomeData {
             val pool = if (m == StudyMode.Draw) kanji.filter { it.strokesJson != null } else kanji
             app.db.padCandidates(source.id, stack.id, m, pool, inStack.mapTo(HashSet()) { it.kanji }).isNotEmpty()
         }
-        val typed = r.states(source.id, wordStack.id, StudyMode.WordType.name).associate { it.kanji to it.toSrs() }
+        val ownStates = mapOf(
+            StudyMode.WordJpEn to jp.orEmpty(), StudyMode.WordEnJp to en.orEmpty(), StudyMode.WordReading to rd.orEmpty(),
+            StudyMode.WordType to r.states(source.id, wordStack.id, StudyMode.WordType.name).associate { it.kanji to it.toSrs() },
+        )
+        for ((m, own) in ownStates) {
+            val d = WordDirection.entries.first { it.mode == m }
+            val ids = wordsInStack.forDirection(d).mapTo(HashSet()) { it.word }
+            if (app.db.padWordCandidates(source.id, wordStack.id, m, ids, own.keys).isNotEmpty()) padModes += m
+        }
+        val typed = ownStates.getValue(StudyMode.WordType)
         val unlocks = Unlocks(learned, unlockRule, r.readingCardsIntroducedSince(source.id, stack.id, startOfDay), padModes, typed)
         value = Extras(stack.id, wordStack.id, allowance, app.db.weekProgress(app.settings, source.id, Instant.now()), unlocks, focus)
     }
@@ -223,7 +233,8 @@ private fun computeModes(
         val ids = words.forDirection(d).map { it.word }
         val q = WordQueues.build(d, ids, own, other, now, newLeft, noise = 0.0)
         val extra = WordQueues.build(d, ids, own, other, now, 0, extra = true, noise = 0.0)
-        return ModeState.of(ids.size >= 2, "Needs at least 2 words", q.count { !it.isNew }, q.count { it.isNew }, extra.isNotEmpty(), locked)
+        val offerExtra = extra.isNotEmpty() || d.mode in ex.unlocks.padModes
+        return ModeState.of(ids.size >= 2, "Needs at least 2 words", q.count { !it.isNew }, q.count { it.isNew }, offerExtra, locked)
     }
     val cards = inStack.map { it.toReadingCard() }
     val readingStates = mapOf(ReadingKind.On to on, ReadingKind.Kun to kun)

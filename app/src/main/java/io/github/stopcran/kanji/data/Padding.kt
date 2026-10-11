@@ -24,6 +24,20 @@ suspend fun AppDatabase.padCandidates(sourceId: String, stack: String, mode: Stu
         .map { PadCandidate(if (reading) ReadingId.of(it.kanji, it.reading) else it.kanji, it.kanji, it.stack, it.toSrs()) }
 }
 
+/**
+ * Started words of [mode] from the other word stacks, for padding a short "Practice more" session. Stacks keep separate states
+ * for the same word, so a word learned in N5 can be unstarted in N4; it qualifies when it is in [eligible] (this stack's words
+ * for the direction) and has no state here ([exclude]), which also keeps this stack's unlock rules intact.
+ */
+suspend fun AppDatabase.padWordCandidates(sourceId: String, stack: String, mode: StudyMode, eligible: Set<String>, exclude: Set<String>): List<PadCandidate> =
+    reviews().borrowable(sourceId, mode.name, stack)
+        .filter { it.kanji in eligible && it.kanji !in exclude }
+        .map { PadCandidate(it.kanji, it.kanji, it.stack, it.toSrs()) }
+
+/** Words are alike when they share a kanji. */
+fun List<io.github.stopcran.kanji.data.WordEntity>.wordSimilarityIndex(): SimilarityIndex =
+    SimilarityIndex(associate { w -> w.word to w.toCard().kanji.toSet() })
+
 /** Kanji are alike when they share a radical or a reading; structural tags (JLPT level, stack) do not count. */
 fun List<KanjiEntity>.similarityIndex(): SimilarityIndex = SimilarityIndex(
     associate { k ->
