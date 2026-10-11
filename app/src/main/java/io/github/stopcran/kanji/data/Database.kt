@@ -201,6 +201,12 @@ interface ReviewDao {
     @Query("SELECT * FROM review_state WHERE sourceId = :sourceId AND stack = :stack AND mode = :mode")
     fun observeStates(sourceId: String, stack: String, mode: String): Flow<List<ReviewStateEntity>>
 
+    @Query("SELECT * FROM review_state")
+    suspend fun allStates(): List<ReviewStateEntity>
+
+    @Query("SELECT * FROM review_log ORDER BY atMs, id")
+    suspend fun allLog(): List<ReviewLogEntity>
+
     @Query("SELECT MAX(atMs) FROM review_log")
     suspend fun lastReviewMs(): Long?
 

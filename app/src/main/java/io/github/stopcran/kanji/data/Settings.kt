@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.StateFlow
 class Settings(context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
+    /** Every stored preference, for the progress export. */
+    fun snapshot(): Map<String, Any?> = prefs.all.toSortedMap()
     private val _source = MutableStateFlow(load())
     val source: StateFlow<RepoSource> = _source
 

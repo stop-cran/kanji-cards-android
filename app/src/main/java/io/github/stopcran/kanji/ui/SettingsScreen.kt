@@ -281,6 +281,31 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             style = MaterialTheme.typography.bodySmall,
         )
         if (exportStatus.isNotEmpty()) Text(exportStatus, style = MaterialTheme.typography.bodySmall)
+        var progressStatus by rememberSaveable { mutableStateOf("") }
+        val progressExporter = androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip"),
+        ) { uri ->
+            if (uri != null) {
+                scope.launch {
+                    progressStatus = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        runCatching {
+                            val n = context.contentResolver.openOutputStream(uri, "wt")
+                                ?.use { io.github.stopcran.kanji.data.ProgressExport.write(app.db, app.settings, it) } ?: error("Cannot open the file")
+                            "Exported progress ($n answers) at ${java.time.LocalTime.now().withNano(0)}"
+                        }.getOrElse { "Export failed: ${it.message}" }
+                    }
+                }
+            }
+        }
+        OutlinedButton(onClick = {
+            val stamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+            progressExporter.launch("kanji-progress-$stamp.zip")
+        }) { Text("Export progress") }
+        Text(
+            "Review states, the answer history and settings, as JSON in a zip: a backup, or something to share when reporting a problem.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        if (progressStatus.isNotEmpty()) Text(progressStatus, style = MaterialTheme.typography.bodySmall)
         TextButton(onClick = onAbout) { Text(stringResource(R.string.about_sources_and_licences)) }
         Text("App version ${io.github.stopcran.kanji.BuildConfig.VERSION_NAME} (${io.github.stopcran.kanji.BuildConfig.GIT_SHA})", style = MaterialTheme.typography.bodySmall)
         Text(source.id + (meta?.let { " — content version ${it.contentVersion}" } ?: " — not synced yet"), style = MaterialTheme.typography.bodySmall)
