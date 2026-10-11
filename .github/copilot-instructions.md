@@ -18,8 +18,7 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
 - Needs `JAVA_HOME` = JDK 17 and `ANDROID_HOME` (see `docs/PLAN.md`). Android Studio's Gradle JVM must be JDK 17 (this Gradle version rejects newer JDKs).
 - `./gradlew assembleDebug testDebugUnitTest`. `ContentTest.parsesRealContentRepoWhenPresent` reads `../../learning-japanese` if that
   clone sits next to this repo, and is skipped otherwise.
-- Emulator: Pixel 9, API 35. UI can be driven from the shell with `adb shell uiautomator dump` + `adb shell input tap`; read element bounds
-  from the dump instead of guessing coordinates.
+- Emulator (Pixel 9, API 35), adb driving, screenshots and copying an APK to the phone: see the `android-emulator` skill in `.github/skills/`.
 - Gradle treats `ContentTest.parsesRealContentRepoWhenPresent` as up to date when only the sibling content clone changed; re-run it with
   `./gradlew cleanTestDebugUnitTest testDebugUnitTest --tests '*ContentTest*'` after pulling or editing `../../learning-japanese`.
 - Check the exit status/test results before committing; a chained `test; commit; push` publishes a red build.
