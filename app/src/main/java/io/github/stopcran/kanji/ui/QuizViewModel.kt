@@ -10,6 +10,7 @@ import io.github.stopcran.kanji.core.quiz.QuizBuilder
 import io.github.stopcran.kanji.core.quiz.QuizCard
 import io.github.stopcran.kanji.core.quiz.QuizOption
 import io.github.stopcran.kanji.core.srs.CardPhase
+import io.github.stopcran.kanji.core.srs.Confusion
 import io.github.stopcran.kanji.core.srs.FontPolicy
 import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.KanjiFont
@@ -70,10 +71,12 @@ class QuizViewModel(private val app: Services) : ViewModel() {
     private val studied = mutableSetOf<String>()
 
     private var started = false
+    private var extra = false
 
     fun ensureStarted(extra: Boolean) {
         if (started) return
         started = true
+        this.extra = extra
         viewModelScope.launch { start(extra) }
     }
 
@@ -184,6 +187,15 @@ class QuizViewModel(private val app: Services) : ViewModel() {
                 app.db.reviews().record(updated.toEntity(sourceId, owner, a.card.kanji, StudyMode.Quiz), log)
             }
         }
+        if (!a.correct && a.picked != NO_ANSWER && !extra) nudge(a.picked)
         showNext()
+    }
+
+    /** The mis-picked card is brought forward without touching its score; see [Confusion]. */
+    private fun nudge(kanji: String) {
+        val updated = Confusion.nudged(states[kanji], Instant.now()) ?: return
+        states[kanji] = updated
+        val owner = owners[kanji] ?: stack
+        viewModelScope.launch(kotlinx.coroutines.NonCancellable) { app.db.reviews().putState(updated.toEntity(sourceId, owner, kanji, StudyMode.Quiz)) }
     }
 }

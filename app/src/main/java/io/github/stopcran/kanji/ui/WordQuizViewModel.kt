@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.srs.CardPhase
+import io.github.stopcran.kanji.core.srs.Confusion
 import io.github.stopcran.kanji.core.srs.FontPolicy
 import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.Grade
@@ -80,12 +81,14 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
     private val states = mutableMapOf<String, SrsState>()
     private var session = QuizSession<String>(emptyList(), { it })
     private var started = false
+    private var extra = false
     private var lastFont: KanjiFont? = null
 
     fun ensureStarted(direction: WordDirection, extra: Boolean) {
         if (started) return
         started = true
         this.direction = direction
+        this.extra = extra
         viewModelScope.launch { start(extra) }
     }
 
@@ -238,6 +241,16 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
         val a = ui as? WordQuizUi.Answer ?: return
         val result = session.answer(a.word.word, a.correct, guessed)
         if (result.record) record(a.word.word, result.grade, Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS)
+        if (!a.correct && !extra) a.pickedWord?.let { nudge(it.word) }
         showNext()
+    }
+
+    /** The mis-picked word is brought forward without touching its score; see [Confusion]. */
+    private fun nudge(word: String) {
+        val updated = Confusion.nudged(states[word], Instant.now()) ?: return
+        states[word] = updated
+        val mode = direction.mode
+        val stack = owners[word] ?: stackId
+        viewModelScope.launch(kotlinx.coroutines.NonCancellable) { app.db.reviews().putState(updated.toEntity(sourceId, stack, word, mode)) }
     }
 }
