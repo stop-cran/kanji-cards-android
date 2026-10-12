@@ -20,7 +20,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.ScaleFactor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -44,7 +46,7 @@ fun ArtCard(title: String, summary: String, @DrawableRes art: Int?, onClick: () 
                 // The art is transparent ink on no paper, so it blends into the card colour; it sits right, under a fade from the text side.
                 Image(
                     painterResource(art), null, Modifier.matchParentSize(),
-                    alignment = Alignment.CenterEnd, contentScale = ContentScale.Crop, alpha = ART_ALPHA,
+                    alignment = Alignment.CenterEnd, contentScale = BandCrop, alpha = ART_ALPHA,
                 )
                 Box(
                     Modifier.matchParentSize().background(
@@ -76,6 +78,16 @@ fun ArtCard(title: String, summary: String, @DrawableRes art: Int?, onClick: () 
     }
 }
 
+/** Crop, but never magnify beyond twice the card height, so a very wide card keeps the whole subject (the art is transparent). */
+private val BandCrop = object : ContentScale {
+    override fun computeScaleFactor(srcSize: Size, dstSize: Size): ScaleFactor {
+        val crop = maxOf(dstSize.width / srcSize.width, dstSize.height / srcSize.height)
+        val s = minOf(crop, BAND_MAX_HEIGHT_RATIO * dstSize.height / srcSize.height)
+        return ScaleFactor(s, s)
+    }
+}
+
+private const val BAND_MAX_HEIGHT_RATIO = 2f
 private const val ART_ALPHA = 0.55f
 private val CHEVRON_BOX = 32.dp
 private val HALO_RADIUS = 32.dp

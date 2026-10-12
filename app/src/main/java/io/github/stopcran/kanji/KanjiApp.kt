@@ -13,6 +13,7 @@ import io.github.stopcran.kanji.data.MIGRATION_5_6
 import io.github.stopcran.kanji.data.ReminderWorker
 import io.github.stopcran.kanji.data.Settings
 import io.github.stopcran.kanji.data.SyncWorker
+import io.github.stopcran.kanji.ui.ArtSet
 
 /** What a ViewModel may use; passed in by a factory so ViewModels never reach for the Application. */
 class Services(val db: AppDatabase, val settings: Settings, val context: Context)
@@ -28,6 +29,7 @@ class KanjiApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        ArtSet.choose(settings)
         SyncWorker.schedulePeriodic(this)
         if (settings.reminderEnabled.value) ReminderWorker.schedule(this, settings.reminderHour.value, replace = false)
     }

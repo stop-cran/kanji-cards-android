@@ -166,6 +166,11 @@ class Settings(context: Context) {
         set(v) = prefs.edit().putLong(KEY_REMIND_LAST, v).apply()
 
     /** Commit SHA of the content branch at the last successful sync, per source id (lets syncs skip an unchanged archive). */
+    /** Index of the illustration set shown in the previous session, or -1. */
+    var artSetLast: Int
+        get() = prefs.getInt(KEY_ART_SET, -1)
+        set(v) = prefs.edit().putInt(KEY_ART_SET, v).apply()
+
     fun syncedCommit(sourceId: String): String? = prefs.getString("sha:$sourceId", null)
     fun setSyncedCommit(sourceId: String, sha: String) = prefs.edit().putString("sha:$sourceId", sha).apply()
     /** ETag of the head-commit response with the SHA it returned, so an unchanged branch costs a 304. */
@@ -220,6 +225,7 @@ class Settings(context: Context) {
         const val KEY_STACK = "stack"
         const val KEY_WORD_STACK = "wordStack"
         const val KEY_N4 = "n4Unlocked"
+        const val KEY_ART_SET = "artSetLast"
         const val KEY_ADVANCE_DISMISSED = "advanceDismissedMs"
         const val KEY_REMIND = "reminder"
         const val KEY_REMIND_HOUR = "reminderHour"

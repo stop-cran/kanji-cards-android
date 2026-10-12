@@ -38,6 +38,8 @@ Code layout and the reasons behind it: [docs/DESIGN.md](docs/DESIGN.md). Contrib
 Code: Apache-2.0 (see [LICENSE](LICENSE)). Content repos have their own licenses; data derived from
 KANJIDIC2, KanjiVG and JMdict is CC BY-SA and requires attribution (shown in the app's About screen). Bundled fonts and their licences: [third_party/fonts](third_party/fonts/README.md).
 
+The home screen illustrations (`drawable-nodpi`, `drawable-night-nodpi`) were generated with an AI image model (Azure OpenAI) from the prompts in [art/prompts.md](art/prompts.md); no existing artwork was supplied as input. Copyright in AI-generated images is legally unsettled in some jurisdictions, so they are shipped as part of the app without a separate licence claim.
+
 ## Fonts
 The quiz kanji uses bundled OFL fonts, subset to JIS X 0208 level 1 + ASCII (about 6 MB total, `app/src/main/res/font/kanji_*.ttf`):
 Noto Serif JP (Mincho, wght 400), Klee One (textbook), Yuji Syuku (brush). Licences are in `third_party/fonts/`.
