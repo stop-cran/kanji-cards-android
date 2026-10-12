@@ -29,7 +29,6 @@
     <string name="correct_strokes">Correct strokes</string>
     <string name="bullet_prefix">• </string>
     <string name="graded_by_stroke_shapes_only">Graded by stroke shapes only (handwriting model not available).</string>
-    <string name="settings_icon">⚙</string>
     <string name="cards_from">Cards from %1$s</string>
     <string name="cards">%1$s cards</string>
     <string name="label_with_count">%1$s (%2$s)</string>

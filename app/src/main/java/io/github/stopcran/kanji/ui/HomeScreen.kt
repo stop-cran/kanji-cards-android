@@ -1,5 +1,6 @@
 package io.github.stopcran.kanji.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import io.github.stopcran.kanji.R
 import androidx.compose.ui.res.stringResource
@@ -9,10 +10,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -24,6 +27,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -77,7 +81,7 @@ fun HomePages(app: KanjiApp, route: String, onBack: () -> Unit, actions: HomeAct
 
 @Composable
 private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeActions) {
-    Page("Kanji Cards", actions = { TextButton(onClick = a.onSettings, modifier = Modifier.semantics { contentDescription = "Settings" }) { Text(stringResource(R.string.settings_icon)) } }) {
+    Page("Kanji Cards", actions = { IconButton(onClick = a.onSettings) { Image(painterResource(R.drawable.settings_brush), "Settings", Modifier.size(36.dp)) } }) {
         if (syncStatus.isNotEmpty()) Text(syncStatus)
         LoadingBar(data)
         val defaultId = remember { RepoSource.parse(Defaults.CONTENT_REPO_URL, Defaults.CONTENT_BRANCH)?.id }
