@@ -44,8 +44,18 @@ fun ArtCard(title: String, summary: String, @DrawableRes art: Int?, onClick: () 
             if (art != null) {
                 // The art is transparent ink at a fixed 5:1, scaled to the card height and anchored right, under a fade from the text side.
                 Image(
-                    painterResource(art), null, Modifier.matchParentSize(),
+                    painterResource(art), null, Modifier.matchParentSize().padding(end = CHEVRON_CENTER),
                     alignment = Alignment.CenterEnd, contentScale = ContentScale.FillHeight, alpha = ART_ALPHA,
+                )
+                Box(
+                    Modifier.matchParentSize().background(
+                        Brush.verticalGradient(
+                            0f to container,
+                            EDGE_FADE to Color.Transparent,
+                            1f - EDGE_FADE to Color.Transparent,
+                            1f to container,
+                        ),
+                    ),
                 )
                 Box(
                     Modifier.matchParentSize().background(
@@ -82,6 +92,8 @@ fun ArtCard(title: String, summary: String, @DrawableRes art: Int?, onClick: () 
 }
 
 private const val ART_ALPHA = 0.55f
+private const val EDGE_FADE = 0.2f
 private val CHEVRON_BOX = 32.dp
+private val CHEVRON_CENTER = 32.dp // card padding + half the chevron box
 private val CHEVRON_LIFT = (-3).dp
 private val HALO_RADIUS = 32.dp
