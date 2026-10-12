@@ -1,6 +1,7 @@
 package io.github.stopcran.kanji.ui
 
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,20 +33,25 @@ import io.github.stopcran.kanji.R
  */
 @Composable
 fun ArtCard(title: String, summary: String, @DrawableRes art: Int?, onClick: () -> Unit) {
-    val surface = MaterialTheme.colorScheme.surface
+    val container = MaterialTheme.colorScheme.secondaryContainer
     Card(
         Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = surface),
+        colors = CardDefaults.cardColors(containerColor = container),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
     ) {
         Box {
             if (art != null) {
-                Image(painterResource(art), null, Modifier.matchParentSize(), contentScale = ContentScale.Crop, alpha = ART_ALPHA)
+                // The art is transparent ink on no paper, so it blends into the card colour; it sits right, under a fade from the text side.
+                Image(
+                    painterResource(art), null, Modifier.matchParentSize(),
+                    alignment = Alignment.CenterEnd, contentScale = ContentScale.Crop, alpha = ART_ALPHA,
+                )
                 Box(
                     Modifier.matchParentSize().background(
                         Brush.horizontalGradient(
-                            0f to surface.copy(alpha = 0.35f),
-                            0.6f to surface.copy(alpha = 0.75f),
-                            1f to surface,
+                            0f to container.copy(alpha = 0.9f),
+                            0.4f to container.copy(alpha = 0.6f),
+                            0.75f to Color.Transparent,
                         ),
                     ),
                 )
@@ -61,4 +67,4 @@ fun ArtCard(title: String, summary: String, @DrawableRes art: Int?, onClick: () 
     }
 }
 
-private const val ART_ALPHA = 0.5f
+private const val ART_ALPHA = 0.55f
