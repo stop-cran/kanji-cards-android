@@ -1,7 +1,6 @@
 package io.github.stopcran.kanji.ui
 
 import androidx.annotation.DrawableRes
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -10,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -33,11 +34,10 @@ import io.github.stopcran.kanji.R
  */
 @Composable
 fun ArtCard(title: String, summary: String, @DrawableRes art: Int?, onClick: () -> Unit) {
-    val container = MaterialTheme.colorScheme.secondaryContainer
+    val container = MaterialTheme.colorScheme.surfaceContainerHighest
     Card(
         Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = container),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
     ) {
         Box {
             if (art != null) {
@@ -61,10 +61,21 @@ fun ArtCard(title: String, summary: String, @DrawableRes art: Int?, onClick: () 
                     Text(title, style = MaterialTheme.typography.titleMedium)
                     Text(summary, style = MaterialTheme.typography.bodyMedium)
                 }
-                Text(stringResource(R.string.chevron), modifier = Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.headlineMedium)
+                // A soft halo in the card colour keeps the chevron distinct from the picture and fades out around it.
+                // It is drawn larger than the layout box so it does not make the card taller.
+                Box(
+                    Modifier.size(CHEVRON_BOX).drawBehind {
+                        drawCircle(Brush.radialGradient(0.45f to container, 1f to Color.Transparent, radius = HALO_RADIUS.toPx()), HALO_RADIUS.toPx())
+                    },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(stringResource(R.string.chevron), modifier = Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.headlineMedium)
+                }
             }
         }
     }
 }
 
 private const val ART_ALPHA = 0.55f
+private val CHEVRON_BOX = 32.dp
+private val HALO_RADIUS = 32.dp
