@@ -38,12 +38,15 @@ import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.core.srs.PacingNote
 import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.home.ModeState
+import io.github.stopcran.kanji.core.kana.KanaMode
+import io.github.stopcran.kanji.core.kana.KanaScript
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.WordStacks
 import io.github.stopcran.kanji.data.SyncResult
 import io.github.stopcran.kanji.data.inStack
 
 /** Where the user can go from the home pages; sessions are started by the caller. */
+@Suppress("LongParameterList")
 class HomeActions(
     val onSettings: () -> Unit,
     val onCards: () -> Unit,
@@ -51,6 +54,8 @@ class HomeActions(
     val onKanjiPage: () -> Unit,
     val onWordsPage: () -> Unit,
     val onCountersPage: () -> Unit,
+    val onKanaPage: () -> Unit,
+    val onKanaStudy: (KanaScript, KanaMode, extra: Boolean) -> Unit,
     val onCounters: (io.github.stopcran.kanji.core.counters.CounterMode, extra: Boolean) -> Unit,
     val onQuiz: (extra: Boolean) -> Unit,
     val onDraw: (extra: Boolean) -> Unit,
@@ -75,12 +80,14 @@ fun HomePages(app: KanjiApp, route: String, onBack: () -> Unit, actions: HomeAct
         "kanji-home" -> KanjiPage(app, data, onBack, actions)
         "words-home" -> WordsPage(app, data, onBack, actions)
         "counters-home" -> CountersPage(app, onBack, actions)
+        "kana-home" -> KanaPage(app, onBack, actions.onKanaStudy)
         else -> MainPage(app, data, syncStatus, actions)
     }
 }
 
 @Composable
 private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeActions) {
+    val kana = rememberKanaOverview(app)
     Page("Kanji Cards", actions = { IconButton(onClick = a.onSettings) { Image(painterResource(R.drawable.settings_brush), "Settings", Modifier.size(27.dp)) } }) {
         if (syncStatus.isNotEmpty()) Text(syncStatus)
         LoadingBar(data)
@@ -88,6 +95,7 @@ private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeA
         if (data.sourceId != defaultId) Text(stringResource(R.string.cards_from, data.sourceId))
         N4Offer(app, data)
         PacingHint(data)
+        Entry("Kana", kana.summary(), R.drawable.kana_sumi, a.onKanaPage)
         Entry("Kanji", data.summary(HomeMode.Meaning, HomeMode.Drawing, HomeMode.Readings) ?: "Loading…", ArtSet.current.kanji, a.onKanjiPage)
         val words = data.summary(HomeMode.WordJp, HomeMode.WordEn, HomeMode.WordReading, HomeMode.WordType) ?: "Loading…"
         Entry("Words", words, ArtSet.current.words, a.onWordsPage)
@@ -109,9 +117,9 @@ private fun KanjiPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: Home
             }
             Text(stringResource(R.string.each_stack_keeps_its_own), style = MaterialTheme.typography.bodySmall)
         }
-        ModeRow("Meaning quiz", data.mode(HomeMode.Meaning), a.onQuiz)
-        ModeRow("Drawing", data.mode(HomeMode.Drawing), a.onDraw)
-        ModeRow("Readings (on'yomi and kun'yomi)", data.mode(HomeMode.Readings), a.onReadings)
+        ModeRow("Meaning quiz", data.mode(HomeMode.Meaning), onStart = a.onQuiz)
+        ModeRow("Drawing", data.mode(HomeMode.Drawing), onStart = a.onDraw)
+        ModeRow("Readings (on'yomi and kun'yomi)", data.mode(HomeMode.Readings), onStart = a.onReadings)
         OutlinedButton(onClick = a.onCards, enabled = data.kanji.isNotEmpty(), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text(stringResource(R.string.browse_cards)) }
     }
 }
@@ -129,10 +137,10 @@ private fun WordsPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: Home
                 }
             }
         }
-        ModeRow("Japanese → English", data.mode(HomeMode.WordJp)) { a.onWords(WordDirection.JpToEn, it) }
-        ModeRow("English → Japanese", data.mode(HomeMode.WordEn)) { a.onWords(WordDirection.EnToJp, it) }
-        ModeRow("Reading", data.mode(HomeMode.WordReading)) { a.onWords(WordDirection.Reading, it) }
-        ModeRow("Type it", data.mode(HomeMode.WordType)) { a.onWords(WordDirection.Type, it) }
+        ModeRow("Japanese → English", data.mode(HomeMode.WordJp), onStart = { a.onWords(WordDirection.JpToEn, it) })
+        ModeRow("English → Japanese", data.mode(HomeMode.WordEn), onStart = { a.onWords(WordDirection.EnToJp, it) })
+        ModeRow("Reading", data.mode(HomeMode.WordReading), onStart = { a.onWords(WordDirection.Reading, it) })
+        ModeRow("Type it", data.mode(HomeMode.WordType), onStart = { a.onWords(WordDirection.Type, it) })
         OutlinedButton(onClick = a.onWordCards, enabled = data.wordCount > 0, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text(stringResource(R.string.browse_words)) }
     }
 }
@@ -151,7 +159,12 @@ private fun Entry(title: String, summary: String, art: Int?, onClick: () -> Unit
 
 /** One study mode: a title, what is on offer, and a single button whose meaning depends on the state. */
 @Composable
-internal fun ModeRow(title: String, state: ModeState, onStart: (extra: Boolean) -> Unit) {
+internal fun ModeRow(
+    title: String,
+    state: ModeState,
+    supportingText: String? = null,
+    onStart: (extra: Boolean) -> Unit,
+) {
     val summary = when (state) {
         ModeState.Loading -> "Loading…"
         is ModeState.Start -> "${state.due} due, ${state.new} new today"
@@ -162,6 +175,7 @@ internal fun ModeRow(title: String, state: ModeState, onStart: (extra: Boolean) 
     Column(Modifier.fillMaxWidth().padding(top = 8.dp).semantics(mergeDescendants = true) { stateDescription = summary }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(title, style = MaterialTheme.typography.titleMedium)
         Text(summary, style = MaterialTheme.typography.bodyMedium)
+        supportingText?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         if (state == ModeState.PracticeMore) {
             OutlinedButton(onClick = { onStart(true) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.practice_more)) }
         } else {

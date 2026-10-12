@@ -168,18 +168,19 @@ private fun AnswerState(s: DrawUi.Answer, vm: DrawViewModel, onOpenDoc: (String)
 }
 
 @Composable
-private fun Overlay(modifier: Modifier, draw: @Composable () -> Unit) {
+internal fun Overlay(modifier: Modifier, draw: @Composable () -> Unit) {
     androidx.compose.foundation.layout.Box(modifier.aspectRatio(1f).border(1.dp, MaterialTheme.colorScheme.outline).background(Color.White)) { draw() }
 }
 
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
-private fun DrawingPad(
+internal fun DrawingPad(
     strokes: List<List<TimedPt>>,
     onStroke: (List<TimedPt>) -> Unit,
     onSize: (Float) -> Unit,
     modifier: Modifier,
     ghost: List<Stroke>? = null,
+    subject: String = "kanji",
 ) {
     val current = remember { mutableStateListOf<TimedPt>() }
     val brush = LocalBrush.current
@@ -192,7 +193,7 @@ private fun DrawingPad(
             .background(Color.White)
             .onSizeChanged { onSize(it.width.toFloat()) }
             .clipToBounds()
-            .semantics { contentDescription = "Drawing area for the kanji, ${strokes.size} strokes drawn. Drawing needs touch input; use “I don't remember” to skip." }
+            .semantics { contentDescription = "Drawing area for the $subject, ${strokes.size} strokes drawn. Drawing needs touch input; use “I don't remember” to skip." }
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
@@ -227,7 +228,7 @@ private fun DrawingPad(
 }
 
 @Composable
-private fun YourDrawing(drawn: List<List<TimedPt>>, canvasPx: Float, flagged: Set<Int>, rejected: Boolean) {
+internal fun YourDrawing(drawn: List<List<TimedPt>>, canvasPx: Float, flagged: Set<Int>, rejected: Boolean) {
     // Show the slightly regularised strokes: kinks too small to matter in writing are dropped.
     val tidy = remember(drawn) { regularize(drawn.map { s -> s.map { Pt(it.x.toDouble(), it.y.toDouble()) } }, 0.02, 48, curved = true) }
     val brush = LocalBrush.current
@@ -241,7 +242,7 @@ private fun YourDrawing(drawn: List<List<TimedPt>>, canvasPx: Float, flagged: Se
 }
 
 @Composable
-private fun Reference(source: List<Stroke>, flagged: Set<Int>, numbers: Boolean) {
+internal fun Reference(source: List<Stroke>, flagged: Set<Int>, numbers: Boolean) {
     val reference = remember(source) { varyReference(source, kotlin.random.Random.nextInt()) }
     val measurer = rememberTextMeasurer()
     val brush = LocalBrush.current

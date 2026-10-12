@@ -47,7 +47,7 @@ fun CountersPage(app: KanjiApp, onBack: () -> Unit, a: HomeActions) {
     Page("Counters", onBack) {
         Text(if (home.cards == null) "Loading…" else "${home.cards} sentences")
         CounterMode.entries.forEach { mode ->
-            ModeRow(mode.label, home.modes[mode] ?: ModeState.Loading) { a.onCounters(mode, it) }
+            ModeRow(mode.label, home.modes[mode] ?: ModeState.Loading, onStart = { a.onCounters(mode, it) })
         }
     }
 }

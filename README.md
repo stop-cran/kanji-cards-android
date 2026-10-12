@@ -6,6 +6,7 @@ reviews with FSRS.
 
 - **Quiz mode** – pick the meaning of a displayed kanji.
 - **Drawing mode** – draw the kanji from its caption; stroke order/direction are checked.
+- **Kana section** – study hiragana and katakana, including voiced forms and common combinations (unlocked separately per mode once both component kana reach 7 days of FSRS stability), with two-way quizzes, typing and stroke-checked drawing.
 - **Articles** – Markdown with in-app navigation between kanji, words and articles.
 - **Configurable content repo** – point the app at your own fork in Settings; it syncs on launch (only when the branch head changed) and daily in the background.
 - **Stacks** – filter by tag (Starter, JLPT N5…N1); every stack keeps its own FSRS schedule.
@@ -38,7 +39,9 @@ Code layout and the reasons behind it: [docs/DESIGN.md](docs/DESIGN.md). Contrib
 Code: Apache-2.0 (see [LICENSE](LICENSE)). Content repos have their own licenses; data derived from
 KANJIDIC2, KanjiVG and JMdict is CC BY-SA and requires attribution (shown in the app's About screen). Bundled fonts and their licences: [third_party/fonts](third_party/fonts/README.md).
 
-The home screen illustrations (`drawable-nodpi`, `drawable-night-nodpi`) were generated with an AI image model (Azure OpenAI) from the prompts in [art/prompts.md](art/prompts.md); no existing artwork was supplied as input. Copyright in AI-generated images is legally unsettled in some jurisdictions, so they are shipped as part of the app without a separate licence claim.
+The home screen illustrations (`drawable-nodpi`, `drawable-night-nodpi`) were generated with an AI image model (Azure OpenAI) from the prompts in [art/prompts.md](art/prompts.md) and [art/kana-prompt.md](art/kana-prompt.md); no existing artwork was supplied as input. Copyright in AI-generated images is legally unsettled in some jurisdictions, so they are shipped as part of the app without a separate licence claim.
+
+The built-in kana writing references in `app/src/main/assets/kana-strokes.json` are converted from KanjiVG revision `70a0b7ae0c18ceb5cb358274b029cce0234a43bc` and remain under CC BY-SA 3.0. Regenerate them with `python tools/generate_kana_strokes.py` (requires `svgpathtools`). The About screen includes the corresponding attribution.
 
 ## Fonts
 The quiz kanji uses bundled OFL fonts, subset to JIS X 0208 level 1 + ASCII (about 6 MB total, `app/src/main/res/font/kanji_*.ttf`):

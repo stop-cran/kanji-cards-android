@@ -7,7 +7,7 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
 ## Layout
 
 - `core/` – pure Kotlin, no Android imports, unit-tested on the JVM. Packages: `content` (front matter, parser, safe zip, repo URL, search), `srs` (FSRS-5, queue builder, stacks, pacing, font policy, reminders),
-  `quiz` (option builder, `QuizSession`), `words` (word queues/stacks/search), `draw` (stroke matcher, grader, regularisation, brush geometry), `markdown` (own parser).
+  `quiz` (option builder, `QuizSession`), `words` (word queues/stacks/search), `kana` (built-in kana catalog and progression), `draw` (stroke matcher, grader, regularisation, brush geometry), `markdown` (own parser).
   Put new logic here whenever possible.
 - `data/` – Room entities/DAOs (`Database.kt`) and migrations, `Settings` (SharedPreferences), `ContentSync` (all network goes through the `ContentHttp` seam; tests use a fake), `SyncWorker`, `ReminderWorker`, `DrawingLog`.
 - `ui/` – Compose screens and view models. `MainActivity` holds a tiny string-route back stack (see Gotchas).
@@ -93,5 +93,6 @@ commit. Say plainly what was not tested on a real device. Release build: `assemb
 - Release signing reads git-ignored keystore.properties; never commit keystores. See docs/RELEASE.md.
 - Source files have mixed LF/CRLF line endings; check before multi-line text replacements.
 - Word `jlpt` is optional vocabulary metadata, not a kanji-derived value to persist. `inWordStack` applies explicit levels first, then the legacy fallback for null; all queue/progression callers share it. Room v3 keeps IDs/SRS state and clears only sync metadata so previously ignored labels are reimported even from an unchanged revision.
+- Kana yōon unlock is per script and mode: both plain components must be in Review at 7+ days of stability. Preserve already-started combinations and apply the same eligibility filter to queues, quiz distractors, and new-card counts.
 - Only omitted word `jlpt` enables fallback: present values must be top-level unquoted integers 1-5. Preserve raw front-matter entries to reject blank/quoted/list values and duplicate or multiline shadowing without changing kanji parsing. Never synthesize level tags; word tags and quiz tag scoring stay independent of `jlpt`.
 - `DatabaseMigrationTest` runs Room upgrades/reopen tests on Robolectric native SQLite (API 28), without the content repo or an emulator. Room 2.6 databases are not `Closeable`; close them explicitly in `finally` rather than using Kotlin `use`.

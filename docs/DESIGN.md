@@ -181,6 +181,7 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   Words page shows the word count and "Browse words" (route `word-cards`, `WordSearch`: written form, kana in either script, romaji ranked below kana,
   English title words). Both open the card's article; the main screen only notes the source when it is not the default repo.
   After process death session routes are dropped from the restored back stack (a session is not resumable) and the user lands on the page they started from.
+- **Kana progression:** Hiragana and katakana have independent review state. Yōon cards unlock per script and per mode only when both plain component kana are in Review with at least seven days of FSRS stability; a yōon card already started in that mode stays available. Locked cards are excluded from that mode's study queues, quiz distractors and new-card counts, and the Kana page reports locked combinations per mode.
 - Home loads asynchronously. The nine main flows (kanji, words, seven review-state sets) start as null = "not yet" and the screen shows a progress
   bar until all emit; empty means "no data". The new-card-introduced counts still start at 0 (meaning "none today") and settle a moment later.
 - Home reads only slim rows (`observeKanjiLite`/`observeWordsLite`: no article body, `strokesJson` reduced to `''` or NULL). Screens that need bodies
