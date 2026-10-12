@@ -85,11 +85,12 @@ private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeA
         N4Offer(app, data)
         PacingHint(data)
         val kanjiStack = if (data.stacks.size > 1) " · ${data.stack.label}" else ""
-        Entry("Kanji", (data.summary(HomeMode.Meaning, HomeMode.Drawing, HomeMode.Readings) ?: "Loading…") + kanjiStack, a.onKanjiPage)
+        Entry("Kanji", (data.summary(HomeMode.Meaning, HomeMode.Drawing, HomeMode.Readings) ?: "Loading…") + kanjiStack, ArtSet.current.kanji, a.onKanjiPage)
         val wordStack = if (data.wordStacks.size > 1) " · ${data.wordStack.label}" else ""
-        Entry("Words", (data.summary(HomeMode.WordJp, HomeMode.WordEn, HomeMode.WordReading, HomeMode.WordType) ?: "Loading…") + wordStack, a.onWordsPage)
+        val words = data.summary(HomeMode.WordJp, HomeMode.WordEn, HomeMode.WordReading, HomeMode.WordType) ?: "Loading…"
+        Entry("Words", words + wordStack, ArtSet.current.words, a.onWordsPage)
         val counters = rememberCounterHome(app)
-        Entry("Counters", counters.summary(), a.onCountersPage)
+        Entry("Counters", counters.summary(), ArtSet.current.counters, a.onCountersPage)
     }
 }
 
@@ -142,16 +143,8 @@ private fun LoadingBar(data: HomeData) {
 }
 
 @Composable
-private fun Entry(title: String, summary: String, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                Text(summary, style = MaterialTheme.typography.bodyMedium)
-            }
-            Text(stringResource(R.string.chevron), modifier = Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.headlineMedium)
-        }
-    }
+private fun Entry(title: String, summary: String, art: Int?, onClick: () -> Unit) {
+    ArtCard(title, summary, art, onClick)
 }
 
 /** One study mode: a title, what is on offer, and a single button whose meaning depends on the state. */
