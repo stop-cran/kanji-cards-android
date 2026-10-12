@@ -81,7 +81,7 @@ fun HomePages(app: KanjiApp, route: String, onBack: () -> Unit, actions: HomeAct
 
 @Composable
 private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeActions) {
-    Page("Kanji Cards", actions = { IconButton(onClick = a.onSettings) { Image(painterResource(R.drawable.settings_brush), "Settings", Modifier.size(36.dp)) } }) {
+    Page("Kanji Cards", actions = { IconButton(onClick = a.onSettings) { Image(painterResource(R.drawable.settings_brush), "Settings", Modifier.size(30.dp)) } }) {
         if (syncStatus.isNotEmpty()) Text(syncStatus)
         LoadingBar(data)
         val defaultId = remember { RepoSource.parse(Defaults.CONTENT_REPO_URL, Defaults.CONTENT_BRANCH)?.id }
