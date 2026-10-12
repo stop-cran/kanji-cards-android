@@ -19,9 +19,12 @@ class CounterHome(val cards: Int?, val modes: Map<CounterMode, ModeState>) {
         cards == null -> "Loading…"
         cards == 0 -> "No cards yet"
         else -> {
-            val due = modes.values.sumOf { (it as? ModeState.Start)?.due ?: 0 }
-            val new = modes.values.sumOf { (it as? ModeState.Start)?.new ?: 0 }
-            "$due due, $new new today"
+            val starts = modes.values.mapNotNull { it as? ModeState.Start }
+            when {
+                starts.isNotEmpty() -> "${starts.sumOf { it.due }} due, ${starts.sumOf { it.new }} new today"
+                modes.values.any { it == ModeState.PracticeMore } -> "All caught up"
+                else -> "Nothing to study yet"
+            }
         }
     }
 }
