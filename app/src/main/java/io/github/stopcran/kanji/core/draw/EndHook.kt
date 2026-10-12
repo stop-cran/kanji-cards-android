@@ -8,7 +8,17 @@ import kotlin.math.hypot
 /** [turn]: how sharply a stroke bends just before its end, in degrees (positive = clockwise on screen); [tail]: length of the bent part. */
 internal data class EndHook(val turn: Double, val tail: Double)
 
-internal fun endTurn(stroke: Stroke): Double = endHook(stroke).turn
+/**
+ * The hook a reference stroke requires (0 = none). A flick longer than the normal window (e.g. the right foot of 氏)
+ * is found with the wide window; a curl shorter than [HOOK_REF_TAIL] units (the dot of 心) is a detail of the typeface, not required.
+ */
+internal fun endTurn(stroke: Stroke): Double {
+    val near = endHook(stroke)
+    val hook = if (abs(near.turn) >= HOOK_REF) near else {
+        endHook(stroke, HOOK_LONG_WINDOW).takeIf { abs(it.turn) >= HOOK_LONG_MIN && it.tail <= HOOK_LONG_TAIL } ?: near
+    }
+    return if (abs(hook.turn) >= HOOK_REF && hook.tail < HOOK_REF_TAIL) 0.0 else hook.turn
+}
 
 /**
  * Finds the strongest turn between the stem (the 5 units before a corner) and the chord from that corner to the end,
@@ -60,8 +70,9 @@ internal fun hookIssue(refTurn: Double, drawn: EndHook, drawnLong: EndHook = dra
 internal const val HOOK_WINDOW = 12
 internal const val HOOK_LONG_WINDOW = 28
 private const val HOOK_LONG_MIN = 60.0
-private const val HOOK_LONG_TAIL = 25.0
+private const val HOOK_LONG_TAIL = 30.0
 private const val HOOK_REF = 60.0
+private const val HOOK_REF_TAIL = 5.0
 private const val HOOK_MIN = 35.0
 private const val HOOK_FLAT = 35.0
 private const val HOOK_EXTRA = 120.0

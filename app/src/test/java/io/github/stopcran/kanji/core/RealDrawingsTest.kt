@@ -37,6 +37,8 @@ class RealDrawingsTest {
             val r = StrokeMatcher().match(reference(kanji), drawn)
             val logged = o["outcome"]!!.jsonPrimitive.content
             if (kanji == "水") assertTrue("$kanji: missing hook expected", r.issues.any { it.type == IssueType.MissingHook })
+            else if (f.name.startsWith(SLANTED_DOT_NUSHI) || f.name.startsWith(NO_FLICK_KAMI)) assertTrue("$kanji must not be clean", !r.clean)
+            else if (f.name.startsWith(KOKORO_DOT_CURL)) assertTrue("心: the dot's curl is not required: ${r.issues}", r.clean)
             else if (f.name.startsWith(HOOKED_KI)) assertTrue("気 with a large hook: ${r.issues}", r.clean)
             else if (f.name.startsWith(WIND_FOR_KI)) assertTrue("風 drawn for 気 must not be clean", !r.clean)
             else if (logged == "Clean") assertTrue("$kanji ${f.name}: ${r.issues}", r.clean)
@@ -58,5 +60,8 @@ class RealDrawingsTest {
         const val HOOKED_KI = "1791541182441"
         const val WIND_FOR_KI = "1791541125001"
         const val COW_FOR_NOON = "1791550749791"
+        const val NO_FLICK_KAMI = "1791781271231"
+        const val SLANTED_DOT_NUSHI = "1791781307655"
+        const val KOKORO_DOT_CURL = "1791782908501"
     }
 }

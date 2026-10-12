@@ -1,5 +1,6 @@
 package io.github.stopcran.kanji.core.draw
 
+import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
@@ -7,6 +8,9 @@ import kotlin.math.min
 data class Pt(val x: Double, val y: Double)
 
 typealias Stroke = List<Pt>
+
+/** Drawn and reference chords closer than 60 degrees to perpendicular (either way) are not the same stroke. */
+private const val LEAN_COS = 0.5
 
 internal fun Stroke.length(): Double {
     var s = 0.0
@@ -194,7 +198,9 @@ class StrokeMatcher(private val cfg: MatcherConfig = MatcherConfig()) {
             if (cost >= cfg.matchLimit) continue
             val reversed = (rev < fwd * 0.7 && fwd - rev > 0.015) || (chordCosine(drawn[d], reference[r]) < -0.3 && refLen[r] > 10.0)
             val ratio = drLen[d] / max(refLen[r], 1e-6)
-            val badLength = refLen[r] > cfg.shortStroke && (ratio < cfg.minLengthRatio || ratio > cfg.maxLengthRatio)
+            // A dot or stroke leaning the other way is a different stroke, even when it is short and so close in distance.
+            val leaning = refLen[r] > 10.0 && abs(chordCosine(drawn[d], reference[r])) < LEAN_COS
+            val badLength = leaning || refLen[r] > cfg.shortStroke && (ratio < cfg.minLengthRatio || ratio > cfg.maxLengthRatio)
             cands += Link.One(d, r, cost, reversed, badLength, shapeLimitFor(refLen[r]))
         }
         for (d in drawn.indices) for (r in 0 until reference.size - 1) {
