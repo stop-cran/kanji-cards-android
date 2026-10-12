@@ -84,11 +84,9 @@ private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeA
         if (data.sourceId != defaultId) Text(stringResource(R.string.cards_from, data.sourceId))
         N4Offer(app, data)
         PacingHint(data)
-        val kanjiStack = if (data.stacks.size > 1) " · ${data.stack.label}" else ""
-        Entry("Kanji", (data.summary(HomeMode.Meaning, HomeMode.Drawing, HomeMode.Readings) ?: "Loading…") + kanjiStack, ArtSet.current.kanji, a.onKanjiPage)
-        val wordStack = if (data.wordStacks.size > 1) " · ${data.wordStack.label}" else ""
+        Entry("Kanji", data.summary(HomeMode.Meaning, HomeMode.Drawing, HomeMode.Readings) ?: "Loading…", ArtSet.current.kanji, a.onKanjiPage)
         val words = data.summary(HomeMode.WordJp, HomeMode.WordEn, HomeMode.WordReading, HomeMode.WordType) ?: "Loading…"
-        Entry("Words", words + wordStack, ArtSet.current.words, a.onWordsPage)
+        Entry("Words", words, ArtSet.current.words, a.onWordsPage)
         val counters = rememberCounterHome(app)
         Entry("Counters", counters.summary(), ArtSet.current.counters, a.onCountersPage)
     }
