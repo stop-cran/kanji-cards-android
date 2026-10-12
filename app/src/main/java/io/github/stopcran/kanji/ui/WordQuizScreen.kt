@@ -46,6 +46,7 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
             WordDirection.Type -> "Words: type it"
         },
         onBack,
+        scrollToTopOnBack = true,
     ) {
         when (val s = vm.ui) {
             WordQuizUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })

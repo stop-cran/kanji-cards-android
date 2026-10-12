@@ -76,7 +76,7 @@ fun DrawScreen(
     val app = LocalContext.current.applicationContext as KanjiApp
     val brush by app.settings.brush.collectAsState()
     androidx.compose.runtime.CompositionLocalProvider(LocalBrush provides brush, LocalBrushLook provides vm.look) {
-    Page("Drawing", onBack) {
+    Page("Drawing", onBack, scrollToTopOnBack = true) {
         when (val s = vm.ui) {
             DrawUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
             is DrawUi.Empty -> Text(s.message)

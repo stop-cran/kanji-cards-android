@@ -34,7 +34,7 @@ import io.github.stopcran.kanji.data.splitSep
 @Composable
 fun QuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit, onPracticeMore: () -> Unit, vm: QuizViewModel = serviceViewModel(sessionKey) { QuizViewModel(it) }) {
     LaunchedEffect(sessionKey) { vm.ensureStarted(sessionKey.endsWith(":extra")) }
-    Page("Quiz", onBack) {
+    Page("Quiz", onBack, scrollToTopOnBack = true) {
         when (val s = vm.ui) {
             QuizUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
             is QuizUi.Empty -> Text(s.message)

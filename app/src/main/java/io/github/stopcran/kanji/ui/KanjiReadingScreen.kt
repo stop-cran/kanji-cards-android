@@ -30,7 +30,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 @Composable
 fun KanjiReadingScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit, onPracticeMore: () -> Unit, vm: KanjiReadingViewModel = serviceViewModel(sessionKey) { KanjiReadingViewModel(it) }) {
     LaunchedEffect(sessionKey) { vm.ensureStarted(sessionKey.endsWith(":extra")) }
-    Page("Kanji readings", onBack) {
+    Page("Kanji readings", onBack, scrollToTopOnBack = true) {
         when (val s = vm.ui) {
             ReadingUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
             is ReadingUi.Empty -> Text(s.message)

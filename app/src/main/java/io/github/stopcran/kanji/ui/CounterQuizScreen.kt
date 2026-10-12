@@ -42,7 +42,7 @@ fun CounterQuizScreen(
 ) {
     val mode = CounterMode.fromCode(sessionKey.split(':').getOrNull(2))
     LaunchedEffect(sessionKey) { vm.ensureStarted(mode, sessionKey.endsWith(":extra")) }
-    Page("Counters: ${mode.label}", onBack, ime = mode == CounterMode.Type) {
+    Page("Counters: ${mode.label}", onBack, ime = mode == CounterMode.Type, scrollToTopOnBack = true) {
         when (val s = vm.ui) {
             CounterUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             is CounterUi.Empty -> Text(s.message)
