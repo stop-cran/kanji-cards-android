@@ -15,7 +15,7 @@ internal data class EndHook(val turn: Double, val tail: Double)
 internal fun endTurn(stroke: Stroke): Double {
     val near = endHook(stroke)
     val hook = if (abs(near.turn) >= HOOK_REF) near else {
-        endHook(stroke, HOOK_LONG_WINDOW).takeIf { abs(it.turn) >= HOOK_LONG_MIN && it.tail <= HOOK_LONG_TAIL } ?: near
+        endHook(stroke, HOOK_LONG_WINDOW).takeIf { it.turn <= -HOOK_LONG_REF && it.tail <= HOOK_LONG_TAIL } ?: near
     }
     return if (abs(hook.turn) >= HOOK_REF && hook.tail < HOOK_REF_TAIL) 0.0 else hook.turn
 }
@@ -72,6 +72,9 @@ internal const val HOOK_LONG_WINDOW = 28
 private const val HOOK_LONG_MIN = 60.0
 private const val HOOK_LONG_TAIL = 30.0
 private const val HOOK_REF = 60.0
+
+// A flick up-right after a vertical (㇙ ㇜) turns 105-145 degrees counter-clockwise; corners such as ㇕ ㇟ ㇇ stay below 100 or turn the other way.
+private const val HOOK_LONG_REF = 100.0
 private const val HOOK_REF_TAIL = 5.0
 private const val HOOK_MIN = 35.0
 private const val HOOK_FLAT = 35.0
