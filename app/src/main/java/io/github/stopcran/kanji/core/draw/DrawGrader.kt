@@ -17,6 +17,11 @@ object DrawGrader {
     }
 }
 
+private fun String.replaceLast(old: String, new: String): String {
+    val i = lastIndexOf(old)
+    return if (i < 0) this else substring(0, i) + new + substring(i + old.length)
+}
+
 /** Human-readable description with 1-based stroke numbers. */
 fun StrokeIssue.describe(): String {
     val r = refIndex?.plus(1)
@@ -24,7 +29,9 @@ fun StrokeIssue.describe(): String {
     return when (type) {
         IssueType.Reversed -> "Stroke $r was drawn in the wrong direction"
         IssueType.WrongOrder -> "Stroke $r was drawn out of order (you drew it as number $d)"
-        IssueType.WrongShape -> "Stroke $r has the wrong shape, position or length"
+        IssueType.WrongShape ->
+            if (faults.isEmpty()) "Stroke $r has the wrong shape, position or length"
+            else "Stroke $r is drawn ${faults.joinToString(", ", transform = ShapeFault::phrase).replaceLast(", ", " and ")}"
         IssueType.Joined -> "Strokes $r and ${r?.plus(1)} were joined into one"
         IssueType.Broken -> "Stroke $r was broken into two"
         IssueType.Missing -> "Stroke $r is missing"

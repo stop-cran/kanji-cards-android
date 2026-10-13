@@ -9,6 +9,7 @@ import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.content.StrokeData
 import io.github.stopcran.kanji.core.draw.DrawGrader
 import io.github.stopcran.kanji.core.draw.DrawOutcome
+import io.github.stopcran.kanji.core.draw.DrawGate
 import io.github.stopcran.kanji.core.draw.Pt
 import io.github.stopcran.kanji.core.draw.Stroke
 import io.github.stopcran.kanji.core.draw.StrokeMatcher
@@ -41,7 +42,7 @@ sealed interface KanaStudyUi {
     data class QuizAnswer(val card: KanaCard, val options: List<String>, val picked: String, val remaining: Int) : KanaStudyUi
     data class TypeQuestion(val card: KanaCard, val remaining: Int) : KanaStudyUi
     data class TypeAnswer(val card: KanaCard, val typed: String, val correct: Boolean, val remaining: Int) : KanaStudyUi
-    data class DrawQuestion(val card: KanaCard, val remaining: Int) : KanaStudyUi
+    data class DrawQuestion(val card: KanaCard, val remaining: Int, val trace: Boolean) : KanaStudyUi
     data class DrawChecking(val card: KanaCard) : KanaStudyUi
     data class DrawAnswer(
         val card: KanaCard,
@@ -52,6 +53,7 @@ sealed interface KanaStudyUi {
         val match: io.github.stopcran.kanji.core.draw.MatchResult,
         val recognizerUsed: Boolean,
         val remaining: Int,
+        val trace: Boolean,
     ) : KanaStudyUi
 }
 
@@ -62,6 +64,7 @@ class KanaStudyViewModel(private val app: Services) : ViewModel() {
     private val references = mutableMapOf<String, List<Stroke>>()
     private val states = mutableMapOf<String, SrsState>()
     private var open: Set<String> = emptySet()
+    private val traced = mutableSetOf<String>()
     private var script = KanaScript.Hiragana
     private var mode = KanaMode.QuizKanaToRomaji
     private var session = QuizSession<String>(emptyList(), { it }, confirm = false)
@@ -169,7 +172,11 @@ class KanaStudyViewModel(private val app: Services) : ViewModel() {
         ui = when (mode) {
             KanaMode.QuizKanaToRomaji -> KanaStudyUi.QuizQuestion(card, options(card, cards.values, KanaMode.QuizKanaToRomaji), remaining)
             KanaMode.QuizRomajiToKana -> KanaStudyUi.QuizQuestion(card, options(card, cards.values, KanaMode.QuizRomajiToKana), remaining)
-            KanaMode.Draw -> KanaStudyUi.DrawQuestion(card, remaining)
+            KanaMode.Draw -> {
+                val trace = DrawGate.shouldTrace(true, states[id], traced, id)
+                if (trace) traced += id
+                KanaStudyUi.DrawQuestion(card, remaining, trace)
+            }
             KanaMode.TypeKanaToRomaji, KanaMode.TypeRomajiToKana -> KanaStudyUi.TypeQuestion(card, remaining)
         }
     }
@@ -224,7 +231,17 @@ class KanaStudyViewModel(private val app: Services) : ViewModel() {
             val match = matcher.match(reference, points)
             val candidates = if (strokes.isEmpty()) emptyList() else recognizer.candidates(strokes)
             val outcome = DrawGrader.outcome(candidates, question.card.kana, match)
-            ui = KanaStudyUi.DrawAnswer(question.card, reference, strokes, canvasPx, outcome, match, candidates != null, question.remaining)
+            ui = KanaStudyUi.DrawAnswer(
+                question.card,
+                reference,
+                strokes,
+                canvasPx,
+                outcome,
+                match,
+                candidates != null,
+                question.remaining,
+                question.trace,
+            )
         }
     }
 
@@ -245,6 +262,11 @@ class KanaStudyViewModel(private val app: Services) : ViewModel() {
             }
             is KanaStudyUi.DrawAnswer -> {
                 id = current.card.kana
+                if (current.trace) {
+                    session.defer(id, 3)
+                    showNext(KanaCatalog.all(script).associateBy { it.kana })
+                    return
+                }
                 correct = current.outcome != DrawOutcome.NotRecognized
                 weak = current.outcome == DrawOutcome.Mistakes
             }

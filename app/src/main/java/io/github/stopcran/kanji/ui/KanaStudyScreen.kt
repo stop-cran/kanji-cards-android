@@ -63,7 +63,7 @@ fun KanaStudyScreen(
                 is KanaStudyUi.QuizAnswer -> QuizAnswer(state, mode, vm)
                 is KanaStudyUi.TypeQuestion -> TypeQuestion(state.card.kana, state.card.romaji, state.remaining, mode, vm)
                 is KanaStudyUi.TypeAnswer -> TypeAnswer(state, mode, vm)
-                is KanaStudyUi.DrawQuestion -> DrawQuestion(state.card.romaji, state.remaining, vm)
+                is KanaStudyUi.DrawQuestion -> DrawQuestion(state, vm)
                 is KanaStudyUi.DrawChecking -> Text("Checking strokes for ${state.card.kana}…")
                 is DrawAnswer -> DrawAnswer(state, vm)
             }
@@ -163,16 +163,21 @@ private fun TypeAnswer(state: KanaStudyUi.TypeAnswer, mode: KanaMode, vm: KanaSt
 }
 
 @Composable
-private fun DrawQuestion(romaji: String, remaining: Int, vm: KanaStudyViewModel) {
+private fun DrawQuestion(state: KanaStudyUi.DrawQuestion, vm: KanaStudyViewModel) {
     val strokes = vm.ink
-    Text("Left: $remaining", style = MaterialTheme.typography.labelMedium)
-    Text("Draw the kana for", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-    Text(romaji, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    Text("Left: ${state.remaining}", style = MaterialTheme.typography.labelMedium)
+    Text(
+        if (state.trace) "Trace the kana for" else "Draw the kana for",
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Text(state.card.romaji, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     DrawingPad(
         strokes = strokes,
         onStroke = { strokes += it },
         onSize = vm::padSized,
         modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+        ghost = if (state.trace) vm.reference(state.card) else null,
         subject = "kana",
     )
     when (vm.modelState) {
@@ -196,11 +201,13 @@ private fun DrawQuestion(romaji: String, remaining: Int, vm: KanaStudyViewModel)
             Text("Check")
         }
     }
-    OutlinedButton(
-        onClick = { vm.checkDrawing(emptyList(), vm.inkSize) },
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Text("I don't remember")
+    if (!state.trace) {
+        OutlinedButton(
+            onClick = { vm.checkDrawing(emptyList(), vm.inkSize) },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("I don't remember")
+        }
     }
 }
 
@@ -213,6 +220,14 @@ private fun DrawAnswer(state: DrawAnswer, vm: KanaStudyViewModel) {
         DrawOutcome.NotRecognized -> "Not recognized" to wrongTextColor()
     }
     Text(state.card.kana, fontSize = 80.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    if (state.trace) {
+        Text(
+            "Practice only: this attempt is not graded.",
+            style = MaterialTheme.typography.bodySmall,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
     Text(headline, color = color, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Overlay(Modifier.weight(1f)) {
@@ -235,7 +250,7 @@ private fun DrawAnswer(state: DrawAnswer, vm: KanaStudyViewModel) {
         onClick = vm::next,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Text(if (state.outcome == DrawOutcome.NotRecognized) "Next (will repeat)" else "Next")
+        Text(if (state.trace) "Next (now from memory)" else if (state.outcome == DrawOutcome.NotRecognized) "Next (will repeat)" else "Next")
     }
 }
 

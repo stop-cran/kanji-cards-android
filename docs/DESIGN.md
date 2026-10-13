@@ -149,6 +149,10 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   **not resampled** points (resampling would erase the corners); never feed `regularize()` output into `endHook`.
 - Issues: `Reversed`, `WrongOrder`, `WrongShape`, `Joined`, `Broken`, `Missing`, `Extra`, plus `MissingHook` / `ExtraHook` (stroke-end hooks,
   `EndHook.kt`; checked only when the whole drawing has no other issues, and only on single-stroke links; extra-hook thresholds are deliberately high to avoid false alarms).
+- `WrongShape` carries `faults` (`ShapeDiagnosis.kt`): the drawn stroke, as fitted to the reference box, is compared with its reference for
+  position (6+ units), length (ratio < 0.75 or > 1.35), angle (15°+, worded per stroke orientation) and curvature. Position along the stroke's own axis is
+  suppressed when the length is off (a shorter stroke shifts its centre). The message then reads e.g. "Stroke 5 is drawn too low"; with no fault it falls back to the generic text.
+  Note a pair made from leftover strokes can name the neighbouring stroke (both inner bars of 有 drawn low pair ref 5 with drawn 6).
 - Accepted alternative orders come from `orderVariants` in the strokes file. The app already applies them; the authored data is what is missing (issue #2).
 - The displayed "correct strokes" are jittered for display only; grading always uses the unmodified reference and the raw points.
 - Short strokes (dots, ticks) get a looser shape limit; hands vary most there.
@@ -181,7 +185,7 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   Words page shows the word count and "Browse words" (route `word-cards`, `WordSearch`: written form, kana in either script, romaji ranked below kana,
   English title words). Both open the card's article; the main screen only notes the source when it is not the default repo.
   After process death session routes are dropped from the restored back stack (a session is not resumable) and the user lands on the page they started from.
-- **Kana progression:** Hiragana and katakana have independent review state. Yōon cards unlock per script and per mode only when both plain component kana are in Review with at least seven days of FSRS stability; a yōon card already started in that mode stays available. Locked cards are excluded from that mode's study queues, quiz distractors and new-card counts, and the Kana page reports locked combinations per mode.
+- **Kana progression:** Hiragana and katakana have independent review state. Yōon cards unlock per script and per mode only when both plain component kana are in Review with at least seven days of FSRS stability; a yōon card already started in that mode stays available. Locked cards are excluded from that mode's study queues, quiz distractors and new-card counts, and the Kana page reports locked combinations per mode. In Kana drawing, a card with no prior Draw review is first shown with the faint numbered reference; this is a practice-only trace, then the card returns later to be drawn from memory without recording the trace attempt.
 - Home loads asynchronously. The nine main flows (kanji, words, seven review-state sets) start as null = "not yet" and the screen shows a progress
   bar until all emit; empty means "no data". The new-card-introduced counts still start at 0 (meaning "none today") and settle a moment later.
 - Home reads only slim rows (`observeKanjiLite`/`observeWordsLite`: no article body, `strokesJson` reduced to `''` or NULL). Screens that need bodies

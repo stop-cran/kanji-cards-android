@@ -64,7 +64,7 @@ enum class IssueType { Reversed, WrongOrder, WrongShape, Joined, Broken, Missing
  * One mistake. [refIndex] is the 0-based reference stroke (stroke order position) and [drawnIndex] the 0-based
  * index in the drawing; either may be null (Missing has no drawn stroke, Extra has no reference stroke).
  */
-data class StrokeIssue(val type: IssueType, val refIndex: Int?, val drawnIndex: Int?)
+data class StrokeIssue(val type: IssueType, val refIndex: Int?, val drawnIndex: Int?, val faults: List<ShapeFault> = emptyList())
 
 data class MatchResult(
     val issues: List<StrokeIssue>,
@@ -141,7 +141,8 @@ class StrokeMatcher(private val cfg: MatcherConfig = MatcherConfig()) {
         val drawn = regularize(rawDrawn, cfg.smoothing, cfg.samples)
         if (reference.isEmpty() || drawn.isEmpty()) return MatchResult(emptyList(), reference.size, drawn.size, 0)
         var scale = fitScale(boxOf(drawn), boxOf(reference))
-        var links = link(reference, normalize(drawn, boxOf(drawn), boxOf(reference)))
+        var normalized = normalize(drawn, boxOf(drawn), boxOf(reference))
+        var links = link(reference, normalized)
         // Refit using only what was found, so a missing or extra stroke does not distort the rest.
         repeat(2) {
             val usedD = links.flatMap { l -> when (l) { is Link.One -> listOf(l.d); is Link.Join -> listOf(l.d); is Link.Split -> listOf(l.d, l.d + 1) } }
@@ -150,12 +151,24 @@ class StrokeMatcher(private val cfg: MatcherConfig = MatcherConfig()) {
                 val from = boxOf(usedD.map { drawn[it] })
                 val to = boxOf(usedR.map { reference[it] })
                 scale = fitScale(from, to)
-                links = link(reference, normalize(drawn, from, to))
+                normalized = normalize(drawn, from, to)
+                links = link(reference, normalized)
             }
         }
-        val result = classify(reference.size, drawn.size, links).copy(fitCost = if (links.isEmpty()) 1.0 else links.sumOf { it.cost } / links.size)
+        val result = classify(reference.size, drawn.size, links)
+            .copy(fitCost = if (links.isEmpty()) 1.0 else links.sumOf { it.cost } / links.size)
+            .withFaults(reference, normalized)
         return if (result.issues.isEmpty()) result.withHookChecks(reference, simplifyStrokes(rawDrawn, cfg.smoothing), links, scale) else result
     }
+
+    /** Says how each wrong-shape stroke differs from its reference, using the drawing as fitted to the reference box. */
+    private fun MatchResult.withFaults(reference: List<Stroke>, normalized: List<Stroke>): MatchResult = copy(
+        issues = issues.map { i ->
+            val r = i.refIndex
+            val d = i.drawnIndex
+            if (i.type == IssueType.WrongShape && r != null && d != null) i.copy(faults = ShapeDiagnosis.diagnose(reference[r], normalized[d])) else i
+        },
+    )
 
     private fun fitScale(from: Box, to: Box): Double = max(to.w, to.h).coerceAtLeast(1e-6) / max(from.w, from.h).coerceAtLeast(1e-6)
 

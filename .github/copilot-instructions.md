@@ -29,6 +29,11 @@ One GitHub issue per work item (file it, get an independent review of the plan, 
 unit tests, check the UI on the emulator, update `docs/DESIGN.md`, commit with the Co-authored-by trailer, push, close the issue with the
 commit. Say plainly what was not tested on a real device. Release build: `assembleRelease`.
 
+Code review: use read-only reviewers on the uncommitted diff, one per feature so each has a bounded scope, and give each the intent plus
+the neighbouring implementation to compare against. Adjudicate findings yourself: a reviewer's claim about direction or sign semantics
+(left/right, clockwise, up/down on a y-down screen) must be checked against a concrete example before acting. If the claim is only
+ambiguous wording, reword the user-facing text instead of flipping the logic.
+
 ## Gotchas
 
 - **Edge-to-edge on API 35:** content draws under the status/navigation bars; a button there is visible but untouchable. Every screen goes
@@ -68,6 +73,7 @@ commit. Say plainly what was not tested on a real device. Release build: `assemb
 ## Stroke matcher (`core/draw`)
 - `StrokeMatcher.match(reference, drawn)` is pure Kotlin. It normalises the drawing onto the reference box (per-axis scale, refit on matched strokes), links drawn to reference strokes greedily by mean resampled distance (single, joined, broken candidates), then reports `Reversed`, `WrongOrder` (strokes outside the longest increasing run of reference indexes), `WrongShape`, `Joined`, `Broken`, `Missing`, `Extra`.
 - Tolerances are in `MatcherConfig` (fractions of the 109 box). They were tuned only on SIMULATED hands (`StrokeMatcherTest.Hand`), so re-tune with real recorded drawings from a device before trusting them; add them as fixtures.
+- `WrongShape` issues carry `faults` from `ShapeDiagnosis` (position, length, angle, curvature) so `describe()` can say e.g. "too low". Describe a position/lean by an unambiguous reference (a lean is named by where the stroke's top is). When two neighbouring strokes are both off, the leftover pairing can name the neighbour; verify against the exported drawing before changing a threshold.
 - The matcher does not identify the kanji: similar kanji share strokes. Identity comes from the recognition gate (ML Kit), the matcher only grades strokes.
 
 ## Drawing mode
@@ -94,5 +100,6 @@ commit. Say plainly what was not tested on a real device. Release build: `assemb
 - Source files have mixed LF/CRLF line endings; check before multi-line text replacements.
 - Word `jlpt` is optional vocabulary metadata, not a kanji-derived value to persist. `inWordStack` applies explicit levels first, then the legacy fallback for null; all queue/progression callers share it. Room v3 keeps IDs/SRS state and clears only sync metadata so previously ignored labels are reimported even from an unchanged revision.
 - Kana yōon unlock is per script and mode: both plain components must be in Review at 7+ days of stability. Preserve already-started combinations and apply the same eligibility filter to queues, quiz distractors, and new-card counts.
+- Kana drawing introduces a never-reviewed card with the shared faint numbered reference once per session, then defers it for a from-memory attempt. The trace attempt must not enter SRS history.
 - Only omitted word `jlpt` enables fallback: present values must be top-level unquoted integers 1-5. Preserve raw front-matter entries to reject blank/quoted/list values and duplicate or multiline shadowing without changing kanji parsing. Never synthesize level tags; word tags and quiz tag scoring stay independent of `jlpt`.
 - `DatabaseMigrationTest` runs Room upgrades/reopen tests on Robolectric native SQLite (API 28), without the content repo or an emulator. Room 2.6 databases are not `Closeable`; close them explicitly in `finally` rather than using Kotlin `use`.

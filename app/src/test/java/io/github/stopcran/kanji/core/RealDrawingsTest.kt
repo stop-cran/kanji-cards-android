@@ -3,6 +3,7 @@ package io.github.stopcran.kanji.core
 import io.github.stopcran.kanji.core.content.StrokeData
 import io.github.stopcran.kanji.core.draw.IssueType
 import io.github.stopcran.kanji.core.draw.LookalikeGate
+import io.github.stopcran.kanji.core.draw.ShapeFault
 import io.github.stopcran.kanji.core.draw.Pt
 import io.github.stopcran.kanji.core.draw.Stroke
 import io.github.stopcran.kanji.core.draw.StrokeMatcher
@@ -14,6 +15,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.double
 import org.junit.Assume.assumeTrue
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.io.File
 
@@ -56,7 +58,18 @@ class RealDrawingsTest {
         org.junit.Assert.assertEquals("牛", found)
     }
 
+    @Test
+    fun lowInnerBarsOfYuAreDescribedAsPositionNotShape() {
+        val f = File("src/test/resources/drawings").listFiles { x -> x.name.startsWith(LOW_BARS_YU) }!!.single()
+        val o = json.parseToJsonElement(f.readText()).jsonObject
+        val drawn = o["strokes"]!!.jsonArray.map { s -> s.jsonArray.map { p -> Pt(p.jsonArray[0].jsonPrimitive.double, p.jsonArray[1].jsonPrimitive.double) } }
+        val shape = StrokeMatcher().match(reference("有"), drawn).issues.single { it.type == IssueType.WrongShape }
+        assertEquals(4, shape.refIndex)
+        assertTrue("${shape.faults}", ShapeFault.TooLow in shape.faults)
+    }
+
     private companion object {
+        const val LOW_BARS_YU = "1791864281413"
         const val HOOKED_KI = "1791541182441"
         const val WIND_FOR_KI = "1791541125001"
         const val COW_FOR_NOON = "1791550749791"

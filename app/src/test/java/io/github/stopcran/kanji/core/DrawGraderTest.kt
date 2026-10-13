@@ -3,6 +3,7 @@ package io.github.stopcran.kanji.core
 import io.github.stopcran.kanji.core.draw.DrawGrader
 import io.github.stopcran.kanji.core.draw.DrawOutcome
 import io.github.stopcran.kanji.core.draw.IssueType
+import io.github.stopcran.kanji.core.draw.ShapeFault
 import io.github.stopcran.kanji.core.draw.MatchResult
 import io.github.stopcran.kanji.core.draw.StrokeIssue
 import io.github.stopcran.kanji.core.draw.describe
@@ -65,5 +66,16 @@ class DrawGraderTest {
     fun describesIssuesWithOneBasedNumbers() {
         assertTrue(StrokeIssue(IssueType.Joined, 0, 0).describe().contains("1 and 2"))
         assertTrue(StrokeIssue(IssueType.Reversed, 2, 2).describe().contains("Stroke 3"))
+    }
+
+    @Test
+    fun wrongShapeNamesTheFaults() {
+        val generic = StrokeIssue(IssueType.WrongShape, 4, 5).describe()
+        assertTrue(generic, generic.startsWith("Stroke 5 has the wrong shape"))
+        assertEquals("Stroke 5 is drawn too low", StrokeIssue(IssueType.WrongShape, 4, 5, listOf(ShapeFault.TooLow)).describe())
+        assertEquals(
+            "Stroke 2 is drawn too high, too short and too curved",
+            StrokeIssue(IssueType.WrongShape, 1, 1, listOf(ShapeFault.TooHigh, ShapeFault.TooShort, ShapeFault.TooCurved)).describe(),
+        )
     }
 }
