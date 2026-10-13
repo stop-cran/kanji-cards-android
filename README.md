@@ -1,4 +1,4 @@
-# Kanji Cards (Android)
+# Ensō Nihongo (Android)
 
 A personal kanji-learning app. Cards, words and articles live in a separate Git repo
 (default: <https://github.com/stop-cran/learning-japanese>); the app syncs them and schedules

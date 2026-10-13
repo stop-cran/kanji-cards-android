@@ -17,7 +17,7 @@ import io.github.stopcran.kanji.Defaults
 private data class Credit(val name: String, val by: String, val license: String, val url: String)
 
 private val credits = listOf(
-    Credit("Kanji Cards (this app)", "© Roman Konstantinovskiy and contributors", "Apache License 2.0", "https://github.com/stop-cran/kanji-cards-android"),
+    Credit("Ensō Nihongo (this app)", "© Roman Konstantinovskiy and contributors", "Apache License 2.0", "https://github.com/stop-cran/kanji-cards-android"),
     Credit("Card content (default repository)", "© Roman Konstantinovskiy and contributors", "CC BY-SA 4.0", Defaults.CONTENT_REPO_URL),
     Credit("Stroke data: KanjiVG (kanji and built-in kana)", "© Ulrich Apel and contributors", "CC BY-SA 3.0", "https://kanjivg.tagaini.net"),
     Credit("Readings and word data: KANJIDIC2 and JMdict", "© Electronic Dictionary Research and Development Group", "EDRDG licence", "https://www.edrdg.org/edrdg/licence.html"),

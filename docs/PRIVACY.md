@@ -1,8 +1,8 @@
-# Privacy policy — Kanji Cards
+# Privacy policy — Ensō Nihongo
 
 _Last updated: October 2026._
 
-Kanji Cards is a personal study app. It has no accounts, no advertising, no analytics of its own and no server of its own. Google's ML Kit library, used for handwriting recognition, may send technical diagnostics and usage metrics to Google (see below).
+Ensō Nihongo is a personal study app. It has no accounts, no advertising, no analytics of its own and no server of its own. Google's ML Kit library, used for handwriting recognition, may send technical diagnostics and usage metrics to Google (see below).
 
 ## What stays on your device
 - Your review progress (which cards you studied and when), settings and the downloaded cards.

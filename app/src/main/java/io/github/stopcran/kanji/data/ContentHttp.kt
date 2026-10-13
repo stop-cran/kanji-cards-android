@@ -18,7 +18,7 @@ fun interface ContentHttp {
 }
 
 object UrlConnectionHttp : ContentHttp {
-    private const val USER_AGENT = "KanjiCards-Android"
+    private const val USER_AGENT = "EnsoNihongo-Android"
 
     override fun open(url: String, headers: Map<String, String>, connectTimeoutMs: Int, readTimeoutMs: Int): ContentResponse {
         val conn = URL(url).openConnection() as HttpURLConnection

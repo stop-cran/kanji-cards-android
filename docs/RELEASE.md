@@ -14,7 +14,7 @@
 4. Smoke-test the release APK on a real device (drawing mode, ML Kit model download).
 
 ## Store listing draft
-- **Title:** Kanji Cards
+- **Title:** Ensō Nihongo
 - **Short description:** Learn kanji by meaning and by drawing, with spaced repetition and your own GitHub-hosted notes.
 - **Full description:** Guess meanings, draw kanji with stroke-order checks, review on an FSRS schedule, browse and search cards, and read articles about similar kanji and words. Content is synced from a public GitHub repository you can fork. No account, no ads.
 - **Category:** Education. **Contains ads:** No.
