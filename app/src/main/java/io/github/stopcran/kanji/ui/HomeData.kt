@@ -118,13 +118,15 @@ internal fun shouldOfferN4(
     val n5Kanji = inStack.filter { it.jlpt == 5 }
     val n5Words = words.inWordStack(WordStacks.n5, levels)
     val onN5 = wordStack.id == WordStacks.n5.id
+    // The word signals come from the selected stack's own states, so judge readiness only on the N5 stack.
+    if (!onN5) return false
     val ready = Advancement.ready(
         listOf(
             n5Kanji.map { s.quiz[it.kanji] },
             n5Kanji.filter { it.strokesJson != null }.map { s.draw[it.kanji] },
-            if (onN5) n5Words.map { s.jp[it.word] } else emptyList(),
-            if (onN5) n5Words.map { s.en[it.word] } else emptyList(),
-            if (onN5) n5Words.forDirection(WordDirection.Reading).map { s.rd[it.word] } else emptyList(),
+            n5Words.map { s.jp[it.word] },
+            n5Words.map { s.en[it.word] },
+            n5Words.forDirection(WordDirection.Reading).map { s.rd[it.word] },
         ),
         now,
     )

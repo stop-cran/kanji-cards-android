@@ -124,8 +124,8 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   `MIN_TAG_STACK_WORDS` (4) tagged words exist, even before N4 is unlocked, so a quiz always has distractors. It uses the normal word quiz
   directions, its own SRS state (a word studied here and in "All words" has two schedules, as for N5/N4) and the shared daily new-card
   allowance. Distractors come only from the stack's own words, so options are all onomatopoeia. `offeredStacks()` keeps home, quizzes and
-  reminders in agreement; an unavailable saved stack falls back to N5. The N4 advancement offer still evaluates only N5 words and is not
-  affected by this stack. Phase 3 (images) is separate.
+  reminders in agreement; an unavailable saved stack falls back to N5. The N4 advancement offer needs the N5 word states, which exist only for
+  the selected stack, so `shouldOfferN4` makes no offer while any other stack (including this one) is selected. Phase 3 (images) is separate.
 - An explicit word `jlpt` wins, including for kana-only words or words with harder, unknown or missing kanji. Only when it is omitted does
   the level fall back to the **minimum** `jlpt` number among the word's kanji (N5 = 5 is easiest, so the minimum is the hardest).
   An unlabelled word with no kanji or an unknown kanji level appears only in "All words". Shared `inWordStack` filtering keeps home counts,
