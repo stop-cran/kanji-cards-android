@@ -9,6 +9,8 @@ data class Manifest(
     val schemaVersion: Int,
     val contentVersion: String,
     val files: Map<String, String>,
+    /** Raw-byte SHA-256 of each images/<name>.webp; absent in content that has no images. */
+    val images: Map<String, String> = emptyMap(),
 )
 
 data class KanjiCard(
@@ -37,6 +39,9 @@ data class WordArticle(
     val jlpt: Int? = null,
     val quizExclusions: List<String> = emptyList(),
     val quizDistractors: List<String> = emptyList(),
+    /** images/<name>.webp path of the scene picture, null when the word has none (or it failed verification). */
+    val image: String? = null,
+    val imageScene: String? = null,
 )
 
 data class Article(val slug: String, val title: String, val body: String)
@@ -105,4 +110,6 @@ data class ParsedContent(
     val strokes: Map<String, StrokeData>,
     val problems: List<String>,
     val counters: List<CounterFile> = emptyList(),
+    /** Verified images referenced by a word, keyed by repo path (images/<name>.webp). */
+    val images: Map<String, ByteArray> = emptyMap(),
 )

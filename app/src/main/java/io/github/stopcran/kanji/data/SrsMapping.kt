@@ -36,13 +36,19 @@ fun List<KanjiEntity>.inStack(stackId: String): List<KanjiEntity> {
 
 fun List<KanjiEntity>.levels(): Map<String, Int?> = associate { it.kanji to it.jlpt }
 
-fun WordArticle.toEntity(sourceId: String) = WordEntity(sourceId, word, reading, title, type, kanji.joinSep(), tags.joinSep(), body, jlpt, quizExclusions.joinSep(), quizDistractors.joinSep())
+fun WordArticle.toEntity(sourceId: String) = WordEntity(sourceId, word, reading, title, type, kanji.joinSep(), tags.joinSep(), body, jlpt, quizExclusions.joinSep(), quizDistractors.joinSep(), image, imageScene)
 
-fun WordEntity.toCard() = WordCard(word, reading, title, type, kanji.splitSep(), tags.splitSep(), jlpt, quizExclusions.splitSep(), quizDistractors.splitSep())
+fun WordEntity.toCard() = WordCard(
+    word, reading, title, type, kanji.splitSep(), tags.splitSep(), jlpt,
+    quizExclusions.splitSep(), quizDistractors.splitSep(), image,
+)
 
 /** The reading quiz skips words whose written form already gives the reading. */
-fun List<WordEntity>.forDirection(direction: WordDirection): List<WordEntity> =
-    if (direction == WordDirection.Reading) filter { hasReadingToLearn(it.word, it.reading) } else this
+fun List<WordEntity>.forDirection(direction: WordDirection): List<WordEntity> = when (direction) {
+    WordDirection.Reading -> filter { hasReadingToLearn(it.word, it.reading) }
+    WordDirection.Picture -> filter { it.image != null }
+    else -> this
+}
 
 /** Stacks to offer for this content, so the home screen, quizzes and reminders agree. */
 fun List<WordEntity>.offeredStacks(n4Unlocked: Boolean): List<WordStack> =

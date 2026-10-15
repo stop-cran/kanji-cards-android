@@ -8,6 +8,8 @@ class ContentException(message: String) : Exception(message)
 /** Turns a map of repo-relative path -> bytes into validated content. Everything here is treated as untrusted input. */
 object ContentParser {
     const val MAX_QUIZ_DISTRACTORS = 3
+    const val MAX_IMAGE_BYTES = 150 * 1024
+    private val IMAGE_PATH = Regex("images/[^/\\\\\\s]+\\.webp")
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -89,8 +91,58 @@ object ContentParser {
         val unique = kanji.filter { c ->
             titles.add(c.title).also { if (!it) problems += "kanji/${c.kanji}.md: duplicate title '${c.title}'" }
         }
-        return ParsedContent(manifest, unique, words, articles, strokes, problems, resolveCounters(counters, problems))
+        val images = verifiedImages(manifest, files, words, problems)
+        return ParsedContent(manifest, unique, words, articles, strokes, problems, resolveCounters(counters, problems), images)
     }
+
+    /**
+     * Images are untrusted binary input: raw-byte hash, WebP container check and one owner word each. A word whose image
+     * fails any check keeps its text and loses the picture; the sync never fails because of an image.
+     */
+    private fun verifiedImages(
+        manifest: Manifest,
+        files: Map<String, ByteArray>,
+        words: MutableList<WordArticle>,
+        problems: MutableList<String>,
+    ): Map<String, ByteArray> {
+        val good = HashMap<String, ByteArray>()
+        for ((path, expectedHash) in manifest.images.toSortedMap()) {
+            val bytes = files[path]
+            val reason = imageProblem(path, bytes, expectedHash)
+            if (reason == null) good[path] = bytes!! else problems += "$path: $reason"
+        }
+        val owners = HashMap<String, String>()
+        for (i in words.indices) {
+            val w = words[i]
+            val image = w.image ?: continue
+            val reason = when {
+                image !in good -> "image '$image' is missing or failed verification"
+                owners.putIfAbsent(image, w.word) != null -> "image '$image' is already used by ${owners[image]}"
+                else -> null
+            }
+            if (reason != null) {
+                problems += "words/${w.word}.md: $reason"
+                words[i] = w.copy(image = null, imageScene = null)
+            }
+        }
+        return good.filterKeys { it in owners }
+    }
+
+    private fun imageProblem(path: String, bytes: ByteArray?, expectedHash: String): String? = when {
+        !IMAGE_PATH.matches(path) -> "not a flat images/<name>.webp path"
+        bytes == null -> "listed in manifest but missing"
+        bytes.size > MAX_IMAGE_BYTES -> "larger than $MAX_IMAGE_BYTES bytes"
+        !isWebp(bytes) -> "not a WebP file"
+        rawSha256(bytes) != expectedHash -> "hash mismatch"
+        else -> null
+    }
+
+    private fun isWebp(bytes: ByteArray) = bytes.size > 12 &&
+        String(bytes, 0, 4, Charsets.ISO_8859_1) == "RIFF" && String(bytes, 8, 4, Charsets.ISO_8859_1) == "WEBP" &&
+        riffSize(bytes) + 8 == bytes.size.toLong()
+
+    private fun riffSize(b: ByteArray) =
+        (0..3).sumOf { (b[4 + it].toLong() and 0xFF) shl (8 * it) }
 
     /** Card IDs are the SRS keys, so a duplicate anywhere drops the later file; reverse cards need all four options. */
     private fun resolveCounters(files: List<CounterFile>, problems: MutableList<String>): List<CounterFile> {
@@ -163,6 +215,9 @@ object ContentParser {
         val f = fm.fields
         val word = f.str("word") ?: throw ContentException("missing 'word'")
         if (word != path.substringAfterLast('/').removeSuffix(".md")) throw ContentException("'word' must match the file name")
+        // A malformed picture reference costs the word its picture only; the validator reports it to the author.
+        val image = f.str("image")?.takeIf { IMAGE_PATH.matches(it) && f.str("image_scene") != null }
+        val scene = f.str("image_scene")
         return WordArticle(
             word = word,
             reading = f.str("reading") ?: throw ContentException("missing 'reading'"),
@@ -176,6 +231,8 @@ object ContentParser {
             quizDistractors = fm.wordIdList("quiz_distractors", word).also {
                 if (it.size > MAX_QUIZ_DISTRACTORS) throw ContentException("'quiz_distractors' may list at most $MAX_QUIZ_DISTRACTORS words")
             },
+            image = image,
+            imageScene = if (image != null) scene else null,
         )
     }
 
@@ -189,11 +246,14 @@ object ContentParser {
         return Article(slug, title, body)
     }
 
-    /** Hashes are computed over LF-normalised bytes, matching tools/build_manifest.py. */
+    /** Text hashes are computed over LF-normalised bytes, matching tools/build_manifest.py; images use [rawSha256]. */
     fun sha256(bytes: ByteArray): String {
         val normalized = String(bytes, Charsets.ISO_8859_1).replace("\r\n", "\n").toByteArray(Charsets.ISO_8859_1)
-        return MessageDigest.getInstance("SHA-256").digest(normalized).joinToString("") { "%02x".format(it) }
+        return rawSha256(normalized)
     }
+
+    fun rawSha256(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
     private fun isSafePath(path: String) =
         !path.startsWith("/") && !path.contains('\\') && path.split('/').none { it == ".." || it.isEmpty() }

@@ -99,8 +99,9 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             val counters = parsed.counters.mapIndexed { i, c ->
                 CounterEntity(source.id, c.id, json.encodeToString(io.github.stopcran.kanji.core.content.CounterFile.serializer(), c), i)
             }
+            val images = parsed.images.map { (path, bytes) -> ImageEntity(source.id, path.removePrefix("images/"), bytes) }
             val meta = SyncMetaEntity(source.id, parsed.manifest.contentVersion, System.currentTimeMillis(), parsed.problems.size)
-            dao.replaceContent(source.id, ContentRows(kanji, words, articles, counters), meta)
+            dao.replaceContent(source.id, ContentRows(kanji, words, articles, counters, images), meta)
             head?.let { settings.setSyncedCommit(commitKey, it) }
             SyncResult.Updated(kanji.size, words.size, parsed.problems)
         } catch (e: ContentException) {

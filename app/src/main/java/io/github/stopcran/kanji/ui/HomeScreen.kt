@@ -97,7 +97,7 @@ private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeA
         PacingHint(data)
         Entry("Kana", kana.summary(), R.drawable.kana_sumi, a.onKanaPage)
         Entry("Kanji", data.summary(HomeMode.Meaning, HomeMode.Drawing, HomeMode.Readings) ?: "Loading…", ArtSet.current.kanji, a.onKanjiPage)
-        val words = data.summary(HomeMode.WordJp, HomeMode.WordEn, HomeMode.WordReading, HomeMode.WordType) ?: "Loading…"
+        val words = data.summary(HomeMode.WordJp, HomeMode.WordEn, HomeMode.WordReading, HomeMode.WordType, HomeMode.WordPicture) ?: "Loading…"
         Entry("Words", words, ArtSet.current.words, a.onWordsPage)
         val counters = rememberCounterHome(app)
         Entry("Counters", counters.summary(), ArtSet.current.counters, a.onCountersPage)
@@ -141,6 +141,7 @@ private fun WordsPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: Home
         ModeRow("English → Japanese", data.mode(HomeMode.WordEn), onStart = { a.onWords(WordDirection.EnToJp, it) })
         ModeRow("Reading", data.mode(HomeMode.WordReading), onStart = { a.onWords(WordDirection.Reading, it) })
         ModeRow("Type it", data.mode(HomeMode.WordType), onStart = { a.onWords(WordDirection.Type, it) })
+        if (data.pictureWordCount > 0) ModeRow("Picture → word", data.mode(HomeMode.WordPicture), onStart = { a.onWords(WordDirection.Picture, it) })
         OutlinedButton(onClick = a.onWordCards, enabled = data.wordCount > 0, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text(stringResource(R.string.browse_words)) }
     }
 }

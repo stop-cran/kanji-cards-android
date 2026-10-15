@@ -6,8 +6,11 @@ in the default repo `stop-cran/learning-japanese`.
 What the app enforces when importing (`core/content/ContentParser.kt`, `FrontMatter.kt`, `SafeZip.kt`):
 
 - The repo archive (`codeload.github.com/<owner>/<repo>/zip/refs/heads/<branch>`) must contain `manifest.json` with `schemaVersion` 1.
-- Only `manifest.json` and files directly in `kanji/`, `words/`, `articles/`, `strokes/` are read; zip-slip paths, more than 5,000 entries,
-  files over 2 MB or 50 MB in total are rejected.
+- Only `manifest.json` and files directly in `kanji/`, `words/`, `articles/`, `strokes/` are read, plus `images/*.webp` (at most 150 KiB each);
+  zip-slip paths, more than 8,000 entries, files over 2 MB or 50 MB in total are rejected.
+- Images are listed in the manifest's separate `images` map with SHA-256 over the raw bytes (no LF normalisation). A word's `image` and
+  `image_scene` keys are read together; an image that is missing, oversize, not WebP, hash-mismatched or shared by two words is reported as a
+  problem and only that word's picture is dropped.
 - Every file listed in the manifest must match its SHA-256 (computed over LF-normalised bytes); mismatching, missing or malformed files are
   skipped and counted as problems instead of failing the sync. Duplicate kanji titles are rejected (titles are quiz answers).
 - Front matter is a restricted subset: `key: value` scalars and inline `[a, b]` lists (commas inside quotes are kept; an unterminated quote

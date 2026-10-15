@@ -57,13 +57,14 @@ fun MarkdownView(text: String, path: String, onOpenDoc: (String) -> Unit, modifi
 
 /** Same rendering as [MarkdownView] but lazy: only visible blocks are composed. For a full-page article; do not nest in a scrolling parent. */
 @Composable
-fun LazyMarkdownView(text: String, path: String, onOpenDoc: (String) -> Unit, modifier: Modifier = Modifier) {
+fun LazyMarkdownView(text: String, path: String, onOpenDoc: (String) -> Unit, modifier: Modifier = Modifier, header: (@Composable () -> Unit)? = null) {
     val blocks = remember(text, path) { Markdown.parse(text, path) }
     val onLink = rememberLinkHandler(onOpenDoc)
     val linkColor = MaterialTheme.colorScheme.primary
     val codeBg = MaterialTheme.colorScheme.surfaceVariant
     SelectionContainer(modifier) {
         androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (header != null) item { header() }
             items(blocks.size) { RenderBlock(blocks[it], onLink, linkColor, codeBg) }
         }
     }

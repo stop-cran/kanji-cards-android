@@ -42,10 +42,17 @@ import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.ZoneId
 
-enum class HomeMode { Meaning, Drawing, Readings, WordJp, WordEn, WordReading, WordType }
+enum class HomeMode { Meaning, Drawing, Readings, WordJp, WordEn, WordReading, WordType, WordPicture }
 
-/** The stack pickers' contents: kanji and word stacks with their current selection, and how many words the selected one holds. */
-class StackChoices(val stacks: List<Stack>, val stack: Stack, val wordStacks: List<WordStack>, val wordStack: WordStack, val wordCount: Int)
+/** The stack pickers' contents: kanji and word stacks with their current selection, and how many words (and how many with a picture) the selected one holds. */
+class StackChoices(
+    val stacks: List<Stack>,
+    val stack: Stack,
+    val wordStacks: List<WordStack>,
+    val wordStack: WordStack,
+    val wordCount: Int,
+    val pictureWordCount: Int = 0,
+)
 
 /** What the home screen says besides the mode counts: the N4 offer, the new-item allowance, week progress and the focus batch. */
 class HomeGuidance(
@@ -69,6 +76,7 @@ class HomeData(
     val wordStacks get() = choices.wordStacks
     val wordStack get() = choices.wordStack
     val wordCount get() = choices.wordCount
+    val pictureWordCount get() = choices.pictureWordCount
     val n4Offer get() = guidance.n4Offer
     val pacing get() = guidance.pacing
     val week get() = guidance.week
@@ -90,6 +98,7 @@ class HomeData(
 private class Unlocks(
     val learned: Set<String>, val rule: io.github.stopcran.kanji.core.unlock.UnlockRule, val introducedReadings: Int,
     val padModes: Set<StudyMode> = emptySet(), val typed: Map<String, SrsState> = emptyMap(),
+    val pictured: Map<String, SrsState> = emptyMap(),
 )
 
 private class Extras(
@@ -174,6 +183,7 @@ fun rememberHomeData(app: KanjiApp): HomeData {
     val en = rememberStates(app, source.id, wordStack.id, StudyMode.WordEnJp)
     val rd = rememberStates(app, source.id, wordStack.id, StudyMode.WordReading)
     val typedObserved = rememberStates(app, source.id, wordStack.id, StudyMode.WordType)
+    val pictureObserved = rememberStates(app, source.id, wordStack.id, StudyMode.WordPicture)
     val stateSet = remember(quiz, draw, on, kun, jp, en, rd) { StateSet.of(quiz, draw, on, kun, jp, en, rd) }
     val statesReady = kanjiOrNull != null && wordsOrNull != null && stateSet != null
     val unlockRule by app.settings.unlockRule.collectAsState()
@@ -181,7 +191,7 @@ fun rememberHomeData(app: KanjiApp): HomeData {
     val focusSize by app.settings.focusSize.collectAsState()
     // The 10-minute spacing and a freshly emptied batch both change with time, not only with review states.
     val minuteKey = if (focusOn || unlockRule != io.github.stopcran.kanji.core.unlock.UnlockRule.NextDay) tick else null
-    val extras by produceState<Extras?>(null, source.id, stack.id, wordStack.id, startOfDay, dailyNew, weekPlan, statesReady, quiz, draw, on, kun, jp, en, rd, typedObserved, unlockRule, focusOn, focusSize, minuteKey) {
+    val extras by produceState<Extras?>(null, source.id, stack.id, wordStack.id, startOfDay, dailyNew, weekPlan, statesReady, quiz, draw, on, kun, jp, en, rd, typedObserved, pictureObserved, unlockRule, focusOn, focusSize, minuteKey) {
         if (!statesReady) return@produceState
         val r = app.db.reviews()
         val allowance = app.db.newAllowance(app.settings, source.id, Instant.now())
@@ -194,6 +204,7 @@ fun rememberHomeData(app: KanjiApp): HomeData {
         val ownStates = mapOf(
             StudyMode.WordJpEn to jp.orEmpty(), StudyMode.WordEnJp to en.orEmpty(), StudyMode.WordReading to rd.orEmpty(),
             StudyMode.WordType to r.states(source.id, wordStack.id, StudyMode.WordType.name).associate { it.kanji to it.toSrs() },
+            StudyMode.WordPicture to r.states(source.id, wordStack.id, StudyMode.WordPicture.name).associate { it.kanji to it.toSrs() },
         )
         for ((m, own) in ownStates) {
             val d = WordDirection.entries.first { it.mode == m }
@@ -201,7 +212,10 @@ fun rememberHomeData(app: KanjiApp): HomeData {
             if (app.db.padWordCandidates(source.id, wordStack.id, m, ids, own.keys).isNotEmpty()) padModes += m
         }
         val typed = ownStates.getValue(StudyMode.WordType)
-        val unlocks = Unlocks(learned, unlockRule, r.readingCardsIntroducedSince(source.id, stack.id, startOfDay), padModes, typed)
+        val unlocks = Unlocks(
+            learned, unlockRule, r.readingCardsIntroducedSince(source.id, stack.id, startOfDay),
+            padModes, typed, ownStates.getValue(StudyMode.WordPicture),
+        )
         value = Extras(stack.id, wordStack.id, allowance, app.db.weekProgress(app.settings, source.id, Instant.now()), unlocks, focus)
     }
     val ex = extras?.takeIf { it.stackId == stack.id && it.wordStackId == wordStack.id }
@@ -215,7 +229,7 @@ fun rememberHomeData(app: KanjiApp): HomeData {
         stateSet != null && !loading && shouldOfferN4(inStack, words, levels, wordStack, stateSet, n4Unlocked, dismissedMs, Instant.now(), System.currentTimeMillis())
     }
     return HomeData(
-        loading, source.id, kanji, StackChoices(stacks, stack, wordStacks, wordStack, wordsInStack.size), modes,
+        loading, source.id, kanji, StackChoices(stacks, stack, wordStacks, wordStack, wordsInStack.size, wordsInStack.count { it.image != null }), modes,
         HomeGuidance(n4Offer, ex?.allowance, ex?.week, ex?.focus),
     )
 }
@@ -265,5 +279,6 @@ private fun computeModes(
         HomeMode.WordEn to word(WordDirection.EnToJp, en, jp, "Unlocks as you learn words"),
         HomeMode.WordReading to word(WordDirection.Reading, rd, jp, "Unlocks as you learn words"),
         HomeMode.WordType to word(WordDirection.Type, ex.unlocks.typed, en, "Unlocks as you learn English → Japanese"),
+        HomeMode.WordPicture to word(WordDirection.Picture, ex.unlocks.pictured, jp, "Unlocks as you learn words"),
     )
 }

@@ -108,7 +108,7 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
         }
         wordList = all
         words = all.associateBy { it.word }
-        cards = all.map { it.toCard() }
+        cards = all.forDirection(direction).map { it.toCard() }
         app.db.reviews().states(sourceId, stackId, direction.mode.name).forEach { states[it.kanji] = it.toSrs() }
         val other = app.db.reviews().states(sourceId, stackId, direction.gate.mode.name).associate { it.kanji to it.toSrs() }
 
@@ -153,6 +153,9 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
                         WordDirection.Reading -> "Nothing is due. The reading quiz opens for words with kanji that you have answered twice in Japanese → English."
                         WordDirection.JpToEn -> "Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings."
                         WordDirection.Type -> "Nothing is due. Typing opens for words you have answered twice in English → Japanese."
+                        WordDirection.Picture ->
+                            "Nothing is due. Picture questions open for words with a picture " +
+                                "that you have answered twice in Japanese → English."
                     },
                 )
             } else WordQuizUi.Done(session.answered, session.correct)

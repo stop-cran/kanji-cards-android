@@ -44,6 +44,7 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
             WordDirection.EnToJp -> "Words: English → Japanese"
             WordDirection.Reading -> "Words: reading"
             WordDirection.Type -> "Words: type it"
+            WordDirection.Picture -> "Words: picture → word"
         },
         onBack,
         scrollToTopOnBack = true,
@@ -70,6 +71,7 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
                         WordDirection.EnToJp -> "Which word is it?"
                         WordDirection.Reading -> "How is it read?"
                         WordDirection.Type -> ""
+                        WordDirection.Picture -> "Which word fits this picture?"
                     },
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center,
@@ -87,7 +89,10 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
 
 @Composable
 private fun Prompt(word: WordEntity, direction: WordDirection, font: io.github.stopcran.kanji.core.srs.KanjiFont, big: Boolean) {
-    if (direction == WordDirection.JpToEn || direction == WordDirection.Reading || !big) {
+    val wordFirst = direction == WordDirection.JpToEn || direction == WordDirection.Reading
+    if (direction == WordDirection.Picture && big) {
+        WordImage(word.image, "Picture to name")
+    } else if (wordFirst || direction == WordDirection.Picture || !big) {
         Text(word.word, fontSize = if (big) 64.sp else 48.sp, fontFamily = font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     } else {
         Text(word.title, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
@@ -147,6 +152,7 @@ private fun TypeAnswer(s: WordQuizUi.TypeAnswer, vm: WordQuizViewModel, onOpenDo
 
 @Composable
 private fun Answer(s: WordQuizUi.Answer, vm: WordQuizViewModel, onOpenDoc: (String) -> Unit) {
+    if (s.direction == WordDirection.Picture) WordImage(s.word.image, s.word.imageScene ?: s.word.title)
     Text(s.word.word, fontSize = 56.sp, fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Text(stringResource(R.string.value_dash_detail, s.word.reading, s.word.title), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Text(

@@ -18,6 +18,9 @@ enum class WordDirection(val mode: StudyMode) {
 
     /** English prompt, free-text Japanese answer (no options). */
     Type(StudyMode.WordType),
+
+    /** A scene picture as the prompt; choose the Japanese word. Only words that have an image take part. */
+    Picture(StudyMode.WordPicture),
     ;
 
     val other: WordDirection get() = if (this == JpToEn) EnToJp else JpToEn
@@ -29,13 +32,14 @@ enum class WordDirection(val mode: StudyMode) {
     val gated: Boolean get() = this != JpToEn
 
     /** Route and display identity of the direction. */
-    val code: String get() = when (this) { JpToEn -> "jp"; EnToJp -> "en"; Reading -> "rd"; Type -> "ty" }
+    val code: String get() = when (this) { JpToEn -> "jp"; EnToJp -> "en"; Reading -> "rd"; Type -> "ty"; Picture -> "pc" }
 
     val label: String get() = when (this) {
         JpToEn -> "Japanese → English"
         EnToJp -> "English → Japanese"
         Reading -> "reading"
         Type -> "type it"
+        Picture -> "picture → word"
     }
 
     companion object {
@@ -66,6 +70,8 @@ data class WordCard(
     val quizExclusions: List<String> = emptyList(),
     /** Curated wrong options (word IDs), used before the scored candidates. */
     val quizDistractors: List<String> = emptyList(),
+    /** images/<name>.webp of the scene picture, or null. */
+    val image: String? = null,
 )
 
 /** A reading is worth asking only when it differs from the written form, i.e. the word contains kanji. */
@@ -180,7 +186,7 @@ object WordQuizBuilder {
 
     fun label(c: WordCard, direction: WordDirection): String = when (direction) {
         WordDirection.JpToEn -> c.title
-        WordDirection.EnToJp, WordDirection.Type -> if (c.word == c.reading) c.word else "${c.word} (${c.reading})"
+        WordDirection.EnToJp, WordDirection.Type, WordDirection.Picture -> if (c.word == c.reading) c.word else "${c.word} (${c.reading})"
         WordDirection.Reading -> c.reading
     }
 }

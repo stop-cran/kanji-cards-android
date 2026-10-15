@@ -125,7 +125,15 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   directions, its own SRS state (a word studied here and in "All words" has two schedules, as for N5/N4) and the shared daily new-card
   allowance. Distractors come only from the stack's own words, so options are all onomatopoeia. `offeredStacks()` keeps home, quizzes and
   reminders in agreement; an unavailable saved stack falls back to N5. The N4 advancement offer needs the N5 word states, which exist only for
-  the selected stack, so `shouldOfferN4` makes no offer while any other stack (including this one) is selected. Phase 3 (images) is separate.
+  the selected stack, so `shouldOfferN4` makes no offer while any other stack (including this one) is selected.
+- **Scene images and Picture → word** (phase 3): a word may carry `image`/`image_scene`. Images are untrusted binary input: the manifest lists
+  them under a separate `images` key with raw-byte SHA-256 (the `files` text hashes are LF-normalised, so old apps that ignore `images` still
+  verify), `SafeZip` admits only `images/*.webp` (150 KiB each), and `ContentParser` checks flat path, size, WebP header, hash and one owner
+  word per image. A failed image only drops that word's picture. Bytes live in the `word_images` table (DB v7) and are replaced in the same
+  transaction as the other content, so sync is atomic. `WordDirection.Picture` (`StudyMode.WordPicture`, code `pc`) is gated on JpToEn like
+  the other non-forward directions and offered only for words with a picture; its options come only from picture words of the stack and honour
+  `quiz_exclusions`. The question shows the picture with a neutral alt text; the answer and the article show `image_scene`. Scenes carry no
+  text so the picture never gives the answer away. Not device-tested beyond the emulator.
 - An explicit word `jlpt` wins, including for kana-only words or words with harder, unknown or missing kanji. Only when it is omitted does
   the level fall back to the **minimum** `jlpt` number among the word's kanji (N5 = 5 is easiest, so the minimum is the hardest).
   An unlabelled word with no kanji or an unknown kanji level appears only in "All words". Shared `inWordStack` filtering keeps home counts,

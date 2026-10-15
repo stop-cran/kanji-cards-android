@@ -7,8 +7,10 @@ import java.util.zip.ZipInputStream
 /** Reads a GitHub archive zip into memory with hard limits (zip-slip, zip bombs, entry count). */
 object SafeZip {
     data class Limits(
-        val maxEntries: Int = 5_000,
+        val maxEntries: Int = 8_000,
         val maxFileBytes: Long = 2L * 1024 * 1024,
+        /** Scene images are small by contract (<= 100 KiB in the content validator); a larger one is hostile or broken. */
+        val maxImageBytes: Long = 150L * 1024,
         val maxTotalBytes: Long = 50L * 1024 * 1024,
         /** Everything inflated from the archive, including entries we skip; bounds CPU spent on a hostile zip. */
         val maxInflatedBytes: Long = 100L * 1024 * 1024,
@@ -33,7 +35,11 @@ object SafeZip {
                 }
                 val relative = name.substringAfter('/', missingDelimiterValue = "")
                 val wanted = relative.isNotEmpty() && isWanted(relative)
-                val bytes = readLimited(zip, if (wanted) limits.maxFileBytes else Long.MAX_VALUE, keep = wanted) { inflated += it; if (inflated > limits.maxInflatedBytes) throw ContentException("Archive is too large") }
+                val limit = if (relative.startsWith("images/")) limits.maxImageBytes else limits.maxFileBytes
+                val bytes = readLimited(zip, if (wanted) limit else Long.MAX_VALUE, keep = wanted) {
+                    inflated += it
+                    if (inflated > limits.maxInflatedBytes) throw ContentException("Archive is too large")
+                }
                 if (!wanted) continue
                 total += bytes.size
                 if (total > limits.maxTotalBytes) throw ContentException("Archive is too large")
@@ -46,7 +52,8 @@ object SafeZip {
     private fun isWanted(relative: String): Boolean {
         if (relative == "manifest.json") return true
         val parts = relative.split('/')
-        return parts.size == 2 && parts[0] in allowedFolders && parts[1].isNotEmpty()
+        if (parts.size != 2 || parts[1].isEmpty()) return false
+        return parts[0] in allowedFolders || (parts[0] == "images" && parts[1].endsWith(".webp"))
     }
 
     /** Drains the current entry; the bytes are kept only when [keep], and [onBytes] sees every inflated chunk. */

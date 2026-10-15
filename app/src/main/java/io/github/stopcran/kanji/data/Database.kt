@@ -52,7 +52,13 @@ data class WordEntity(
     val jlpt: Int? = null,
     @ColumnInfo(defaultValue = "''") val quizExclusions: String = "",
     @ColumnInfo(defaultValue = "''") val quizDistractors: String = "",
+    val image: String? = null,
+    val imageScene: String? = null,
 )
+
+/** A verified scene picture (WebP bytes), replaced together with the rest of the snapshot. */
+@Entity(tableName = "word_images", primaryKeys = ["sourceId", "name"])
+class ImageEntity(val sourceId: String, val name: String, val bytes: ByteArray)
 
 @Entity(tableName = "articles", primaryKeys = ["sourceId", "slug"])
 data class ArticleEntity(val sourceId: String, val slug: String, val title: String, val body: String)
@@ -103,6 +109,7 @@ data class ContentRows(
     val words: List<WordEntity>,
     val articles: List<ArticleEntity>,
     val counters: List<CounterEntity> = emptyList(),
+    val images: List<ImageEntity> = emptyList(),
 )
 
 @Dao
@@ -119,7 +126,7 @@ interface ContentDao {
     fun observeKanjiLite(sourceId: String): Flow<List<KanjiEntity>>
 
     @Query(
-        "SELECT sourceId, word, reading, title, type, kanji, tags, '' AS body, jlpt, quizExclusions, quizDistractors " +
+        "SELECT sourceId, word, reading, title, type, kanji, tags, '' AS body, jlpt, quizExclusions, quizDistractors, image, imageScene " +
             "FROM words WHERE sourceId = :sourceId ORDER BY word"
     )
     fun observeWordsLite(sourceId: String): Flow<List<WordEntity>>
@@ -177,6 +184,15 @@ interface ContentDao {
     @Query("DELETE FROM counters WHERE sourceId = :sourceId")
     suspend fun clearCounters(sourceId: String)
 
+    @Query("DELETE FROM word_images WHERE sourceId = :sourceId")
+    suspend fun clearImages(sourceId: String)
+
+    @Query("SELECT bytes FROM word_images WHERE sourceId = :sourceId AND name = :name")
+    suspend fun imageBytes(sourceId: String, name: String): ByteArray?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertImages(items: List<ImageEntity>)
+
     @Query("SELECT * FROM counters WHERE sourceId = :sourceId ORDER BY position")
     suspend fun counters(sourceId: String): List<CounterEntity>
 
@@ -205,10 +221,12 @@ interface ContentDao {
         clearWords(sourceId)
         clearArticles(sourceId)
         clearCounters(sourceId)
+        clearImages(sourceId)
         insertKanji(rows.kanji)
         insertWords(rows.words)
         insertArticles(rows.articles)
         insertCounters(rows.counters)
+        insertImages(rows.images)
         putMeta(meta)
     }
 }
@@ -278,10 +296,10 @@ interface ReviewDao {
 
 @Database(
     entities = [
-        KanjiEntity::class, WordEntity::class, ArticleEntity::class, CounterEntity::class,
+        KanjiEntity::class, WordEntity::class, ArticleEntity::class, CounterEntity::class, ImageEntity::class,
         ReviewStateEntity::class, ReviewLogEntity::class, SyncMetaEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -329,6 +347,19 @@ val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
         db.execSQL(
             "CREATE TABLE IF NOT EXISTS counters (sourceId TEXT NOT NULL, id TEXT NOT NULL, json TEXT NOT NULL, " +
                 "position INTEGER NOT NULL, PRIMARY KEY(sourceId, id))",
+        )
+        db.execSQL("DELETE FROM sync_meta")
+    }
+}
+
+/** Word scene pictures: add the image columns and table, and reimport an unchanged snapshot so existing installs fetch them. */
+val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE words ADD COLUMN image TEXT")
+        db.execSQL("ALTER TABLE words ADD COLUMN imageScene TEXT")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS word_images (sourceId TEXT NOT NULL, name TEXT NOT NULL, bytes BLOB NOT NULL, " +
+                "PRIMARY KEY(sourceId, name))",
         )
         db.execSQL("DELETE FROM sync_meta")
     }
