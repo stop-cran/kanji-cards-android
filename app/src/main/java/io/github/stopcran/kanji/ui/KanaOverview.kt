@@ -30,11 +30,10 @@ internal class KanaOverview(
     private val allowance: NewAllowance?,
     private val now: Instant,
 ) {
-    fun lockedCombinations(script: KanaScript, mode: KanaMode): Int? {
+    fun lockedCount(script: KanaScript, mode: KanaMode): Int? {
         val rows = states[KanaStateKey(script, mode)] ?: return null
         val byId = rows.associate { it.kanji to it.toSrs() }
-        val unlocked = KanaCatalog.unlocked(script, byId).mapTo(HashSet()) { it.kana }
-        return KanaCatalog.all(script).count { KanaCatalog.components(it).isNotEmpty() && it.kana !in unlocked }
+        return KanaCatalog.all(script).size - KanaCatalog.unlocked(script, byId).size
     }
 
     fun modeState(script: KanaScript, mode: KanaMode): ModeState {

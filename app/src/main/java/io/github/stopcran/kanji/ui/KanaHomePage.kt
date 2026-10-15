@@ -32,7 +32,8 @@ internal fun KanaPage(
         Text(
             "Includes the basic syllabary, voiced and semi-voiced kana, and common yōon combinations. " +
                 "A combination such as ちゅ unlocks separately in each mode once both parts (ち and ゆ) have FSRS stability of at least " +
-                "${KanaCatalog.UNLOCK_STABILITY_DAYS.toInt()} days in that mode. " +
+                "${KanaCatalog.UNLOCK_STABILITY_DAYS.toInt()} days in that mode. A voiced or semi-voiced kana such as が or ぱ " +
+                "unlocks the same way once its plain kana (か, は) reaches ${KanaCatalog.VOICED_UNLOCK_STABILITY_DAYS.toInt()} days. " +
                 "Hiragana and katakana keep separate review schedules. The uncommon ぢ and づ use di/du " +
                 "to keep reverse romaji questions distinct; ji/zu are accepted when typing.",
             style = MaterialTheme.typography.bodyMedium,
@@ -47,12 +48,12 @@ internal fun KanaPage(
             }
         }
         KanaMode.entries.forEach { mode ->
-            val locked = overview.lockedCombinations(script, mode)
+            val locked = overview.lockedCount(script, mode)
             val lockSummary = when (locked) {
-                null -> "Checking locked combinations…"
-                0 -> "No yōon combinations locked"
-                1 -> "1 yōon combination locked"
-                else -> "$locked yōon combinations locked"
+                null -> "Checking locked kana…"
+                0 -> "No kana locked"
+                1 -> "1 kana locked"
+                else -> "$locked kana locked"
             }
             ModeRow(
                 mode.title,

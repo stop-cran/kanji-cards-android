@@ -77,18 +77,36 @@ object KanaCatalog {
         return listOf(card.script.form(hira[0].toString()), card.script.form(tail.toString()))
     }
 
-    /**
-     * Cards open for study: everything except combinations whose components are not yet solid in this mode.
-     * Combinations that were already started stay available.
-     */
-    fun unlocked(script: KanaScript, states: Map<String, SrsState>): List<KanaCard> = all(script).filter { card ->
-        val parts = components(card)
-        parts.isEmpty() || card.kana in states || parts.all { part ->
-            states[part]?.let { it.phase == CardPhase.Review && it.stability >= UNLOCK_STABILITY_DAYS } == true
-        }
+    private val voicedBases: Map<Char, Char> = buildMap {
+        "がぎぐげご".zip("かきくけこ").forEach { put(it.first, it.second) }
+        "ざじずぜぞ".zip("さしすせそ").forEach { put(it.first, it.second) }
+        "だぢづでど".zip("たちつてと").forEach { put(it.first, it.second) }
+        "ばびぶべぼ".zip("はひふへほ").forEach { put(it.first, it.second) }
+        "ぱぴぷぺぽ".zip("はひふへほ").forEach { put(it.first, it.second) }
     }
 
+    /** The unvoiced kana a voiced or semi-voiced kana is derived from (が -> か); null for other cards. */
+    fun voicedBase(card: KanaCard): String? {
+        if (card.kana.length != 1) return null
+        val hira = if (card.script == KanaScript.Hiragana) card.kana[0] else (card.kana[0].code - KATAKANA_OFFSET).toChar()
+        return voicedBases[hira]?.let { card.script.form(it.toString()) }
+    }
+
+    /**
+     * Cards open for study: everything except combinations whose components, and voiced kana whose base, are not yet
+     * solid in this mode. Cards that were already started stay available.
+     */
+    fun unlocked(script: KanaScript, states: Map<String, SrsState>): List<KanaCard> = all(script).filter { card ->
+        if (card.kana in states) return@filter true
+        val voicedBase = voicedBase(card)
+        if (voicedBase != null) return@filter isSolid(states[voicedBase], VOICED_UNLOCK_STABILITY_DAYS)
+        components(card).all { isSolid(states[it], UNLOCK_STABILITY_DAYS) }
+    }
+
+    private fun isSolid(state: SrsState?, days: Double) = state != null && state.phase == CardPhase.Review && state.stability >= days
+
     const val UNLOCK_STABILITY_DAYS = 7.0
+    const val VOICED_UNLOCK_STABILITY_DAYS = 3.0
 
     fun KanaScript.form(hiragana: String): String =
         if (this == KanaScript.Hiragana) hiragana else hiragana.map { (it.code + KATAKANA_OFFSET).toChar() }.joinToString("")

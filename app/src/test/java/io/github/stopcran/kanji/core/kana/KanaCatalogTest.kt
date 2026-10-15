@@ -27,6 +27,48 @@ class KanaCatalogTest {
     }
 
     @Test
+    fun voicedKanaUnlockWhenTheirBaseIsSolid() {
+        fun open(script: KanaScript, states: Map<String, SrsState>) = KanaCatalog.unlocked(script, states).map { it.kana }
+        val solid = SrsState(phase = CardPhase.Review, stability = 3.0)
+        val shaky = SrsState(phase = CardPhase.Review, stability = 2.99)
+        assertFalse("が" in open(KanaScript.Hiragana, emptyMap()))
+        assertFalse("が" in open(KanaScript.Hiragana, mapOf("か" to shaky)))
+        assertFalse("が" in open(KanaScript.Hiragana, mapOf("か" to SrsState(phase = CardPhase.Learning, stability = 5.0))))
+        assertTrue("が" in open(KanaScript.Hiragana, mapOf("か" to solid)))
+        assertTrue("あ" in open(KanaScript.Hiragana, emptyMap()))
+        assertTrue("が" in open(KanaScript.Hiragana, mapOf("が" to SrsState())))
+        assertTrue("ぢ" in open(KanaScript.Hiragana, mapOf("ち" to solid)))
+        assertTrue("づ" in open(KanaScript.Hiragana, mapOf("つ" to solid)))
+        assertTrue("ヂ" in open(KanaScript.Katakana, mapOf("チ" to solid)))
+        assertTrue("パ" in open(KanaScript.Katakana, mapOf("ハ" to solid)))
+        assertTrue("ば" in open(KanaScript.Hiragana, mapOf("は" to solid)) && "ぱ" in open(KanaScript.Hiragana, mapOf("は" to solid)))
+        assertFalse("ガ" in open(KanaScript.Katakana, mapOf("か" to solid)))
+    }
+
+    @Test
+    fun everyVoicedKanaHasAnUnvoicedBasicBase() {
+        KanaScript.entries.forEach { script ->
+            val cards = KanaCatalog.all(script)
+            val voiced = cards.filter { KanaCatalog.voicedBase(it) != null }
+            assertEquals(25, voiced.size)
+            voiced.forEach { card ->
+                val base = KanaCatalog.card(script, KanaCatalog.voicedBase(card)!!)!!
+                assertEquals(null, KanaCatalog.voicedBase(base))
+                assertTrue(KanaCatalog.components(base).isEmpty())
+            }
+        }
+    }
+
+    @Test
+    fun yoonOnVoicedKanaStillNeedsTheVoicedKanaToBeSolid() {
+        val seven = SrsState(phase = CardPhase.Review, stability = 7.0)
+        val open = KanaCatalog.unlocked(KanaScript.Hiragana, mapOf("か" to seven, "や" to seven)).map { it.kana }
+        assertFalse("ぎゃ" in open)
+        val voicedSolid = KanaCatalog.unlocked(KanaScript.Hiragana, mapOf("ぎ" to seven, "や" to seven)).map { it.kana }
+        assertTrue("ぎゃ" in voicedSolid)
+    }
+
+    @Test
     fun eachScriptHasAllCoreAndCombinedKanaWithUniqueRomaji() {
         KanaScript.entries.forEach { script ->
             val cards = KanaCatalog.all(script)
