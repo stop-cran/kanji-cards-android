@@ -28,6 +28,7 @@ import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.WordEntity
 import io.github.stopcran.kanji.data.forDirection
 import io.github.stopcran.kanji.data.inWordStack
+import io.github.stopcran.kanji.data.offeredStacks
 import io.github.stopcran.kanji.data.levels
 import io.github.stopcran.kanji.core.srs.PadContext
 import io.github.stopcran.kanji.core.srs.PracticePadding
@@ -95,11 +96,12 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
     private suspend fun start(extra: Boolean) {
         val source = app.settings.source.value
         sourceId = source.id
-        val offered = WordStacks.offered(app.settings.n4Unlocked.value)
+        val allWords = app.db.content().words(sourceId)
+        val offered = allWords.offeredStacks(app.settings.n4Unlocked.value)
         val stack = WordStacks.find(app.settings.wordStack.value, offered)
         stackId = stack.id
         val levels = app.db.content().kanji(sourceId).levels()
-        val all = app.db.content().words(sourceId).inWordStack(stack, levels)
+        val all = allWords.inWordStack(stack, levels)
         if (all.size < 2) {
             ui = WordQuizUi.Empty("No words yet. Sync the content first (⚙ settings).")
             return

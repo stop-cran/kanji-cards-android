@@ -51,7 +51,7 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - Every review goes through `Fsrs.review`; there is one `SrsState` per **(sourceId, stack, item, mode)**. The key is never a title or
   position. `sourceId` is the lower-case `owner/repo`, so switching to a fork keeps separate progress.
 - **Stacks have independent state** on purpose: a kanji learned in a small set may be confused in a larger one and must be re-learned there.
-  Kanji stacks are tag filters (`all`, `starter`, `jlpt-n5`...). Word stacks are `words-n5`, `words-n4`, `words-all` (cumulative by level).
+  Kanji stacks are tag filters (`all`, `starter`, `jlpt-n5`...). Word stacks are `words-n5`, `words-n4`, `words-all` (cumulative by level) and the tag stack `words-onomatopoeia`.
 - **Modes** are `Quiz`, `Draw`, `WordJpEn`, `WordEnJp`, `WordReading`, `WordType`; each mode has its own state for the same item. Recognition and recall are different
   memories and must not share a schedule.
 - **Typed words** (`WordType`, `core/words/TypedAnswer.kt`): English prompt, free-text answer, no options. Gate is `WordDirection.gate` (EnToJp, twice answered).
@@ -119,6 +119,13 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 
 - Word stacks are cumulative in *membership* (`words-n4` includes N5 words) but keyed independently in SRS state, so switching from `words-n5`
   to `words-n4` starts those words afresh. Never share state across stacks.
+- **Onomatopoeia stack** (`words-onomatopoeia`, a `WordStack` with `tag = "onomatopoeia"`): membership is the word's tag alone, independent of
+  JLPT level or kanji, so it covers unlevelled kana-only words that appear otherwise only in "All words". It is offered whenever at least
+  `MIN_TAG_STACK_WORDS` (4) tagged words exist, even before N4 is unlocked, so a quiz always has distractors. It uses the normal word quiz
+  directions, its own SRS state (a word studied here and in "All words" has two schedules, as for N5/N4) and the shared daily new-card
+  allowance. Distractors come only from the stack's own words, so options are all onomatopoeia. `offeredStacks()` keeps home, quizzes and
+  reminders in agreement; an unavailable saved stack falls back to N5. The N4 advancement offer still evaluates only N5 words and is not
+  affected by this stack. Phase 3 (images) is separate.
 - An explicit word `jlpt` wins, including for kana-only words or words with harder, unknown or missing kanji. Only when it is omitted does
   the level fall back to the **minimum** `jlpt` number among the word's kanji (N5 = 5 is easiest, so the minimum is the hardest).
   An unlabelled word with no kanji or an unknown kanji level appears only in "All words". Shared `inWordStack` filtering keeps home counts,

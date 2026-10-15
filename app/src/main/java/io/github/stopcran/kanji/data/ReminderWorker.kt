@@ -53,8 +53,9 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 val newLeft = if (mode == StudyMode.Quiz) minOf(newRemaining, focus?.capacity ?: newRemaining) else newRemaining
                 due += QueueBuilder.build(ids, states, Instant.ofEpochMilli(now), newLeft).size
             }
-            val wordStack = WordStacks.find(app.settings.wordStack.value, WordStacks.offered(app.settings.n4Unlocked.value))
-            val wordEntities = app.db.content().words(source.id).inWordStack(wordStack, app.db.content().kanjiLite(source.id).levels())
+            val allWords = app.db.content().words(source.id)
+            val wordStack = WordStacks.find(app.settings.wordStack.value, allWords.offeredStacks(app.settings.n4Unlocked.value))
+            val wordEntities = allWords.inWordStack(wordStack, app.db.content().kanjiLite(source.id).levels())
             val wordStates = WordDirection.entries.associateWith { d -> app.db.reviews().states(source.id, wordStack.id, d.mode.name).associate { it.kanji to it.toSrs() } }
             due += app.db.readingData(app.settings, cards, ReadingRequest(source.id, stack, newRemaining, Instant.ofEpochMilli(now))).items.size
             for (d in WordDirection.entries) {

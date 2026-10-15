@@ -26,6 +26,7 @@ import io.github.stopcran.kanji.data.KanjiEntity
 import io.github.stopcran.kanji.data.forDirection
 import io.github.stopcran.kanji.data.inStack
 import io.github.stopcran.kanji.data.inWordStack
+import io.github.stopcran.kanji.data.offeredStacks
 import io.github.stopcran.kanji.data.levels
 import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.focusStatus
@@ -153,7 +154,7 @@ fun rememberHomeData(app: KanjiApp): HomeData {
     val stacks = remember(kanji) { kanji.stacks() }
     val stack = Stacks.find(stackId, stacks)
     val inStack = remember(kanji, stack) { kanji.inStack(stack.id) }
-    val wordStacks = WordStacks.offered(n4Unlocked)
+    val wordStacks = remember(words, n4Unlocked) { words.offeredStacks(n4Unlocked) }
     val wordStack = WordStacks.find(wordStackId, wordStacks)
     val levels = remember(kanji) { kanji.levels() }
     val wordsInStack = remember(words, levels, wordStack) { words.inWordStack(wordStack, levels) }

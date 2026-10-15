@@ -10,6 +10,7 @@ import io.github.stopcran.kanji.core.srs.StudyMode
 import io.github.stopcran.kanji.core.words.WordCard
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.WordStack
+import io.github.stopcran.kanji.core.words.WordStacks
 import io.github.stopcran.kanji.core.words.hasReadingToLearn
 import io.github.stopcran.kanji.core.words.wordLevel
 import java.time.Instant
@@ -43,6 +44,10 @@ fun WordEntity.toCard() = WordCard(word, reading, title, type, kanji.splitSep(),
 fun List<WordEntity>.forDirection(direction: WordDirection): List<WordEntity> =
     if (direction == WordDirection.Reading) filter { hasReadingToLearn(it.word, it.reading) } else this
 
+/** Stacks to offer for this content, so the home screen, quizzes and reminders agree. */
+fun List<WordEntity>.offeredStacks(n4Unlocked: Boolean): List<WordStack> =
+    WordStacks.offered(n4Unlocked, WordStacks.onomatopoeiaCount(map { it.tags.splitSep() }))
+
 /** Shared by quizzes, home counts/progression and reminders; explicit word levels take precedence over kanji. */
 fun List<WordEntity>.inWordStack(stack: WordStack, levels: Map<String, Int?>): List<WordEntity> =
-    filter { stack.contains(wordLevel(it.kanji.splitSep(), levels, it.jlpt)) }
+    filter { stack.matches(wordLevel(it.kanji.splitSep(), levels, it.jlpt), it.tags.splitSep()) }

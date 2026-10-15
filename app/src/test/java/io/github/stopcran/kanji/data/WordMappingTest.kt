@@ -114,6 +114,29 @@ class WordMappingTest {
     }
 
     @Test
+    fun onomatopoeiaStackSelectsByTagIgnoringLevelAndKanji() {
+        fun tagged(id: String, tags: String, jlpt: Int? = null) = word(id, jlpt = jlpt).copy(tags = tags)
+        val pool = listOf(
+            tagged("a", "onomatopoeia${SEP}gitaigo"), tagged("b", "onomatopoeia", jlpt = 3), tagged("c", "onomatopoeia", jlpt = 5),
+            tagged("d", "onomatopoeia"), tagged("e", "wago"), tagged("f", "onomatopoeia-like"), word("g", jlpt = 5),
+        )
+        assertEquals(listOf("a", "b", "c", "d"), pool.inWordStack(WordStacks.onomatopoeia, levels).map { it.word })
+        assertEquals(setOf("c", "g"), pool.inWordStack(WordStacks.n5, levels).map { it.word }.toSet())
+        assertEquals(pool, pool.inWordStack(WordStacks.all, levels))
+    }
+
+    @Test
+    fun onomatopoeiaStackIsOfferedOnlyWithEnoughTaggedWordsAndKeepsLevelStacks() {
+        val few = (1..3).map { word("w$it").copy(tags = "onomatopoeia") }
+        val enough = (1..4).map { word("w$it").copy(tags = "onomatopoeia") }
+        assertEquals(listOf(WordStacks.n5), few.offeredStacks(false))
+        assertEquals(listOf(WordStacks.n5, WordStacks.onomatopoeia), enough.offeredStacks(false))
+        assertEquals(listOf(WordStacks.n5, WordStacks.n4, WordStacks.all, WordStacks.onomatopoeia), enough.offeredStacks(true))
+        assertEquals(WordStacks.onomatopoeia, WordStacks.find("words-onomatopoeia", enough.offeredStacks(false)))
+        assertEquals(WordStacks.n5, WordStacks.find("words-onomatopoeia", few.offeredStacks(false)))
+    }
+
+    @Test
     fun persistedWordLevelsDriveCumulativeStacksWithLegacyFallback() {
         assertEquals(n5Ids, words.inWordStack(WordStacks.n5, levels).map { it.word }.toSet())
         assertEquals(n5Ids + setOf("explicit-n4", "legacy-n4"), words.inWordStack(WordStacks.n4, levels).map { it.word }.toSet())

@@ -83,18 +83,33 @@ fun wordLevel(kanji: List<String>, kanjiLevels: Map<String, Int?>, jlpt: Int? = 
     return levels.min()
 }
 
-/** Word stacks are cumulative: studying N4 words includes the N5 words. */
-data class WordStack(val id: String, val label: String, val minLevel: Int?) {
+/**
+ * Level stacks are cumulative: studying N4 words includes the N5 words. A tag stack ([tag] set) is a thematic
+ * collection that ignores JLPT level and has its own review schedule, like every stack.
+ */
+data class WordStack(val id: String, val label: String, val minLevel: Int?, val tag: String? = null) {
     fun contains(level: Int?) = minLevel == null || (level != null && level >= minLevel)
+
+    fun matches(level: Int?, tags: List<String>) = if (tag != null) tag in tags else contains(level)
 }
 
 object WordStacks {
     val n5 = WordStack("words-n5", "N5 words", 5)
     val n4 = WordStack("words-n4", "N4 words (with N5)", 4)
     val all = WordStack("words-all", "All words", null)
+    val onomatopoeia = WordStack("words-onomatopoeia", "Onomatopoeia", null, tag = "onomatopoeia")
 
-    /** Stacks offered to the user; the larger ones appear once N4 is unlocked. */
-    fun offered(n4Unlocked: Boolean): List<WordStack> = if (n4Unlocked) listOf(n5, n4, all) else listOf(n5)
+    /**
+     * Stacks offered to the user; the larger level stacks appear once N4 is unlocked. The onomatopoeia stack
+     * appears whenever the content has enough tagged words for a quiz, regardless of level progress.
+     */
+    fun offered(n4Unlocked: Boolean, onomatopoeiaWords: Int = 0): List<WordStack> =
+        (if (n4Unlocked) listOf(n5, n4, all) else listOf(n5)) + listOfNotNull(onomatopoeia.takeIf { onomatopoeiaWords >= MIN_TAG_STACK_WORDS })
+
+    /** A quiz needs a correct word and at least three wrong choices. */
+    const val MIN_TAG_STACK_WORDS = 4
+
+    fun onomatopoeiaCount(tagLists: Iterable<List<String>>): Int = tagLists.count { onomatopoeia.tag in it }
 
     fun find(id: String, offered: List<WordStack>): WordStack = offered.firstOrNull { it.id == id } ?: offered.first()
 }
