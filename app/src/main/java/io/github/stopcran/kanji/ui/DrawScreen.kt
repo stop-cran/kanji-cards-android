@@ -62,7 +62,6 @@ import io.github.stopcran.kanji.core.draw.describe
 
 private val Good = Color(0xFF2E7D32)
 private val Bad = Color(0xFFC62828)
-private val Ink = Color(0xFF1A237E)
 
 @Composable
 fun DrawScreen(
@@ -216,14 +215,13 @@ internal fun DrawingPad(
         drawLine(guide, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 2f)
         if (ghost != null && labels != null) {
             val k = size.width / 109f
-            val faint = Color(0xFFC5CAE9)
             ghost.forEachIndexed { i, s ->
-                drawBrushStroke(s.map { Offset(it.x.toFloat() * k, it.y.toFloat() * k) }, faint, brush, look = look)
+                drawBrushStroke(s.map { Offset(it.x.toFloat() * k, it.y.toFloat() * k) }, look.color.copy(alpha = 0.22f), brush, look = look)
                 val layout = measurer.measure("${i + 1}", TextStyle(color = Color(0xFF9FA8DA), fontSize = 15.sp))
                 drawText(layout, topLeft = labels[i] * k - Offset(layout.size.width / 2f, layout.size.height / 2f))
             }
         }
-        (strokes + listOf(current.toList())).forEach { s -> drawBrushStroke(s.map { Offset(it.x, it.y) }, Ink, brush, look = look) }
+        (strokes + listOf(current.toList())).forEach { s -> drawBrushStroke(s.map { Offset(it.x, it.y) }, look.color, brush, look = look) }
     }
 }
 
@@ -236,7 +234,7 @@ internal fun YourDrawing(drawn: List<List<TimedPt>>, canvasPx: Float, flagged: S
     Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
         val k = size.width / canvasPx
         tidy.forEachIndexed { i, s ->
-            drawBrushStroke(s.map { Offset(it.x.toFloat() * k, it.y.toFloat() * k) }, if (rejected || i in flagged) Bad else Ink, brush, look = look)
+            drawBrushStroke(s.map { Offset(it.x.toFloat() * k, it.y.toFloat() * k) }, if (rejected || i in flagged) Bad else look.color, brush, look = look)
         }
     }
 }

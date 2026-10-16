@@ -76,7 +76,7 @@ class DrawViewModel(private val app: Services) : ViewModel() {
 
     var ui: DrawUi by mutableStateOf(DrawUi.Loading)
         private set
-    /** Fixed for the whole card (question, answer, undo, clear); re-rolled when the next card appears. */
+    /** Fixed for the whole session, including its question and answer views. */
     var look: BrushLook by mutableStateOf(BrushLook.random())
         private set
     var modelState: ModelState by mutableStateOf(ModelState.Unknown)
@@ -179,7 +179,6 @@ class DrawViewModel(private val app: Services) : ViewModel() {
         ui = if (kanji == null) {
             if (session.answered == 0) DrawUi.Empty("Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings.") else DrawUi.Done(session.answered, session.correct)
         } else {
-            look = BrushLook.random()
             val trace = DrawGate.shouldTrace(app.settings.traceNew.value, states[kanji], traced, kanji)
             if (trace) traced += kanji
             DrawUi.Question(cards.getValue(kanji), session.pending + 1, session.answered, trace)

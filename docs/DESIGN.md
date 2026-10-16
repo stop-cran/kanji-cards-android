@@ -150,6 +150,9 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 
 ## 6. Drawing and the matcher
 
+- Drawing keeps the selected brush family (Dot, Chisel, Soft, Ink) from Settings. One subtle randomized look is fixed for each drawing
+  session across all cards and answer views: thickness, chisel angle, taper, smoothing, Ink texture/softness, and independent small hue
+  (±2–4°) and brightness (±1–5 RGB levels) shifts around deep indigo `#1A237E`. These affect only rendering, never the recorded points or stroke grading.
 - Two signals, combined in `DrawGrader`. ML Kit Digital Ink says whether the drawing reads as the target (top 5 candidates). `StrokeMatcher`
   compares strokes with the KanjiVG reference and reports issues; it never identifies the kanji. Outcome: a **clean match is Clean** even
   if ML Kit disagrees (avoids false rejects; the trade-off is that a different character within tolerance would pass); otherwise the target must

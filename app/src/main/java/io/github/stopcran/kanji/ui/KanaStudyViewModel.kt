@@ -168,7 +168,6 @@ class KanaStudyViewModel(private val app: Services) : ViewModel() {
         }
         val card = cards.getValue(id)
         val remaining = session.pending + 1
-        if (mode == KanaMode.Draw) look = BrushLook.random()
         ui = when (mode) {
             KanaMode.QuizKanaToRomaji -> KanaStudyUi.QuizQuestion(card, options(card, cards.values, KanaMode.QuizKanaToRomaji), remaining)
             KanaMode.QuizRomajiToKana -> KanaStudyUi.QuizQuestion(card, options(card, cards.values, KanaMode.QuizRomajiToKana), remaining)

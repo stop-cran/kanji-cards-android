@@ -38,18 +38,72 @@ val LocalBrush = compositionLocalOf { BrushStyle.Default }
 val LocalBrushLook = compositionLocalOf { BrushLook.Neutral }
 
 /**
- * Small per-card variation of the chosen brush, so the student does not overlearn one pen size.
- * [width] scales thickness, [angle] turns the chisel nib (radians), [taper] scales how thin the stroke end gets.
+ * Small per-session variation of the chosen brush, so the student does not overlearn one fixed appearance.
+ * The selected [BrushStyle] remains the student's preference.
  */
-data class BrushLook(val width: Float, val angle: Float, val taper: Float) {
+data class BrushLook(
+    val width: Float,
+    val angle: Float,
+    val taper: Float,
+    val smoothing: Float,
+    val texture: Float,
+    val softness: Float,
+    val color: Color,
+) {
     companion object {
-        val Neutral = BrushLook(1f, 0f, 1f)
+        val Neutral = BrushLook(1f, 0f, 1f, 1f, 1f, 1f, Color(0xFF1A237E))
+
+        private data class Hsv(val hue: Float, val saturation: Float, val value: Float)
 
         fun random(rnd: kotlin.random.Random = kotlin.random.Random) = BrushLook(
-            width = 0.8f + 0.45f * rnd.nextFloat(),
-            angle = ((rnd.nextFloat() - 0.5f) * 0.5f),
-            taper = 0.7f + 0.8f * rnd.nextFloat(),
+            width = 0.94f + 0.12f * rnd.nextFloat(),
+            angle = (rnd.nextFloat() - 0.5f) * 0.2f,
+            taper = 0.9f + 0.2f * rnd.nextFloat(),
+            smoothing = 0.94f + 0.12f * rnd.nextFloat(),
+            texture = 0.9f + 0.2f * rnd.nextFloat(),
+            softness = 0.9f + 0.2f * rnd.nextFloat(),
+            color = variedInk(rnd),
         )
+
+        private fun variedInk(rnd: kotlin.random.Random): Color {
+            val hsv = toHsv(Neutral.color)
+            val hueShift = rnd.nextInt(2, 5) * if (rnd.nextBoolean()) 1 else -1
+            val brightnessShift = rnd.nextInt(1, 6) * if (rnd.nextBoolean()) 1 else -1
+            return fromHsv(
+                hue = (hsv.hue + hueShift + 360f) % 360f,
+                saturation = hsv.saturation,
+                value = (hsv.value + brightnessShift / 255f).coerceIn(0f, 1f),
+            )
+        }
+
+        private fun toHsv(color: Color): Hsv {
+            val max = maxOf(color.red, color.green, color.blue)
+            val min = minOf(color.red, color.green, color.blue)
+            val delta = max - min
+            val hue = when {
+                delta == 0f -> 0f
+                max == color.red -> 60f * (((color.green - color.blue) / delta) % 6f)
+                max == color.green -> 60f * ((color.blue - color.red) / delta + 2f)
+                else -> 60f * ((color.red - color.green) / delta + 4f)
+            }.let { (it + 360f) % 360f }
+            return Hsv(hue, if (max == 0f) 0f else delta / max, max)
+        }
+
+        private fun fromHsv(hue: Float, saturation: Float, value: Float): Color {
+            val chroma = value * saturation
+            val x = chroma * (1f - kotlin.math.abs(hue / 60f % 2f - 1f))
+            val m = value - chroma
+            val (r, g, b) = when (hue / 60f) {
+                in 0f..<1f -> Triple(chroma, x, 0f)
+                in 1f..<2f -> Triple(x, chroma, 0f)
+                in 2f..<3f -> Triple(0f, chroma, x)
+                in 3f..<4f -> Triple(0f, x, chroma)
+                in 4f..<5f -> Triple(x, 0f, chroma)
+                else -> Triple(chroma, 0f, x)
+            }
+            fun channel(value: Float) = (value + m).coerceIn(0f, 1f)
+            return Color(channel(r), channel(g), channel(b))
+        }
     }
 }
 
@@ -61,12 +115,17 @@ data class BrushLook(val width: Float, val angle: Float, val taper: Float) {
 fun DrawScope.drawBrushStroke(rawPoints: List<Offset>, color: Color, style: BrushStyle, canvasWidth: Float = size.width, look: BrushLook = BrushLook.Neutral) {
     if (rawPoints.isEmpty()) return
     val w = canvasWidth
-    val points = smoothLongSegments(rawPoints, w * 0.012f, w * 0.003f)
+    val points = smoothLongSegments(rawPoints, w * 0.012f * look.smoothing, w * 0.003f * look.smoothing)
     when (style) {
         BrushStyle.Dot -> dot(points, color, w * 0.011f * look.width)
         BrushStyle.Chisel -> chisel(densify(points, w * 0.003f), color, w, look)
         BrushStyle.Soft -> variable(densify(points, w * 0.003f), color, w * 0.022f * look.width, endWidth = (0.4f * look.taper).coerceAtMost(0.9f), rough = 0f)
-        BrushStyle.Ink -> variable(densify(points, w * 0.003f), color, w * 0.026f * look.width, endWidth = (0.12f * look.taper).coerceAtMost(0.9f), rough = 0.07f, blur = 0.5f)
+        BrushStyle.Ink -> variable(
+            densify(points, w * 0.003f), color, w * 0.026f * look.width,
+            endWidth = (0.12f * look.taper).coerceAtMost(0.9f),
+            rough = 0.07f * look.texture,
+            blur = 0.5f * look.softness,
+        )
     }
 }
 
