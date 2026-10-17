@@ -11,6 +11,7 @@ import io.github.stopcran.kanji.data.MIGRATION_3_4
 import io.github.stopcran.kanji.data.MIGRATION_4_5
 import io.github.stopcran.kanji.data.MIGRATION_5_6
 import io.github.stopcran.kanji.data.MIGRATION_6_7
+import io.github.stopcran.kanji.data.MIGRATION_7_8
 import io.github.stopcran.kanji.data.ReminderWorker
 import io.github.stopcran.kanji.data.Settings
 import io.github.stopcran.kanji.data.SyncWorker
@@ -23,7 +24,7 @@ class KanjiApp : Application() {
     val db: AppDatabase by lazy {
         Room.databaseBuilder(this, AppDatabase::class.java, "kanji.db")
             .addMigrations(
-                MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
+                MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
             )
             .build()
     }

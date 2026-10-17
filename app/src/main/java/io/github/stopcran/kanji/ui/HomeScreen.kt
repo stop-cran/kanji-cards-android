@@ -54,9 +54,12 @@ class HomeActions(
     val onKanjiPage: () -> Unit,
     val onWordsPage: () -> Unit,
     val onCountersPage: () -> Unit,
+    val onGrammarPage: () -> Unit,
+    val onOpenDoc: (String) -> Unit,
     val onKanaPage: () -> Unit,
     val onKanaStudy: (KanaScript, KanaMode, extra: Boolean) -> Unit,
     val onCounters: (io.github.stopcran.kanji.core.counters.CounterMode, extra: Boolean) -> Unit,
+    val onGrammar: (extra: Boolean) -> Unit,
     val onQuiz: (extra: Boolean) -> Unit,
     val onDraw: (extra: Boolean) -> Unit,
     val onReadings: (extra: Boolean) -> Unit,
@@ -80,6 +83,7 @@ fun HomePages(app: KanjiApp, route: String, onBack: () -> Unit, actions: HomeAct
         "kanji-home" -> KanjiPage(app, data, onBack, actions)
         "words-home" -> WordsPage(app, data, onBack, actions)
         "counters-home" -> CountersPage(app, onBack, actions)
+        "grammar-home" -> GrammarPage(app, onBack, actions.onOpenDoc, actions)
         "kana-home" -> KanaPage(app, onBack, actions.onKanaStudy)
         else -> MainPage(app, data, syncStatus, actions)
     }
@@ -101,6 +105,8 @@ private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeA
         Entry("Words", words, ArtSet.current.words, a.onWordsPage)
         val counters = rememberCounterHome(app)
         Entry("Counters", counters.summary(), ArtSet.current.counters, a.onCountersPage)
+        val grammar = rememberGrammarHome(app).value
+        Entry("Grammar", grammar.summary(), null, a.onGrammarPage)
     }
 }
 

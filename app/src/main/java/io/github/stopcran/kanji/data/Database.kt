@@ -67,6 +67,27 @@ data class ArticleEntity(val sourceId: String, val slug: String, val title: Stri
 @Entity(tableName = "counters", primaryKeys = ["sourceId", "id"])
 data class CounterEntity(val sourceId: String, val id: String, val json: String, val position: Int)
 
+/** One grammar exercise set stored in its validated, versioned JSON form. */
+@Entity(tableName = "grammar_sets", primaryKeys = ["sourceId", "id"])
+data class GrammarEntity(val sourceId: String, val id: String, val json: String, val position: Int)
+
+/** Local-only response detail for the same single SRS answer in review_log. */
+@Entity(
+    tableName = "grammar_responses",
+    indices = [Index(value = ["sourceId", "stack", "relationshipId"]), Index(value = ["exerciseId"])],
+)
+data class GrammarResponseEntity(
+    @PrimaryKey val reviewLogId: Long,
+    val sourceId: String,
+    val stack: String,
+    val exerciseId: String,
+    val constructionId: String,
+    val relationshipId: String,
+    val promptType: String,
+    val response: String,
+    val correct: Boolean,
+)
+
 /** Scheduling state per (content source, stack, kanji, mode); survives content updates and card edits. */
 @Entity(tableName = "review_state", primaryKeys = ["sourceId", "stack", "kanji", "mode", "reading"])
 data class ReviewStateEntity(
@@ -110,6 +131,7 @@ data class ContentRows(
     val articles: List<ArticleEntity>,
     val counters: List<CounterEntity> = emptyList(),
     val images: List<ImageEntity> = emptyList(),
+    val grammar: List<GrammarEntity> = emptyList(),
 )
 
 @Dao
@@ -184,6 +206,9 @@ interface ContentDao {
     @Query("DELETE FROM counters WHERE sourceId = :sourceId")
     suspend fun clearCounters(sourceId: String)
 
+    @Query("DELETE FROM grammar_sets WHERE sourceId = :sourceId")
+    suspend fun clearGrammar(sourceId: String)
+
     @Query("DELETE FROM word_images WHERE sourceId = :sourceId")
     suspend fun clearImages(sourceId: String)
 
@@ -199,8 +224,17 @@ interface ContentDao {
     @Query("SELECT COUNT(*) FROM counters WHERE sourceId = :sourceId")
     suspend fun counterCount(sourceId: String): Int
 
+    @Query("SELECT * FROM grammar_sets WHERE sourceId = :sourceId ORDER BY position")
+    suspend fun grammar(sourceId: String): List<GrammarEntity>
+
+    @Query("SELECT COUNT(*) FROM grammar_sets WHERE sourceId = :sourceId")
+    suspend fun grammarCount(sourceId: String): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCounters(items: List<CounterEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertGrammar(items: List<GrammarEntity>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertKanji(items: List<KanjiEntity>)
@@ -221,11 +255,13 @@ interface ContentDao {
         clearWords(sourceId)
         clearArticles(sourceId)
         clearCounters(sourceId)
+        clearGrammar(sourceId)
         clearImages(sourceId)
         insertKanji(rows.kanji)
         insertWords(rows.words)
         insertArticles(rows.articles)
         insertCounters(rows.counters)
+        insertGrammar(rows.grammar)
         insertImages(rows.images)
         putMeta(meta)
     }
@@ -249,6 +285,9 @@ interface ReviewDao {
     @Query("SELECT * FROM review_log ORDER BY atMs, id")
     suspend fun allLog(): List<ReviewLogEntity>
 
+    @Query("SELECT * FROM grammar_responses ORDER BY reviewLogId")
+    suspend fun allGrammarResponses(): List<GrammarResponseEntity>
+
     @Query("SELECT MAX(atMs) FROM review_log")
     suspend fun lastReviewMs(): Long?
 
@@ -260,6 +299,12 @@ interface ReviewDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putLog(log: ReviewLogEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLog(log: ReviewLogEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putGrammarResponse(response: GrammarResponseEntity)
 
     @Query("SELECT COUNT(*) FROM (SELECT kanji FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode = :mode GROUP BY kanji HAVING MIN(atMs) >= :sinceMs)")
     suspend fun newCardsIntroducedSince(sourceId: String, stack: String, mode: String, sinceMs: Long): Int
@@ -292,19 +337,44 @@ interface ReviewDao {
         putState(state)
         putLog(log)
     }
+
+    @Transaction
+    suspend fun recordGrammar(state: ReviewStateEntity, log: ReviewLogEntity, response: GrammarResponseEntity) {
+        putState(state)
+        val logId = insertLog(log)
+        putGrammarResponse(response.copy(reviewLogId = logId))
+    }
 }
 
 @Database(
     entities = [
         KanjiEntity::class, WordEntity::class, ArticleEntity::class, CounterEntity::class, ImageEntity::class,
-        ReviewStateEntity::class, ReviewLogEntity::class, SyncMetaEntity::class,
+        GrammarEntity::class, GrammarResponseEntity::class, ReviewStateEntity::class, ReviewLogEntity::class, SyncMetaEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun content(): ContentDao
     abstract fun reviews(): ReviewDao
+}
+
+/** Grammar practice content and local response details; existing scheduling records remain unchanged. */
+val MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS grammar_sets (sourceId TEXT NOT NULL, id TEXT NOT NULL, json TEXT NOT NULL, " +
+                "position INTEGER NOT NULL, PRIMARY KEY(sourceId, id))",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS grammar_responses (reviewLogId INTEGER NOT NULL, sourceId TEXT NOT NULL, stack TEXT NOT NULL, " +
+                "exerciseId TEXT NOT NULL, constructionId TEXT NOT NULL, relationshipId TEXT NOT NULL, promptType TEXT NOT NULL, " +
+                "response TEXT NOT NULL, correct INTEGER NOT NULL, PRIMARY KEY(reviewLogId))",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_grammar_responses_sourceId_stack_relationshipId ON grammar_responses (sourceId, stack, relationshipId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_grammar_responses_exerciseId ON grammar_responses (exerciseId)")
+        db.execSQL("DELETE FROM sync_meta")
+    }
 }
 
 /** v1 had a single stack; its state becomes the "all" stack. */

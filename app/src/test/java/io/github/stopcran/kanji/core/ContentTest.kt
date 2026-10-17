@@ -36,6 +36,19 @@ class ContentTest {
 
     private val strokesJson =
         """{"schemaVersion":1,"kanji":"日","viewBox":[0,0,109,109],"strokeCount":1,"strokes":[{"id":1,"type":"a","points":[[1,2],[3,4]]}]}"""
+    private val grammarJson = """
+        {"schemaVersion":1,"id":"sample-set","title":"Sample","article":"articles/x.md",
+         "constructions":[{"id":"alpha","label":"甲"},{"id":"beta","label":"乙"}],
+         "relationships":[{"id":"alpha-vs-beta","label":"contrast","constructions":["alpha","beta"]}],
+         "exercises":[
+           {"id":"alpha-example","target":"alpha","relationship":"alpha-vs-beta","prompt":"A ____.",
+            "translation":"A.","evidence":"Context.","explanation":"Reason.","answer":"alpha","acceptedAnswers":["甲"],
+            "options":[{"id":"alpha","label":"甲","rationale":"Fits."},{"id":"beta","label":"乙","rationale":"Does not fit."}]},
+           {"id":"beta-example","target":"beta","relationship":"alpha-vs-beta","prompt":"B ____.",
+            "translation":"B.","evidence":"Context.","explanation":"Reason.","answer":"beta","acceptedAnswers":["乙"],
+            "options":[{"id":"alpha","label":"甲","rationale":"Does not fit."},{"id":"beta","label":"乙","rationale":"Fits."}]}
+         ]}
+    """.trimIndent()
 
     private fun wordMd(jlptField: String = "") = """
         ---
@@ -102,6 +115,31 @@ class ContentTest {
         assertEquals(5, parsed.kanji.single().jlpt)
         assertEquals("Title X", parsed.articles.single().title)
         assertNotNull(parsed.strokes["日"])
+    }
+
+    @Test
+    fun parsesGrammarSetAndDropsSetsWithBrokenArticleReferences() {
+        val files = sample() + ("grammar/sample-set.json" to grammarJson.toByteArray())
+        val parsed = ContentParser.parse(files + ("manifest.json" to manifest(files)))
+        assertEquals(emptyList<String>(), parsed.problems)
+        assertEquals(listOf("alpha-example", "beta-example"), parsed.grammar.single().exercises.map { it.id })
+        assertEquals("articles/x.md", parsed.grammar.single().article)
+
+        val broken = grammarJson.replace("articles/x.md", "articles/missing.md")
+        val brokenFiles = sample() + ("grammar/sample-set.json" to broken.toByteArray())
+        val rejected = ContentParser.parse(brokenFiles + ("manifest.json" to manifest(brokenFiles)))
+        assertTrue(rejected.grammar.isEmpty())
+        assertTrue(rejected.problems.single().contains("linked article 'articles/missing.md' is missing"))
+    }
+
+    @Test
+    fun invalidGrammarExerciseIsSkippedWithoutDiscardingOtherContent() {
+        val malformed = grammarJson.replace("B ____.", "B ____ and ____.")
+        val files = sample() + ("grammar/sample-set.json" to malformed.toByteArray())
+        val parsed = ContentParser.parse(files + ("manifest.json" to manifest(files)))
+        assertTrue(parsed.grammar.isEmpty())
+        assertTrue(parsed.problems.single().contains("prompt needs exactly one ____ blank"))
+        assertEquals(1, parsed.articles.size)
     }
 
     @Test
@@ -496,6 +534,8 @@ class ContentTest {
         assertEquals(setOf("kanji/a.md"), SafeZip.read(ByteArrayInputStream(mixed)).keys)
         val withCounters = zip("repo/manifest.json" to "{}", "repo/counters/mai.json" to "{}", "repo/docs/x.md" to "x")
         assertEquals(setOf("manifest.json", "counters/mai.json"), SafeZip.read(ByteArrayInputStream(withCounters)).keys)
+        val withGrammar = zip("repo/grammar/pilot.json" to "{}", "repo/grammar/sub/ignored.json" to "{}")
+        assertEquals(setOf("grammar/pilot.json"), SafeZip.read(ByteArrayInputStream(withGrammar)).keys)
     }
 
     @Test
@@ -512,10 +552,15 @@ class ContentTest {
         assertEquals(10, parsed.counters.size)
         assertEquals(120, parsed.counters.sumOf { it.cards.size })
         assertEquals(20, parsed.counters.sumOf { it.reverse.size })
+        assertEquals(1, parsed.grammar.size)
+        assertEquals(8, parsed.grammar.sumOf { it.exercises.size })
         val j = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
         val again = parsed.counters.map { j.decodeFromString(CounterFile.serializer(), j.encodeToString(CounterFile.serializer(), it)) }
         assertEquals(parsed.counters, again)
         val index = io.github.stopcran.kanji.core.counters.CounterIndex(again)
         assertEquals(120, index.ids(io.github.stopcran.kanji.core.counters.CounterMode.Choose).size)
+        val serializer = io.github.stopcran.kanji.core.content.GrammarSet.serializer()
+        val grammarAgain = parsed.grammar.map { j.decodeFromString(serializer, j.encodeToString(serializer, it)) }
+        assertEquals(parsed.grammar, grammarAgain)
     }
 }

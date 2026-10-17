@@ -101,6 +101,41 @@ data class CounterReverse(val id: String, val answer: String, val options: List<
 @Serializable
 data class CounterWord(val reading: String = "", val gloss: String = "")
 
+/** One versioned grammar exercise set stored as grammar/<id>.json. */
+@Serializable
+data class GrammarSet(
+    val schemaVersion: Int,
+    val id: String,
+    val title: String,
+    val article: String,
+    val constructions: List<GrammarConstruction>,
+    val relationships: List<GrammarRelationship>,
+    val exercises: List<GrammarExercise>,
+)
+
+@Serializable
+data class GrammarConstruction(val id: String, val label: String)
+
+@Serializable
+data class GrammarRelationship(val id: String, val label: String, val constructions: List<String>)
+
+@Serializable
+data class GrammarExercise(
+    val id: String,
+    val target: String,
+    val relationship: String,
+    val prompt: String,
+    val translation: String,
+    val evidence: String,
+    val explanation: String,
+    val answer: String,
+    val acceptedAnswers: List<String>,
+    val options: List<GrammarOption>,
+)
+
+@Serializable
+data class GrammarOption(val id: String, val label: String, val rationale: String)
+
 /** Result of parsing a content snapshot; invalid files are skipped and reported instead of failing the whole sync. */
 data class ParsedContent(
     val manifest: Manifest,
@@ -112,4 +147,5 @@ data class ParsedContent(
     val counters: List<CounterFile> = emptyList(),
     /** Verified images referenced by a word, keyed by repo path (images/<name>.webp). */
     val images: Map<String, ByteArray> = emptyMap(),
+    val grammar: List<GrammarSet> = emptyList(),
 )

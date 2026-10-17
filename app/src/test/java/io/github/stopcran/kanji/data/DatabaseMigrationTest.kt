@@ -7,6 +7,7 @@ import androidx.room.Room
 import io.github.stopcran.kanji.core.content.ContentParser
 import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.SrsState
+import io.github.stopcran.kanji.core.srs.StudyMode
 import io.github.stopcran.kanji.core.words.Advancement
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.WordQueues
@@ -25,6 +26,13 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.SQLiteMode
 import java.time.Instant
+import java.io.ByteArrayOutputStream
+import java.util.zip.ZipInputStream
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], manifest = Config.NONE, application = Application::class)
@@ -40,7 +48,7 @@ class DatabaseMigrationTest {
     }
 
     private fun openDatabase() = Room.databaseBuilder(context, AppDatabase::class.java, name)
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
         .allowMainThreadQueries()
         .build()
 
@@ -71,6 +79,56 @@ class DatabaseMigrationTest {
             val withoutLevel = expected.last().copy(jlpt = null)
             db.content().insertWords(listOf(withoutLevel))
             assertEquals(withoutLevel, db.content().word(withoutLevel.sourceId, withoutLevel.word))
+        }
+    }
+
+    @Test
+    fun grammarReviewAndResponseDetailAreOneExportableEvent() = runBlocking {
+        val source = sources.first()
+        val exerciseId = "koto-work-hours-fact"
+        val now = Instant.parse("2026-10-15T12:00:00Z")
+        val state = io.github.stopcran.kanji.core.srs.Fsrs().review(SrsState(), io.github.stopcran.kanji.core.srs.Grade.Good, now)
+        val detail = GrammarResponseEntity(
+            reviewLogId = 0,
+            sourceId = source,
+            stack = GRAMMAR_STACK,
+            exerciseId = exerciseId,
+            constructionId = "koto",
+            relationshipId = "koto-vs-wake",
+            promptType = "choose",
+            response = "koto",
+            correct = true,
+        )
+        withDatabase { db ->
+            db.reviews().recordGrammar(
+                state.toEntity(source, GRAMMAR_STACK, exerciseId, StudyMode.Grammar),
+                ReviewLogEntity(0, source, GRAMMAR_STACK, exerciseId, StudyMode.Grammar.name, 3, now.toEpochMilli()),
+                detail,
+            )
+            val log = db.reviews().allLog().single()
+            val response = db.reviews().allGrammarResponses().single()
+            assertEquals(log.id, response.reviewLogId)
+            assertEquals(1, db.reviews().allLog().size)
+
+            val output = ByteArrayOutputStream()
+            assertEquals(1, ProgressExport.write(db, Settings(context), output))
+            val entries = ZipInputStream(output.toByteArray().inputStream()).use { zip ->
+                buildMap {
+                    while (true) {
+                        val entry = zip.nextEntry ?: break
+                        put(entry.name, zip.readBytes().decodeToString())
+                    }
+                }
+            }
+            val json = Json
+            assertEquals(2, json.parseToJsonElement(entries.getValue("export_manifest.json")).jsonObject.getValue("formatVersion").jsonPrimitive.int)
+            assertEquals(1, json.parseToJsonElement(entries.getValue("review_log.json")).jsonArray.size)
+            val exported = json.parseToJsonElement(entries.getValue("grammar_responses.json")).jsonArray.single().jsonObject
+            val exportedLog = json.parseToJsonElement(entries.getValue("review_log.json")).jsonArray.single().jsonObject
+            assertEquals(exerciseId, exported.getValue("exerciseId").jsonPrimitive.content)
+            assertEquals("koto-vs-wake", exported.getValue("relationshipId").jsonPrimitive.content)
+            assertEquals(exportedLog.getValue("id"), exported.getValue("reviewLogId"))
+            assertEquals(1, json.parseToJsonElement(entries.getValue("grammar_responses.json")).jsonArray.size)
         }
     }
 

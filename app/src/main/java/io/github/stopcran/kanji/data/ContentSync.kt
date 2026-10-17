@@ -16,6 +16,16 @@ sealed interface SyncResult {
     data class Failed(val message: String, val retryable: Boolean) : SyncResult
 }
 
+private fun List<io.github.stopcran.kanji.core.content.GrammarSet>.toGrammarEntities(sourceId: String): List<GrammarEntity> =
+    mapIndexed { index, set ->
+        GrammarEntity(
+            sourceId,
+            set.id,
+            Json.encodeToString(io.github.stopcran.kanji.core.content.GrammarSet.serializer(), set),
+            index,
+        )
+    }
+
 class ContentSync(private val db: AppDatabase, private val settings: Settings, private val http: ContentHttp = UrlConnectionHttp) {
     private val json = Json
     private val lock = Mutex()
@@ -99,9 +109,10 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             val counters = parsed.counters.mapIndexed { i, c ->
                 CounterEntity(source.id, c.id, json.encodeToString(io.github.stopcran.kanji.core.content.CounterFile.serializer(), c), i)
             }
+            val grammar = parsed.grammar.toGrammarEntities(source.id)
             val images = parsed.images.map { (path, bytes) -> ImageEntity(source.id, path.removePrefix("images/"), bytes) }
             val meta = SyncMetaEntity(source.id, parsed.manifest.contentVersion, System.currentTimeMillis(), parsed.problems.size)
-            dao.replaceContent(source.id, ContentRows(kanji, words, articles, counters, images), meta)
+            dao.replaceContent(source.id, ContentRows(kanji, words, articles, counters, images, grammar), meta)
             head?.let { settings.setSyncedCommit(commitKey, it) }
             SyncResult.Updated(kanji.size, words.size, parsed.problems)
         } catch (e: ContentException) {
@@ -120,7 +131,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
         val dao = db.content()
         if (dao.meta(sourceId) == null) return false
         return parsed.kanji.size < dao.kanjiCount(sourceId) || parsed.words.size < dao.wordCount(sourceId) ||
-            parsed.counters.size < dao.counterCount(sourceId)
+            parsed.counters.size < dao.counterCount(sourceId) || parsed.grammar.size < dao.grammarCount(sourceId)
     }
 
     /** Streams the archive to [block] without holding it in memory; the compressed size is capped. */

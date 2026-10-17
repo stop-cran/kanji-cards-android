@@ -18,9 +18,12 @@ object ProgressExport {
     suspend fun write(db: AppDatabase, settings: Settings, out: OutputStream): Int {
         val states = db.reviews().allStates()
         val log = db.reviews().allLog()
+        val grammarResponses = db.reviews().allGrammarResponses()
         ZipOutputStream(out).use { zip ->
             zip.entry("review_state.json", JsonArray(states.map(::stateJson)))
             zip.entry("review_log.json", JsonArray(log.map(::logJson)))
+            zip.entry("grammar_responses.json", JsonArray(grammarResponses.map(::grammarResponseJson)))
+            zip.entry("export_manifest.json", JsonObject(mapOf("formatVersion" to JsonPrimitive(2))))
             zip.entry("settings.json", JsonObject(settings.snapshot().mapValues { primitive(it.value) }))
         }
         return log.size
@@ -51,9 +54,19 @@ object ProgressExport {
 
     private fun logJson(l: ReviewLogEntity) = JsonObject(
         mapOf(
-            "sourceId" to JsonPrimitive(l.sourceId), "stack" to JsonPrimitive(l.stack), "kanji" to JsonPrimitive(l.kanji),
+            "id" to JsonPrimitive(l.id), "sourceId" to JsonPrimitive(l.sourceId),
+            "stack" to JsonPrimitive(l.stack), "kanji" to JsonPrimitive(l.kanji),
             "mode" to JsonPrimitive(l.mode), "reading" to JsonPrimitive(l.reading), "grade" to JsonPrimitive(l.grade),
             "atMs" to JsonPrimitive(l.atMs),
+        ),
+    )
+
+    private fun grammarResponseJson(r: GrammarResponseEntity) = JsonObject(
+        mapOf(
+            "reviewLogId" to JsonPrimitive(r.reviewLogId), "sourceId" to JsonPrimitive(r.sourceId),
+            "stack" to JsonPrimitive(r.stack), "exerciseId" to JsonPrimitive(r.exerciseId),
+            "constructionId" to JsonPrimitive(r.constructionId), "relationshipId" to JsonPrimitive(r.relationshipId),
+            "promptType" to JsonPrimitive(r.promptType), "response" to JsonPrimitive(r.response), "correct" to JsonPrimitive(r.correct),
         ),
     )
 }

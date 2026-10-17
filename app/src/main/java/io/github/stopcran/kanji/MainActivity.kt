@@ -15,6 +15,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.toMutableStateList
 import io.github.stopcran.kanji.ui.AboutScreen
 import io.github.stopcran.kanji.ui.CounterQuizScreen
+import io.github.stopcran.kanji.ui.GrammarQuizScreen
 import io.github.stopcran.kanji.ui.DocScreen
 import io.github.stopcran.kanji.ui.DrawScreen
 import io.github.stopcran.kanji.ui.CardsScreen
@@ -41,7 +42,7 @@ class MainActivity : ComponentActivity() {
 
 /** Identifies this process; a saved back stack from another process (process death) must not resume a half-finished session. */
 private val processToken = System.nanoTime().toString()
-private val sessionPrefixes = listOf("quiz:", "wquiz:", "cquiz:", "draw:", "kreading:", "kana-study:")
+private val sessionPrefixes = listOf("quiz:", "wquiz:", "cquiz:", "grammarquiz:", "draw:", "kreading:", "kana-study:")
 
 /**
  * Back stack of route strings: "home", "kanji-home", "words-home", "settings", "cards", "word-cards", "quiz:..", "doc:<path>". Survives rotation via
@@ -107,6 +108,13 @@ private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, p
                 onBack = pop,
                 onPracticeMore = { pop(); push("cquiz:${System.currentTimeMillis()}:${route.split(":")[2]}:extra") },
             )
+        } else if (route.startsWith("grammarquiz:")) {
+            GrammarQuizScreen(
+                sessionKey = route,
+                onBack = pop,
+                onOpenDoc = { push("doc:$it") },
+                onPracticeMore = { pop(); push("grammarquiz:${System.currentTimeMillis()}:extra") },
+            )
         } else if (route.startsWith("kreading:")) {
             KanjiReadingScreen(
                 sessionKey = route,
@@ -145,11 +153,14 @@ private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, p
                     onKanjiPage = { push("kanji-home") },
                     onWordsPage = { push("words-home") },
                     onCountersPage = { push("counters-home") },
+                    onGrammarPage = { push("grammar-home") },
+                    onOpenDoc = { push("doc:$it") },
                     onKanaPage = { push("kana-home") },
                     onKanaStudy = { script, mode, extra ->
                         push("kana-study:${script.id}:${mode.name}:${System.currentTimeMillis()}" + if (extra) ":extra" else "")
                     },
                     onCounters = { mode, extra -> push("cquiz:${System.currentTimeMillis()}:${mode.code}" + if (extra) ":extra" else "") },
+                    onGrammar = { extra -> push("grammarquiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
                     onQuiz = { extra -> push("quiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
                     onDraw = { extra -> push("draw:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
                     onReadings = { extra -> push("kreading:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },

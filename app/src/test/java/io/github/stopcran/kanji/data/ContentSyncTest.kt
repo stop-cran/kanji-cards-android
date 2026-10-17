@@ -41,10 +41,18 @@ private fun kanjiMd(kanji: String, title: String) = """
 """.trimIndent()
 
 /** Builds a GitHub-style archive (single top-level folder) with a valid manifest. */
-private fun archive(version: String, cards: Map<String, String>, corrupt: Set<String> = emptySet()): ByteArray {
+private fun archive(
+    version: String,
+    cards: Map<String, String>,
+    corrupt: Set<String> = emptySet(),
+    grammar: Pair<String, String>? = null,
+): ByteArray {
     val files = cards.entries.associate { (k, title) ->
         "kanji/$k.md" to (if (k in corrupt) "no front matter here" else kanjiMd(k, title)).toByteArray()
-    }
+    } + if (grammar == null) emptyMap() else mapOf(
+        "articles/pilot.md" to "# Pilot\n".toByteArray(),
+        "grammar/${grammar.first}.json" to grammar.second.toByteArray(),
+    )
     val entries = files.entries.joinToString(",") { (p, b) -> "\"$p\":\"${ContentParser.sha256(b)}\"" }
     val manifest = """{"schemaVersion":1,"contentVersion":"$version","files":{$entries}}""".toByteArray()
     val out = ByteArrayOutputStream()
@@ -119,6 +127,26 @@ class ContentSyncTest {
         assertEquals(SyncResult.Updated(1, 0, emptyList()), r)
         assertEquals(1, runBlocking { db.content().kanjiCount(source.id) })
         assertEquals(SHA_A, settings.syncedCommit("${source.id}@main"))
+    }
+
+    @Test
+    fun syncStoresValidatedGrammarSetsWithTheirContentSnapshot() {
+        val grammar = """{"schemaVersion":1,"id":"pilot","title":"Pilot","article":"articles/pilot.md",
+            "constructions":[{"id":"alpha","label":"甲"},{"id":"beta","label":"乙"}],
+            "relationships":[{"id":"contrast","label":"contrast","constructions":["alpha","beta"]}],
+            "exercises":[
+              {"id":"alpha-one","target":"alpha","relationship":"contrast","prompt":"A ____.","translation":"A.",
+               "evidence":"Context.","explanation":"Reason.","answer":"alpha","acceptedAnswers":["甲"],
+               "options":[{"id":"alpha","label":"甲","rationale":"Fits."},{"id":"beta","label":"乙","rationale":"No."}]},
+              {"id":"beta-one","target":"beta","relationship":"contrast","prompt":"B ____.","translation":"B.",
+               "evidence":"Context.","explanation":"Reason.","answer":"beta","acceptedAnswers":["乙"],
+               "options":[{"id":"alpha","label":"甲","rationale":"No."},{"id":"beta","label":"乙","rationale":"Fits."}]}
+            ]}"""
+        http.archiveBytes = archive("v2", mapOf("日" to "sun"), grammar = "pilot" to grammar)
+        assertEquals(SyncResult.Updated(1, 0, emptyList()), run())
+        val stored = runBlocking { db.grammarSets(source.id) }
+        assertEquals(listOf("alpha-one", "beta-one"), stored.single().exercises.map { it.id })
+        assertEquals(1, runBlocking { db.content().grammarCount(source.id) })
     }
 
     @Test

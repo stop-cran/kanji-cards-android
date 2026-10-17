@@ -30,6 +30,7 @@ object ContentParser {
         val articles = mutableListOf<Article>()
         val strokes = mutableMapOf<String, StrokeData>()
         val counters = mutableListOf<CounterFile>()
+        val grammar = mutableListOf<GrammarSet>()
         for ((path, expectedHash) in manifest.files.toSortedMap()) {
             if (!isSafePath(path)) {
                 problems += "$path: unsafe path"
@@ -50,6 +51,7 @@ object ContentParser {
                     path.startsWith("words/") && path.endsWith(".md") -> words += parseWord(path, bytes.decodeToString())
                     path.startsWith("articles/") && path.endsWith(".md") -> articles += parseArticle(path, bytes.decodeToString())
                     path.startsWith("counters/") && path.endsWith(".json") -> counters += parseCounter(path, bytes.decodeToString())
+                    path.startsWith("grammar/") && path.endsWith(".json") -> grammar += parseGrammar(path, bytes.decodeToString())
                     path.startsWith("strokes/") && path.endsWith(".json") -> {
                         val data = json.decodeFromString(StrokeData.serializer(), bytes.decodeToString())
                         require(data.schemaVersion == 1) { "unsupported strokes schema ${data.schemaVersion}" }
@@ -92,7 +94,134 @@ object ContentParser {
             titles.add(c.title).also { if (!it) problems += "kanji/${c.kanji}.md: duplicate title '${c.title}'" }
         }
         val images = verifiedImages(manifest, files, words, problems)
-        return ParsedContent(manifest, unique, words, articles, strokes, problems, resolveCounters(counters, problems), images)
+        val candidates = resolveGrammar(grammar, problems)
+        val articleIds = articles.mapTo(hashSetOf()) { "articles/${it.slug}.md" }
+        val grammarSets = candidates.filter { set ->
+            (set.article in articleIds).also {
+                if (!it) problems += "grammar/${set.id}.json: linked article '${set.article}' is missing"
+            }
+        }
+        return ParsedContent(
+            manifest, unique, words, articles, strokes, problems,
+            resolveCounters(counters, problems), images, grammarSets,
+        )
+    }
+
+    fun parseGrammar(path: String, text: String): GrammarSet {
+        val set = try {
+            json.decodeFromString(GrammarSet.serializer(), text)
+        } catch (e: Exception) {
+            throw ContentException("invalid grammar JSON: ${e.message}")
+        }
+        validateGrammarSet(path, set)
+        return set
+    }
+
+    private fun validateGrammarSet(path: String, set: GrammarSet) {
+        require(set.schemaVersion == 1) { "unsupported grammar schema ${set.schemaVersion}" }
+        require(path == "grammar/${set.id}.json") { "grammar ID must match its file path" }
+        require(set.id.matches(Regex("[a-z0-9-]+"))) { "invalid grammar set ID" }
+        require(set.title.isNotBlank()) { "missing grammar set title" }
+        require(set.article.matches(Regex("articles/[a-z0-9-]+\\.md"))) { "article must be an articles/<slug>.md path" }
+        val constructionIds = validateGrammarConstructions(set)
+        val relationships = validateGrammarRelationships(set, constructionIds)
+        validateGrammarExercises(set, constructionIds, relationships)
+    }
+
+    private fun validateGrammarConstructions(set: GrammarSet): Set<String> {
+        require(set.constructions.isNotEmpty() && set.constructions.all { it.id.matches(Regex("[a-z0-9-]+")) && it.label.isNotBlank() }) {
+            "constructions need unique IDs and labels"
+        }
+        val constructionIds = set.constructions.map { it.id }
+        require(constructionIds.distinct().size == constructionIds.size) { "duplicate construction ID" }
+        return constructionIds.toSet()
+    }
+
+    private fun validateGrammarRelationships(set: GrammarSet, constructionIds: Set<String>): Map<String, GrammarRelationship> {
+        require(set.relationships.isNotEmpty()) { "missing grammar relationships" }
+        val relationIds = set.relationships.map { it.id }
+        require(relationIds.all { it.matches(Regex("[a-z0-9-]+")) } && relationIds.distinct().size == relationIds.size) {
+            "invalid or duplicate relationship ID"
+        }
+        require(
+            set.relationships.all {
+                it.label.isNotBlank() && it.constructions.size >= 2 &&
+                    it.constructions.distinct().size == it.constructions.size && it.constructions.all(constructionIds::contains)
+            },
+        ) {
+            "relationships need a label and at least two known constructions"
+        }
+        return set.relationships.associateBy { it.id }
+    }
+
+    private fun validateGrammarExercises(
+        set: GrammarSet,
+        constructionIds: Set<String>,
+        relationships: Map<String, GrammarRelationship>,
+    ) {
+        require(set.exercises.isNotEmpty()) { "missing grammar exercises" }
+        val exerciseIds = set.exercises.map { it.id }
+        require(exerciseIds.all { it.matches(Regex("[a-z0-9-]+")) } && exerciseIds.distinct().size == exerciseIds.size) {
+            "invalid or duplicate exercise ID"
+        }
+        set.exercises.forEach { validateGrammarExercise(it, constructionIds, relationships) }
+        for (relation in set.relationships) {
+            val covered = set.exercises.filter { it.relationship == relation.id }.mapTo(hashSetOf()) { it.target }
+            require(relation.constructions.all(covered::contains)) { "${relation.id}: exercises must target both sides of the relationship" }
+        }
+    }
+
+    private fun validateGrammarExercise(
+        exercise: GrammarExercise,
+        constructionIds: Set<String>,
+        relationships: Map<String, GrammarRelationship>,
+    ) {
+        require(exercise.target in constructionIds) { "${exercise.id}: unknown target construction" }
+        val relation = relationships[exercise.relationship]
+        require(relation != null && exercise.target in relation.constructions) { "${exercise.id}: target is not in its relationship" }
+        require(exercise.prompt.split("____").size == 2) { "${exercise.id}: prompt needs exactly one ____ blank" }
+        require(exercise.translation.isNotBlank() && exercise.evidence.isNotBlank() && exercise.explanation.isNotBlank()) {
+            "${exercise.id}: translation, evidence and explanation are required"
+        }
+        require(exercise.answer == exercise.target) { "${exercise.id}: answer must identify its target construction" }
+        require(exercise.acceptedAnswers.isNotEmpty() && exercise.acceptedAnswers.none(String::isBlank)) {
+            "${exercise.id}: acceptedAnswers must contain non-empty forms"
+        }
+        require(exercise.options.size >= 2 && exercise.options.map { it.id }.distinct().size == exercise.options.size) {
+            "${exercise.id}: needs at least two options with unique IDs"
+        }
+        require(
+            exercise.options.all { option ->
+                option.id in relation.constructions && option.label.isNotBlank() && option.rationale.isNotBlank()
+            },
+        ) { "${exercise.id}: options need relationship construction IDs, labels and rationales" }
+        require(exercise.options.count { it.id == exercise.answer } == 1) {
+            "${exercise.id}: answer option must occur exactly once"
+        }
+        val answerLabel = exercise.options.single { it.id == exercise.answer }.label
+        require(exercise.acceptedAnswers.any { it.trim() == answerLabel }) {
+            "${exercise.id}: acceptedAnswers must include the answer label"
+        }
+    }
+
+    private fun resolveGrammar(sets: List<GrammarSet>, problems: MutableList<String>): List<GrammarSet> {
+        val kept = mutableListOf<GrammarSet>()
+        val ids = hashSetOf<String>()
+        val exercises = hashSetOf<String>()
+        for (set in sets.sortedBy { it.id }) {
+            if (!ids.add(set.id)) {
+                problems += "grammar/${set.id}.json: duplicate grammar set ID"
+                continue
+            }
+            val duplicate = set.exercises.firstOrNull { it.id in exercises }
+            if (duplicate != null) {
+                problems += "grammar/${set.id}.json: duplicate exercise ID '${duplicate.id}'"
+                continue
+            }
+            exercises += set.exercises.map { it.id }
+            kept += set
+        }
+        return kept
     }
 
     /**
