@@ -32,6 +32,10 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   An explicit community vocabulary level takes precedence over kanji difficulty; only omission enables the legacy fallback (see §5).
   Word tags remain free-form: no JLPT tags are required or generated, and level metadata does not affect quiz tag scoring.
 - `articles/*.md` free-form; `strokes/<char>.json` KanjiVG-derived geometry in a 109-unit box with optional `orderVariants`.
+- `grammar/<id>.json` schema v1 holds constructions/answer classes, relationships and contextual exercises, linked to an article.
+  The bounded formal-noun pilot has 401 reviewed exercises in 32 sets, including five mixed sets (content commit `c2a9844`).
+  This is scoped coverage, not a claim to cover every use or all Japanese grammar. Accepted alternatives share one exercise identity;
+  every literal completion must fit the visible task, and accepted equivalents must not become distractors.
 - `manifest.json` maps path to SHA-256 over LF-normalised bytes; files failing the hash are skipped. The content repo's
   `tools/build_manifest.py` and `ContentParser.sha256` must stay in sync.
 - Sync checks the branch head via `api.github.com`, then downloads the zip pinned to that commit SHA (`RepoSource.commitZipUrl`), so the
@@ -48,12 +52,15 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 
 ## 3. Scheduling (FSRS-5)
 
-- Every review goes through `Fsrs.review`; there is one `SrsState` per **(sourceId, stack, item, mode)**. The key is never a title or
+- Every recorded review goes through `Fsrs.review`; there is one `SrsState` per **(sourceId, stack, item, mode, reading)**. The key is never a title or
   position. `sourceId` is the lower-case `owner/repo`, so switching to a fork keeps separate progress.
 - **Stacks have independent state** on purpose: a kanji learned in a small set may be confused in a larger one and must be re-learned there.
   Kanji stacks are tag filters (`all`, `starter`, `jlpt-n5`...). Word stacks are `words-n5`, `words-n4`, `words-all` (cumulative by level) and the tag stack `words-onomatopoeia`.
-- **Modes** are `Quiz`, `Draw`, `WordJpEn`, `WordEnJp`, `WordReading`, `WordType`; each mode has its own state for the same item. Recognition and recall are different
-  memories and must not share a schedule.
+- **Kanji/word modes** include `Quiz`, `Draw`, `WordJpEn`, `WordEnJp`, `WordReading`, `WordType`; these modes have independent state.
+  **Grammar** deliberately treats choose/type as presentations of one exercise, not two modes: one state under
+  `(sourceId, "grammar", exerciseId, "Grammar", "")`. Construction/relationship IDs are analytical labels, not extra schedules.
+  New exercises are sampled randomly from all imported sets within the shared daily allowance; known constructions, relationships,
+  prerequisites and set balancing do not affect selection. Relationship-aware introductions are future issue #48, not part of this pilot.
 - **Typed words** (`WordType`, `core/words/TypedAnswer.kt`): English prompt, free-text answer, no options. Gate is `WordDirection.gate` (EnToJp, twice answered).
   Exact written form or a same-title/same-type synonym = Good; kana reading of a kanji word = Hard (re-asked); else Again. IME conversion is accepted as typed;
   kana-to-kanji recall is left to other modes. No first-success cap. Its new items share the daily `newBudget`.
@@ -71,14 +78,21 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - Scheduling tweaks: a new card's first non-Again answer in a multiple-choice mode (meaning, words, readings) is capped at 1 day, because a lucky guess
   is possible (drawing keeps FSRS' default); intervals of 3+ days get deterministic fuzz (+-10%, +-5% from a week, seeded by item, mode and
   reps) so cards learned together spread out. `FsrsTest` checks a sequence against py-fsrs 5.1.0.
-- Extra practice (`QueueBuilder.extra`) goes through the normal FSRS update; there is no "practice doesn't count" path. FSRS itself handles
-  sub-day reviews with the short-term stability formula (don't remove it).
+- Extra practice (`QueueBuilder.extra`) uses normal FSRS updates for recorded answers; successful practice-only confirmations remain
+  unrecorded as described below. FSRS handles sub-day reviews with the short-term stability formula (don't remove it).
 - Review state and its log entry are written in one transaction (`ReviewDao.record`). Reminders back off at growing gaps (1/2/4/7/14 days)
   and stop until the user studies again (`ReminderPolicy`).
 
 ## 4. Quiz mechanics
 
-- **Architecture:** the four session ViewModels (Quiz, Word, Reading, Draw) share the pure `core/quiz/QuizSession` (queue, tallies, grade choice, `Relearn` reinsertion; Draw uses `confirm = false`). They receive `Services(db, settings, context)` through `serviceViewModel(key) { … }` instead of casting `Application`. `HomeData` loads the seven state maps as one non-null `StateSet`; the N4 offer is the pure `shouldOfferN4`. `InkRecognizer` and `ContentSync` rethrow `CancellationException` and turn any other failure into a fallback / `SyncResult.Failed`.
+- **Architecture:** the Grammar, Quiz, Word, Reading and Draw session ViewModels share the pure `core/quiz/QuizSession` (queue, tallies, grade choice, `Relearn` reinsertion; Draw uses `confirm = false`). They receive `Services(db, settings, context)` through `serviceViewModel(key) { … }` instead of casting `Application`. `HomeData` loads the seven state maps as one non-null `StateSet`; the N4 offer is the pure `shouldOfferN4`. `InkRecognizer` and `ContentSync` rethrow `CancellationException` and turn any other failure into a fallback / `SyncResult.Failed`.
+- **Grammar questions:** a session starts with a shuffled choice question and alternates choose/type, including re-asks. Both show the
+  complete Japanese prompt and English meaning; checking reveals evidence, explanation and all option rationales. The article opens on
+  the normal document stack and Back preserves the current question/answer. Choice checks the answer ID; typing trims and NFKC-normalizes
+  both input and all accepted answers, then requires exact membership (no script folding, transliteration or typo tolerance).
+  Input is limited to 80 characters. Empty Check does nothing; "I don't know" is Again. Correct is Good, or Hard when a correct-choice user
+  selects "I guessed"; choice first success is capped at one day, typing is not. Advancing a recorded answer atomically saves one state,
+  one canonical review log and one linked response detail. A successful confirmation is still practice only, regardless of presentation.
 - **Feedback and relearning:** every question offers "I don't know" (graded Again, no wrong pick; all three quizzes). A wrong pick says what it was ("that is 月", the word, or which kanji the reading belongs to) and the article is collapsed behind "Read the article" after a miss (open after a correct answer). A failed card is relearned in-session by `Relearn`: re-asked 3 cards later (recorded) and, if right, once more 7 cards later; that confirmation is practice only and is recorded only when wrong. Drawing with stroke mistakes (graded Hard) gets one re-ask; not-recognised is Again and re-asked. A repeat is never asked straight after itself: when no other card is queued the repeat is dropped (the answer is still recorded and FSRS schedules it), so a one-card "Practice more" session ends instead of looping. "Practice more" in Meaning, Drawing and Readings is padded to a minimum size (`Settings.practiceMinimum()` = max(10, batch size)) by `core/srs/PracticePadding`: the shortfall is filled with the weakest (lowest FSRS retrievability) already-started cards of the same mode from the source's other stacks (never from `all`, never kanji of the current stack, never a New card), with a bounded boost for kanji sharing a radical or reading with the session ("confusable"). Gates are never loosened: no card is introduced. A borrowed card is answered and recorded in its owning stack (`owners` map in the view models); if several stacks hold it the lowest retrievability, then stack id, wins. The home "Practice more" button also appears when only padding candidates exist. Normal due sessions are not padded. The word quizzes (all four directions) pad the same way from the other word stacks: stacks keep separate states for a word, so a word learned in N5 and still unstarted in N4 qualifies (it must belong to the current stack for that direction, have no state here, and be started in another stack); similarity is a shared kanji. When a word session ends and its own "Practice more" would hold fewer than `PracticeSuggestion.WORTHWHILE` (5) cards, the button instead offers the best-stocked other direction ("Practice more: Japanese → English"); gated directions (Type, EN→JP, Reading) are short until their gate direction has been learned.
 - **Tracing before drawing:** the first time a kanji with no Draw state is asked (setting "Trace new kanji first", on by default) the pad shows a light numbered reference to trace (`DrawGate.shouldTrace`). That attempt is practice only: checked and shown, but not graded, logged, saved as a diagnostic drawing or counted, and it creates no FSRS state. "Next" re-queues the kanji 3 cards later (`QuizSession.defer`) and that attempt is from memory and graded. Nothing is persisted, so an unfinished session traces again.
 - **Exposure before testing:** a kanji with no review state is first shown on a study view (`QuizUi.Study`: kanji, title, main readings, the article, "Got it — quiz me"), then
@@ -192,12 +206,12 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - **Rare glyphs:** old components in articles (e.g. 𠯑 in 話) are CJK Ext. A/B/radical characters that phone system fonts often lack. `RareHan` draws
   characters in those ranges from a bundled subset of HanaMin (`res/font/rare_han_a/b.otf`, a few KB, generated by `tools/make_rare_font.py`, notice in
   `third_party/fonts`). `RareHanTest` fails when the content uses a rare character the subset does not cover; regenerate and update its list.
-- **Home structure: a short main screen plus a Kanji page and a Words page** (`HomePages`: routes `home`, `kanji-home`, `words-home`). The main
-  screen shows status, the N4 offer and two entries with one-line summaries; each page lists its modes. **One button per mode**, never a disabled
+- **Home structure: a short main screen with study-section entries**, including Kanji/Words pages (`HomePages`: routes `home`, `kanji-home`, `words-home`)
+  and the Grammar pilot. The main screen shows status, the N4 offer and study entries with summaries; each section exposes its modes. **One button per mode**, never a disabled
   "Start" next to an enabled "Extra practice": `ModeState` (`core/home`) is `Loading | Start(due,new) | PracticeMore | Locked(reason) | Unavailable(reason)`,
   computed from the same eligibility predicates the session view models enforce (a quiz needs two cards, drawing one stroke card, ...) so a
   tappable button never leads to an empty session. The reason for a disabled button is visible text and part of the row's accessibility state.
-  All counts come from one `HomeData` (`rememberHomeData`), shared by the main screen and both pages, built from strict noise-free queues; a one-minute
+  Kanji/word counts come from one `HomeData` (`rememberHomeData`), shared by the main screen and both pages, built from strict noise-free queues; a one-minute
   tick makes newly due cards and the day rollover show up. Rows stay in `Loading` until content, review states and introduced-today counts are all known.
   Card browsing lives on each page, since the sets differ: the Kanji page shows the card count and "Browse cards" (route `cards`, `CardSearch`), the
   Words page shows the word count and "Browse words" (route `word-cards`, `WordSearch`: written form, kana in either script, romaji ranked below kana,
@@ -217,13 +231,13 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 
 ## 8. Invariants (don't break these; tests cover most)
 
-1. Review state is keyed by (sourceId, stack, item, mode, reading), where item is the kanji character or word string, never a title or position; the kanji readings modes add the reading match key (`ReadingId`).
+1. Review state is keyed by (sourceId, stack, item, mode, reading), where item is a stable card/exercise ID, never a title or position; the kanji readings modes add the reading match key (`ReadingId`).
    Review-state reads are scoped by source, stack and mode; the new-item allowance is shared across stacks and modes of a source (reminder-history queries are global).
 2. A failed sync (fatal error) leaves the previous content intact; the swap is atomic.
 3. A hash mismatch or malformed manifest file skips that file only; an unsafe zip entry or limit violation aborts the whole sync.
 4. Each quiz grades one designated target. Meaning-quiz word options enforce exact title/form deduplication and curated exclusions; these
    checks do not guarantee semantic uniqueness for uncurated meanings. Reading options have distinct reading keys.
-5. Stacks, modes, directions and reading kinds never share SRS state; only ordering may look across directions.
+5. Stacks, modes, word directions and reading kinds have independent SRS state; Grammar choose/type are two presentations of one mode and deliberately share exercise state.
 6. Grading uses raw/regularised drawn points and the unmodified reference; display jitter and brush smoothing never leak into grading.
 7. No network use beyond: GitHub (`api.github.com` head lookup, `codeload.github.com` download), the one-off ML Kit model download, and links the
    user taps (any `https://` link opens the browser; repo links must be exactly `kanji|words|articles/<file>.md`).
@@ -233,6 +247,22 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 Testing seams: network goes through `ContentHttp` (tests use a fake), view models are built with `serviceViewModel` over in-memory Room, and Compose
 UI tests (`ComposeUiTest`) run on Robolectric for the stateless pieces (answer feedback, article toggle, page chrome). Static analysis is Detekt
 with a baseline (`config/detekt`); new code must add no findings, and the baseline should only shrink.
+
+### Local progress evidence
+
+Room v8 adds Grammar sets and response details without resetting existing progress; its migration clears only sync metadata to reimport
+content. Export v2 includes the canonical log plus `grammar_responses.json`, joined one-to-one by `reviewLogId`; details do not create
+additional review events. The stored target construction/relationship describe the exercise, not the wrong option. Typed responses are
+stored automatically for recorded reviews, unlike the opt-in drawing log. User-controlled export and Android backup can copy this private
+data off the device; see `PRIVACY.md` and `CONTENT-SCHEMA.md`.
+
+The stdlib-only `tools/analyze_grammar_progress.py` gives two overlapping post-hoc views of those events (recorded construction and
+relationship IDs), with choice/type and first-observed/repeated strata. Retain both for diagnosing where contextual contrasts need attention,
+not as separate mastery measures or schedules. A repeated set-local ID may conflate labels; functional answer classes do not measure each
+member form. Hard and empty-response counts are available, but there is no separate guessed flag and successful confirmations are absent.
+Cached sync SHAs are only export-time snapshot hints, not historical answer revisions. Small author/reviewer samples, repeats, presentation
+differences and visible English prevent an efficacy claim. Existing evidence does not justify another question type or broader coverage
+within #46; scope those separately if a concrete need emerges. No real export, typed response or private readout belongs in the repository.
 
 ## 9. Known gaps and evolution
 
@@ -245,5 +275,7 @@ with a baseline (`config/detekt`); new code must add no findings, and the baseli
   before encouraging branch switching.
 - **Content freshness**: a bad publish that forgets to bump `contentVersion` stays hidden until a forced sync.
 - **Scheduling**: fit FSRS weights from the review log after enough history; desired-retention setting.
-- **Portability**: backup/export of review state (it lives only in the app's database), and iOS is out of scope.
+- **Portability**: progress ZIP export is available; import/restore is not implemented, and iOS is out of scope.
+- **Grammar**: relationship-aware new-material selection is future #48; two-correct fixed-option interaction/counter applicability is
+  separate #47. Neither is implemented by the bounded #46 pilot, and learning effectiveness remains unestablished.
 - **Release**: Play listing, data-safety form, check the image model's output terms for the icon (`RELEASE.md`).

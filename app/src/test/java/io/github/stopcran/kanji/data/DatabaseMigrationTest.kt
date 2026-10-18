@@ -27,6 +27,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.SQLiteMode
 import java.time.Instant
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.util.zip.ZipInputStream
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.int
@@ -105,6 +106,9 @@ class DatabaseMigrationTest {
                 ReviewLogEntity(0, source, GRAMMAR_STACK, exerciseId, StudyMode.Grammar.name, 3, now.toEpochMilli()),
                 detail,
             )
+        }
+        withDatabase { db ->
+            assertEquals(state.toEntity(source, GRAMMAR_STACK, exerciseId, StudyMode.Grammar), db.reviews().allStates().single())
             val log = db.reviews().allLog().single()
             val response = db.reviews().allGrammarResponses().single()
             assertEquals(log.id, response.reviewLogId)
@@ -129,6 +133,47 @@ class DatabaseMigrationTest {
             assertEquals("koto-vs-wake", exported.getValue("relationshipId").jsonPrimitive.content)
             assertEquals(exportedLog.getValue("id"), exported.getValue("reviewLogId"))
             assertEquals(1, json.parseToJsonElement(entries.getValue("grammar_responses.json")).jsonArray.size)
+        }
+    }
+
+    @Test
+    fun version7UpgradePreservesReadingProgressAndReopensWithGrammarTables() = runBlocking {
+        val schema = Json.parseToJsonElement(
+            File("schemas", "io.github.stopcran.kanji.data.AppDatabase${File.separator}7.json").readText(),
+        ).jsonObject.getValue("database").jsonObject
+        context.openOrCreateDatabase(name, Context.MODE_PRIVATE, null).use { sqlite ->
+            schema.getValue("entities").jsonArray.forEach { item ->
+                val entity = item.jsonObject
+                val table = entity.getValue("tableName").jsonPrimitive.content
+                sqlite.execSQL(entity.getValue("createSql").jsonPrimitive.content.replace("\${TABLE_NAME}", table))
+                entity["indices"]?.jsonArray?.forEach {
+                    sqlite.execSQL(it.jsonObject.getValue("createSql").jsonPrimitive.content.replace("\${TABLE_NAME}", table))
+                }
+            }
+            schema.getValue("setupQueries").jsonArray.forEach { sqlite.execSQL(it.jsonPrimitive.content) }
+            sqlite.execSQL(
+                "INSERT INTO review_state VALUES (?, 'all', '日', 'KanjiOn', 'Review', 12.5, 5.0, 999, 500, 3, 1, 'にち')",
+                arrayOf(sources.first()),
+            )
+            sqlite.execSQL(
+                "INSERT INTO review_log VALUES (7, ?, 'all', '日', 'KanjiOn', 3, 500, 'にち')",
+                arrayOf(sources.first()),
+            )
+            sqlite.execSQL("INSERT INTO sync_meta VALUES (?, 'before-grammar', 500, 0)", arrayOf(sources.first()))
+            sqlite.version = 7
+        }
+        repeat(2) {
+            withDatabase { db ->
+                assertEquals(8, db.openHelper.writableDatabase.version)
+                assertEquals(
+                    ReviewStateEntity(sources.first(), "all", "日", "KanjiOn", "Review", 12.5, 5.0, 999, 500, 3, 1, "にち"),
+                    db.reviews().allStates().single(),
+                )
+                assertEquals(ReviewLogEntity(7, sources.first(), "all", "日", "KanjiOn", 3, 500, "にち"), db.reviews().allLog().single())
+                assertNull(db.content().meta(sources.first()))
+                assertTrue(db.grammarSets(sources.first()).isEmpty())
+                assertTrue(db.reviews().allGrammarResponses().isEmpty())
+            }
         }
     }
 

@@ -60,6 +60,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 
 - Run Gradle with `$env:JAVA_HOME` set explicitly; new shells don't inherit it.
 - Non-ASCII output from Python/PowerShell needs `$env:PYTHONIOENCODING='utf-8'`.
+- `uiautomator dump` can print `ERROR: null root node returned by UiTestAutomationBridge` yet exit successfully and leave old XML behind.
+  Require its `UI hierchary dumped to:` success line before trusting/pulling the hierarchy; let the window settle and retry after a failed dump.
 - The file `create` tool refuses existing files and missing parent directories; create folders first.
 
 ## Markdown viewer and extra practice
@@ -103,3 +105,6 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - Kana drawing introduces a never-reviewed card with the shared faint numbered reference once per session, then defers it for a from-memory attempt. The trace attempt must not enter SRS history.
 - Only omitted word `jlpt` enables fallback: present values must be top-level unquoted integers 1-5. Preserve raw front-matter entries to reject blank/quoted/list values and duplicate or multiline shadowing without changing kanji parsing. Never synthesize level tags; word tags and quiz tag scoring stay independent of `jlpt`.
 - `DatabaseMigrationTest` runs Room upgrades/reopen tests on Robolectric native SQLite (API 28), without the content repo or an emulator. Room 2.6 databases are not `Closeable`; close them explicitly in `finally` rather than using Kotlin `use`.
+- In view-model tests, a DAO read or a barrier on the underlying executor does not drain Room's separately serialized transaction queue.
+  With `UnconfinedTestDispatcher`, enqueue an empty `db.withTransaction {}` after advancing the answer and await it before asserting
+  recorded events or their absence (see `GrammarQuizViewModelTest`). This also covers unrecorded successful confirmations without sleeps.

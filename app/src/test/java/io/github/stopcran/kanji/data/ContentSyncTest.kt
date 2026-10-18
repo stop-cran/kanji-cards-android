@@ -147,6 +147,21 @@ class ContentSyncTest {
         val stored = runBlocking { db.grammarSets(source.id) }
         assertEquals(listOf("alpha-one", "beta-one"), stored.single().exercises.map { it.id })
         assertEquals(1, runBlocking { db.content().grammarCount(source.id) })
+        val before = runBlocking {
+            db.reviews().recordGrammar(
+                ReviewStateEntity(source.id, GRAMMAR_STACK, "alpha-one", "Grammar", "Review", 12.5, 5.0, 999, 500, 3, 1),
+                ReviewLogEntity(0, source.id, GRAMMAR_STACK, "alpha-one", "Grammar", 3, 500),
+                GrammarResponseEntity(0, source.id, GRAMMAR_STACK, "alpha-one", "alpha", "contrast", "type", "甲", true),
+            )
+            Triple(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses())
+        }
+        http.headSha = SHA_B
+        http.archiveBytes = archive("v3", mapOf("日" to "sun"), grammar = "pilot" to grammar.replace("Context.", "Updated context."))
+        assertEquals(SyncResult.Updated(1, 0, emptyList()), run())
+        assertEquals("Updated context.", runBlocking { db.grammarSets(source.id).single().exercises.first().evidence })
+        assertEquals(before, runBlocking {
+            Triple(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses())
+        })
     }
 
     @Test

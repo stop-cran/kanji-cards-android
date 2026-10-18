@@ -11,6 +11,7 @@ reviews with FSRS.
 - **Configurable content repo** – point the app at your own fork in Settings; it syncs on launch (only when the branch head changed) and daily in the background.
 - **Stacks** – filter by tag (Starter, JLPT N5…N1); every stack keeps its own FSRS schedule.
 - **Word quizzes** – explicit vocabulary JLPT levels include kana-only words in N5/N4; unlabelled words retain the hardest-kanji fallback. N4 words include N5, with separate schedules for each stack and quiz direction.
+- **Grammar pilot** – contextual contrasts with alternating choice and typing questions, full English meaning, explanatory feedback and linked articles. Both presentations share one schedule per exercise; suitable alternative completions are accepted.
 - **Search** in Browse cards: kanji, meaning, kana (katakana prefers on'yomi, hiragana kun'yomi) and romaji.
 - **Gentle reminder** (optional) that backs off while ignored; **brushes**, stroke-number hints and an opt-in drawing log with zip export.
 
@@ -34,6 +35,33 @@ CI clones it. After editing that clone, re-run with `./gradlew cleanTestDebugUni
 the sibling directory as an input. On Windows use `gradlew.bat`.
 
 Code layout and the reasons behind it: [docs/DESIGN.md](docs/DESIGN.md). Contributor notes: [.github/copilot-instructions.md](.github/copilot-instructions.md).
+
+## Grammar pilot and local progress analysis
+
+The bounded formal-noun corpus has **401 reviewed exercises in 32 sets**, including five mixed sets, published in
+[learning-japanese at c2a9844](https://github.com/stop-cran/learning-japanese/commit/c2a98448ca7f7c5f77c199743b3d5ec21d851c97).
+This is scoped practice, not exhaustive Japanese grammar coverage. New exercises are sampled randomly within the shared daily allowance;
+relationships do not yet prioritize introductions ([future work #48](https://github.com/stop-cran/kanji-cards-android/issues/48)).
+
+**Settings → Export progress** saves review states, the canonical answer log, settings and linked Grammar response details as a ZIP.
+Recorded typed responses are stored automatically on the device; the separate drawing log remains opt-in. Exports contain private study
+history and typed text: do not commit or upload them. See [privacy](docs/PRIVACY.md) and the [export contract](docs/CONTENT-SCHEMA.md#progress-export-v2).
+
+The dependency-free Python 3.9+ analyzer reads a local ZIP without extracting it or using the network:
+
+```powershell
+python -B tools\analyze_grammar_progress.py "C:\private\kanji-progress.zip" > "C:\private\grammar-report.json"
+python -B -m unittest discover -s tools -p test_analyze_grammar_progress.py
+```
+
+The JSON report omits response text and general settings. It gives sample sizes/errors by recorded construction and relationship IDs,
+split by choice/typing and first-observed/repeated exercise attempts. Those views reuse the same events, not independent samples.
+Empty cells have `correct_rate: null`; legacy exports explicitly have no Grammar evidence. Corrupt or incomplete v2 exports fail with
+a nonzero exit status, as do JSON files over 16 MiB or an export over 32 MiB uncompressed.
+Cached sync commits are only snapshot hints, not a revision attached to each answer. Hard is not an independently recorded guessed flag.
+Small samples, repeats, different presentations, visible English and author/reviewer familiarity prevent interpreting accuracy as learning
+effectiveness. Keep even the aggregate report private: it still identifies sources and content.
+
 ## License
 
 Code: Apache-2.0 (see [LICENSE](LICENSE)). Content repos have their own licenses; data derived from
