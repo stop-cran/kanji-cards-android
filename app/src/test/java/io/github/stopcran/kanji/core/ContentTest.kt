@@ -4,6 +4,8 @@ import io.github.stopcran.kanji.core.content.ContentException
 import io.github.stopcran.kanji.core.content.ContentParser
 import io.github.stopcran.kanji.core.content.CounterFile
 import io.github.stopcran.kanji.core.content.FrontMatter
+import io.github.stopcran.kanji.core.content.GrammarSet
+import io.github.stopcran.kanji.core.content.Manifest
 import io.github.stopcran.kanji.core.content.SafeZip
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -552,14 +554,21 @@ class ContentTest {
         assertEquals(10, parsed.counters.size)
         assertEquals(120, parsed.counters.sumOf { it.cards.size })
         assertEquals(20, parsed.counters.sumOf { it.reverse.size })
-        assertEquals(1, parsed.grammar.size)
-        assertEquals(8, parsed.grammar.sumOf { it.exercises.size })
         val j = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
         val again = parsed.counters.map { j.decodeFromString(CounterFile.serializer(), j.encodeToString(CounterFile.serializer(), it)) }
         assertEquals(parsed.counters, again)
         val index = io.github.stopcran.kanji.core.counters.CounterIndex(again)
         assertEquals(120, index.ids(io.github.stopcran.kanji.core.counters.CounterMode.Choose).size)
-        val serializer = io.github.stopcran.kanji.core.content.GrammarSet.serializer()
+        val serializer = GrammarSet.serializer()
+        val declared = j.decodeFromString(Manifest.serializer(), files.getValue("manifest.json").decodeToString())
+        val expectedGrammar = declared.files.keys.filter { it.startsWith("grammar/") }.map { path ->
+            j.decodeFromString(serializer, files.getValue(path).decodeToString())
+        }.sortedBy { it.id }
+        assertTrue(expectedGrammar.isNotEmpty())
+        assertEquals(expectedGrammar.size, expectedGrammar.map { it.id }.toSet().size)
+        val exerciseIds = expectedGrammar.flatMap { it.exercises }.map { it.id }
+        assertEquals(exerciseIds.size, exerciseIds.toSet().size)
+        assertEquals(expectedGrammar, parsed.grammar.sortedBy { it.id })
         val grammarAgain = parsed.grammar.map { j.decodeFromString(serializer, j.encodeToString(serializer, it)) }
         assertEquals(parsed.grammar, grammarAgain)
     }
