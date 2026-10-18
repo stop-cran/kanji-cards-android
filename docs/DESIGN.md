@@ -61,6 +61,8 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   `(sourceId, "grammar", exerciseId, "Grammar", "")`. Construction/relationship IDs are analytical labels, not extra schedules.
   New exercises are sampled randomly from all imported sets within the shared daily allowance; known constructions, relationships,
   prerequisites and set balancing do not affect selection. Relationship-aware introductions are future issue #48, not part of this pilot.
+  The [phase A introduction contract](GRAMMAR-INTRODUCTIONS.md) specifies the forthcoming single-level JLPT scope, focused groups and
+  relationship-guided transitions. It is design-only until the corresponding implementation phases land; current behavior is unchanged.
 - **Typed words** (`WordType`, `core/words/TypedAnswer.kt`): English prompt, free-text answer, no options. Gate is `WordDirection.gate` (EnToJp, twice answered).
   Exact written form or a same-title/same-type synonym = Good; kana reading of a kanji word = Hard (re-asked); else Again. IME conversion is accepted as typed;
   kana-to-kanji recall is left to other modes. No first-success cap. Its new items share the daily `newBudget`.
@@ -276,6 +278,7 @@ within #46; scope those separately if a concrete need emerges. No real export, t
 - **Content freshness**: a bad publish that forgets to bump `contentVersion` stays hidden until a forced sync.
 - **Scheduling**: fit FSRS weights from the review log after enough history; desired-retention setting.
 - **Portability**: progress ZIP export is available; import/restore is not implemented, and iOS is out of scope.
-- **Grammar**: relationship-aware new-material selection is future #48; two-correct fixed-option interaction/counter applicability is
+- **Grammar**: #48's [phase A contract](GRAMMAR-INTRODUCTIONS.md) defines cumulative JLPT scope, focused introductions and relationship-aware
+  new-material selection; implementation remains phased future work. Two-correct fixed-option interaction/counter applicability is
   separate #47. Neither is implemented by the bounded #46 pilot, and learning effectiveness remains unestablished.
 - **Release**: Play listing, data-safety form, check the image model's output terms for the icon (`RELEASE.md`).
