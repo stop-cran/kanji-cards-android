@@ -1,9 +1,10 @@
-# Grammar introductions: phase A contract
+# Grammar introductions: phased contract
 
 Design for [#48](https://github.com/stop-cran/kanji-cards-android/issues/48), 2026-10-18.
-**Not implemented by this document.** Phase A fixes the contract and pilot; Phase B adds metadata/filtering,
-Phase C focused introductions, and Phase D relationship-guided transitions. Pause after each reviewed phase.
-Current runtime remains the random Grammar selector described in [DESIGN](DESIGN.md).
+**Implementation boundary:** Phase A established this contract and its reviewed pilot. Phase B implements optional
+JLPT metadata, source-scoped cumulative intake/exact browsing and epoch-1 cache refresh. The group metadata, guided
+controls, focus/evidence/cursor rules and relationship transitions below remain future Phases C/D, not current runtime.
+Pause after each reviewed phase. Current selection remains random inside the eligible level scope, as described in [DESIGN](DESIGN.md).
 
 These are explicit, conservative pilot heuristics, not validated mastery measures or an adaptive curriculum.
 They do not change FSRS, exercise identities, grading, accepted alternatives or choose/type presentation.
@@ -32,7 +33,7 @@ Review availability, relative due ordering/interleaving and daily/backlog accoun
 Only new ordinary introductions consume the ordinary remaining allowance; choosing a group consumes none.
 Filtered/blocked pools may underfill that allowance. Never fill the remainder with out-of-scope exercises.
 
-The guided setting is source-scoped, off by default. Off uses random selection within the level scope;
+The future Phase C guided setting is source-scoped, off by default. Off uses random selection within the level scope;
 off + All preserves current ordinary behavior. Switching either setting never resets exercise progress.
 Scope/control changes apply to the next session; an existing question/article/back navigation retains its
 session snapshot and grading. A stale session cannot mutate the focus cursor of a newer session.
@@ -224,12 +225,13 @@ An active focus is not interrupted merely because a different candidate becomes 
 
 ## Persistence, integration and deployment
 
-Phase B introduces source-scoped level/browse preferences and a **parser epoch 1** marker.
-Phase C adds group decoding/validation and **epoch 2**. Current caches have epoch 0: typed reserialization
+Phase B stores source-scoped level/browse preferences and a **parser epoch 1** marker.
+Phase C adds group decoding/validation and **epoch 2**. Pre-Phase-B caches have epoch 0: typed reserialization
 in `toGrammarEntities` dropped previously unknown fields, and both SHA and contentVersion can skip import.
 An epoch mismatch bypasses those two up-to-date shortcuts, **not** the existing bad-content/shrink safeguards.
+The launch-check throttle must not report an outstanding epoch as up to date; offline archive fallback backoff still applies.
 Write the source's new epoch only after the existing atomic content replacement succeeds. Failed/offline
-refresh retains the old usable cache and a retryable outstanding epoch; do not clear content or progress.
+refresh retains the old usable cache and an outstanding epoch for later refresh; do not clear content or progress.
 Changing supported content metadata also regenerates its manifest/contentVersion as usual.
 
 An outstanding epoch is **metadata unavailable**, not evidence that cached omissions were authored.

@@ -9,10 +9,20 @@ import io.github.stopcran.kanji.core.content.GrammarExercise
 import io.github.stopcran.kanji.core.content.GrammarOption
 import io.github.stopcran.kanji.core.content.GrammarRelationship
 import io.github.stopcran.kanji.core.content.GrammarSet
+import io.github.stopcran.kanji.core.grammar.GRAMMAR_LEVEL_SYNC_NEEDED
+import io.github.stopcran.kanji.core.grammar.GrammarScope
+import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.data.AppDatabase
+import io.github.stopcran.kanji.data.GRAMMAR_LEVEL_EPOCH
 import io.github.stopcran.kanji.data.GRAMMAR_STACK
 import io.github.stopcran.kanji.data.GrammarEntity
+import io.github.stopcran.kanji.data.GrammarResponseEntity
+import io.github.stopcran.kanji.data.ReviewLogEntity
+import io.github.stopcran.kanji.data.ReviewStateEntity
 import io.github.stopcran.kanji.data.Settings
+import io.github.stopcran.kanji.data.grammarModeState
+import io.github.stopcran.kanji.data.grammarSets
+import io.github.stopcran.kanji.data.newAllowance
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
@@ -32,6 +42,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.SQLiteMode
+import java.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -60,6 +71,15 @@ class GrammarQuizViewModelTest {
     }
 
     private fun start(count: Int = 3, answers: List<String> = listOf("model", "alternative")): GrammarQuizViewModel {
+        install(count, answers)
+        return launch().also { assertTrue("Expected a first choice question, got ${it.ui}", it.ui is GrammarUi.Choose) }
+    }
+
+    private fun install(
+        count: Int,
+        answers: List<String> = listOf("model", "alternative"),
+        levels: List<Int?> = List(count) { null },
+    ) {
         val constructions = (0 until count).map { GrammarConstruction("target-$it", "Target $it") }
         val exercises = constructions.mapIndexed { index, target ->
             GrammarExercise(
@@ -69,6 +89,7 @@ class GrammarQuizViewModelTest {
                     GrammarOption(target.id, answers.first(), "Fits."),
                     GrammarOption(constructions[(index + 1) % count].id, "wrong", "Does not fit."),
                 ),
+                jlpt = levels[index],
             )
         }
         val set = GrammarSet(
@@ -78,12 +99,32 @@ class GrammarQuizViewModelTest {
         runBlocking {
             db.content().insertGrammar(listOf(GrammarEntity(sourceId, set.id, Json.encodeToString(GrammarSet.serializer(), set), 0)))
         }
+    }
+
+    private fun launch(extra: Boolean = false): GrammarQuizViewModel {
         val vm = GrammarQuizViewModel(services)
-        vm.ensureStarted(false)
+        vm.ensureStarted(extra)
         val end = System.currentTimeMillis() + 10_000
         while (vm.ui is GrammarUi.Loading && System.currentTimeMillis() < end) Thread.sleep(10)
-        assertTrue("Expected a first choice question, got ${vm.ui}", vm.ui is GrammarUi.Choose)
+        assertFalse("Session did not finish loading", vm.ui is GrammarUi.Loading)
         return vm
+    }
+
+    private fun mode(): ModeState = runBlocking {
+        val now = Instant.now()
+        db.grammarModeState(
+            sourceId, db.grammarSets(sourceId), db.newAllowance(services.settings, sourceId, now).remaining,
+            now, services.settings.grammarFor(sourceId),
+        )
+    }
+
+    private fun seedReview(index: Int, due: Instant) = runBlocking {
+        val yesterday = Instant.now().minusSeconds(86_400).toEpochMilli()
+        db.reviews().recordGrammar(
+            ReviewStateEntity(sourceId, GRAMMAR_STACK, "exercise-$index", "Grammar", "Review", 3.0, 5.0, due.toEpochMilli(), yesterday, 1, 0),
+            ReviewLogEntity(0, sourceId, GRAMMAR_STACK, "exercise-$index", "Grammar", 3, yesterday),
+            GrammarResponseEntity(0, sourceId, GRAMMAR_STACK, "exercise-$index", "target-$index", "contrast", "choose", "target-$index", true),
+        )
     }
 
     private fun answerCorrect(vm: GrammarQuizViewModel) {
@@ -108,6 +149,77 @@ class GrammarQuizViewModelTest {
     private fun logs() = runBlocking { db.reviews().allLog() }
     private fun details() = runBlocking { db.reviews().allGrammarResponses() }
     private fun states() = runBlocking { db.reviews().allStates() }
+
+    @Test
+    fun singleEligibleExerciseIsAskableAndChangingScopeDoesNotChangeTheSessionSnapshot() {
+        install(3, levels = listOf(3, 4, null))
+        services.settings.setGrammarParserEpoch(sourceId, GRAMMAR_LEVEL_EPOCH)
+        services.settings.setGrammarNewScope(sourceId, GrammarScope.N4)
+        services.settings.setGrammarBrowseScope(sourceId, GrammarScope.N3)
+        assertEquals(ModeState.Start(0, 1), mode())
+        val vm = launch()
+        assertEquals("exercise-1", (vm.ui as GrammarUi.Choose).exercise.id)
+        services.settings.setGrammarNewScope(sourceId, GrammarScope.Unclassified)
+        answerCorrect(vm)
+        assertTrue(vm.ui is GrammarUi.Done)
+        assertEquals(listOf("exercise-1"), states().map { it.kanji })
+        assertEquals(GrammarScope.N3, services.settings.grammarFor(sourceId).browseScope)
+        assertEquals("exercise-2", (launch().ui as GrammarUi.Choose).exercise.id)
+        assertEquals(1, logs().size)
+    }
+
+    @Test
+    fun emptyNewScopeStillOffersOutOfScopeDueReviews() {
+        install(3, levels = listOf(3, 4, null))
+        services.settings.setGrammarParserEpoch(sourceId, GRAMMAR_LEVEL_EPOCH)
+        services.settings.setGrammarNewScope(sourceId, GrammarScope.N5)
+        assertTrue(mode() is ModeState.Locked)
+        assertTrue((launch().ui as GrammarUi.Empty).message.contains("No unseen grammar exercises match N5"))
+        seedReview(0, Instant.now().minusSeconds(60))
+        assertEquals(ModeState.Start(1, 0), mode())
+        assertEquals("exercise-0", (launch().ui as GrammarUi.Choose).exercise.id)
+    }
+
+    @Test
+    fun extraPracticeFiltersUnseenItemsButKeepsEarlyReviewsAndIgnoresTheDailyCap() {
+        install(4, levels = listOf(4, 3, null, 5))
+        services.settings.setGrammarParserEpoch(sourceId, GRAMMAR_LEVEL_EPOCH)
+        services.settings.setGrammarNewScope(sourceId, GrammarScope.N4)
+        services.settings.setDailyNewCards(0)
+        seedReview(1, Instant.now().plusSeconds(86_400))
+        assertEquals(ModeState.PracticeMore, mode())
+        val vm = launch(extra = true)
+        val ids = mutableListOf<String>()
+        repeat(3) {
+            ids += when (val question = vm.ui) {
+                is GrammarUi.Choose -> question.exercise.id
+                is GrammarUi.Type -> question.exercise.id
+                else -> error("Expected an extra-practice question, got $question")
+            }
+            answerCorrect(vm)
+        }
+        assertEquals(setOf("exercise-0", "exercise-3"), ids.take(2).toSet())
+        assertEquals("exercise-1", ids.last())
+        assertTrue(vm.ui is GrammarUi.Done)
+        assertEquals(setOf("exercise-0", "exercise-1", "exercise-3"), states().map { it.kanji }.toSet())
+    }
+
+    @Test
+    fun pendingEpochBlocksRestrictedNewItemsButNotAllOrStartedExtraPractice() {
+        install(3)
+        seedReview(0, Instant.now().plusSeconds(86_400))
+        val before = Triple(states(), logs(), details())
+        for (scope in listOf(GrammarScope.Unclassified, GrammarScope.N4)) {
+            services.settings.setGrammarNewScope(sourceId, scope)
+            assertEquals(ModeState.PracticeMore, mode())
+            assertEquals(GRAMMAR_LEVEL_SYNC_NEEDED, (launch().ui as GrammarUi.Empty).message)
+            assertEquals("exercise-0", (launch(extra = true).ui as GrammarUi.Choose).exercise.id)
+        }
+        services.settings.setGrammarNewScope(sourceId, GrammarScope.All)
+        assertEquals(ModeState.Start(0, 2), mode())
+        assertTrue(launch().ui is GrammarUi.Choose)
+        assertEquals(before, Triple(states(), logs(), details()))
+    }
 
     @Test
     fun choiceAndTypingRecordGoodAndGuessedChoiceRecordsHard() {

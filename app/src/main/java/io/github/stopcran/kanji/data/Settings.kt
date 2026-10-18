@@ -4,11 +4,21 @@ import android.content.Context
 import io.github.stopcran.kanji.Defaults
 import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.focus.FocusBatch
+import io.github.stopcran.kanji.core.grammar.GrammarScope
 import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.unlock.UnlockRule
 import io.github.stopcran.kanji.core.words.WordStacks
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
+
+data class GrammarPreferences(
+    val newScope: GrammarScope = GrammarScope.All,
+    val browseScope: GrammarScope = GrammarScope.All,
+    val parserEpoch: Int = 0,
+) {
+    val levelsReady: Boolean get() = parserEpoch >= GRAMMAR_LEVEL_EPOCH
+}
 
 class Settings(context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -17,6 +27,40 @@ class Settings(context: Context) {
     fun snapshot(): Map<String, Any?> = prefs.all.toSortedMap()
     private val _source = MutableStateFlow(load())
     val source: StateFlow<RepoSource> = _source
+    private val _grammarPreferences = MutableStateFlow(loadGrammarPreferences())
+    val grammarPreferences: StateFlow<Map<String, GrammarPreferences>> = _grammarPreferences
+
+    fun grammarFor(sourceId: String): GrammarPreferences = _grammarPreferences.value[sourceId] ?: GrammarPreferences()
+
+    fun setGrammarNewScope(sourceId: String, scope: GrammarScope) {
+        prefs.edit().putString("$GRAMMAR_NEW$sourceId", scope.id).apply()
+        _grammarPreferences.update { it + (sourceId to (it[sourceId] ?: GrammarPreferences()).copy(newScope = scope)) }
+    }
+
+    fun setGrammarBrowseScope(sourceId: String, scope: GrammarScope) {
+        prefs.edit().putString("$GRAMMAR_BROWSE$sourceId", scope.id).apply()
+        _grammarPreferences.update { it + (sourceId to (it[sourceId] ?: GrammarPreferences()).copy(browseScope = scope)) }
+    }
+
+    fun setGrammarParserEpoch(sourceId: String, epoch: Int) {
+        require(epoch >= 0) { "Grammar parser epoch must not be negative." }
+        prefs.edit().putInt("$GRAMMAR_EPOCH$sourceId", epoch).apply()
+        _grammarPreferences.update { it + (sourceId to (it[sourceId] ?: GrammarPreferences()).copy(parserEpoch = epoch)) }
+    }
+
+    private fun loadGrammarPreferences(): Map<String, GrammarPreferences> {
+        val prefixes = listOf(GRAMMAR_NEW, GRAMMAR_BROWSE, GRAMMAR_EPOCH)
+        val sources = prefs.all.keys.mapNotNull { key ->
+            prefixes.firstOrNull { key.startsWith(it) }?.let { key.removePrefix(it) }
+        }.toSet()
+        return sources.associateWith { sourceId ->
+            GrammarPreferences(
+                GrammarScope.fromId(prefs.getString("$GRAMMAR_NEW$sourceId", "all") ?: "all"),
+                GrammarScope.fromId(prefs.getString("$GRAMMAR_BROWSE$sourceId", "all") ?: "all"),
+                prefs.getInt("$GRAMMAR_EPOCH$sourceId", 0),
+            )
+        }
+    }
 
     private val _dailyNewCards = MutableStateFlow(prefs.getInt(KEY_NEW, 10))
     val dailyNewCards: StateFlow<Int> = _dailyNewCards
@@ -232,5 +276,8 @@ class Settings(context: Context) {
         const val KEY_REMIND_IGNORED = "remindersIgnored"
         const val KEY_REMIND_LAST = "lastReminderMs"
         const val KEY_LAST_CHECK = "lastCheckMs"
+        const val GRAMMAR_NEW = "grammarNew:"
+        const val GRAMMAR_BROWSE = "grammarBrowse:"
+        const val GRAMMAR_EPOCH = "grammarParserEpoch:"
     }
 }

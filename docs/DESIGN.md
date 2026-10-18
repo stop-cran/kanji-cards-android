@@ -36,12 +36,15 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   The bounded formal-noun pilot has 401 reviewed exercises in 32 sets, including five mixed sets (content commit `c2a9844`).
   This is scoped coverage, not a claim to cover every use or all Japanese grammar. Accepted alternatives share one exercise identity;
   every literal completion must fit the visible task, and accepted equivalents must not become distractors.
+  Optional exercise `jlpt` is one strict integer 1-5; omission is unclassified, not a vocabulary-derived fallback or inferred easiest level.
 - `manifest.json` maps path to SHA-256 over LF-normalised bytes; files failing the hash are skipped. The content repo's
   `tools/build_manifest.py` and `ContentParser.sha256` must stay in sync.
 - Sync checks the branch head via `api.github.com`, then downloads the zip pinned to that commit SHA (`RepoSource.commitZipUrl`), so the
   archive cannot differ from the checked head. It is skipped when the head SHA equals the stored one, and the
   import is also skipped when `manifest.contentVersion` is unchanged, so **content changes must bump `contentVersion`** (`force` bypasses
-  both). If the head lookup fails and content exists, the branch archive is downloaded at most once per 6h per source/branch (persisted
+  both). A pending Grammar parser epoch also bypasses these shortcuts and the launch-check throttle, but not bad-content/shrink protection.
+  Epoch 1 is recorded per source only after atomic replacement, retaining JLPT in the typed cache; old epoch-0 caches permit only All new
+  intake until refreshed, with started reviews preserved. If the head lookup fails and content exists, the branch archive is downloaded at most once per 6h per source/branch (persisted
   `fallback:` timestamp; throttled calls return a non-retryable failure so the worker does not loop); with no content it downloads at once.
   `SafeZip` drains skipped entries too and caps total inflated bytes (100 MB) besides the wanted-file cap.
 - Import is one Room `@Transaction` (`replaceContent`) that replaces the whole snapshot: readers never see a half-imported snapshot.
@@ -95,6 +98,12 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   Input is limited to 80 characters. Empty Check does nothing; "I don't know" is Again. Correct is Good, or Hard when a correct-choice user
   selects "I guessed"; choice first success is capped at one day, typing is not. Advancing a recorded answer atomically saves one state,
   one canonical review log and one linked response detail. A successful confirmation is still practice only, regardless of presentation.
+- **Grammar scope (Phase B):** source-scoped All/Unclassified/N5-N1 controls select cumulative new material independently from exact-level
+  article browsing; counts describe matching exercises, not whole matching files. `GrammarEligibility` supplies Home, sessions and reminders.
+  Started, still-imported exercises remain eligible at every level; only unseen candidates are filtered in ordinary and extra practice.
+  One authored exercise is askable without generating distractors. Normal new selection stays random within scope and the shared allowance;
+  Practice more keeps overdue/new/upcoming ordering outside that cap. Changes affect the next session and never reset SRS. Home refreshes
+  on source/scope/budget changes and completed content replacement; unavailable old-cache metadata is explained rather than counted as Unclassified.
 - **Feedback and relearning:** every question offers "I don't know" (graded Again, no wrong pick; all three quizzes). A wrong pick says what it was ("that is 月", the word, or which kanji the reading belongs to) and the article is collapsed behind "Read the article" after a miss (open after a correct answer). A failed card is relearned in-session by `Relearn`: re-asked 3 cards later (recorded) and, if right, once more 7 cards later; that confirmation is practice only and is recorded only when wrong. Drawing with stroke mistakes (graded Hard) gets one re-ask; not-recognised is Again and re-asked. A repeat is never asked straight after itself: when no other card is queued the repeat is dropped (the answer is still recorded and FSRS schedules it), so a one-card "Practice more" session ends instead of looping. "Practice more" in Meaning, Drawing and Readings is padded to a minimum size (`Settings.practiceMinimum()` = max(10, batch size)) by `core/srs/PracticePadding`: the shortfall is filled with the weakest (lowest FSRS retrievability) already-started cards of the same mode from the source's other stacks (never from `all`, never kanji of the current stack, never a New card), with a bounded boost for kanji sharing a radical or reading with the session ("confusable"). Gates are never loosened: no card is introduced. A borrowed card is answered and recorded in its owning stack (`owners` map in the view models); if several stacks hold it the lowest retrievability, then stack id, wins. The home "Practice more" button also appears when only padding candidates exist. Normal due sessions are not padded. The word quizzes (all four directions) pad the same way from the other word stacks: stacks keep separate states for a word, so a word learned in N5 and still unstarted in N4 qualifies (it must belong to the current stack for that direction, have no state here, and be started in another stack); similarity is a shared kanji. When a word session ends and its own "Practice more" would hold fewer than `PracticeSuggestion.WORTHWHILE` (5) cards, the button instead offers the best-stocked other direction ("Practice more: Japanese → English"); gated directions (Type, EN→JP, Reading) are short until their gate direction has been learned.
 - **Tracing before drawing:** the first time a kanji with no Draw state is asked (setting "Trace new kanji first", on by default) the pad shows a light numbered reference to trace (`DrawGate.shouldTrace`). That attempt is practice only: checked and shown, but not graded, logged, saved as a diagnostic drawing or counted, and it creates no FSRS state. "Next" re-queues the kanji 3 cards later (`QuizSession.defer`) and that attempt is from memory and graded. Nothing is persisted, so an unfinished session traces again.
 - **Exposure before testing:** a kanji with no review state is first shown on a study view (`QuizUi.Study`: kanji, title, main readings, the article, "Got it — quiz me"), then
@@ -278,7 +287,8 @@ within #46; scope those separately if a concrete need emerges. No real export, t
 - **Content freshness**: a bad publish that forgets to bump `contentVersion` stays hidden until a forced sync.
 - **Scheduling**: fit FSRS weights from the review log after enough history; desired-retention setting.
 - **Portability**: progress ZIP export is available; import/restore is not implemented, and iOS is out of scope.
-- **Grammar**: #48's [phase A contract](GRAMMAR-INTRODUCTIONS.md) defines cumulative JLPT scope, focused introductions and relationship-aware
-  new-material selection; implementation remains phased future work. Two-correct fixed-option interaction/counter applicability is
+- **Grammar**: #48's [phased contract](GRAMMAR-INTRODUCTIONS.md) defines cumulative JLPT scope, focused introductions and relationship-aware
+  new-material selection. Phase B implements level scope/browsing; focused groups and relationship priorities remain Phases C/D.
+  Two-correct fixed-option interaction/counter applicability is
   separate #47. Neither is implemented by the bounded #46 pilot, and learning effectiveness remains unestablished.
 - **Release**: Play listing, data-safety form, check the image model's output terms for the icon (`RELEASE.md`).

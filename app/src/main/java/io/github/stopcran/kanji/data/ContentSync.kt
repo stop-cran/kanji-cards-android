@@ -33,11 +33,13 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
     /** Cheap check at app start: at most every [LAUNCH_INTERVAL_MS], and only downloads when the branch head moved. */
     suspend fun syncOnLaunch(source: RepoSource): SyncResult {
         val now = System.currentTimeMillis()
-        if (now - settings.lastCheckMs < LAUNCH_INTERVAL_MS) return SyncResult.UpToDate
+        if (!needsGrammarRefresh(source) && now - settings.lastCheckMs < LAUNCH_INTERVAL_MS) return SyncResult.UpToDate
         val result = sync(source)
         if (result !is SyncResult.Failed) settings.lastCheckMs = now
         return result
     }
+
+    private fun needsGrammarRefresh(source: RepoSource): Boolean = !settings.grammarFor(source.id).levelsReady
 
     /** Head commit of the branch via the GitHub API (one tiny request); null when unavailable, e.g. offline or rate limited. */
     private fun headCommit(source: RepoSource): String? {
@@ -67,6 +69,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
     }
     suspend fun sync(source: RepoSource, force: Boolean = false): SyncResult = lock.withLock { withContext(Dispatchers.IO) {
         try {
+            val maySkipImport = !force && !needsGrammarRefresh(source)
             val commitKey = "${source.id}@${source.branch}"
             val head = headCommit(source)
             // Rate-limited or offline: fall back to the branch archive, but at most once per interval so launches and worker retries cannot hammer codeload.
@@ -78,13 +81,12 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
                 }
                 settings.setFallbackAttemptMs(commitKey, now)
             }
-            if (!force && head != null && head == settings.syncedCommit(commitKey) && db.content().meta(source.id) != null) {
-                return@withContext SyncResult.UpToDate
-            }
+            val headUnchanged = head != null && head == settings.syncedCommit(commitKey)
+            if (maySkipImport && headUnchanged && db.content().meta(source.id) != null) return@withContext SyncResult.UpToDate
             val files = download(url) { SafeZip.read(it) }
             val parsed = ContentParser.parse(files)
             val dao = db.content()
-            if (!force && dao.meta(source.id)?.contentVersion == parsed.manifest.contentVersion) {
+            if (maySkipImport && dao.meta(source.id)?.contentVersion == parsed.manifest.contentVersion) {
                 head?.let { settings.setSyncedCommit(commitKey, it) }
                 return@withContext SyncResult.UpToDate
             }
@@ -113,6 +115,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             val images = parsed.images.map { (path, bytes) -> ImageEntity(source.id, path.removePrefix("images/"), bytes) }
             val meta = SyncMetaEntity(source.id, parsed.manifest.contentVersion, System.currentTimeMillis(), parsed.problems.size)
             dao.replaceContent(source.id, ContentRows(kanji, words, articles, counters, images, grammar), meta)
+            settings.setGrammarParserEpoch(source.id, GRAMMAR_LEVEL_EPOCH)
             head?.let { settings.setSyncedCommit(commitKey, it) }
             SyncResult.Updated(kanji.size, words.size, parsed.problems)
         } catch (e: ContentException) {

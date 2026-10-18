@@ -40,8 +40,13 @@ Code layout and the reasons behind it: [docs/DESIGN.md](docs/DESIGN.md). Contrib
 
 The bounded formal-noun corpus has **401 reviewed exercises in 32 sets**, including five mixed sets, published in
 [learning-japanese at c2a9844](https://github.com/stop-cran/learning-japanese/commit/c2a98448ca7f7c5f77c199743b3d5ec21d851c97).
-This is scoped practice, not exhaustive Japanese grammar coverage. New exercises are sampled randomly within the shared daily allowance;
-relationships do not yet prioritize introductions ([future work #48](https://github.com/stop-cran/kanji-cards-android/issues/48)).
+This is scoped practice, not exhaustive Japanese grammar coverage. **New grammar** chooses All (default), Unclassified, or a cumulative
+JLPT scope: N3 includes annotated N3, N4 and N5 exercises. **Browse** independently selects an exact level. Levels classify the required
+grammar/contrast, not every word, and annotation may be incomplete. Each repository remembers its own choices without resetting progress.
+New exercises are sampled randomly inside that scope and the shared daily allowance. Started reviews remain available at every level;
+Practice more uses the same scope for unseen exercises, outside the ordinary daily cap. An upgraded cache may need a successful sync before
+level-dependent intake/browsing is available; All and started reviews remain usable. Focused introductions and relationship-based priorities
+remain later phases of [#48](https://github.com/stop-cran/kanji-cards-android/issues/48).
 
 **Settings → Export progress** saves review states, the canonical answer log, settings and linked Grammar response details as a ZIP.
 Recorded typed responses are stored automatically on the device; the separate drawing log remains opt-in. Exports contain private study

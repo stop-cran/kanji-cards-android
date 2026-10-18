@@ -6,6 +6,8 @@ Ensō Nihongo is a personal study app. It has no accounts, no advertising, no an
 
 ## What stays on your device
 - Your review progress (which cards you studied and when), settings and the downloaded cards.
+- Grammar's per-repository new-material/browse scopes and successful parser epoch are local settings, also included in the settings export.
+  Level filtering adds no response collection, telemetry or upload.
 - Recorded **Grammar** reviews automatically store the exercise, construction and relationship IDs, choice/typing presentation, your selected
   option ID or normalized typed answer, and correctness, linked to the review's grade and time. This is separate from the opt-in drawing log.
   Give-up stores an empty answer; successful practice-only confirmations are not recorded. The app does not upload these responses.

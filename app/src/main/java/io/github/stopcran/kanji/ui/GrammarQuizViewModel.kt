@@ -8,6 +8,8 @@ import androidx.lifecycle.viewModelScope
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.content.GrammarExercise
 import io.github.stopcran.kanji.core.content.GrammarOption
+import io.github.stopcran.kanji.core.grammar.GRAMMAR_NOT_DUE
+import io.github.stopcran.kanji.core.grammar.GrammarEligibility
 import io.github.stopcran.kanji.core.quiz.QuizSession
 import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.Grade
@@ -56,6 +58,7 @@ class GrammarQuizViewModel(private val app: Services) : ViewModel() {
     private var sourceId = ""
     private var asked = 0
     private var started = false
+    private var emptyMessage = GRAMMAR_NOT_DUE
 
     fun ensureStarted(extra: Boolean) {
         if (started) return
@@ -65,6 +68,7 @@ class GrammarQuizViewModel(private val app: Services) : ViewModel() {
 
     private suspend fun start(extra: Boolean) {
         sourceId = app.settings.source.value.id
+        val preferences = app.settings.grammarFor(sourceId)
         val sets = app.db.grammarSets(sourceId)
         exercises = sets.flatMap { it.exercises }.associateBy { it.id }
         articlePaths = sets.flatMap { set -> set.exercises.map { it.id to set.article } }.toMap()
@@ -73,12 +77,14 @@ class GrammarQuizViewModel(private val app: Services) : ViewModel() {
             return
         }
         states += app.db.grammarStates(sourceId)
+        val pool = GrammarEligibility.pool(exercises.values.toList(), states, preferences.newScope, preferences.levelsReady)
+        emptyMessage = pool.newItemMessage ?: GRAMMAR_NOT_DUE
         val now = Instant.now()
         val allowance = app.db.newAllowance(app.settings, sourceId, now).remaining
         val queue = if (extra) {
-            QueueBuilder.extra(exercises.keys.toList(), states, now, limit = app.settings.practiceMinimum())
+            QueueBuilder.extra(pool.ids, states, now, limit = app.settings.practiceMinimum())
         } else {
-            QueueBuilder.build(exercises.keys.toList(), states, now, allowance)
+            QueueBuilder.build(pool.ids, states, now, allowance)
         }
         session = QuizSession(queue.map { it.kanji }, { it })
         showNext()
@@ -90,7 +96,7 @@ class GrammarQuizViewModel(private val app: Services) : ViewModel() {
         val id = session.take()
         if (id == null) {
             ui = if (session.answered == 0) {
-                GrammarUi.Empty("Nothing is due. Come back later or raise the daily new-item limit in ⚙ settings.")
+                GrammarUi.Empty(emptyMessage)
             } else {
                 GrammarUi.Done(session.answered, session.correct)
             }

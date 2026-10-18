@@ -72,6 +72,12 @@ Translation, evidence and explanation are required, nonblank strings. Options ha
 and `rationale`, at least two choices, and exactly one occurrence of the answer ID. The nonempty `acceptedAnswers` list contains no blank
 forms and must include the correct option label after trimming.
 
+An exercise may also contain one optional `jlpt` integer in 1..5. Omission means Unclassified; explicit `null`, strings, booleans,
+fractions and out-of-range values reject the set. Do not duplicate the level as tags or add cumulative memberships. The level describes
+the required grammar/contrast, not incidental vocabulary or every accepted alternative. New-material scope is cumulative (`jlpt >= selected
+level`); browsing is exact. Neither creates another exercise identity or schedule. Group metadata remains future-phase design in
+[the introduction contract](GRAMMAR-INTRODUCTIONS.md), not implemented authoring support.
+
 The importer also rejects duplicate set/exercise identities across the content snapshot and missing article references. Construction and
 relationship IDs are validated within a set, not as global grammatical concepts. Structural validation does not establish linguistic
 uniqueness: authors/reviewers must keep every fitting in-pool completion, never use an accepted equivalent as a wrong button, and make each
@@ -92,6 +98,13 @@ Grammar uses `(sourceId, stack="grammar", item=exerciseId, mode="Grammar", readi
 `kanji` column holds the exercise ID. Choose and type are presentations, not separate modes or schedules. Editing a set's prose without
 changing exercise IDs preserves progress; switching repositories uses another source scope. Branches of one repository share that scope.
 Content replacement never clears review states, canonical logs or Grammar response details.
+
+Grammar levels need no Room migration: `grammar_sets.json` retains the optional field, omitting absent/default-null values on serialization.
+Source-scoped settings store independent introduction/browse scopes (both default All) and the last successfully imported Grammar parser epoch.
+Epoch 1 refreshes old typed caches that erased unknown fields, even when the head SHA/contentVersion is unchanged or the launch check is recent.
+Only successful atomic replacement advances the epoch; it does not bypass rejected-file/shrink protection or offline archive backoff.
+Until then, restricted and Unclassified new intake/browse counts are unavailable, not inferred from erased values. All new intake and
+already-started reviews remain safe, and the user's selected scope is never silently widened. Epoch 2/group cursor storage are future work.
 
 `DatabaseMigrationTest` checks upgrades from versions 1, 2, 3 and 7, native-SQLite reopen preservation and the Grammar event/export join.
 `ContentSyncTest` checks a changed Grammar snapshot without losing its existing progress or response history.

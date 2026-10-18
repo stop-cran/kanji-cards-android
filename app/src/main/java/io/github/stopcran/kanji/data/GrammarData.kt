@@ -1,6 +1,8 @@
 package io.github.stopcran.kanji.data
 
 import io.github.stopcran.kanji.core.content.GrammarSet
+import io.github.stopcran.kanji.core.grammar.GRAMMAR_NOT_DUE
+import io.github.stopcran.kanji.core.grammar.GrammarEligibility
 import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.core.srs.QueueBuilder
 import io.github.stopcran.kanji.core.srs.SrsState
@@ -9,6 +11,7 @@ import kotlinx.serialization.json.Json
 import java.time.Instant
 
 const val GRAMMAR_STACK = "grammar"
+const val GRAMMAR_LEVEL_EPOCH = 1
 
 private val grammarJson = Json { ignoreUnknownKeys = true }
 
@@ -25,17 +28,19 @@ suspend fun AppDatabase.grammarModeState(
     sets: List<GrammarSet>,
     newBudget: Int,
     now: Instant,
+    preferences: GrammarPreferences,
 ): ModeState {
-    val ids = sets.flatMap { it.exercises }.map { it.id }
+    val exercises = sets.flatMap { it.exercises }
     val states = grammarStates(sourceId)
-    val queue = QueueBuilder.build(ids, states, now, newBudget, noise = 0.0)
-    val extra = QueueBuilder.extra(ids, states, now, limit = 1, noise = 0.0)
+    val pool = GrammarEligibility.pool(exercises, states, preferences.newScope, preferences.levelsReady)
+    val queue = QueueBuilder.build(pool.ids, states, now, newBudget, noise = 0.0)
+    val extra = QueueBuilder.extra(pool.ids, states, now, limit = 1, noise = 0.0)
     return ModeState.of(
-        available = ids.size >= 2,
+        available = exercises.isNotEmpty(),
         unavailableReason = "No grammar exercises yet. Sync the content first (⚙ settings).",
         due = queue.count { !it.isNew },
         new = queue.count { it.isNew },
         extraPossible = extra.isNotEmpty(),
-        lockedReason = "Nothing is due. Come back later or raise the daily new-item limit in ⚙ settings.",
+        lockedReason = pool.newItemMessage ?: GRAMMAR_NOT_DUE,
     )
 }

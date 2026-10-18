@@ -131,6 +131,7 @@ data class GrammarExercise(
     val answer: String,
     val acceptedAnswers: List<String>,
     val options: List<GrammarOption>,
+    val jlpt: Int? = null,
 )
 
 @Serializable

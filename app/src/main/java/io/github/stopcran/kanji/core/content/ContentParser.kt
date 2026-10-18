@@ -1,6 +1,9 @@
 package io.github.stopcran.kanji.core.content
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import java.security.MessageDigest
 
 class ContentException(message: String) : Exception(message)
@@ -12,6 +15,7 @@ object ContentParser {
     private val IMAGE_PATH = Regex("images/[^/\\\\\\s]+\\.webp")
 
     private val json = Json { ignoreUnknownKeys = true }
+    private val grammarLevel = Regex("[1-5]")
 
     fun parse(files: Map<String, ByteArray>): ParsedContent {
         val manifestBytes = files["manifest.json"] ?: throw ContentException("manifest.json is missing")
@@ -109,7 +113,17 @@ object ContentParser {
 
     fun parseGrammar(path: String, text: String): GrammarSet {
         val set = try {
-            json.decodeFromString(GrammarSet.serializer(), text)
+            val raw = json.parseToJsonElement(text).jsonObject
+            raw["exercises"]?.jsonArray?.forEach { item ->
+                val exercise = item.jsonObject
+                if ("jlpt" in exercise) {
+                    val level = exercise["jlpt"] as? JsonPrimitive
+                    require(level != null && !level.isString && grammarLevel.matches(level.content)) {
+                        "${exercise["id"]}: jlpt must be an integer from 1 to 5, or omitted"
+                    }
+                }
+            }
+            json.decodeFromJsonElement(GrammarSet.serializer(), raw)
         } catch (e: Exception) {
             throw ContentException("invalid grammar JSON: ${e.message}")
         }

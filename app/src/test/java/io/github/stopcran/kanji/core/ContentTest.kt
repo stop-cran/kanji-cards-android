@@ -145,6 +145,31 @@ class ContentTest {
     }
 
     @Test
+    fun optionalGrammarLevelsAreStrictAndSurviveTypedCacheSerialization() {
+        val path = "grammar/sample-set.json"
+        val json = kotlinx.serialization.json.Json
+        val serializer = GrammarSet.serializer()
+        val unclassified = ContentParser.parseGrammar(path, grammarJson)
+        assertTrue(unclassified.exercises.all { it.jlpt == null })
+        assertEquals(unclassified, ContentParser.parseGrammar(path, json.encodeToString(serializer, unclassified)))
+        for (level in 1..5) {
+            val text = grammarJson.replace("\"id\":\"alpha-example\"", "\"id\":\"alpha-example\",\"jlpt\":$level")
+            val parsed = ContentParser.parseGrammar(path, text)
+            assertEquals(level, parsed.exercises.first().jlpt)
+            assertNull(parsed.exercises.last().jlpt)
+            assertEquals(parsed, ContentParser.parseGrammar(path, json.encodeToString(serializer, parsed)))
+        }
+        for (invalid in listOf("null", "\"4\"", "true", "false", "3.0", "3.5", "3e0", "0", "6", "-1", "[]", "{}")) {
+            val text = grammarJson.replace("\"id\":\"alpha-example\"", "\"id\":\"alpha-example\",\"jlpt\":$invalid")
+            val files = sample() + (path to text.toByteArray())
+            val parsed = ContentParser.parse(files + ("manifest.json" to manifest(files)))
+            assertTrue("$invalid must reject the grammar set", parsed.grammar.isEmpty())
+            assertTrue(parsed.problems.toString(), parsed.problems.single().contains("jlpt must be an integer"))
+            assertEquals(1, parsed.articles.size)
+        }
+    }
+
+    @Test
     fun parsesExplicitWordLevelsIncludingKanaOnlyWords() {
         for (level in 1..5) {
             val word = ContentParser.parseWord("words/ねこ.md", wordMd("jlpt: $level"))

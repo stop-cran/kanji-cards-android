@@ -3,8 +3,11 @@ package io.github.stopcran.kanji.data
 import android.app.Application
 import androidx.room.Room
 import io.github.stopcran.kanji.core.content.ContentParser
+import io.github.stopcran.kanji.core.content.GrammarSet
 import io.github.stopcran.kanji.core.content.RepoSource
+import io.github.stopcran.kanji.core.grammar.GrammarScope
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -136,6 +139,7 @@ class ContentSyncTest {
             "relationships":[{"id":"contrast","label":"contrast","constructions":["alpha","beta"]}],
             "exercises":[
               {"id":"alpha-one","target":"alpha","relationship":"contrast","prompt":"A ____.","translation":"A.",
+               "jlpt":4,
                "evidence":"Context.","explanation":"Reason.","answer":"alpha","acceptedAnswers":["甲"],
                "options":[{"id":"alpha","label":"甲","rationale":"Fits."},{"id":"beta","label":"乙","rationale":"No."}]},
               {"id":"beta-one","target":"beta","relationship":"contrast","prompt":"B ____.","translation":"B.",
@@ -146,6 +150,7 @@ class ContentSyncTest {
         assertEquals(SyncResult.Updated(1, 0, emptyList()), run())
         val stored = runBlocking { db.grammarSets(source.id) }
         assertEquals(listOf("alpha-one", "beta-one"), stored.single().exercises.map { it.id })
+        assertEquals(listOf(4, null), stored.single().exercises.map { it.jlpt })
         assertEquals(1, runBlocking { db.content().grammarCount(source.id) })
         val before = runBlocking {
             db.reviews().recordGrammar(
@@ -155,6 +160,24 @@ class ContentSyncTest {
             )
             Triple(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses())
         }
+        // Reproduce the old parser's typed cache without changing either upstream version.
+        runBlocking {
+            db.content().insertGrammar(stored.mapIndexed { index, set ->
+                val old = set.copy(exercises = set.exercises.map { it.copy(jlpt = null) })
+                GrammarEntity(source.id, set.id, Json.encodeToString(GrammarSet.serializer(), old), index)
+            })
+        }
+        settings.setGrammarParserEpoch(source.id, 0)
+        settings.setGrammarNewScope(source.id, GrammarScope.N3)
+        settings.setGrammarBrowseScope(source.id, GrammarScope.Unclassified)
+        settings.lastCheckMs = System.currentTimeMillis()
+        assertEquals(SyncResult.Updated(1, 0, emptyList()), runBlocking { sync.syncOnLaunch(source) })
+        assertEquals(2, http.downloads)
+        assertEquals(listOf(4, null), runBlocking { db.grammarSets(source.id).single().exercises.map { it.jlpt } })
+        assertEquals(GrammarPreferences(GrammarScope.N3, GrammarScope.Unclassified, 1), settings.grammarFor(source.id))
+        assertEquals(before, runBlocking {
+            Triple(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses())
+        })
         http.headSha = SHA_B
         http.archiveBytes = archive("v3", mapOf("日" to "sun"), grammar = "pilot" to grammar.replace("Context.", "Updated context."))
         assertEquals(SyncResult.Updated(1, 0, emptyList()), run())
@@ -270,6 +293,35 @@ class ContentSyncTest {
         val r = run() as SyncResult.Failed
         assertEquals(true, r.retryable)
         assertEquals(2, runBlocking { db.content().kanjiCount(source.id) })
+    }
+
+    @Test
+    fun pendingParserUpgradeDoesNotBypassBadContentOrOfflineFallbackSafeguards() {
+        http.archiveBytes = archive("v1", mapOf("日" to "sun", "月" to "moon"))
+        assertTrue(run() is SyncResult.Updated)
+        settings.setGrammarParserEpoch(source.id, 0)
+        settings.setGrammarNewScope(source.id, GrammarScope.Unclassified)
+        val before = runBlocking { db.content().kanji(source.id) }
+        val preferences = settings.grammarFor(source.id)
+        val lastCheck = System.currentTimeMillis()
+        settings.lastCheckMs = lastCheck
+        http.archiveBytes = archive("v1", mapOf("日" to "sun", "月" to "moon"), corrupt = setOf("月"))
+        val rejected = runBlocking { sync.syncOnLaunch(source) } as SyncResult.Failed
+        assertTrue(rejected.message, rejected.message.contains("keeping previous cards"))
+        assertTrue(rejected.retryable)
+        assertEquals(preferences, settings.grammarFor(source.id))
+        assertEquals(lastCheck, settings.lastCheckMs)
+        assertEquals(before, runBlocking { db.content().kanji(source.id) })
+
+        http.headFails = true
+        http.archiveFails = true
+        assertTrue(runBlocking { sync.syncOnLaunch(source) } is SyncResult.Failed)
+        val downloads = http.downloads
+        assertTrue(runBlocking { sync.syncOnLaunch(source) } is SyncResult.Failed)
+        assertEquals(downloads, http.downloads)
+        assertEquals(preferences, settings.grammarFor(source.id))
+        assertEquals(lastCheck, settings.lastCheckMs)
+        assertEquals(before, runBlocking { db.content().kanji(source.id) })
     }
 
     @Test
