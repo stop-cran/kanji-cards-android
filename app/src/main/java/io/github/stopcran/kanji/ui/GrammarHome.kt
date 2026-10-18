@@ -20,6 +20,7 @@ import io.github.stopcran.kanji.core.content.GrammarSet
 import io.github.stopcran.kanji.core.grammar.GRAMMAR_LEVEL_SYNC_NEEDED
 import io.github.stopcran.kanji.core.grammar.GrammarScope
 import io.github.stopcran.kanji.core.grammar.GrammarFocusDecision
+import io.github.stopcran.kanji.core.grammar.FocusCandidate
 import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.data.GrammarPreferences
 import io.github.stopcran.kanji.data.GRAMMAR_STACK
@@ -159,6 +160,7 @@ private fun GrammarFocusControls(app: KanjiApp, home: GrammarHome) {
     val current = focus?.current
     if (current != null) {
         Text(if (focus.continuing) "Focus: ${current.group.label}" else "Next focus (not committed): ${current.group.label}")
+        GrammarRecommendationReadout(current)
         current.group.facets.forEach { facet ->
             val evidence = current.evidence.facets.getValue(facet.id)
             val introduced = focus.activation?.introduced.orEmpty().count { it.facetId == facet.id }
@@ -200,6 +202,7 @@ private fun GrammarFocusControls(app: KanjiApp, home: GrammarHome) {
                         TextButton(onClick = { choose(candidate.group.id) }, enabled = candidate.blocked == null) {
                             Text(candidate.group.label)
                         }
+                        Text("Recommendation priority: ${candidate.score}/3", style = MaterialTheme.typography.bodySmall)
                         candidate.blocked?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     }
                     error?.let { Text(it) }
@@ -207,6 +210,31 @@ private fun GrammarFocusControls(app: KanjiApp, home: GrammarHome) {
             },
             confirmButton = { TextButton(onClick = { choosing = false }) { Text("Close") } },
         )
+    }
+}
+
+@Composable
+internal fun GrammarRecommendationReadout(candidate: FocusCandidate) {
+    Text(
+        "Group: ${candidate.group.id}. Recommendation priority: ${candidate.score}/3 (maximum, not sum).",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    if (candidate.recommendations.isEmpty()) {
+        Text("No incoming recommendation from a supported familiar group.", style = MaterialTheme.typography.bodySmall)
+    }
+    candidate.recommendations.filter { it.link.importance == candidate.score }.sortedBy { it.sourceGroup.id }.forEach { support ->
+        Text(
+            "From ${support.sourceGroup.label} (${support.sourceGroup.id}), importance ${support.link.importance}: ${support.link.reason}",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        support.sourceGroup.facets.forEach { facet ->
+            val evidence = support.evidence.facets.getValue(facet.id)
+            Text(
+                "Supported source facet ${facet.id}: ${evidence.positiveKeys} positive contexts, " +
+                    "${evidence.typedPositives} typed, ${evidence.spanMs / 3_600_000}h span within 21 days.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
     }
 }
 

@@ -84,6 +84,8 @@ Recommendations are `{groupId, importance, reason}` with integer importance 1-3;
 Unknown nested fields, null arrays, duplicate groups/ownership and missing/cyclic prerequisites reject declaring files and dependents;
 missing optional recommendations only warn and drop the edge. See [the complete introduction contract](GRAMMAR-INTRODUCTIONS.md#additive-metadata).
 Accepted snapshots with rejecting Grammar diagnostics block guided new intake, never reinterpret malformed groups as legacy contrasts.
+The focused pilot ranks eligible next groups by maximum incoming importance from supported familiar groups; links are not prerequisites
+or automatic familiarity. Phase D uses the already-retained epoch-2 fields without another parser epoch or Room migration.
 
 The importer also rejects duplicate set/exercise identities across the content snapshot and missing article references. Construction and
 relationship IDs are validated within a set, not as global grammatical concepts. Structural validation does not establish linguistic

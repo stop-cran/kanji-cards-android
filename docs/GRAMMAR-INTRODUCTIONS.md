@@ -3,8 +3,9 @@
 Design for [#48](https://github.com/stop-cran/kanji-cards-android/issues/48), 2026-10-18.
 **Implementation boundary:** Phase A established this contract and its reviewed pilot. Phase B implements optional
 JLPT metadata, source-scoped cumulative intake/exact browsing and epoch-1 cache refresh. Phase C implements group metadata,
-opt-in focus controls, evidence, persistent activation accounting and epoch-2 cache refresh, with all recommendation scores zero.
-Relationship-based ranking remains Phase D. Pause after each reviewed phase; pilot-off selection remains random inside the eligible level scope.
+opt-in focus controls, evidence, persistent activation accounting and epoch-2 cache refresh, initially with recommendation scores zero.
+Phase D enables the authored scores and their local explanation on the same machinery. Pause after each reviewed phase;
+pilot-off selection remains random inside the eligible level scope.
 
 These are explicit, conservative pilot heuristics, not validated mastery measures or an adaptive curriculum.
 They do not change FSRS, exercise identities, grading, accepted alternatives or choose/type presentation.
@@ -192,7 +193,7 @@ At the next ordinary-session start:
 - Disabling the pilot clears only the active cursor; automatic-selection accounting and SRS history remain.
   Re-enabling starts a newly validated focus. A source switch loads that source's separate cursor.
 
-Phase C uses the rules below with all recommendation scores zero. Phase D enables the authored scores;
+Phase C established the rules below with all recommendation scores zero. Phase D enables the authored scores;
 both use the same candidate provider and focus state, not two queues.
 
 ### Automatic group choice and bounded exploration
@@ -228,6 +229,13 @@ This is not a wall-clock guarantee, a promise about manual choices, or a require
 content. Manual moves and abandoned uncommitted selections do not consume an exploration slot.
 An active focus is not interrupted merely because a different candidate becomes available.
 
+The local readout identifies the current group and its recommendation priority (0..3, maximum not sum),
+and shows the strongest contributing authored links with source group/facet IDs, reasons, positive-context
+counts, typed counts and elapsed spans. These source groups need supported familiarity, not eligibility for
+more new material: an exhausted or out-of-scope learned group can still support a recommendation. Evidence
+expiry or a later Again/Hard removes its support on the next calculation. No score or link confers familiarity
+on the destination, bypasses prerequisites, or changes the active session snapshot.
+
 ## Persistence, integration and deployment
 
 Phase B stores source-scoped level/browse preferences and a **parser epoch 1** marker.
@@ -238,6 +246,8 @@ The launch-check throttle must not report an outstanding epoch as up to date; of
 Write the source's new epoch only after the existing atomic content replacement succeeds. Failed/offline
 refresh retains the old usable cache and an outstanding epoch for later refresh; do not clear content or progress.
 Changing supported content metadata also regenerates its manifest/contentVersion as usual.
+Phase D needs no further parser epoch, content/manifest change, cursor format or database migration:
+epoch 2 already retains the validated recommendation metadata.
 
 An outstanding epoch is **metadata unavailable**, not evidence that cached omissions were authored.
 The source's last successfully imported epoch determines which new-intake operations are safe:
@@ -329,3 +339,15 @@ These are implementation acceptance cases, not claims that Phase A has executed 
 The implementation phases must turn these into focused pure-policy and integration cases and verify
 the actual stated boundaries. Revisit these heuristics after each reviewed phase, not by silently changing
 thresholds while implementing. No efficacy claim follows from deterministic selection or a smoke test.
+
+### Retain/revise decision and limits
+
+Retain the bounded, opt-in pilot and the agreed evidence/quota/exploration thresholds. Functional acceptance
+supports the selection and persistence contract, not optimal learning order or improved retention. Do not
+expand classifications, invent prerequisites or tune thresholds from these synthetic cases.
+
+The pilot still has only three authored groups/19 classified exercises and one editorial recommendation;
+other valid exercises retain the compatibility path. Stable historical exercise meaning remains an authoring
+assumption, not per-answer provenance. No exploration guarantee promises every group, and no physical-device
+or real-learner efficacy claim follows from local tests and bounded emulator checks. Revisit heuristics only
+as an explicitly scoped follow-up with appropriate evidence; preserve the unguided opt-out.

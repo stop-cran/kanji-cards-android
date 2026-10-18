@@ -4,6 +4,9 @@ import android.app.Application
 import androidx.room.Room
 import androidx.room.withTransaction
 import io.github.stopcran.kanji.Services
+import io.github.stopcran.kanji.core.grammarFixture
+import io.github.stopcran.kanji.core.familiarEvents
+import io.github.stopcran.kanji.core.recommending
 import io.github.stopcran.kanji.core.content.GrammarConstruction
 import io.github.stopcran.kanji.core.content.GrammarExercise
 import io.github.stopcran.kanji.core.content.GrammarOption
@@ -163,6 +166,55 @@ class GrammarQuizViewModelTest {
         val cursor = Json.decodeFromString(GrammarCursor.serializer(), row.json)
         assertEquals(2L, cursor.automaticOrdinal)
         assertEquals(1, cursor.active!!.introduced.size)
+    }
+
+    @Test
+    fun rankedSessionMatchesHomeMixesDueReviewsAndCommitsOnlyItsBoundedNewGroup() {
+        val foundation = grammarFixture("foundation", examples = 2).recommending("beta" to 3).let { set ->
+            set.copy(exercises = set.exercises.map { it.copy(jlpt = 3) })
+        }
+        val sets = listOf(foundation, grammarFixture("beta"), grammarFixture("alpha"))
+        services.settings.setGrammarParserEpoch(sourceId, GRAMMAR_GROUP_EPOCH)
+        services.settings.setGrammarNewScope(sourceId, GrammarScope.N4)
+        runBlocking {
+            db.content().insertGrammar(sets.mapIndexed { index, set ->
+                GrammarEntity(sourceId, set.id, Json.encodeToString(GrammarSet.serializer(), set), index)
+            })
+            familiarEvents(foundation, Instant.now()).forEach { event ->
+                db.reviews().recordGrammar(
+                    ReviewStateEntity(sourceId, GRAMMAR_STACK, event.exerciseId, "Grammar", "Review", 3.0, 5.0, event.atMs, event.atMs, 1, 0),
+                    ReviewLogEntity(0, sourceId, GRAMMAR_STACK, event.exerciseId, "Grammar", event.grade, event.atMs),
+                    GrammarResponseEntity(
+                        0, sourceId, GRAMMAR_STACK, event.exerciseId, event.constructionId!!, event.relationshipId!!,
+                        event.promptType!!, event.constructionId!!, true,
+                    ),
+                )
+            }
+            db.changeGrammarGuided(services.settings, sourceId, true)
+        }
+        assertEquals(ModeState.Start(4, 4), mode())
+        val vm = launch()
+        val asked = mutableListOf<String>()
+        repeat(8) {
+            asked += when (val question = vm.ui) {
+                is GrammarUi.Choose -> question.exercise.id
+                is GrammarUi.Type -> question.exercise.id
+                else -> error("Expected one of the eight queued questions, got $question")
+            }
+            answerCorrect(vm)
+        }
+        assertTrue(vm.ui is GrammarUi.Done)
+        assertEquals(4, asked.count { it.startsWith("foundation-") })
+        assertEquals(4, asked.count { it.startsWith("beta-") })
+        val cursor = runBlocking { db.reviews().grammarFocus(sourceId) }!!.let { Json.decodeFromString(GrammarCursor.serializer(), it.json) }
+        assertEquals(2L, cursor.automaticOrdinal)
+        assertEquals(mapOf("a" to 2, "b" to 2), cursor.active!!.introduced.groupingBy { it.facetId }.eachCount())
+        assertEquals(12, logs().size)
+        assertEquals(12, details().size)
+        val more = runBlocking { db.grammarStudy(services.settings, sourceId, Instant.now(), extra = true) }
+        assertEquals(16, more.extraIds.size)
+        assertTrue(more.extraIds.any { it.startsWith("alpha-") })
+        assertEquals(null, more.focus)
     }
 
     @Test

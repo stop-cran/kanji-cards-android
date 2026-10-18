@@ -2,6 +2,7 @@ package io.github.stopcran.kanji.core.grammar
 
 import io.github.stopcran.kanji.core.content.GrammarFacet
 import io.github.stopcran.kanji.core.content.GrammarMember
+import io.github.stopcran.kanji.core.content.GrammarRecommendation
 import io.github.stopcran.kanji.core.content.GrammarSet
 import io.github.stopcran.kanji.core.srs.SrsState
 import kotlinx.serialization.Serializable
@@ -15,6 +16,7 @@ data class IntroductionGroup(
     val facets: List<GrammarFacet>,
     val members: List<GrammarMember>,
     val requires: List<String>,
+    val next: List<GrammarRecommendation> = emptyList(),
 )
 
 @Serializable
@@ -56,7 +58,16 @@ data class GrammarCursor(
     }
 }
 
-data class FocusCandidate(val group: IntroductionGroup, val evidence: GroupEvidence, val blocked: String?)
+data class FocusRecommendation(val sourceGroup: IntroductionGroup, val evidence: GroupEvidence, val link: GrammarRecommendation)
+
+data class FocusCandidate(
+    val group: IntroductionGroup,
+    val evidence: GroupEvidence,
+    val blocked: String?,
+    val recommendations: List<FocusRecommendation> = emptyList(),
+) {
+    val score: Int get() = recommendations.maxOfOrNull { it.link.importance } ?: 0
+}
 
 data class GrammarFocusDecision(
     val candidates: List<FocusCandidate>,
@@ -83,7 +94,7 @@ data class GrammarFocusInput(
 object GrammarFocus {
     fun groups(sets: List<GrammarSet>): List<IntroductionGroup> = sets.flatMap { set ->
         val authored = set.introductionGroups.map {
-            IntroductionGroup(it.id, it.label, true, it.facets, it.members, it.requires)
+            IntroductionGroup(it.id, it.label, true, it.facets, it.members, it.requires, it.next)
         }
         val owned = authored.flatMap { it.members }.map { it.exerciseId }.toSet()
         val legacy = set.exercises.filter { it.id !in owned }.groupBy { it.relationship }.map { (relationship, exercises) ->
@@ -106,9 +117,15 @@ object GrammarFocus {
         val evidence = groups.associate { group ->
             group.id to GrammarEvidence.evaluate(group, exercises, input.states, input.events, input.now)
         }
+        val recommendations = groups.filter { evidence.getValue(it.id).familiar }.flatMap { group ->
+            group.next.map { FocusRecommendation(group, evidence.getValue(group.id), it) }
+        }.groupBy { it.link.groupId }
         val eligible = GrammarEligibility.pool(exercises.values.toList(), input.states, input.scope, true).ids.toSet()
         val candidates = groups.map { group ->
-            FocusCandidate(group, evidence.getValue(group.id), blocked(group, eligible, input.states, evidence))
+            FocusCandidate(
+                group, evidence.getValue(group.id), blocked(group, eligible, input.states, evidence),
+                recommendations[group.id].orEmpty(),
+            )
         }
         val active = input.cursor.active
         val previous = candidates.find { it.group.id == active?.groupId }
@@ -123,14 +140,11 @@ object GrammarFocus {
             } else "Continue ${continuing.group.label}."
             return GrammarFocusDecision(candidates, active, selected, reason, continuing = true)
         }
-        val group = automatic(input, candidates)
+        val candidate = automatic(input, candidates)
             ?: return GrammarFocusDecision(candidates, null, emptyList(), "No eligible focus has new material.", resetReason)
+        val group = candidate.group
         val activation = GrammarActivation(group.id, FocusOrigin.Automatic, input.cursor.automaticOrdinal)
-        val reason = if (input.budget <= 0) "No ordinary new-item allowance remains." else {
-            val policy = if (input.cursor.automaticOrdinal % 3 == 0L) "Exploration" else "Authored-first"
-            "$policy slot ${input.cursor.automaticOrdinal}: ${group.label}. Recommendation scores are zero in Phase C."
-        }
-        return GrammarFocusDecision(candidates, activation, select(input, group, activation), reason, resetReason)
+        return GrammarFocusDecision(candidates, activation, select(input, group, activation), selectionReason(input, candidate), resetReason)
     }
 
     private fun blocked(
@@ -163,11 +177,27 @@ object GrammarFocus {
         }
     }
 
-    private fun automatic(input: GrammarFocusInput, candidates: List<FocusCandidate>): IntroductionGroup? {
+    private fun automatic(input: GrammarFocusInput, candidates: List<FocusCandidate>): FocusCandidate? {
         var pool = candidates.filter { it.blocked == null }
-        if (input.cursor.automaticOrdinal % 3 != 0L && pool.any { it.group.authored }) pool = pool.filter { it.group.authored }
+        val exploration = input.cursor.automaticOrdinal % 3 == 0L
+        if (!exploration && pool.any { it.group.authored }) pool = pool.filter { it.group.authored }
         if (pool.any { !it.evidence.familiar }) pool = pool.filter { !it.evidence.familiar }
-        return pool.minByOrNull { tie(input.sourceId, input.cursor.automaticOrdinal, it.group.id) }?.group
+        if (exploration && pool.any { it.score == 0 }) pool = pool.filter { it.score == 0 }
+        return pool.minWithOrNull(
+            compareByDescending<FocusCandidate> { it.score }.thenBy { tie(input.sourceId, input.cursor.automaticOrdinal, it.group.id) },
+        )
+    }
+
+    private fun selectionReason(input: GrammarFocusInput, candidate: FocusCandidate): String {
+        if (input.budget <= 0) return "No ordinary new-item allowance remains."
+        val exploration = input.cursor.automaticOrdinal % 3 == 0L
+        val policy = if (exploration) "Exploration" else "Authored-first"
+        val rule = when {
+            exploration && candidate.score == 0 -> "Score-zero exploration"
+            exploration -> "No score-zero group in the familiarity-prioritized pool"
+            else -> "Maximum supported incoming importance"
+        }
+        return "$policy slot ${input.cursor.automaticOrdinal}: ${candidate.group.label}. $rule; recommendation priority ${candidate.score}/3."
     }
 
     private fun select(input: GrammarFocusInput, group: IntroductionGroup, activation: GrammarActivation): List<GrammarExposure> {

@@ -7,6 +7,16 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import io.github.stopcran.kanji.core.grammarFixture
+import io.github.stopcran.kanji.core.familiarEvents
+import io.github.stopcran.kanji.core.recommending
+import io.github.stopcran.kanji.core.grammar.GrammarCursor
+import io.github.stopcran.kanji.core.grammar.GrammarFocus
+import io.github.stopcran.kanji.core.grammar.GrammarFocusInput
+import io.github.stopcran.kanji.core.grammar.GrammarScope
+import io.github.stopcran.kanji.core.srs.CardPhase
+import io.github.stopcran.kanji.core.srs.SrsState
+import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -20,6 +30,25 @@ import org.robolectric.annotation.Config
 @Config(sdk = [28], application = Application::class)
 class ComposeUiTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test
+    fun grammarRecommendationReadoutExplainsItsAuthoredLinkAndSourceEvidenceNotTheNewGroupsHistory() {
+        val now = Instant.parse("2026-10-18T12:00:00Z")
+        val source = grammarFixture("foundation", examples = 2).recommending("beta" to 3)
+        val events = familiarEvents(source, now)
+        val input = GrammarFocusInput(
+            "owner/repo", listOf(source, grammarFixture("beta")),
+            events.associate { it.exerciseId to SrsState(CardPhase.Review) }, events, GrammarScope.All, 10, now, GrammarCursor(),
+        )
+        val candidate = GrammarFocus.decide(input).current!!
+        rule.setContent {
+            androidx.compose.foundation.layout.Column { GrammarRecommendationReadout(candidate) }
+        }
+        rule.onNodeWithText("Group: beta. Recommendation priority: 3/3 (maximum, not sum).").assertIsDisplayed()
+        rule.onNodeWithText("From foundation (foundation), importance 3: Compare foundation with beta.").assertIsDisplayed()
+        rule.onNodeWithText("Supported source facet a: 2 positive contexts, 1 typed, 24h span within 21 days.").assertIsDisplayed()
+        rule.onNodeWithText("Supported source facet b: 2 positive contexts, 1 typed, 24h span within 21 days.").assertIsDisplayed()
+    }
 
     @Test
     fun answerFeedbackIsNotColourOnly() {

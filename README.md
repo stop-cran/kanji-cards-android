@@ -47,8 +47,9 @@ grammar/contrast, not every word, and annotation may be incomplete. Each reposit
 introduces at most two exercises per facet per activation, and offers Change focus/Revisit without claiming mastery. Conservative
 familiarity requires two contexts per facet, typed success and a 24-hour span within the last 21 days, after any Again/Hard reset.
 Every third committed automatic activation explores; opening or abandoning a session consumes no activation. Unannotated content uses
-clearly labeled compatibility contrasts. Relationship priorities remain Phase D of [#48](https://github.com/stop-cran/kanji-cards-android/issues/48);
-all recommendation scores are zero in Phase C.
+clearly labeled compatibility contrasts. Next-group choice uses the **highest authored importance** of an incoming recommendation from
+a supported familiar group, never summed votes or exercise counts. Exploration prefers score-zero choices within its unfamiliar-first
+eligible pool. The local readout explains the strongest link and its source evidence; priority is not mastery or proof of learning benefit.
 
 With the pilot off, new exercises are sampled randomly inside the scope and shared allowance. Started reviews remain available at every
 level. Practice more stays unguided within the unseen-item scope, outside the ordinary daily cap. An upgraded cache needs a successful sync

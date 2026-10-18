@@ -63,10 +63,10 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - **Kanji/word modes** include `Quiz`, `Draw`, `WordJpEn`, `WordEnJp`, `WordReading`, `WordType`; these modes have independent state.
   **Grammar** deliberately treats choose/type as presentations of one exercise, not two modes: one state under
   `(sourceId, "grammar", exerciseId, "Grammar", "")`. Construction/relationship IDs are analytical labels, not extra schedules.
-  New exercises are sampled randomly from all imported sets within the shared daily allowance; known constructions, relationships,
-  prerequisites and set balancing do not affect selection. Relationship-aware introductions are future issue #48, not part of this pilot.
-  The [phase A introduction contract](GRAMMAR-INTRODUCTIONS.md) specifies the forthcoming single-level JLPT scope, focused groups and
-  relationship-guided transitions. It is design-only until the corresponding implementation phases land; current behavior is unchanged.
+  Pilot-off new exercises are sampled randomly within the chosen JLPT scope and shared daily allowance. Opt-in focused introductions
+  keep new material in one eligible group and use supported familiarity plus authored recommendations when choosing the next group.
+  The [introduction contract](GRAMMAR-INTRODUCTIONS.md) specifies the implemented scope, focus, evidence and exploration rules;
+  none creates another schedule or restricts existing due reviews.
 - **Typed words** (`WordType`, `core/words/TypedAnswer.kt`): English prompt, free-text answer, no options. Gate is `WordDirection.gate` (EnToJp, twice answered).
   Exact written form or a same-title/same-type synonym = Good; kana reading of a kanji word = Hard (re-asked); else Again. IME conversion is accepted as typed;
   kana-to-kanji recall is left to other modes. No first-success cap. Its new items share the daily `newBudget`.
@@ -106,11 +106,13 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   One authored exercise is askable without generating distractors. Pilot-off selection stays random within scope and the shared allowance;
   Practice more keeps overdue/new/upcoming ordering outside that cap. Changes affect the next session and never reset SRS. Home refreshes
   on source/scope/budget changes and completed content replacement; unavailable old-cache metadata is explained rather than counted as Unclassified.
-- **Focused Grammar introductions (Phase C):** an opt-in source-scoped cursor keeps ordinary new material in one eligible contrast group,
+- **Focused Grammar introductions (Phases C/D):** an opt-in source-scoped cursor keeps ordinary new material in one eligible contrast group,
   at most two recorded first introductions per facet per activation. Pure `GrammarFocus` and `GrammarEvidence` implement the
   [reviewed contract](GRAMMAR-INTRODUCTIONS.md): conservative 21-day familiarity, separate exposure coverage, explicit change/revisit,
-  safe compatibility groups, deterministic authored-first selection and every-third-activation exploration. Recommendation scores are zero;
-  Phase D will enable ranking. Home previews are read-only; session reservations and revision checks prevent stale answers from spending a
+  safe compatibility groups, deterministic authored-first selection and every-third-activation exploration. Phase D ranks by maximum
+  incoming authored importance from supported familiar groups, with score-zero exploration inside the unfamiliar-first eligible pool.
+  The local readout shows strongest links and source evidence, without raw responses. Home previews are read-only;
+  session reservations and revision checks prevent stale answers from spending a
   newer activation's quota. Extra practice bypasses focus/prerequisites but not unseen-item level scope.
 - **Feedback and relearning:** every question offers "I don't know" (graded Again, no wrong pick; all three quizzes). A wrong pick says what it was ("that is 月", the word, or which kanji the reading belongs to) and the article is collapsed behind "Read the article" after a miss (open after a correct answer). A failed card is relearned in-session by `Relearn`: re-asked 3 cards later (recorded) and, if right, once more 7 cards later; that confirmation is practice only and is recorded only when wrong. Drawing with stroke mistakes (graded Hard) gets one re-ask; not-recognised is Again and re-asked. A repeat is never asked straight after itself: when no other card is queued the repeat is dropped (the answer is still recorded and FSRS schedules it), so a one-card "Practice more" session ends instead of looping. "Practice more" in Meaning, Drawing and Readings is padded to a minimum size (`Settings.practiceMinimum()` = max(10, batch size)) by `core/srs/PracticePadding`: the shortfall is filled with the weakest (lowest FSRS retrievability) already-started cards of the same mode from the source's other stacks (never from `all`, never kanji of the current stack, never a New card), with a bounded boost for kanji sharing a radical or reading with the session ("confusable"). Gates are never loosened: no card is introduced. A borrowed card is answered and recorded in its owning stack (`owners` map in the view models); if several stacks hold it the lowest retrievability, then stack id, wins. The home "Practice more" button also appears when only padding candidates exist. Normal due sessions are not padded. The word quizzes (all four directions) pad the same way from the other word stacks: stacks keep separate states for a word, so a word learned in N5 and still unstarted in N4 qualifies (it must belong to the current stack for that direction, have no state here, and be started in another stack); similarity is a shared kanji. When a word session ends and its own "Practice more" would hold fewer than `PracticeSuggestion.WORTHWHILE` (5) cards, the button instead offers the best-stocked other direction ("Practice more: Japanese → English"); gated directions (Type, EN→JP, Reading) are short until their gate direction has been learned.
 - **Tracing before drawing:** the first time a kanji with no Draw state is asked (setting "Trace new kanji first", on by default) the pad shows a light numbered reference to trace (`DrawGate.shouldTrace`). That attempt is practice only: checked and shown, but not graded, logged, saved as a diagnostic drawing or counted, and it creates no FSRS state. "Next" re-queues the kanji 3 cards later (`QuizSession.defer`) and that attempt is from memory and graded. Nothing is persisted, so an unfinished session traces again.
@@ -298,8 +300,8 @@ within #46; scope those separately if a concrete need emerges. No real export, t
 - **Content freshness**: a bad publish that forgets to bump `contentVersion` stays hidden until a forced sync.
 - **Scheduling**: fit FSRS weights from the review log after enough history; desired-retention setting.
 - **Portability**: progress ZIP export is available; import/restore is not implemented, and iOS is out of scope.
-- **Grammar**: #48's [phased contract](GRAMMAR-INTRODUCTIONS.md) defines cumulative JLPT scope, focused introductions and relationship-aware
-  new-material selection. Phases B/C implement level scope/browsing and focused introductions; relationship priorities remain Phase D.
+- **Grammar**: #48's [phased contract](GRAMMAR-INTRODUCTIONS.md) implements cumulative JLPT scope, focused introductions and relationship-aware
+  new-material selection. The conservative pilot heuristics, incomplete classifications and editorial links are not a validated curriculum.
   Two-correct fixed-option interaction/counter applicability is
   separate #47. Neither is implemented by the bounded #46 pilot, and learning effectiveness remains unestablished.
 - **Release**: Play listing, data-safety form, check the image model's output terms for the icon (`RELEASE.md`).
