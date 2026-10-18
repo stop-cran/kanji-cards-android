@@ -65,6 +65,7 @@ and an `article` path to an imported `articles/<slug>.md`. The set contains:
 | `constructions` | Unique valid `id` and nonblank `label` for each answer class. A class may contain several contextually fitting forms. |
 | `relationships` | Unique valid `id`, nonblank `label`, and at least two distinct known construction IDs in `constructions`. |
 | `exercises` | Nonempty list with unique valid exercise IDs. Every member of each relationship must be targeted by an exercise in that relationship. |
+| `introductionGroups` | Optional authored groups, default `[]`, with source-global IDs and local facet/context membership; explicit null is invalid. |
 
 An exercise has `id`, `target`, `relationship`, `prompt`, `translation`, `evidence`, `explanation`, `answer`, `acceptedAnswers` and `options`.
 The target must belong to the named relationship; `answer` must equal the target ID. The prompt contains exactly one `____` blank.
@@ -75,8 +76,14 @@ forms and must include the correct option label after trimming.
 An exercise may also contain one optional `jlpt` integer in 1..5. Omission means Unclassified; explicit `null`, strings, booleans,
 fractions and out-of-range values reject the set. Do not duplicate the level as tags or add cumulative memberships. The level describes
 the required grammar/contrast, not incidental vocabulary or every accepted alternative. New-material scope is cumulative (`jlpt >= selected
-level`); browsing is exact. Neither creates another exercise identity or schedule. Group metadata remains future-phase design in
-[the introduction contract](GRAMMAR-INTRODUCTIONS.md), not implemented authoring support.
+level`); browsing is exact. Neither creates another exercise identity or schedule.
+
+Group definitions require `id`, `label`, `facets` and `members`; optional `next` and `requires` default to empty arrays.
+Each facet needs two distinct example keys and one local target/answer class. One exercise has at most one authored owner.
+Recommendations are `{groupId, importance, reason}` with integer importance 1-3; prerequisites are group-ID strings.
+Unknown nested fields, null arrays, duplicate groups/ownership and missing/cyclic prerequisites reject declaring files and dependents;
+missing optional recommendations only warn and drop the edge. See [the complete introduction contract](GRAMMAR-INTRODUCTIONS.md#additive-metadata).
+Accepted snapshots with rejecting Grammar diagnostics block guided new intake, never reinterpret malformed groups as legacy contrasts.
 
 The importer also rejects duplicate set/exercise identities across the content snapshot and missing article references. Construction and
 relationship IDs are validated within a set, not as global grammatical concepts. Structural validation does not establish linguistic
@@ -88,11 +95,13 @@ Typing grades exact membership after trimming and Unicode NFKC normalization of 
 folding, romaji conversion, typo tolerance or substring matching. Choice grades the option ID, not its label. The complete Japanese prompt
 and English meaning appear before answering; feedback and the linked article do not supply hidden required context.
 
-## Room v8 and content replacement
+## Room v9 and content replacement
 
-The current Room version is **8**. The 7-to-8 migration creates `grammar_sets` (key: source + set ID) and `grammar_responses`
+The current Room version is **9**. The 7-to-8 migration creates `grammar_sets` (key: source + set ID) and `grammar_responses`
 (key: `reviewLogId`) and clears only sync metadata to force a content reimport. Existing content, review states and history are preserved;
 all older versions use the registered migration chain, with no destructive fallback.
+The additive 8-to-9 migration preserves that snapshot and all history, creates source-keyed `grammar_focus` (`revision`, cursor JSON),
+and adds nullable `sync_meta.grammarProblem`. Atomic replacement invalidates outstanding focus tickets and stores snapshot diagnostics.
 
 Grammar uses `(sourceId, stack="grammar", item=exerciseId, mode="Grammar", reading="")` as its review-state identity. The generic Room
 `kanji` column holds the exercise ID. Choose and type are presentations, not separate modes or schedules. Editing a set's prose without
@@ -101,13 +110,18 @@ Content replacement never clears review states, canonical logs or Grammar respon
 
 Grammar levels need no Room migration: `grammar_sets.json` retains the optional field, omitting absent/default-null values on serialization.
 Source-scoped settings store independent introduction/browse scopes (both default All) and the last successfully imported Grammar parser epoch.
-Epoch 1 refreshes old typed caches that erased unknown fields, even when the head SHA/contentVersion is unchanged or the launch check is recent.
+Epoch 1 supports retained levels; epoch 2 additionally retains and validates groups. A pending epoch refreshes typed caches even when the
+head SHA/contentVersion is unchanged or the launch check is recent.
 Only successful atomic replacement advances the epoch; it does not bypass rejected-file/shrink protection or offline archive backoff.
-Until then, restricted and Unclassified new intake/browse counts are unavailable, not inferred from erased values. All new intake and
-already-started reviews remain safe, and the user's selected scope is never silently widened. Epoch 2/group cursor storage are future work.
+Epoch 0 permits only unguided All new intake; epoch 1 permits level-aware unguided intake; guided introductions require epoch 2.
+Started reviews remain safe throughout, and the selected scope/pilot is never silently changed. Failed downloads retain the previous snapshot
+and diagnostics, rather than marking last-known-good content invalid.
 
-`DatabaseMigrationTest` checks upgrades from versions 1, 2, 3 and 7, native-SQLite reopen preservation and the Grammar event/export join.
+`DatabaseMigrationTest` checks upgrades from versions 1, 2, 3, 7 and 8, native-SQLite reopen preservation and the Grammar event/export join.
 `ContentSyncTest` checks a changed Grammar snapshot without losing its existing progress or response history.
+`GrammarFocusPersistenceTest` covers reservation/reopen, stale tickets, rollback and source isolation. Cursor updates share the answer's
+state/log/detail transaction. The cursor retains automatic ordinal, manual selection nonce, active group/origin/seed and recorded exposure
+IDs with their facet/context keys. It is omitted from progress ZIPs; Android backup includes the database and preferences normally.
 
 ## Progress export v2
 

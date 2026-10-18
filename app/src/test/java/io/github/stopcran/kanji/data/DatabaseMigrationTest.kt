@@ -49,7 +49,7 @@ class DatabaseMigrationTest {
     }
 
     private fun openDatabase() = Room.databaseBuilder(context, AppDatabase::class.java, name)
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
         .allowMainThreadQueries()
         .build()
 
@@ -138,8 +138,35 @@ class DatabaseMigrationTest {
 
     @Test
     fun version7UpgradePreservesReadingProgressAndReopensWithGrammarTables() = runBlocking {
+        createSchema(7) { sqlite ->
+            sqlite.execSQL(
+                "INSERT INTO review_state VALUES (?, 'all', '日', 'KanjiOn', 'Review', 12.5, 5.0, 999, 500, 3, 1, 'にち')",
+                arrayOf(sources.first()),
+            )
+            sqlite.execSQL(
+                "INSERT INTO review_log VALUES (7, ?, 'all', '日', 'KanjiOn', 3, 500, 'にち')",
+                arrayOf(sources.first()),
+            )
+            sqlite.execSQL("INSERT INTO sync_meta VALUES (?, 'before-grammar', 500, 0)", arrayOf(sources.first()))
+        }
+        repeat(2) {
+            withDatabase { db ->
+                assertEquals(9, db.openHelper.writableDatabase.version)
+                assertEquals(
+                    ReviewStateEntity(sources.first(), "all", "日", "KanjiOn", "Review", 12.5, 5.0, 999, 500, 3, 1, "にち"),
+                    db.reviews().allStates().single(),
+                )
+                assertEquals(ReviewLogEntity(7, sources.first(), "all", "日", "KanjiOn", 3, 500, "にち"), db.reviews().allLog().single())
+                assertNull(db.content().meta(sources.first()))
+                assertTrue(db.grammarSets(sources.first()).isEmpty())
+                assertTrue(db.reviews().allGrammarResponses().isEmpty())
+            }
+        }
+    }
+
+    private fun createSchema(version: Int, seed: (android.database.sqlite.SQLiteDatabase) -> Unit) {
         val schema = Json.parseToJsonElement(
-            File("schemas", "io.github.stopcran.kanji.data.AppDatabase${File.separator}7.json").readText(),
+            File("schemas", "io.github.stopcran.kanji.data.AppDatabase${File.separator}$version.json").readText(),
         ).jsonObject.getValue("database").jsonObject
         context.openOrCreateDatabase(name, Context.MODE_PRIVATE, null).use { sqlite ->
             schema.getValue("entities").jsonArray.forEach { item ->
@@ -151,28 +178,44 @@ class DatabaseMigrationTest {
                 }
             }
             schema.getValue("setupQueries").jsonArray.forEach { sqlite.execSQL(it.jsonPrimitive.content) }
+            seed(sqlite)
+            sqlite.version = version
+        }
+    }
+
+    @Test
+    fun version8UpgradePreservesGrammarSnapshotAndCanonicalHistoryWithoutInventingFocus() = runBlocking {
+        val source = sources.first()
+        val set = io.github.stopcran.kanji.core.grammarFixture()
+        val json = Json.encodeToString(io.github.stopcran.kanji.core.content.GrammarSet.serializer(), set)
+        createSchema(8) { sqlite ->
+            sqlite.execSQL("INSERT INTO grammar_sets VALUES (?, 'alpha', ?, 0)", arrayOf(source, json))
             sqlite.execSQL(
-                "INSERT INTO review_state VALUES (?, 'all', '日', 'KanjiOn', 'Review', 12.5, 5.0, 999, 500, 3, 1, 'にち')",
-                arrayOf(sources.first()),
+                "INSERT INTO review_state VALUES (?, 'grammar', 'alpha-a-0', 'Grammar', 'Review', 12.5, 5.0, 999, 500, 3, 1, '')",
+                arrayOf(source),
             )
+            sqlite.execSQL("INSERT INTO review_log VALUES (7, ?, 'grammar', 'alpha-a-0', 'Grammar', 3, 500, '')", arrayOf(source))
             sqlite.execSQL(
-                "INSERT INTO review_log VALUES (7, ?, 'all', '日', 'KanjiOn', 3, 500, 'にち')",
-                arrayOf(sources.first()),
+                "INSERT INTO grammar_responses VALUES (7, ?, 'grammar', 'alpha-a-0', 'a', 'contrast', 'type', 'a', 1)",
+                arrayOf(source),
             )
-            sqlite.execSQL("INSERT INTO sync_meta VALUES (?, 'before-grammar', 500, 0)", arrayOf(sources.first()))
-            sqlite.version = 7
+            sqlite.execSQL("INSERT INTO sync_meta VALUES (?, 'before-focus', 500, 0)", arrayOf(source))
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(8, db.openHelper.writableDatabase.version)
+                assertEquals(9, db.openHelper.writableDatabase.version)
                 assertEquals(
-                    ReviewStateEntity(sources.first(), "all", "日", "KanjiOn", "Review", 12.5, 5.0, 999, 500, 3, 1, "にち"),
+                    ReviewStateEntity(source, GRAMMAR_STACK, "alpha-a-0", "Grammar", "Review", 12.5, 5.0, 999, 500, 3, 1),
                     db.reviews().allStates().single(),
                 )
-                assertEquals(ReviewLogEntity(7, sources.first(), "all", "日", "KanjiOn", 3, 500, "にち"), db.reviews().allLog().single())
-                assertNull(db.content().meta(sources.first()))
-                assertTrue(db.grammarSets(sources.first()).isEmpty())
-                assertTrue(db.reviews().allGrammarResponses().isEmpty())
+                assertEquals(ReviewLogEntity(7, source, GRAMMAR_STACK, "alpha-a-0", "Grammar", 3, 500), db.reviews().allLog().single())
+                assertEquals(
+                    GrammarResponseEntity(7, source, GRAMMAR_STACK, "alpha-a-0", "a", "contrast", "type", "a", true),
+                    db.reviews().allGrammarResponses().single(),
+                )
+                assertEquals(listOf(set), db.grammarSets(source))
+                assertEquals(SyncMetaEntity(source, "before-focus", 500, 0), db.content().meta(source))
+                assertNull(db.reviews().grammarFocus(source))
             }
         }
     }

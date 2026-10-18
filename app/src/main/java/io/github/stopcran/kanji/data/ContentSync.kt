@@ -26,6 +26,11 @@ private fun List<io.github.stopcran.kanji.core.content.GrammarSet>.toGrammarEnti
         )
     }
 
+private fun io.github.stopcran.kanji.core.content.ParsedContent.toSyncMeta(sourceId: String) = SyncMetaEntity(
+    sourceId, manifest.contentVersion, System.currentTimeMillis(), problems.size,
+    grammarProblems.takeIf { it.isNotEmpty() }?.joinToString("\n"),
+)
+
 class ContentSync(private val db: AppDatabase, private val settings: Settings, private val http: ContentHttp = UrlConnectionHttp) {
     private val json = Json
     private val lock = Mutex()
@@ -39,7 +44,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
         return result
     }
 
-    private fun needsGrammarRefresh(source: RepoSource): Boolean = !settings.grammarFor(source.id).levelsReady
+    private fun needsGrammarRefresh(source: RepoSource): Boolean = !settings.grammarFor(source.id).groupsReady
 
     /** Head commit of the branch via the GitHub API (one tiny request); null when unavailable, e.g. offline or rate limited. */
     private fun headCommit(source: RepoSource): String? {
@@ -113,9 +118,9 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             }
             val grammar = parsed.grammar.toGrammarEntities(source.id)
             val images = parsed.images.map { (path, bytes) -> ImageEntity(source.id, path.removePrefix("images/"), bytes) }
-            val meta = SyncMetaEntity(source.id, parsed.manifest.contentVersion, System.currentTimeMillis(), parsed.problems.size)
+            val meta = parsed.toSyncMeta(source.id)
             dao.replaceContent(source.id, ContentRows(kanji, words, articles, counters, images, grammar), meta)
-            settings.setGrammarParserEpoch(source.id, GRAMMAR_LEVEL_EPOCH)
+            settings.setGrammarParserEpoch(source.id, GRAMMAR_GROUP_EPOCH)
             head?.let { settings.setSyncedCommit(commitKey, it) }
             SyncResult.Updated(kanji.size, words.size, parsed.problems)
         } catch (e: ContentException) {

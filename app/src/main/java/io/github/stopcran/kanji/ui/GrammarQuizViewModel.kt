@@ -9,7 +9,6 @@ import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.content.GrammarExercise
 import io.github.stopcran.kanji.core.content.GrammarOption
 import io.github.stopcran.kanji.core.grammar.GRAMMAR_NOT_DUE
-import io.github.stopcran.kanji.core.grammar.GrammarEligibility
 import io.github.stopcran.kanji.core.quiz.QuizSession
 import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.Grade
@@ -19,9 +18,9 @@ import io.github.stopcran.kanji.core.srs.StudyMode
 import io.github.stopcran.kanji.data.GRAMMAR_STACK
 import io.github.stopcran.kanji.data.GrammarResponseEntity
 import io.github.stopcran.kanji.data.ReviewLogEntity
-import io.github.stopcran.kanji.data.grammarSets
-import io.github.stopcran.kanji.data.grammarStates
-import io.github.stopcran.kanji.data.newAllowance
+import io.github.stopcran.kanji.data.GrammarFocusTicket
+import io.github.stopcran.kanji.data.grammarStudy
+import io.github.stopcran.kanji.data.recordGrammarAnswer
 import io.github.stopcran.kanji.data.practiceMinimum
 import io.github.stopcran.kanji.data.toEntity
 import kotlinx.coroutines.launch
@@ -59,6 +58,9 @@ class GrammarQuizViewModel(private val app: Services) : ViewModel() {
     private var asked = 0
     private var started = false
     private var emptyMessage = GRAMMAR_NOT_DUE
+    private var focusTicket: GrammarFocusTicket? = null
+    var focusNotice: String? by mutableStateOf(null)
+        private set
 
     fun ensureStarted(extra: Boolean) {
         if (started) return
@@ -68,23 +70,23 @@ class GrammarQuizViewModel(private val app: Services) : ViewModel() {
 
     private suspend fun start(extra: Boolean) {
         sourceId = app.settings.source.value.id
-        val preferences = app.settings.grammarFor(sourceId)
-        val sets = app.db.grammarSets(sourceId)
+        val now = Instant.now()
+        val study = app.db.grammarStudy(app.settings, sourceId, now, reserve = !extra, extra = extra)
+        val sets = study.sets
         exercises = sets.flatMap { it.exercises }.associateBy { it.id }
         articlePaths = sets.flatMap { set -> set.exercises.map { it.id to set.article } }.toMap()
         if (exercises.isEmpty()) {
             ui = GrammarUi.Empty("No grammar exercises are available. Sync the content first (⚙ settings).")
             return
         }
-        states += app.db.grammarStates(sourceId)
-        val pool = GrammarEligibility.pool(exercises.values.toList(), states, preferences.newScope, preferences.levelsReady)
-        emptyMessage = pool.newItemMessage ?: GRAMMAR_NOT_DUE
-        val now = Instant.now()
-        val allowance = app.db.newAllowance(app.settings, sourceId, now).remaining
+        states += study.states
+        focusTicket = study.ticket
+        focusNotice = if (!extra && study.preferences.guided) study.notice else null
+        emptyMessage = study.notice ?: GRAMMAR_NOT_DUE
         val queue = if (extra) {
-            QueueBuilder.extra(pool.ids, states, now, limit = app.settings.practiceMinimum())
+            QueueBuilder.extra(study.extraIds, states, now, limit = app.settings.practiceMinimum())
         } else {
-            QueueBuilder.build(pool.ids, states, now, allowance)
+            QueueBuilder.build(study.ordinaryIds, states, now, study.budget)
         }
         session = QuizSession(queue.map { it.kanji }, { it })
         showNext()
@@ -161,7 +163,10 @@ class GrammarQuizViewModel(private val app: Services) : ViewModel() {
             val log = ReviewLogEntity(
                 0, sourceId, GRAMMAR_STACK, answer.exercise.id, StudyMode.Grammar.name, grade.value, now.toEpochMilli(),
             )
-            app.db.reviews().recordGrammar(updated.toEntity(sourceId, GRAMMAR_STACK, answer.exercise.id, StudyMode.Grammar), log, detail)
+            val error = app.db.recordGrammarAnswer(
+                app.settings, updated.toEntity(sourceId, GRAMMAR_STACK, answer.exercise.id, StudyMode.Grammar), log, detail, focusTicket,
+            )
+            if (error != null) focusNotice = error
         }
     }
 

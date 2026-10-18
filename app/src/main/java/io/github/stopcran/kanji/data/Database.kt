@@ -71,6 +71,9 @@ data class CounterEntity(val sourceId: String, val id: String, val json: String,
 @Entity(tableName = "grammar_sets", primaryKeys = ["sourceId", "id"])
 data class GrammarEntity(val sourceId: String, val id: String, val json: String, val position: Int)
 
+@Entity(tableName = "grammar_focus")
+data class GrammarFocusEntity(@PrimaryKey val sourceId: String, val revision: Long, val json: String)
+
 /** Local-only response detail for the same single SRS answer in review_log. */
 @Entity(
     tableName = "grammar_responses",
@@ -122,7 +125,13 @@ data class ReviewLogEntity(
 )
 
 @Entity(tableName = "sync_meta", primaryKeys = ["sourceId"])
-data class SyncMetaEntity(val sourceId: String, val contentVersion: String, val syncedAtMs: Long, val problems: Int)
+data class SyncMetaEntity(
+    val sourceId: String,
+    val contentVersion: String,
+    val syncedAtMs: Long,
+    val problems: Int,
+    val grammarProblem: String? = null,
+)
 
 /** Everything a content snapshot stores for one source. */
 data class ContentRows(
@@ -248,6 +257,9 @@ interface ContentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putMeta(meta: SyncMetaEntity)
 
+    @Query("UPDATE grammar_focus SET revision = revision + 1 WHERE sourceId = :sourceId")
+    suspend fun invalidateGrammarFocus(sourceId: String)
+
     /** Atomic swap: readers never see a half-imported snapshot, and a failure leaves the last-known-good content. */
     @Transaction
     suspend fun replaceContent(sourceId: String, rows: ContentRows, meta: SyncMetaEntity) {
@@ -264,11 +276,33 @@ interface ContentDao {
         insertGrammar(rows.grammar)
         insertImages(rows.images)
         putMeta(meta)
+        invalidateGrammarFocus(sourceId)
     }
 }
 
 @Dao
 interface ReviewDao {
+    @Query("SELECT * FROM grammar_focus WHERE sourceId = :sourceId")
+    suspend fun grammarFocus(sourceId: String): GrammarFocusEntity?
+
+    @Query("SELECT * FROM grammar_focus WHERE sourceId = :sourceId")
+    fun observeGrammarFocus(sourceId: String): Flow<GrammarFocusEntity?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putGrammarFocus(focus: GrammarFocusEntity)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM review_state WHERE sourceId = :sourceId AND stack = 'grammar' AND mode = 'Grammar' " +
+        "AND kanji = :exerciseId AND reading = '' AND phase != 'New')")
+    suspend fun grammarStarted(sourceId: String, exerciseId: String): Boolean
+
+    @Query(
+        "SELECT l.id, l.kanji AS exerciseId, l.grade, l.atMs, d.constructionId, d.relationshipId, d.promptType, d.correct, " +
+            "CASE WHEN d.sourceId = l.sourceId AND d.stack = l.stack AND d.exerciseId = l.kanji AND l.reading = '' " +
+            "THEN 1 ELSE 0 END AS identityMatches FROM review_log l LEFT JOIN grammar_responses d ON d.reviewLogId = l.id " +
+            "WHERE l.sourceId = :sourceId AND l.stack = 'grammar' AND l.mode = 'Grammar' AND l.atMs >= :sinceMs ORDER BY l.atMs, l.id",
+    )
+    suspend fun grammarEvidence(sourceId: String, sinceMs: Long): List<io.github.stopcran.kanji.core.grammar.GrammarEvent>
+
     @Query("SELECT * FROM review_state WHERE sourceId = :sourceId AND stack = :stack AND mode = :mode")
     suspend fun states(sourceId: String, stack: String, mode: String): List<ReviewStateEntity>
 
@@ -349,14 +383,22 @@ interface ReviewDao {
 @Database(
     entities = [
         KanjiEntity::class, WordEntity::class, ArticleEntity::class, CounterEntity::class, ImageEntity::class,
-        GrammarEntity::class, GrammarResponseEntity::class, ReviewStateEntity::class, ReviewLogEntity::class, SyncMetaEntity::class,
+        GrammarEntity::class, GrammarResponseEntity::class, GrammarFocusEntity::class,
+        ReviewStateEntity::class, ReviewLogEntity::class, SyncMetaEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun content(): ContentDao
     abstract fun reviews(): ReviewDao
+}
+
+val MIGRATION_8_9 = object : androidx.room.migration.Migration(8, 9) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS grammar_focus (sourceId TEXT NOT NULL, revision INTEGER NOT NULL, json TEXT NOT NULL, PRIMARY KEY(sourceId))")
+        db.execSQL("ALTER TABLE sync_meta ADD COLUMN grammarProblem TEXT")
+    }
 }
 
 /** Grammar practice content and local response details; existing scheduling records remain unchanged. */

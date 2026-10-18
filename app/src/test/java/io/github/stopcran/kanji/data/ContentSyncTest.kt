@@ -10,6 +10,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -49,10 +50,12 @@ private fun archive(
     cards: Map<String, String>,
     corrupt: Set<String> = emptySet(),
     grammar: Pair<String, String>? = null,
+    additionalGrammar: Map<String, String> = emptyMap(),
 ): ByteArray {
     val files = cards.entries.associate { (k, title) ->
         "kanji/$k.md" to (if (k in corrupt) "no front matter here" else kanjiMd(k, title)).toByteArray()
-    } + if (grammar == null) emptyMap() else mapOf(
+    } + additionalGrammar.map { (id, text) -> "grammar/$id.json" to text.toByteArray() }.toMap() +
+        if (grammar == null) emptyMap() else mapOf(
         "articles/pilot.md" to "# Pilot\n".toByteArray(),
         "grammar/${grammar.first}.json" to grammar.second.toByteArray(),
     )
@@ -174,7 +177,7 @@ class ContentSyncTest {
         assertEquals(SyncResult.Updated(1, 0, emptyList()), runBlocking { sync.syncOnLaunch(source) })
         assertEquals(2, http.downloads)
         assertEquals(listOf(4, null), runBlocking { db.grammarSets(source.id).single().exercises.map { it.jlpt } })
-        assertEquals(GrammarPreferences(GrammarScope.N3, GrammarScope.Unclassified, 1), settings.grammarFor(source.id))
+        assertEquals(GrammarPreferences(GrammarScope.N3, GrammarScope.Unclassified, GRAMMAR_GROUP_EPOCH), settings.grammarFor(source.id))
         assertEquals(before, runBlocking {
             Triple(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses())
         })
@@ -185,6 +188,61 @@ class ContentSyncTest {
         assertEquals(before, runBlocking {
             Triple(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses())
         })
+    }
+
+    @Test
+    fun groupEpochRefreshAndRejectedDownloadsPreserveTheLastAcceptedSnapshot() {
+        val set = io.github.stopcran.kanji.core.grammarFixture().copy(article = "articles/pilot.md")
+        val json = Json.encodeToString(GrammarSet.serializer(), set)
+        http.archiveBytes = archive("groups", mapOf("日" to "sun"), grammar = set.id to json)
+        assertTrue(run() is SyncResult.Updated)
+        runBlocking {
+            val old = set.copy(introductionGroups = emptyList())
+            db.content().insertGrammar(listOf(GrammarEntity(source.id, set.id, Json.encodeToString(GrammarSet.serializer(), old), 0)))
+        }
+        settings.setGrammarParserEpoch(source.id, GRAMMAR_LEVEL_EPOCH)
+        settings.lastCheckMs = System.currentTimeMillis()
+        assertTrue(runBlocking { sync.syncOnLaunch(source) } is SyncResult.Updated)
+        assertEquals(2, http.downloads)
+        assertEquals(listOf(set), runBlocking { db.grammarSets(source.id) })
+        assertEquals(GRAMMAR_GROUP_EPOCH, settings.grammarFor(source.id).parserEpoch)
+        val before = runBlocking { db.content().meta(source.id) }
+        val broken = set.copy(introductionGroups = set.introductionGroups.map { it.copy(requires = listOf("absent")) })
+        http.archiveBytes = archive("broken", mapOf("日" to "sun"), grammar = set.id to Json.encodeToString(GrammarSet.serializer(), broken))
+        http.headSha = SHA_B
+        assertTrue(run() is SyncResult.Failed)
+        assertEquals(before, runBlocking { db.content().meta(source.id) })
+        assertEquals(listOf(set), runBlocking { db.grammarSets(source.id) })
+        assertNull(before!!.grammarProblem)
+    }
+
+    @Test
+    fun acceptedPartialSnapshotBlocksGuidedNewMaterialButPreservesAvailableReviews() {
+        val good = io.github.stopcran.kanji.core.grammarFixture().copy(article = "articles/pilot.md")
+        val bad = io.github.stopcran.kanji.core.grammarFixture("beta", requires = listOf("absent")).copy(article = "articles/pilot.md")
+        http.archiveBytes = archive(
+            "partial", mapOf("日" to "sun"), grammar = good.id to Json.encodeToString(GrammarSet.serializer(), good),
+            additionalGrammar = mapOf(bad.id to Json.encodeToString(GrammarSet.serializer(), bad)),
+        )
+        assertTrue(run() is SyncResult.Updated)
+        runBlocking {
+            assertEquals(listOf(good), db.grammarSets(source.id))
+            assertTrue(db.content().meta(source.id)!!.grammarProblem!!.contains("beta"))
+            db.reviews().recordGrammar(
+                ReviewStateEntity(source.id, GRAMMAR_STACK, "alpha-a-0", "Grammar", "Review", 12.5, 5.0, 999, 500, 3, 1),
+                ReviewLogEntity(0, source.id, GRAMMAR_STACK, "alpha-a-0", "Grammar", 3, 500),
+                GrammarResponseEntity(0, source.id, GRAMMAR_STACK, "alpha-a-0", "a", "contrast", "choose", "a", true),
+            )
+            db.changeGrammarGuided(settings, source.id, true)
+            val study = db.grammarStudy(settings, source.id, java.time.Instant.now(), reserve = true)
+            assertEquals(listOf("alpha-a-0"), study.ordinaryIds)
+            assertEquals(6, study.extraIds.size)
+            assertTrue(study.notice!!.contains("content errors"))
+            assertNull(study.ticket)
+            assertEquals(1, db.reviews().allGrammarResponses().size)
+            db.changeGrammarGuided(settings, source.id, false)
+            assertEquals(6, db.grammarStudy(settings, source.id, java.time.Instant.now()).ordinaryIds.size)
+        }
     }
 
     @Test

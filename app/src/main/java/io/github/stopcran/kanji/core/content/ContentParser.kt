@@ -105,15 +105,19 @@ object ContentParser {
                 if (!it) problems += "grammar/${set.id}.json: linked article '${set.article}' is missing"
             }
         }
+        val grammarResolution = GrammarGroups.resolve(grammarSets)
+        val grammarProblems = problems.filter { it.startsWith("grammar/") } + grammarResolution.errors
+        problems += grammarResolution.errors + grammarResolution.warnings
         return ParsedContent(
             manifest, unique, words, articles, strokes, problems,
-            resolveCounters(counters, problems), images, grammarSets,
+            resolveCounters(counters, problems), images, grammarResolution.sets, grammarProblems,
         )
     }
 
     fun parseGrammar(path: String, text: String): GrammarSet {
         val set = try {
             val raw = json.parseToJsonElement(text).jsonObject
+            val groups = GrammarGroups.decode(raw["introductionGroups"])
             raw["exercises"]?.jsonArray?.forEach { item ->
                 val exercise = item.jsonObject
                 if ("jlpt" in exercise) {
@@ -123,11 +127,12 @@ object ContentParser {
                     }
                 }
             }
-            json.decodeFromJsonElement(GrammarSet.serializer(), raw)
+            json.decodeFromJsonElement(GrammarSet.serializer(), raw).copy(introductionGroups = groups)
         } catch (e: Exception) {
             throw ContentException("invalid grammar JSON: ${e.message}")
         }
         validateGrammarSet(path, set)
+        GrammarGroups.validate(set)
         return set
     }
 

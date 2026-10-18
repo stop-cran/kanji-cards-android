@@ -36,6 +36,7 @@ fun GrammarQuizScreen(
 ) {
     LaunchedEffect(sessionKey) { vm.ensureStarted(sessionKey.endsWith(":extra")) }
     Page("Grammar", onBack, ime = true, scrollToTopOnBack = true) {
+        vm.focusNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         when (val state = vm.ui) {
             GrammarUi.Loading -> Text("Loading…", Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             is GrammarUi.Empty -> Text(state.message)

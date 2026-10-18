@@ -71,13 +71,8 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
                     io.github.stopcran.kanji.core.counters.CounterQueueRequest(m, own, counterChoose, Instant.ofEpochMilli(now), newRemaining),
                 ).size
             }
-            val grammarPreferences = app.settings.grammarFor(source.id)
-            val grammarSets = app.db.grammarSets(source.id)
-            val grammarStates = app.db.grammarStates(source.id)
-            val grammarPool = io.github.stopcran.kanji.core.grammar.GrammarEligibility.pool(
-                grammarSets.flatMap { it.exercises }, grammarStates, grammarPreferences.newScope, grammarPreferences.levelsReady,
-            )
-            due += QueueBuilder.build(grammarPool.ids, grammarStates, Instant.ofEpochMilli(now), newRemaining).size
+            val grammar = app.db.grammarStudy(app.settings, source.id, Instant.ofEpochMilli(now))
+            due += QueueBuilder.build(grammar.ordinaryIds, grammar.states, grammar.now, grammar.budget).size
             val decision = ReminderPolicy.decide(
                 now, LocalDate.now().atStartOfDay(zone).toInstant().toEpochMilli(), app.db.reviews().lastReviewMs(),
                 app.settings.lastReminderMs, app.settings.remindersIgnored, due,

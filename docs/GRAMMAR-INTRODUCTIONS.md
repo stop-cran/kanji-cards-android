@@ -2,9 +2,9 @@
 
 Design for [#48](https://github.com/stop-cran/kanji-cards-android/issues/48), 2026-10-18.
 **Implementation boundary:** Phase A established this contract and its reviewed pilot. Phase B implements optional
-JLPT metadata, source-scoped cumulative intake/exact browsing and epoch-1 cache refresh. The group metadata, guided
-controls, focus/evidence/cursor rules and relationship transitions below remain future Phases C/D, not current runtime.
-Pause after each reviewed phase. Current selection remains random inside the eligible level scope, as described in [DESIGN](DESIGN.md).
+JLPT metadata, source-scoped cumulative intake/exact browsing and epoch-1 cache refresh. Phase C implements group metadata,
+opt-in focus controls, evidence, persistent activation accounting and epoch-2 cache refresh, with all recommendation scores zero.
+Relationship-based ranking remains Phase D. Pause after each reviewed phase; pilot-off selection remains random inside the eligible level scope.
 
 These are explicit, conservative pilot heuristics, not validated mastery measures or an adaptive curriculum.
 They do not change FSRS, exercise identities, grading, accepted alternatives or choose/type presentation.
@@ -33,7 +33,7 @@ Review availability, relative due ordering/interleaving and daily/backlog accoun
 Only new ordinary introductions consume the ordinary remaining allowance; choosing a group consumes none.
 Filtered/blocked pools may underfill that allowance. Never fill the remainder with out-of-scope exercises.
 
-The future Phase C guided setting is source-scoped, off by default. Off uses random selection within the level scope;
+The Phase C guided setting is source-scoped, off by default. Off uses random selection within the level scope;
 off + All preserves current ordinary behavior. Switching either setting never resets exercise progress.
 Scope/control changes apply to the next session; an existing question/article/back navigation retains its
 session snapshot and grading. A stale session cannot mutate the focus cursor of a newer session.
@@ -111,6 +111,9 @@ If any grammar-file rejection or invalid prerequisite metadata affects the snaps
 introductions* with an explicit content-error reason until a clean sync or explicit opt-out. Do not silently
 reinterpret rejected annotations as valid legacy groups. Still-available due content and its history remain
 usable under the existing sync/partial-import rules; no progress tables are cleared.
+The diagnostic belongs to the **accepted content snapshot** and is stored in the same replacement transaction.
+A rejected download (including shrink protection) leaves the last-known-good snapshot and its diagnostics unchanged;
+a failed update is not evidence that the retained content has become invalid.
 
 ### Compatibility groups
 
@@ -182,6 +185,8 @@ At the next ordinary-session start:
 - "Change focus" can choose another eligible group without claiming that this one is learned. "Revisit"
   explicitly starts a fresh bounded activation, including additional examples of weak/familiar groups.
   Neither bypasses level scope or guided prerequisites. If no alternative qualifies, explain that outcome.
+  A fresh, uncommitted activation may introduce its bounded examples even if the group is already familiar;
+  normal familiarity-based release applies after commitment. Otherwise an explicit familiar revisit would release before its first question.
 - Revalidate after sync/scope changes. Clear a removed/incoherent/prerequisite-ineligible focus with a
   specific explanation, retain its review history and select another eligible group when allowance permits.
 - Disabling the pilot clears only the active cursor; automatic-selection accounting and SRS history remain.
@@ -251,7 +256,7 @@ blocked. Exact-level/Unclassified browse counts are likewise unavailable until e
 zero or populated from erased fields. Only a successful level/group-aware import permits treating missing
 metadata as genuinely unclassified/unannotated. After refresh, recompute eligibility without resetting SRS.
 
-Phase C adds one Room cursor row per source in the next additive migration (currently v8 -> v9):
+Phase C adds one Room cursor row per source in the additive v8 -> v9 migration:
 automatic ordinal, monotonically increasing selection nonce, and optional active group/origin/token,
 reserved ordinal, committed flag and introduced exercise IDs for that activation. It is an intake cursor,
 not another schedule. Updating it on a recorded introduction shares the existing `recordGrammar` transaction

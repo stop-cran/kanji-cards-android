@@ -16,8 +16,10 @@ data class GrammarPreferences(
     val newScope: GrammarScope = GrammarScope.All,
     val browseScope: GrammarScope = GrammarScope.All,
     val parserEpoch: Int = 0,
+    val guided: Boolean = false,
 ) {
     val levelsReady: Boolean get() = parserEpoch >= GRAMMAR_LEVEL_EPOCH
+    val groupsReady: Boolean get() = parserEpoch >= GRAMMAR_GROUP_EPOCH
 }
 
 class Settings(context: Context) {
@@ -48,8 +50,13 @@ class Settings(context: Context) {
         _grammarPreferences.update { it + (sourceId to (it[sourceId] ?: GrammarPreferences()).copy(parserEpoch = epoch)) }
     }
 
+    internal fun setGrammarGuided(sourceId: String, guided: Boolean) {
+        prefs.edit().putBoolean("$GRAMMAR_GUIDED$sourceId", guided).apply()
+        _grammarPreferences.update { it + (sourceId to (it[sourceId] ?: GrammarPreferences()).copy(guided = guided)) }
+    }
+
     private fun loadGrammarPreferences(): Map<String, GrammarPreferences> {
-        val prefixes = listOf(GRAMMAR_NEW, GRAMMAR_BROWSE, GRAMMAR_EPOCH)
+        val prefixes = listOf(GRAMMAR_NEW, GRAMMAR_BROWSE, GRAMMAR_EPOCH, GRAMMAR_GUIDED)
         val sources = prefs.all.keys.mapNotNull { key ->
             prefixes.firstOrNull { key.startsWith(it) }?.let { key.removePrefix(it) }
         }.toSet()
@@ -58,6 +65,7 @@ class Settings(context: Context) {
                 GrammarScope.fromId(prefs.getString("$GRAMMAR_NEW$sourceId", "all") ?: "all"),
                 GrammarScope.fromId(prefs.getString("$GRAMMAR_BROWSE$sourceId", "all") ?: "all"),
                 prefs.getInt("$GRAMMAR_EPOCH$sourceId", 0),
+                prefs.getBoolean("$GRAMMAR_GUIDED$sourceId", false),
             )
         }
     }
@@ -279,5 +287,6 @@ class Settings(context: Context) {
         const val GRAMMAR_NEW = "grammarNew:"
         const val GRAMMAR_BROWSE = "grammarBrowse:"
         const val GRAMMAR_EPOCH = "grammarParserEpoch:"
+        const val GRAMMAR_GUIDED = "grammarGuided:"
     }
 }

@@ -43,10 +43,17 @@ The bounded formal-noun corpus has **401 reviewed exercises in 32 sets**, includ
 This is scoped practice, not exhaustive Japanese grammar coverage. **New grammar** chooses All (default), Unclassified, or a cumulative
 JLPT scope: N3 includes annotated N3, N4 and N5 exercises. **Browse** independently selects an exact level. Levels classify the required
 grammar/contrast, not every word, and annotation may be incomplete. Each repository remembers its own choices without resetting progress.
-New exercises are sampled randomly inside that scope and the shared daily allowance. Started reviews remain available at every level;
-Practice more uses the same scope for unseen exercises, outside the ordinary daily cap. An upgraded cache may need a successful sync before
-level-dependent intake/browsing is available; All and started reviews remain usable. Focused introductions and relationship-based priorities
-remain later phases of [#48](https://github.com/stop-cran/kanji-cards-android/issues/48).
+**Focused introductions (pilot)** is opt-in per repository. It keeps ordinary new material within one construction/contrast group,
+introduces at most two exercises per facet per activation, and offers Change focus/Revisit without claiming mastery. Conservative
+familiarity requires two contexts per facet, typed success and a 24-hour span within the last 21 days, after any Again/Hard reset.
+Every third committed automatic activation explores; opening or abandoning a session consumes no activation. Unannotated content uses
+clearly labeled compatibility contrasts. Relationship priorities remain Phase D of [#48](https://github.com/stop-cran/kanji-cards-android/issues/48);
+all recommendation scores are zero in Phase C.
+
+With the pilot off, new exercises are sampled randomly inside the scope and shared allowance. Started reviews remain available at every
+level. Practice more stays unguided within the unseen-item scope, outside the ordinary daily cap. An upgraded cache needs a successful sync
+before level-dependent or guided intake is available; safe unguided intake and started reviews remain usable. See the
+[introduction contract](docs/GRAMMAR-INTRODUCTIONS.md) for focus, evidence and metadata-error handling.
 
 **Settings → Export progress** saves review states, the canonical answer log, settings and linked Grammar response details as a ZIP.
 Recorded typed responses are stored automatically on the device; the separate drawing log remains opt-in. Exports contain private study

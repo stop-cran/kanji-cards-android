@@ -111,6 +111,7 @@ data class GrammarSet(
     val constructions: List<GrammarConstruction>,
     val relationships: List<GrammarRelationship>,
     val exercises: List<GrammarExercise>,
+    val introductionGroups: List<GrammarIntroductionGroup> = emptyList(),
 )
 
 @Serializable
@@ -137,6 +138,25 @@ data class GrammarExercise(
 @Serializable
 data class GrammarOption(val id: String, val label: String, val rationale: String)
 
+@Serializable
+data class GrammarIntroductionGroup(
+    val id: String,
+    val label: String,
+    val facets: List<GrammarFacet>,
+    val members: List<GrammarMember>,
+    val next: List<GrammarRecommendation> = emptyList(),
+    val requires: List<String> = emptyList(),
+)
+
+@Serializable
+data class GrammarFacet(val id: String, val label: String)
+
+@Serializable
+data class GrammarMember(val exerciseId: String, val facetId: String, val exampleKey: String)
+
+@Serializable
+data class GrammarRecommendation(val groupId: String, val importance: Int, val reason: String)
+
 /** Result of parsing a content snapshot; invalid files are skipped and reported instead of failing the whole sync. */
 data class ParsedContent(
     val manifest: Manifest,
@@ -149,4 +169,5 @@ data class ParsedContent(
     /** Verified images referenced by a word, keyed by repo path (images/<name>.webp). */
     val images: Map<String, ByteArray> = emptyMap(),
     val grammar: List<GrammarSet> = emptyList(),
+    val grammarProblems: List<String> = emptyList(),
 )

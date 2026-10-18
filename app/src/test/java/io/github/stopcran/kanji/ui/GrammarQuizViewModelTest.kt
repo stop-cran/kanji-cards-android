@@ -14,15 +14,16 @@ import io.github.stopcran.kanji.core.grammar.GrammarScope
 import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.data.AppDatabase
 import io.github.stopcran.kanji.data.GRAMMAR_LEVEL_EPOCH
+import io.github.stopcran.kanji.data.GRAMMAR_GROUP_EPOCH
 import io.github.stopcran.kanji.data.GRAMMAR_STACK
 import io.github.stopcran.kanji.data.GrammarEntity
 import io.github.stopcran.kanji.data.GrammarResponseEntity
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.ReviewStateEntity
 import io.github.stopcran.kanji.data.Settings
-import io.github.stopcran.kanji.data.grammarModeState
-import io.github.stopcran.kanji.data.grammarSets
-import io.github.stopcran.kanji.data.newAllowance
+import io.github.stopcran.kanji.data.grammarStudy
+import io.github.stopcran.kanji.data.changeGrammarGuided
+import io.github.stopcran.kanji.core.grammar.GrammarCursor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
@@ -111,11 +112,7 @@ class GrammarQuizViewModelTest {
     }
 
     private fun mode(): ModeState = runBlocking {
-        val now = Instant.now()
-        db.grammarModeState(
-            sourceId, db.grammarSets(sourceId), db.newAllowance(services.settings, sourceId, now).remaining,
-            now, services.settings.grammarFor(sourceId),
-        )
+        db.grammarStudy(services.settings, sourceId, Instant.now()).mode
     }
 
     private fun seedReview(index: Int, due: Instant) = runBlocking {
@@ -149,6 +146,24 @@ class GrammarQuizViewModelTest {
     private fun logs() = runBlocking { db.reviews().allLog() }
     private fun details() = runBlocking { db.reviews().allGrammarResponses() }
     private fun states() = runBlocking { db.reviews().allStates() }
+
+    @Test
+    fun repeatedNextCallbackCannotRecordOrCommitAFocusTwice() {
+        install(4)
+        services.settings.setGrammarParserEpoch(sourceId, GRAMMAR_GROUP_EPOCH)
+        runBlocking { db.changeGrammarGuided(services.settings, sourceId, true) }
+        val vm = launch()
+        val question = vm.ui as GrammarUi.Choose
+        vm.pick(question.exercise.answer)
+        advance(vm)
+        advance(vm)
+        assertEquals(1, logs().size)
+        assertEquals(1, details().size)
+        val row = runBlocking { db.reviews().grammarFocus(sourceId) }!!
+        val cursor = Json.decodeFromString(GrammarCursor.serializer(), row.json)
+        assertEquals(2L, cursor.automaticOrdinal)
+        assertEquals(1, cursor.active!!.introduced.size)
+    }
 
     @Test
     fun singleEligibleExerciseIsAskableAndChangingScopeDoesNotChangeTheSessionSnapshot() {
