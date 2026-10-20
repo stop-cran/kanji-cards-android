@@ -3,7 +3,6 @@ package io.github.stopcran.kanji.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.reading.KanjiReadingQuiz
@@ -50,7 +49,7 @@ sealed interface ReadingUi {
 }
 
 /** Kanji readings session over on'yomi and kun'yomi; each (kanji, kind, reading) has its own scheduling state. */
-class KanjiReadingViewModel(private val app: Services) : ViewModel() {
+class KanjiReadingViewModel(private val app: Services) : StudyViewModel(app) {
     private val fsrs = Fsrs()
     private val random = Random.Default
 
@@ -94,7 +93,7 @@ class KanjiReadingViewModel(private val app: Services) : ViewModel() {
         } else {
             data.items
         }
-        session = QuizSession(items, { it.id })
+        session = trackSession(QuizSession(items, { it.id }), sourceId, stack, "KanjiReadings", extra)
         showNext()
     }
 
@@ -137,6 +136,7 @@ class KanjiReadingViewModel(private val app: Services) : ViewModel() {
         while (true) {
             val item = session.take()
             if (item == null) {
+                finishSession()
                 ui = if (session.answered == 0) ReadingUi.Empty("Nothing to practise yet. ${app.settings.unlockRule.value.hint.replace("Unlocks", "Readings unlock")}.") else ReadingUi.Done(session.answered, session.correct)
                 return
             }
@@ -175,8 +175,8 @@ class KanjiReadingViewModel(private val app: Services) : ViewModel() {
             )
             states.getValue(kind)[id] = updated
             val owner = owners[padKey(kind, id)] ?: stack
-            viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
-                val log = ReviewLogEntity(0, sourceId, owner, kanji, kind.mode.name, grade.value, now.toEpochMilli(), a.question.correctKey)
+            recordSession {
+                val log = ReviewLogEntity(0, sourceId, owner, kanji, kind.mode.name, grade.value, now.toEpochMilli(), a.question.correctKey, reviewSessionId)
                 app.db.reviews().record(updated.toEntity(sourceId, owner, kanji, kind.mode, a.question.correctKey), log)
             }
         }

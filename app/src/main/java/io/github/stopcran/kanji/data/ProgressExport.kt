@@ -1,5 +1,6 @@
 package io.github.stopcran.kanji.data
 
+import androidx.room.withTransaction
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -16,18 +17,26 @@ object ProgressExport {
 
     /** Returns the number of logged answers written. */
     suspend fun write(db: AppDatabase, settings: Settings, out: OutputStream): Int {
-        val states = db.reviews().allStates()
-        val log = db.reviews().allLog()
-        val grammarResponses = db.reviews().allGrammarResponses()
+        val snapshot = db.withTransaction {
+            Snapshot(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses(), db.reviews().allSessions())
+        }
         ZipOutputStream(out).use { zip ->
-            zip.entry("review_state.json", JsonArray(states.map(::stateJson)))
-            zip.entry("review_log.json", JsonArray(log.map(::logJson)))
-            zip.entry("grammar_responses.json", JsonArray(grammarResponses.map(::grammarResponseJson)))
-            zip.entry("export_manifest.json", JsonObject(mapOf("formatVersion" to JsonPrimitive(2))))
+            zip.entry("review_state.json", JsonArray(snapshot.states.map(::stateJson)))
+            zip.entry("review_log.json", JsonArray(snapshot.log.map(::logJson)))
+            zip.entry("grammar_responses.json", JsonArray(snapshot.grammarResponses.map(::grammarResponseJson)))
+            zip.entry("study_sessions.json", JsonArray(snapshot.sessions.map(::sessionJson)))
+            zip.entry("export_manifest.json", JsonObject(mapOf("formatVersion" to JsonPrimitive(3))))
             zip.entry("settings.json", JsonObject(settings.snapshot().mapValues { primitive(it.value) }))
         }
-        return log.size
+        return snapshot.log.size
     }
+
+    private data class Snapshot(
+        val states: List<ReviewStateEntity>,
+        val log: List<ReviewLogEntity>,
+        val grammarResponses: List<GrammarResponseEntity>,
+        val sessions: List<StudySessionEntity>,
+    )
 
     private fun ZipOutputStream.entry(name: String, element: JsonElement) {
         putNextEntry(ZipEntry(name))
@@ -57,7 +66,16 @@ object ProgressExport {
             "id" to JsonPrimitive(l.id), "sourceId" to JsonPrimitive(l.sourceId),
             "stack" to JsonPrimitive(l.stack), "kanji" to JsonPrimitive(l.kanji),
             "mode" to JsonPrimitive(l.mode), "reading" to JsonPrimitive(l.reading), "grade" to JsonPrimitive(l.grade),
-            "atMs" to JsonPrimitive(l.atMs),
+            "atMs" to JsonPrimitive(l.atMs), "sessionId" to JsonPrimitive(l.sessionId),
+        ),
+    )
+
+    private fun sessionJson(s: StudySessionEntity) = JsonObject(
+        mapOf(
+            "id" to JsonPrimitive(s.id), "sourceId" to JsonPrimitive(s.sourceId), "stack" to JsonPrimitive(s.stack),
+            "mode" to JsonPrimitive(s.mode), "extra" to JsonPrimitive(s.extra), "startedAtMs" to JsonPrimitive(s.startedAtMs),
+            "endedAtMs" to JsonPrimitive(s.endedAtMs), "endReason" to JsonPrimitive(s.endReason),
+            "answered" to JsonPrimitive(s.answered), "correct" to JsonPrimitive(s.correct),
         ),
     )
 

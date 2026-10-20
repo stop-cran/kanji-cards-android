@@ -3,11 +3,13 @@ package io.github.stopcran.kanji.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.room.withTransaction
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.content.GrammarExercise
 import io.github.stopcran.kanji.core.content.GrammarOption
+import io.github.stopcran.kanji.core.content.GrammarVocabularySpan
+import io.github.stopcran.kanji.core.words.Advancement
 import io.github.stopcran.kanji.core.grammar.GRAMMAR_NOT_DUE
 import io.github.stopcran.kanji.core.quiz.QuizSession
 import io.github.stopcran.kanji.core.srs.Fsrs
@@ -23,6 +25,8 @@ import io.github.stopcran.kanji.data.grammarStudy
 import io.github.stopcran.kanji.data.recordGrammarAnswer
 import io.github.stopcran.kanji.data.practiceMinimum
 import io.github.stopcran.kanji.data.toEntity
+import io.github.stopcran.kanji.data.toSrs
+import io.github.stopcran.kanji.data.WordEntity
 import kotlinx.coroutines.launch
 import java.text.Normalizer
 import java.time.Instant
@@ -43,18 +47,27 @@ sealed interface GrammarUi {
 }
 
 /** One SRS queue per authored exercise; the choose/type prompt is presentation detail, not another schedule. */
-class GrammarQuizViewModel(private val app: Services) : ViewModel() {
+class GrammarQuizViewModel(private val app: Services) : StudyViewModel(app) {
     private val fsrs = Fsrs()
     var ui: GrammarUi by mutableStateOf(GrammarUi.Loading)
         private set
     var draft: String by mutableStateOf("")
+        private set
+    var lookup: GrammarVocabularySpan? by mutableStateOf(null)
+        private set
+    var lookupArticle: WordEntity? by mutableStateOf(null)
+        private set
+    var vocabularyListOpen: Boolean by mutableStateOf(false)
         private set
 
     private lateinit var exercises: Map<String, GrammarExercise>
     private lateinit var articlePaths: Map<String, String>
     private val states = mutableMapOf<String, SrsState>()
     private var session = QuizSession<String>(emptyList(), { it })
-    private var sourceId = ""
+    var sourceId = ""
+        private set
+    private var vocabularyWords = emptyMap<String, WordEntity>()
+    private var familiarWords = emptySet<String>()
     private var asked = 0
     private var started = false
     private var emptyMessage = GRAMMAR_NOT_DUE
@@ -71,7 +84,23 @@ class GrammarQuizViewModel(private val app: Services) : ViewModel() {
     private suspend fun start(extra: Boolean) {
         sourceId = app.settings.source.value.id
         val now = Instant.now()
-        val study = app.db.grammarStudy(app.settings, sourceId, now, reserve = !extra, extra = extra)
+        val (study, queue) = app.db.withTransaction {
+            val captured = app.db.grammarStudy(app.settings, sourceId, now, reserve = !extra, extra = extra)
+            val selected = if (extra) {
+                QueueBuilder.extra(captured.extraIds, captured.states, now, limit = app.settings.practiceMinimum())
+            } else {
+                QueueBuilder.build(captured.ordinaryIds, captured.states, now, captured.budget)
+            }
+            val queuedIds = selected.map { it.kanji }.toSet()
+            val ids = captured.sets.flatMap { it.exercises }.filter { it.id in queuedIds }.flatMap { it.vocabulary?.spans.orEmpty() }
+                .mapNotNull { it.word }.distinct()
+            vocabularyWords = ids.chunked(900).flatMap { app.db.content().referencedWords(sourceId, it) }.associateBy { it.word }
+            familiarWords = if (ids.isEmpty()) emptySet() else {
+                app.db.reviews().statesAcrossStacks(sourceId, StudyMode.WordJpEn.name)
+                    .filter { it.kanji in vocabularyWords && Advancement.isSolid(it.toSrs(), now) }.map { it.kanji }.toSet()
+            }
+            captured to selected
+        }
         val sets = study.sets
         exercises = sets.flatMap { it.exercises }.associateBy { it.id }
         articlePaths = sets.flatMap { set -> set.exercises.map { it.id to set.article } }.toMap()
@@ -83,20 +112,42 @@ class GrammarQuizViewModel(private val app: Services) : ViewModel() {
         focusTicket = study.ticket
         focusNotice = if (!extra && study.preferences.guided) study.notice else null
         emptyMessage = study.notice ?: GRAMMAR_NOT_DUE
-        val queue = if (extra) {
-            QueueBuilder.extra(study.extraIds, states, now, limit = app.settings.practiceMinimum())
-        } else {
-            QueueBuilder.build(study.ordinaryIds, states, now, study.budget)
-        }
-        session = QuizSession(queue.map { it.kanji }, { it })
+        session = trackSession(QuizSession(queue.map { it.kanji }, { it }), sourceId, GRAMMAR_STACK, StudyMode.Grammar.name, extra)
         showNext()
     }
 
     fun articlePath(exerciseId: String): String = articlePaths.getValue(exerciseId)
 
+    val currentExercise: GrammarExercise? get() = when (val state = ui) {
+        is GrammarUi.Choose -> state.exercise
+        is GrammarUi.Type -> state.exercise
+        is GrammarUi.Answer -> state.exercise
+        else -> null
+    }
+
+    fun isFamiliar(span: GrammarVocabularySpan): Boolean = span.word in familiarWords
+
+    fun openVocabularyList() { vocabularyListOpen = true }
+    fun closeVocabularyList() { vocabularyListOpen = false }
+
+    fun openLookup(span: GrammarVocabularySpan) {
+        if (span !in currentExercise?.vocabulary?.spans.orEmpty()) return
+        vocabularyListOpen = false
+        lookup = span
+    }
+
+    fun closeLookup() { lookup = null }
+    fun lookupHasArticle(): Boolean = lookup?.word in vocabularyWords
+    fun openLookupArticle() { lookupArticle = vocabularyWords[lookup?.word] }
+    fun closeLookupArticle() { lookupArticle = null }
+
     private fun showNext() {
+        lookup = null
+        lookupArticle = null
+        vocabularyListOpen = false
         val id = session.take()
         if (id == null) {
+            finishSession()
             ui = if (session.answered == 0) {
                 GrammarUi.Empty(emptyMessage)
             } else {
@@ -159,9 +210,9 @@ class GrammarQuizViewModel(private val app: Services) : ViewModel() {
             response = answer.response,
             correct = answer.correct,
         )
-        viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
+        recordSession {
             val log = ReviewLogEntity(
-                0, sourceId, GRAMMAR_STACK, answer.exercise.id, StudyMode.Grammar.name, grade.value, now.toEpochMilli(),
+                0, sourceId, GRAMMAR_STACK, answer.exercise.id, StudyMode.Grammar.name, grade.value, now.toEpochMilli(), sessionId = reviewSessionId,
             )
             val error = app.db.recordGrammarAnswer(
                 app.settings, updated.toEntity(sourceId, GRAMMAR_STACK, answer.exercise.id, StudyMode.Grammar), log, detail, focusTicket,

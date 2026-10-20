@@ -113,9 +113,31 @@ Typing grades exact membership after trimming and Unicode NFKC normalization of 
 folding, romaji conversion, typo tolerance or substring matching. Choice grades the option ID, not its label. The complete Japanese prompt
 and English meaning appear before answering; feedback and the linked article do not supply hidden required context.
 
-## Room v9 and content replacement
+### Optional occurrence-addressed vocabulary
 
-The current Room version is **9**. The 7-to-8 migration creates `grammar_sets` (key: source + set ID) and `grammar_responses`
+An exercise's optional `vocabulary` object has exactly `schemaVersion: 1`, `promptSha256` and `spans`.
+The hash is SHA-256 of the exact UTF-8 prompt, without normalization. A span has integer `start`/`end`, exact `text`,
+displayed-form `reading`, dictionary `headword`, context-specific English `gloss` and optional canonical `word` ID.
+Offsets are half-open Unicode-code-point intervals in the original prompt. Rendering converts them to UTF-16 and shifts only
+ranges after the filled blank; it never searches for guessed substrings or annotates the inserted answer.
+
+Spans must be sorted/nonoverlapping, match their occurrences, avoid the blank and not split combining sequences.
+Limits: 128 spans; 80 code points for nonblank form/reading/headword/word IDs; 240 for the nonblank gloss.
+Word references are flat IDs without slashes, control characters, `.` or `..`, resolving to accepted `words/<id>.md` entries.
+Local glosses without word references are valid. Repeated spellings may have distinct readings/glosses and share a word identity.
+Omission remains valid legacy content; explicit null, malformed fields/types or a stale hash disable only this exercise's hints.
+Missing article references are removed while preserving local glosses. These diagnostics are reported separately from rejecting
+Grammar errors and never populate `sync_meta.grammarProblem` or block otherwise valid guided introductions.
+
+`vocabularyProblem` is an internal import/cache diagnostic, not an authored field; supplied values are stripped before import.
+Typed Room serialization retains hints and real diagnostics. Grammar parser epoch **3** forces a reimport even at the same
+commit/manifest, recovering fields that an older client discarded from its typed cache. No additional Room migration is needed.
+The maintained content repository has a revision-bound authoring/coverage gate; the app does not require its inventory or mandatory
+annotations from legacy/fork content. See that repository's `docs/content-format.md` for editorial exclusions and provenance.
+
+## Room content replacement
+
+The current Room version is **11**. The 7-to-8 migration creates `grammar_sets` (key: source + set ID) and `grammar_responses`
 (key: `reviewLogId`) and clears only sync metadata to force a content reimport. Existing content, review states and history are preserved;
 all older versions use the registered migration chain, with no destructive fallback.
 The additive 8-to-9 migration preserves that snapshot and all history, creates source-keyed `grammar_focus` (`revision`, cursor JSON),
@@ -141,16 +163,17 @@ and diagnostics, rather than marking last-known-good content invalid.
 state/log/detail transaction. The cursor retains automatic ordinal, manual selection nonce, active group/origin/seed and recorded exposure
 IDs with their facet/context keys. It is omitted from progress ZIPs; Android backup includes the database and preferences normally.
 
-## Progress export v2
+## Progress export v3
 
-**Settings → Export progress** writes five UTF-8 JSON members:
+**Settings → Export progress** writes six UTF-8 JSON members. Database rows are read in one transaction:
 
 | ZIP member | Meaning |
 | --- | --- |
-| `export_manifest.json` | `{"formatVersion":2}`; independent of content JSON/manifest schema versions. |
+| `export_manifest.json` | `{"formatVersion":3}`; independent of content JSON/manifest schema versions. |
 | `review_state.json` | Current SRS rows: `sourceId`, `stack`, `kanji`, `mode`, `reading`, `phase`, `stability`, `difficulty`, `dueMs`, `lastReviewMs`, `reps`, `lapses`. |
-| `review_log.json` | Canonical recorded events: `id`, `sourceId`, `stack`, `kanji`, `mode`, `reading`, `grade`, `atMs` (Unix milliseconds). Grades: Again=1, Hard=2, Good=3, Easy=4. |
+| `review_log.json` | Canonical recorded events: `id`, `sourceId`, `stack`, `kanji`, `mode`, `reading`, `grade`, `atMs` (Unix milliseconds), nullable `sessionId`. Grades: Again=1, Hard=2, Good=3, Easy=4. |
 | `grammar_responses.json` | `reviewLogId`, `sourceId`, `stack`, `exerciseId`, `constructionId`, `relationshipId`, `promptType` (`choose`/`type`), `response`, `correct`. |
+| `study_sessions.json` | Session `id`, `sourceId`, selected `stack`, `mode`, `extra`, `startedAtMs`, nullable `endedAtMs`, `endReason`, `answered`, `correct`. |
 | `settings.json` | Stored preferences, including source configuration and cached sync metadata. |
 
 For a recorded Grammar answer, state, canonical log and response detail are written in one transaction. Join `reviewLogId` to the unique
@@ -160,13 +183,26 @@ relationship, not the wrong choice's construction. There is no separate guessed 
 Hard. Successful practice confirmations create no state update, log or detail, even though the session's displayed tally includes them.
 The export's answer count is the number of canonical log rows, not log rows plus details.
 
+Join a non-null `review_log.sessionId` to `study_sessions.id`. Each prepared study queue gets a UUID; repeated answers keep it,
+and a new start or "Practice more" gets another. `extra=false` means the ordinary due/new queue, not necessarily due-only cards.
+`mode` matches the log except `KanjiReadings`, which groups both `KanjiOn` and `KanjiKun`. A borrowed padding card retains its owning
+log `stack`, which may differ from the session's selected stack. Opening an article, rotating or backgrounding does not split a session.
+Exhausting the queue records `endReason="completed"`; removing its route early records `"left"`. The end marker follows all pending
+recorded answers. Ended sessions' `answered`/`correct` match the UI tally, including successful practice confirmations, but excluding
+study views, traces and skipped questions. These are answered-attempt counts, not every on-screen presentation or per-card attempt logs.
+If no ending was observed (still open or process killed), all four ending/count fields remain null, even after restart.
+Times are wall-clock Unix milliseconds, not active-study durations. Never infer an exact killed-session end or fill historical boundaries.
+Room v11 preserves old state/log/detail rows; pre-tracking log rows have `sessionId=null` and no synthetic session.
+
 Legacy exports have only `review_state.json`, `review_log.json` and `settings.json`, with no version manifest, log `id` fields or Grammar details.
-They provide no Grammar evidence; a v2 export missing required files or linked details is corruption, not legacy absence.
+They provide no Grammar evidence. V2 has five members and Grammar details, but no sessions or session links.
+A v2/v3 export missing its required files or linked details is corruption, not legacy absence.
 The export has no per-answer content revision or set ID. `sha:<source>@<branch>` settings give last-synced commit hints, but cannot establish
 which snapshot a historical answer used (a session can retain questions loaded before a later sync).
 
 `tools/analyze_grammar_progress.py` validates the canonical/detail join and emits local aggregates without response text or general settings.
 It rejects duplicate JSON keys/ZIP members, incomplete v2 data, invalid types and mismatched/duplicate/orphan links rather than counting them
-as evidence. First-observed/repeated attempts use `(sourceId, stack, exerciseId)` in `(atMs, id)` order. Both recorded-ID views use the same
+as evidence. It also validates v3 session links and final counts without treating confirmations as extra SRS reviews.
+First-observed/repeated attempts use `(sourceId, stack, exerciseId)` in `(atMs, id)` order, still across sessions. Both recorded-ID views use the same
 events; reused set-local IDs cannot be disambiguated from this export alone. This is an observability tool, not an import/restore feature or
 proof of grammatical mastery or learning benefit.

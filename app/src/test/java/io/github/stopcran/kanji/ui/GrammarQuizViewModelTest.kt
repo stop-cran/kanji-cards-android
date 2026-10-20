@@ -12,6 +12,10 @@ import io.github.stopcran.kanji.core.content.GrammarExercise
 import io.github.stopcran.kanji.core.content.GrammarOption
 import io.github.stopcran.kanji.core.content.GrammarRelationship
 import io.github.stopcran.kanji.core.content.GrammarSet
+import io.github.stopcran.kanji.core.content.ContentParser
+import io.github.stopcran.kanji.core.content.GrammarVocabularyData
+import io.github.stopcran.kanji.core.content.GrammarVocabularySpan
+import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.grammar.GRAMMAR_LEVEL_SYNC_NEEDED
 import io.github.stopcran.kanji.core.grammar.GrammarScope
 import io.github.stopcran.kanji.core.home.ModeState
@@ -24,20 +28,31 @@ import io.github.stopcran.kanji.data.GrammarResponseEntity
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.ReviewStateEntity
 import io.github.stopcran.kanji.data.Settings
+import io.github.stopcran.kanji.data.StudySessionEntity
+import io.github.stopcran.kanji.data.WordEntity
+import io.github.stopcran.kanji.data.ProgressExport
+import io.github.stopcran.kanji.data.grammarSets
 import io.github.stopcran.kanji.data.grammarStudy
 import io.github.stopcran.kanji.data.changeGrammarGuided
 import io.github.stopcran.kanji.core.grammar.GrammarCursor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -47,6 +62,8 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.SQLiteMode
 import java.time.Instant
+import java.io.ByteArrayOutputStream
+import java.util.zip.ZipInputStream
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -148,7 +165,158 @@ class GrammarQuizViewModelTest {
 
     private fun logs() = runBlocking { db.reviews().allLog() }
     private fun details() = runBlocking { db.reviews().allGrammarResponses() }
+    private fun sessions() = runBlocking { db.reviews().allSessions() }
+
+    private fun awaitSessionEnd(id: String): StudySessionEntity {
+        val deadline = System.currentTimeMillis() + 10_000
+        var row = sessions().single { it.id == id }
+        while (row.endedAtMs == null && System.currentTimeMillis() < deadline) {
+            Thread.sleep(10)
+            row = sessions().single { it.id == id }
+        }
+        assertTrue("Session did not close", row.endedAtMs != null)
+        return row
+    }
     private fun states() = runBlocking { db.reviews().allStates() }
+
+    private fun vocabularyFixture(): List<GrammarVocabularySpan> {
+        install(3)
+        val forms = listOf("Known", "OtherMode", "OtherSource", "Weak", "Unstarted", "Local")
+        val prompt = forms.joinToString(" ") + " ____ Known."
+        val spans = (forms + "Known").mapIndexed { index, text ->
+            val at = if (index == forms.size) prompt.lastIndexOf(text) else prompt.indexOf(text)
+            GrammarVocabularySpan(at, at + text.length, text, text.lowercase(), text, "Context for $text",
+                word = text.takeUnless { it == "Local" })
+        }
+        runBlocking {
+            val base = db.grammarSets(sourceId).single()
+            val set = base.copy(exercises = base.exercises.map { e ->
+                e.copy(prompt = prompt, vocabulary = GrammarVocabularyData(1, ContentParser.rawSha256(prompt.toByteArray()), spans))
+            })
+            db.content().insertGrammar(listOf(GrammarEntity(sourceId, set.id, Json.encodeToString(GrammarSet.serializer(), set), 0)))
+            db.content().insertWords(forms.filterNot { it == "Local" }.map {
+                WordEntity(sourceId, it, it.lowercase(), "Original $it", null, "", "", "Original article for $it")
+            })
+            val yesterday = Instant.now().minusSeconds(86_400).toEpochMilli()
+            val other = RepoSource("example", "fork", "main").id
+            for (state in listOf(
+                ReviewStateEntity(sourceId, "n5", "Known", "WordJpEn", "Review", 1.0, 5.0, yesterday, yesterday, 3, 0),
+                ReviewStateEntity(sourceId, "custom", "Known", "WordJpEn", "Review", 14.0, 5.0, yesterday, yesterday, 3, 0),
+                ReviewStateEntity(sourceId, "n5", "OtherMode", "WordEnJp", "Review", 14.0, 5.0, yesterday, yesterday, 3, 0),
+                ReviewStateEntity(other, "n5", "OtherSource", "WordJpEn", "Review", 14.0, 5.0, yesterday, yesterday, 3, 0),
+                ReviewStateEntity(sourceId, "n5", "Weak", "WordJpEn", "Review", 1.0, 5.0, yesterday, yesterday, 3, 0),
+                ReviewStateEntity(sourceId, "n5", "Local", "Quiz", "Review", 14.0, 5.0, yesterday, yesterday, 3, 0),
+            )) {
+                db.reviews().record(
+                    state,
+                    ReviewLogEntity(0, state.sourceId, state.stack, state.kanji, state.mode, 3, yesterday),
+                )
+            }
+        }
+        return spans
+    }
+
+    private fun exportedProgress(): Map<String, String> = runBlocking {
+        val bytes = ByteArrayOutputStream()
+        ProgressExport.write(db, services.settings, bytes)
+        val entries = mutableMapOf<String, String>()
+        ZipInputStream(bytes.toByteArray().inputStream()).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                entries[entry.name] = zip.readBytes().toString(Charsets.UTF_8)
+            }
+        }
+        entries
+    }
+
+    @Test
+    fun lookupPreservesChoiceDraftAnswerAndExportedSessionWithoutProgressMutations() {
+        val spans = vocabularyFixture()
+        val vm = launch()
+        val initialSession = Json.parseToJsonElement(exportedProgress().getValue("study_sessions.json")).jsonArray.single().jsonObject
+        val sessionId = initialSession.getValue("id").jsonPrimitive.content
+        fun lookAround() {
+            val ui = vm.ui
+            val draft = vm.draft
+            val before = exportedProgress()
+            val focus = runBlocking { db.reviews().grammarFocus(sourceId) }
+            vm.openVocabularyList()
+            vm.closeVocabularyList()
+            vm.openLookup(spans.first())
+            assertTrue(vm.lookupHasArticle())
+            vm.openLookupArticle()
+            assertEquals("Original article for Known", vm.lookupArticle!!.body)
+            vm.closeLookupArticle()
+            vm.closeLookup()
+            vm.openLookup(spans.first { it.word == null })
+            assertFalse(vm.lookupHasArticle())
+            vm.closeLookup()
+            assertEquals(ui, vm.ui)
+            assertEquals(draft, vm.draft)
+            assertEquals(before, exportedProgress())
+            assertEquals(focus, runBlocking { db.reviews().grammarFocus(sourceId) })
+        }
+        lookAround()
+        vm.pick((vm.ui as GrammarUi.Choose).exercise.answer)
+        lookAround()
+        advance(vm)
+        assertTrue(vm.ui is GrammarUi.Type)
+        vm.onDraft("alternative")
+        lookAround()
+        vm.check()
+        assertTrue((vm.ui as GrammarUi.Answer).correct)
+        lookAround()
+        advance(vm)
+        vm.leaveSession()
+        val finished = awaitSessionEnd(sessionId)
+        assertEquals(2, finished.answered)
+        assertEquals(2, finished.correct)
+        val exported = exportedProgress()
+        assertEquals(sessionId, Json.parseToJsonElement(exported.getValue("study_sessions.json"))
+            .jsonArray.single().jsonObject.getValue("id").jsonPrimitive.content)
+        val grammarLogs = Json.parseToJsonElement(exported.getValue("review_log.json")).jsonArray
+            .map { it.jsonObject }.filter { it.getValue("mode").jsonPrimitive.content == "Grammar" }
+        assertEquals(2, grammarLogs.size)
+        assertTrue(grammarLogs.all { it.getValue("sessionId").jsonPrimitive.content == sessionId })
+    }
+
+    @Test
+    fun familiarityAndWordArticlesAreSourceScopedSnapshotsAcrossSyncAndSourceChanges() {
+        val spans = vocabularyFixture()
+        val vm = launch()
+        assertEquals(listOf(true, false, false, false, false, false, true), spans.map(vm::isFamiliar))
+        val capturedSource = sourceId
+        val question = vm.ui
+        runBlocking {
+            val known = db.content().word(capturedSource, "Known")!!
+            val weak = db.content().word(capturedSource, "Weak")!!
+            db.content().insertWords(listOf(
+                known.copy(body = "Changed by sync"),
+                known.copy(sourceId = RepoSource("example", "fork", "main").id, body = "Other source article"),
+            ))
+            val now = Instant.now().toEpochMilli()
+            db.reviews().record(
+                ReviewStateEntity(capturedSource, "custom", weak.word, "WordJpEn", "Review", 14.0, 5.0, now, now, 5, 0),
+                ReviewLogEntity(0, capturedSource, "custom", weak.word, "WordJpEn", 3, now),
+            )
+            val old = db.grammarSets(capturedSource).single()
+            val changed = old.copy(exercises = old.exercises.map { it.copy(prompt = "Changed ____.", vocabulary = null) })
+            db.content().insertGrammar(listOf(GrammarEntity(capturedSource, changed.id, Json.encodeToString(GrammarSet.serializer(), changed), 0)))
+        }
+        assertTrue(services.settings.setSource("https://github.com/example/fork", "main"))
+        vm.ensureStarted(false)
+        vm.openLookup(spans.first())
+        vm.openLookupArticle()
+        assertEquals("Original article for Known", vm.lookupArticle!!.body)
+        assertEquals(capturedSource, vm.lookupArticle!!.sourceId)
+        assertEquals(capturedSource, vm.sourceId)
+        assertEquals(question, vm.ui)
+        assertEquals(listOf(true, false, false, false, false, false, true), spans.map(vm::isFamiliar))
+        vm.closeLookupArticle()
+        vm.closeLookup()
+        vm.leaveSession()
+        awaitSessionEnd(sessions().single().id)
+    }
 
     @Test
     fun repeatedNextCallbackCannotRecordOrCommitAFocusTwice() {
@@ -385,6 +553,9 @@ class GrammarQuizViewModelTest {
     @Test
     fun successfulPracticeConfirmationAddsNeitherLogNorResponseNorSrsRepetition() {
         val vm = start(5)
+        val opened = sessions().single()
+        vm.ensureStarted(false)
+        assertEquals(listOf(opened), sessions())
         val first = vm.ui as GrammarUi.Choose
         vm.pick(first.options.first { it.id != first.exercise.answer }.id)
         advance(vm)
@@ -396,5 +567,57 @@ class GrammarQuizViewModelTest {
         assertEquals(6, details().size)
         assertEquals(2, details().count { it.exerciseId == first.exercise.id })
         assertEquals(2, states().single { it.kanji == first.exercise.id }.reps)
+        val closed = awaitSessionEnd(opened.id)
+        assertEquals("completed", closed.endReason)
+        assertEquals(done.answered, closed.answered)
+        assertEquals(done.correct, closed.correct)
+        assertFalse(closed.extra)
+        assertEquals(setOf(closed.id), logs().map { it.sessionId }.toSet())
+        vm.leaveSession()
+        assertEquals(closed, sessions().single())
+    }
+
+    @Test
+    fun leavingKeepsPendingReviewsAndExtraPracticeStartsANewSession() {
+        val vm = start(3)
+        val opened = sessions().single()
+        services.studySessions.register("grammar-route", vm::leaveSession)
+        services.studySessions.leave("doc:articles/fixture.md")
+        assertNull(sessions().single().endReason)
+        val first = vm.ui as GrammarUi.Choose
+        runBlocking {
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            val blocker = launch(Dispatchers.IO) {
+                db.withTransaction {
+                    entered.complete(Unit)
+                    release.await()
+                }
+            }
+            try {
+                withTimeout(10_000) { entered.await() }
+                vm.pick(first.exercise.answer)
+                vm.next()
+                services.studySessions.leave("grammar-route")
+            } finally {
+                release.complete(Unit)
+            }
+            blocker.join()
+        }
+        val closed = awaitSessionEnd(opened.id)
+        assertEquals("left", closed.endReason)
+        assertEquals(1, closed.answered)
+        assertEquals(1, closed.correct)
+        assertEquals(opened.id, logs().single().sessionId)
+        assertEquals(first.exercise.id, logs().single().kanji)
+        assertTrue(logs().single().atMs >= opened.startedAtMs)
+        assertTrue(logs().single().atMs <= closed.endedAtMs!!)
+        val extra = launch(extra = true)
+        val next = sessions().single { it.id != opened.id }
+        assertNotEquals(opened.id, next.id)
+        assertTrue(next.extra)
+        assertNull(next.endReason)
+        extra.leaveSession()
+        assertEquals("left", awaitSessionEnd(next.id).endReason)
     }
 }

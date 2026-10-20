@@ -24,21 +24,23 @@ suspend fun loadDoc(app: KanjiApp, sourceId: String, path: String): Pair<String,
 
 /** The article body for [path]; lazy, so it must not sit inside a scrolling parent. */
 @Composable
-fun DocBody(app: KanjiApp, path: String, onOpenDoc: (String) -> Unit, modifier: Modifier = Modifier) {
+fun DocBody(app: KanjiApp, path: String, onOpenDoc: (String) -> Unit, modifier: Modifier = Modifier, sourceId: String? = null) {
     val source by app.settings.source.collectAsState()
-    val doc by produceState<Pair<String, String>?>(null, source, path) { value = loadDoc(app, source.id, path) }
+    val capturedSourceId = sourceId ?: source.id
+    val doc by produceState<Pair<String, String>?>(null, capturedSourceId, path) { value = loadDoc(app, capturedSourceId, path) }
     val d = doc
     val header: (@Composable () -> Unit)? = if (path.startsWith("words/")) {
-        { WordSceneGallery(app, source.id, path.substringAfter('/').removeSuffix(".md")) }
+        { WordSceneGallery(app, capturedSourceId, path.substringAfter('/').removeSuffix(".md")) }
     } else null
     if (d == null) Text(stringResource(R.string.not_found_in_the_current), modifier) else LazyMarkdownView(d.second, path, onOpenDoc, modifier, header)
 }
 
 @Composable
-fun DocScreen(app: KanjiApp, path: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit) {
+fun DocScreen(app: KanjiApp, path: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit, sourceId: String? = null) {
     val source by app.settings.source.collectAsState()
-    val doc by produceState<Pair<String, String>?>(null, source, path) { value = loadDoc(app, source.id, path) }
+    val capturedSourceId = sourceId ?: source.id
+    val doc by produceState<Pair<String, String>?>(null, capturedSourceId, path) { value = loadDoc(app, capturedSourceId, path) }
     Page(doc?.first ?: path.substringAfter('/').removeSuffix(".md"), onBack, scrollable = false) {
-        DocBody(app, path, onOpenDoc, Modifier.weight(1f))
+        DocBody(app, path, onOpenDoc, Modifier.weight(1f), capturedSourceId)
     }
 }

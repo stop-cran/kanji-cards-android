@@ -13,6 +13,7 @@ MAX_JSON_BYTES = 16 * 1024 * 1024
 MAX_TOTAL_BYTES = 32 * 1024 * 1024
 LEGACY_ENTRIES = {"review_state.json", "review_log.json", "settings.json"}
 V2_ENTRIES = LEGACY_ENTRIES | {"export_manifest.json", "grammar_responses.json"}
+V3_ENTRIES = V2_ENTRIES | {"study_sessions.json"}
 LIMITATIONS = [
     "These are recorded reviews, not all screen answers: successful practice confirmations are not logged.",
     "First-observed means first in this export for (source, stack, exercise), not first-ever learning.",
@@ -50,8 +51,8 @@ def _load(path):
         names = {entry.filename for entry in entries}
         if len(names) != len(entries):
             raise ExportError("Duplicate ZIP entry")
-        if names not in (LEGACY_ENTRIES, V2_ENTRIES):
-            raise ExportError("Expected the three legacy files or all five v2 files")
+        if names not in (LEGACY_ENTRIES, V2_ENTRIES, V3_ENTRIES):
+            raise ExportError("Expected a complete legacy, v2 or v3 export")
         if sum(entry.file_size for entry in entries) > MAX_TOTAL_BYTES:
             raise ExportError("Export exceeds the 32 MiB total JSON limit")
         result = {}
@@ -96,8 +97,51 @@ def _rows(bundle, name):
     return value
 
 
+def _sessions(bundle):
+    sessions = {}
+    for row in _rows(bundle, "study_sessions.json"):
+        session_id = _text(row, "id")
+        if session_id in sessions:
+            raise ExportError("Duplicate study session ID")
+        for key in ("sourceId", "stack", "mode"):
+            _text(row, key)
+        _integer(row, "startedAtMs")
+        if type(row.get("extra")) is not bool:
+            raise ExportError("Invalid session practice flag")
+        ending = ("endedAtMs", "endReason", "answered", "correct")
+        if any(key not in row for key in ending):
+            raise ExportError("Missing session ending fields")
+        if row["endedAtMs"] is None:
+            if any(row[key] is not None for key in ending):
+                raise ExportError("Unfinished session has final counts or an end reason")
+        else:
+            _integer(row, "endedAtMs")
+            if row["endReason"] not in ("completed", "left"):
+                raise ExportError("Invalid session end reason")
+            _integer(row, "correct", maximum=_integer(row, "answered"))
+        sessions[session_id] = row
+    return sessions
+
+
+def _session_link(log, sessions):
+    if "sessionId" not in log:
+        raise ExportError("Missing review session link")
+    if log["sessionId"] is None:
+        return
+    session_id = _text(log, "sessionId")
+    if session_id not in sessions:
+        raise ExportError("Orphan review session link")
+    session = sessions[session_id]
+    modes = ("KanjiOn", "KanjiKun") if session["mode"] == "KanjiReadings" else (session["mode"],)
+    if log["sourceId"] != session["sourceId"] or log["mode"] not in modes:
+        raise ExportError("Review session source or mode mismatch")
+    # Extra-practice padding may legitimately use a different owning stack.
+
+
 def _join(bundle, version):
     rows = _rows(bundle, "review_log.json")
+    sessions = _sessions(bundle) if version == 3 else {}
+    session_counts = defaultdict(int)
     logs = {}
     for row in rows:
         for key in ("sourceId", "stack", "kanji", "mode"):
@@ -105,6 +149,10 @@ def _join(bundle, version):
         _text(row, "reading", empty=True)
         _integer(row, "grade", 1, 4)
         _integer(row, "atMs")
+        if version == 3:
+            _session_link(row, sessions)
+            if row["sessionId"] is not None:
+                session_counts[row["sessionId"]] += 1
         if version == 1:
             if row["mode"] == "Grammar":
                 raise ExportError("Legacy export contains Grammar reviews without their details")
@@ -113,6 +161,10 @@ def _join(bundle, version):
         if log_id in logs:
             raise ExportError("Duplicate canonical review ID")
         logs[log_id] = row
+    for session_id, count in session_counts.items():
+        answered = sessions[session_id]["answered"]
+        if answered is not None and count > answered:
+            raise ExportError("Session has more recorded reviews than answered attempts")
     if version == 1:
         return len(rows), []
     grammar_ids = {key for key, row in logs.items() if row["mode"] == "Grammar"}
@@ -203,9 +255,11 @@ def analyze(path):
     version = 1
     if "export_manifest.json" in bundle:
         manifest = bundle["export_manifest.json"]
-        if not isinstance(manifest, dict) or _integer(manifest, "formatVersion", 2, 2) != 2:
+        if not isinstance(manifest, dict):
             raise ExportError("Unsupported export manifest")
-        version = 2
+        version = _integer(manifest, "formatVersion", 2, 3)
+        if set(bundle) != (V2_ENTRIES if version == 2 else V3_ENTRIES):
+            raise ExportError("Export members do not match the declared format version")
     _rows(bundle, "review_state.json")
     settings = bundle["settings.json"]
     if not isinstance(settings, dict):

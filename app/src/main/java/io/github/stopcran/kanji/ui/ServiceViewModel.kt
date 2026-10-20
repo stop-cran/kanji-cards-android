@@ -13,5 +13,14 @@ import io.github.stopcran.kanji.Services
 @Composable
 inline fun <reified VM : ViewModel> serviceViewModel(key: String, crossinline create: (Services) -> VM): VM {
     val services = (LocalContext.current.applicationContext as KanjiApp).services
-    return viewModel(key = key, factory = viewModelFactory { initializer { create(services) } })
+    return viewModel(key = key, factory = viewModelFactory {
+        initializer {
+            create(services).also { vm ->
+                if (vm is StudyViewModel) {
+                    services.studySessions.register(key, vm::leaveSession)
+                    vm.addCloseable { services.studySessions.leave(key) }
+                }
+            }
+        }
+    })
 }

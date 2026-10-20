@@ -34,6 +34,20 @@ def fixture():
     }
 
 
+def session_fixture():
+    bundle = fixture()
+    bundle["export_manifest.json"]["formatVersion"] = 3
+    for log in bundle["review_log.json"]:
+        log["sessionId"] = "session-a" if log["sourceId"] == "owner/repo" else None
+    bundle["study_sessions.json"] = [
+        dict(id="session-a", sourceId="owner/repo", stack="grammar", mode="Grammar", extra=False,
+             startedAtMs=50, endedAtMs=300, endReason="completed", answered=4, correct=3),
+        dict(id="unfinished", sourceId="owner/repo", stack="grammar", mode="Grammar", extra=True,
+             startedAtMs=400, endedAtMs=None, endReason=None, answered=None, correct=None),
+    ]
+    return bundle
+
+
 class GrammarAnalysisTest(unittest.TestCase):
     def read(self, bundle, raw=None):
         with tempfile.TemporaryDirectory() as directory:
@@ -76,6 +90,51 @@ class GrammarAnalysisTest(unittest.TestCase):
         expected = self.read(bundle)
         bundle["review_log.json"].reverse()
         self.assertEqual(expected, self.read(bundle))
+
+    def test_v3_sessions_preserve_review_metrics_and_allow_legacy_unassigned_reviews(self):
+        expected = self.read(fixture())
+        expected["export_format_version"] = 3
+        self.assertEqual(expected, self.read(session_fixture()))
+
+    def test_v3_rejects_missing_or_inconsistent_session_evidence(self):
+        mutations = [
+            lambda b: b.pop("study_sessions.json"),
+            lambda b: b["export_manifest.json"].update(formatVersion=2),
+            lambda b: b["study_sessions.json"].append(deepcopy(b["study_sessions.json"][0])),
+            lambda b: b["review_log.json"][0].pop("sessionId"),
+            lambda b: b["review_log.json"][0].update(sessionId="missing"),
+            lambda b: b["review_log.json"][3].update(sessionId="session-a"),
+            lambda b: b["study_sessions.json"][0].update(mode="WordJpEn"),
+            lambda b: b["study_sessions.json"][0].update(extra=1),
+            lambda b: b["study_sessions.json"][0].update(endReason="unknown"),
+            lambda b: b["study_sessions.json"][0].update(answered=2, correct=2),
+            lambda b: b["study_sessions.json"][0].update(correct=5),
+            lambda b: b["study_sessions.json"][1].update(answered=0),
+            lambda b: b["study_sessions.json"][1].pop("endedAtMs"),
+        ]
+        for index, mutate in enumerate(mutations):
+            with self.subTest(case=index):
+                bundle = session_fixture()
+                mutate(bundle)
+                with self.assertRaises(ExportError):
+                    self.read(bundle)
+
+    def test_v3_mixed_readings_and_borrowed_stacks_share_a_session(self):
+        bundle = session_fixture()
+        bundle["grammar_responses.json"] = []
+        bundle["study_sessions.json"] = [
+            dict(id="readings", sourceId="owner/repo", stack="jlpt-n5", mode="KanjiReadings", extra=True,
+                 startedAtMs=50, endedAtMs=300, endReason="completed", answered=2, correct=2),
+        ]
+        bundle["review_log.json"] = [
+            dict(id=1, sourceId="owner/repo", stack="jlpt-n4", kanji="x", mode="KanjiOn",
+                 reading="a", grade=3, atMs=100, sessionId="readings"),
+            dict(id=2, sourceId="owner/repo", stack="jlpt-n5", kanji="x", mode="KanjiKun",
+                 reading="b", grade=3, atMs=200, sessionId="readings"),
+        ]
+        report = self.read(bundle)
+        self.assertEqual(2, report["canonical_review_count"])
+        self.assertEqual("no_recorded_grammar_reviews", report["grammar_evidence"])
 
     def test_legacy_and_empty_v2_explicitly_have_no_grammar_evidence(self):
         legacy = {"review_state.json": [], "review_log.json": [], "settings.json": {}}

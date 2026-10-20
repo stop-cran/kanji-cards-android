@@ -99,6 +99,17 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   Input is limited to 80 characters. Empty Check does nothing; "I don't know" is Again. Correct is Good, or Hard when a correct-choice user
   selects "I guessed"; choice first success is capped at one day, typing is not. Advancing a recorded answer atomically saves one state,
   one canonical review log and one linked response detail. A successful confirmation is still practice only, regardless of presentation.
+- **Grammar vocabulary:** optional reviewed occurrence ranges link lexical words in both question and answer-check prompts, never the
+  blank or its inserted answer. All supported words are underlined/tappable; heavier links indicate insufficient familiarity evidence.
+  A separate vocabulary list supplies large labeled buttons, including local-gloss-only words. The popup shows the displayed-form
+  reading, contextual gloss and differing headword without grading or enrolling anything.
+  At session preparation, one Room transaction captures Grammar data, referenced word-article text and same-source `WordJpEn` states
+  across stacks. Any state satisfying `Advancement.isSolid` makes that canonical word familiar for the session; other modes/sources,
+  kanji knowledge and JLPT do not. This is a word-level hint, not proof of knowing every sense/reading.
+  Lookup/list/article state lives beside (not inside) the question state. Captured word-article text opens in a saveable panel within
+  the same session; deeper document links and the answer-side grammar article use a source-pinned document route. Sync/source changes
+  cannot retarget a lookup or replace its captured text. The existing grammar draft/options/order remain intact across panel and
+  document navigation. There is no per-lookup telemetry, review, session, introduction-budget debit or grade adjustment.
 - **Grammar scope (Phase B):** source-scoped All/Unclassified/N5-N1 controls select cumulative new material independently from exact-level
   article browsing; counts describe matching exercises, not whole matching files. `grammarStudy` supplies Home, sessions and reminders
   from the shared `GrammarEligibility` pool and optional focus policy.
@@ -302,8 +313,14 @@ additional review events. The stored target construction/relationship describe t
 stored automatically for recorded reviews, unlike the opt-in drawing log. User-controlled export and Android backup can copy this private
 data off the device; see `PRIVACY.md` and `CONTENT-SCHEMA.md`.
 Room v9 adds only the focus cursor and nullable accepted-snapshot Grammar diagnostic. The cursor is updated atomically with a first
-guided introduction, omitted from the unchanged five-member progress export, and included in normal Android database backup.
+guided introduction, omitted from progress exports, and included in normal Android database backup.
 The local focus readout contains aggregate evidence and decision reasons, never raw typed responses; no new telemetry is added.
+
+Room v11 adds `study_sessions` and nullable `review_log.sessionId`; export v3 adds the sixth member `study_sessions.json`.
+All study ViewModels use `StudyViewModel` for start/end tracking and ordered review persistence, without changing `QuizSession` or FSRS.
+The route registry closes sessions on actual navigation removal, not composition disposal (article links/rotation).
+Completion and early exit store the UI answer totals, including practice-only confirmations; process death leaves an unknown ending.
+Historical answers remain unassigned. See `CONTENT-SCHEMA.md` for linkage, mixed readings/padding and timestamp limitations.
 
 The stdlib-only `tools/analyze_grammar_progress.py` gives two overlapping post-hoc views of those events (recorded construction and
 relationship IDs), with choice/type and first-observed/repeated strata. Retain both for diagnosing where contextual contrasts need attention,

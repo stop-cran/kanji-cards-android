@@ -3,7 +3,6 @@ package io.github.stopcran.kanji.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.content.StrokeData
@@ -68,7 +67,7 @@ sealed interface DrawUi {
 }
 
 /** Drawing session: caption + canvas -> check (recogniser gate + stroke matcher) -> graded answer with overlay. */
-class DrawViewModel(private val app: Services) : ViewModel() {
+class DrawViewModel(private val app: Services) : StudyViewModel(app) {
     private val fsrs = Fsrs()
     private val matcher = StrokeMatcher()
     private val recognizer = InkRecognizer()
@@ -131,7 +130,7 @@ class DrawViewModel(private val app: Services) : ViewModel() {
         } else {
             QueueBuilder.build(ids, states, Instant.now(), budget).map { it.kanji }
         }
-        session = QuizSession(items, { it }, confirm = false)
+        session = trackSession(QuizSession(items, { it }, confirm = false), sourceId, stack, StudyMode.Draw.name, extra)
         showNext()
     }
 
@@ -177,6 +176,7 @@ class DrawViewModel(private val app: Services) : ViewModel() {
         ink.clear()
         val kanji = session.take()
         ui = if (kanji == null) {
+            finishSession()
             if (session.answered == 0) DrawUi.Empty("Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings.") else DrawUi.Done(session.answered, session.correct)
         } else {
             val trace = DrawGate.shouldTrace(app.settings.traceNew.value, states[kanji], traced, kanji)
@@ -232,10 +232,10 @@ class DrawViewModel(private val app: Services) : ViewModel() {
         val updated = fsrs.review(states[a.card.kanji] ?: SrsState(), grade, now, fuzzSeed = Fsrs.seed(a.card.kanji, StudyMode.Draw.name, states[a.card.kanji]?.reps ?: 0))
         states[a.card.kanji] = updated
         val owner = owners[a.card.kanji] ?: stack
-        viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
+        recordSession {
             app.db.reviews().record(
                 updated.toEntity(sourceId, owner, a.card.kanji, StudyMode.Draw),
-                ReviewLogEntity(0, sourceId, owner, a.card.kanji, StudyMode.Draw.name, grade.value, now.toEpochMilli()),
+                ReviewLogEntity(0, sourceId, owner, a.card.kanji, StudyMode.Draw.name, grade.value, now.toEpochMilli(), sessionId = reviewSessionId),
             )
         }
         showNext()
@@ -243,5 +243,6 @@ class DrawViewModel(private val app: Services) : ViewModel() {
 
     override fun onCleared() {
         recognizer.close()
+        super.onCleared()
     }
 }

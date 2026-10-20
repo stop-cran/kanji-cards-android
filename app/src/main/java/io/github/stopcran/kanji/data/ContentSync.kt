@@ -5,6 +5,7 @@ import io.github.stopcran.kanji.core.content.ContentParser
 import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.content.SafeZip
 import io.github.stopcran.kanji.core.content.SceneCatalog
+import io.github.stopcran.kanji.core.content.GrammarVocabulary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -72,7 +73,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
     }
 
     private fun needsParserRefresh(source: RepoSource): Boolean =
-        !settings.grammarFor(source.id).groupsReady || settings.sceneParserEpoch(source.id) < SceneCatalog.PARSER_EPOCH
+        settings.grammarFor(source.id).parserEpoch < GrammarVocabulary.PARSER_EPOCH || settings.sceneParserEpoch(source.id) < SceneCatalog.PARSER_EPOCH
 
     /** Head commit of the branch via the GitHub API (one tiny request); null when unavailable, e.g. offline or rate limited. */
     private fun headCommit(source: RepoSource): String? {
@@ -134,7 +135,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             val rows = parsed.toRows(source.id)
             val meta = parsed.toSyncMeta(source.id)
             dao.replaceContent(source.id, rows, meta)
-            settings.setGrammarParserEpoch(source.id, GRAMMAR_GROUP_EPOCH)
+            settings.setGrammarParserEpoch(source.id, GrammarVocabulary.PARSER_EPOCH)
             settings.setSceneParserEpoch(source.id, SceneCatalog.PARSER_EPOCH)
             head?.let { settings.setSyncedCommit(commitKey, it) }
             SyncResult.Updated(rows.kanji.size, rows.words.size, parsed.problems)

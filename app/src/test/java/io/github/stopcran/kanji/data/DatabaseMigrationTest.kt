@@ -30,6 +30,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.zip.ZipInputStream
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -49,7 +50,10 @@ class DatabaseMigrationTest {
     }
 
     private fun openDatabase() = Room.databaseBuilder(context, AppDatabase::class.java, name)
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+        .addMigrations(
+            MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
+            MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
+        )
         .allowMainThreadQueries()
         .build()
 
@@ -100,32 +104,30 @@ class DatabaseMigrationTest {
             response = "koto",
             correct = true,
         )
+        val session = StudySessionEntity("session-1", source, GRAMMAR_STACK, "Grammar", false, now.toEpochMilli() - 1)
         withDatabase { db ->
+            db.reviews().insertSession(session)
             db.reviews().recordGrammar(
                 state.toEntity(source, GRAMMAR_STACK, exerciseId, StudyMode.Grammar),
-                ReviewLogEntity(0, source, GRAMMAR_STACK, exerciseId, StudyMode.Grammar.name, 3, now.toEpochMilli()),
+                ReviewLogEntity(0, source, GRAMMAR_STACK, exerciseId, StudyMode.Grammar.name, 3, now.toEpochMilli(), sessionId = session.id),
                 detail,
             )
+            assertEquals(1, db.reviews().endSession(session.id, now.toEpochMilli() + 1, "completed", 2, 2))
         }
         withDatabase { db ->
             assertEquals(state.toEntity(source, GRAMMAR_STACK, exerciseId, StudyMode.Grammar), db.reviews().allStates().single())
             val log = db.reviews().allLog().single()
             val response = db.reviews().allGrammarResponses().single()
             assertEquals(log.id, response.reviewLogId)
+            assertEquals(session.id, log.sessionId)
             assertEquals(1, db.reviews().allLog().size)
 
             val output = ByteArrayOutputStream()
             assertEquals(1, ProgressExport.write(db, Settings(context), output))
-            val entries = ZipInputStream(output.toByteArray().inputStream()).use { zip ->
-                buildMap {
-                    while (true) {
-                        val entry = zip.nextEntry ?: break
-                        put(entry.name, zip.readBytes().decodeToString())
-                    }
-                }
-            }
+            val entries = zipEntries(output)
             val json = Json
-            assertEquals(2, json.parseToJsonElement(entries.getValue("export_manifest.json")).jsonObject.getValue("formatVersion").jsonPrimitive.int)
+            assertEquals(3, json.parseToJsonElement(entries.getValue("export_manifest.json")).jsonObject.getValue("formatVersion").jsonPrimitive.int)
+            assertEquals(6, entries.size)
             assertEquals(1, json.parseToJsonElement(entries.getValue("review_log.json")).jsonArray.size)
             val exported = json.parseToJsonElement(entries.getValue("grammar_responses.json")).jsonArray.single().jsonObject
             val exportedLog = json.parseToJsonElement(entries.getValue("review_log.json")).jsonArray.single().jsonObject
@@ -133,6 +135,11 @@ class DatabaseMigrationTest {
             assertEquals("koto-vs-wake", exported.getValue("relationshipId").jsonPrimitive.content)
             assertEquals(exportedLog.getValue("id"), exported.getValue("reviewLogId"))
             assertEquals(1, json.parseToJsonElement(entries.getValue("grammar_responses.json")).jsonArray.size)
+            val exportedSession = json.parseToJsonElement(entries.getValue("study_sessions.json")).jsonArray.single().jsonObject
+            assertEquals(exportedSession.getValue("id"), exportedLog.getValue("sessionId"))
+            assertEquals("completed", exportedSession.getValue("endReason").jsonPrimitive.content)
+            assertEquals(2, exportedSession.getValue("answered").jsonPrimitive.int)
+            assertEquals(2, exportedSession.getValue("correct").jsonPrimitive.int)
         }
     }
 
@@ -151,7 +158,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(10, db.openHelper.writableDatabase.version)
+                assertEquals(11, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(sources.first(), "all", "日", "KanjiOn", "Review", 12.5, 5.0, 999, 500, 3, 1, "にち"),
                     db.reviews().allStates().single(),
@@ -163,6 +170,46 @@ class DatabaseMigrationTest {
             }
         }
     }
+
+    @Test
+    fun version10UpgradeDoesNotInventHistoricalSessionsOrAnInterruptedEnd() = runBlocking {
+        val source = sources.first()
+        createSchema(10) { sqlite ->
+            sqlite.execSQL("INSERT INTO review_log VALUES (7, ?, 'all', 'x', 'Quiz', 3, 500, '')", arrayOf(source))
+            sqlite.execSQL(
+                "INSERT INTO review_state VALUES (?, 'all', 'x', 'Quiz', 'Review', 12.5, 5.0, 999, 500, 3, 1, '')",
+                arrayOf(source),
+            )
+        }
+        val interrupted = StudySessionEntity("interrupted", source, "all", "Quiz", true, 1000)
+        withDatabase { db ->
+            assertEquals(ReviewLogEntity(7, source, "all", "x", "Quiz", 3, 500), db.reviews().allLog().single())
+            assertEquals(3, db.reviews().allStates().single().reps)
+            assertTrue(db.reviews().allSessions().isEmpty())
+            db.reviews().insertSession(interrupted)
+        }
+        withDatabase { db ->
+            assertEquals(interrupted, db.reviews().allSessions().single())
+            assertNull(db.reviews().allLog().single().sessionId)
+            val output = ByteArrayOutputStream()
+            ProgressExport.write(db, Settings(context), output)
+            val entries = zipEntries(output)
+            val row = Json.parseToJsonElement(entries.getValue("study_sessions.json")).jsonArray.single().jsonObject
+            for (key in listOf("endedAtMs", "endReason", "answered", "correct")) assertEquals(JsonNull, row.getValue(key))
+            val log = Json.parseToJsonElement(entries.getValue("review_log.json")).jsonArray.single().jsonObject
+            assertEquals(JsonNull, log.getValue("sessionId"))
+        }
+    }
+
+    private fun zipEntries(output: ByteArrayOutputStream): Map<String, String> =
+        ZipInputStream(output.toByteArray().inputStream()).use { zip ->
+            buildMap {
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    put(entry.name, zip.readBytes().decodeToString())
+                }
+            }
+        }
 
     private fun createSchema(version: Int, seed: (android.database.sqlite.SQLiteDatabase) -> Unit) {
         val schema = Json.parseToJsonElement(
@@ -203,7 +250,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(10, db.openHelper.writableDatabase.version)
+                assertEquals(11, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(source, GRAMMAR_STACK, "alpha-a-0", "Grammar", "Review", 12.5, 5.0, 999, 500, 3, 1),
                     db.reviews().allStates().single(),

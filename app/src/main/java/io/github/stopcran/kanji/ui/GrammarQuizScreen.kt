@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -24,17 +25,35 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import io.github.stopcran.kanji.core.content.GrammarExercise
 
 @Composable
 fun GrammarQuizScreen(
     sessionKey: String,
     onBack: () -> Unit,
-    onOpenDoc: (String) -> Unit,
+    onOpenDoc: (String, String) -> Unit,
     onPracticeMore: () -> Unit,
     vm: GrammarQuizViewModel = serviceViewModel(sessionKey) { GrammarQuizViewModel(it) },
 ) {
     LaunchedEffect(sessionKey) { vm.ensureStarted(sessionKey.endsWith(":extra")) }
+    val holder = rememberSaveableStateHolder()
+    val article = vm.lookupArticle
+    holder.SaveableStateProvider(if (article == null) "question" else "vocabulary:${article.word}") {
+        if (article != null) {
+            GrammarVocabularyArticle(article, vm::closeLookupArticle) { onOpenDoc(vm.sourceId, it) }
+        } else {
+            GrammarSessionBody(vm, onBack, onOpenDoc, onPracticeMore)
+        }
+    }
+}
+
+@Composable
+private fun GrammarSessionBody(
+    vm: GrammarQuizViewModel,
+    onBack: () -> Unit,
+    onOpenDoc: (String, String) -> Unit,
+    onPracticeMore: () -> Unit,
+) {
+    GrammarVocabularyHelp(vm)
     Page("Grammar", onBack, ime = true, scrollToTopOnBack = true) {
         vm.focusNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         when (val state = vm.ui) {
@@ -48,7 +67,7 @@ fun GrammarQuizScreen(
             }
             is GrammarUi.Choose -> {
                 GrammarRemaining(state.remaining)
-                Prompt(state.exercise)
+                GrammarPrompt(vm, state.exercise)
                 Text("Choose the construction that best fits the context.", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 state.options.forEach { option ->
                     OutlinedButton(onClick = { vm.pick(option.id) }, modifier = Modifier.fillMaxWidth()) { Text(option.label) }
@@ -57,7 +76,7 @@ fun GrammarQuizScreen(
             }
             is GrammarUi.Type -> {
                 GrammarRemaining(state.remaining)
-                Prompt(state.exercise)
+                GrammarPrompt(vm, state.exercise)
                 Text("Type the construction (not the whole sentence).", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 TypeAnswer(vm)
             }
@@ -69,7 +88,7 @@ fun GrammarQuizScreen(
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center,
                 )
-                Prompt(state.exercise, state.exercise.options.first { it.id == state.exercise.answer }.label)
+                GrammarPrompt(vm, state.exercise, state.exercise.options.first { it.id == state.exercise.answer }.label)
                 if (state.response.isNotEmpty()) {
                     val response = if (state.type == "choose") {
                         state.exercise.options.firstOrNull { it.id == state.response }?.label ?: state.response
@@ -82,7 +101,7 @@ fun GrammarQuizScreen(
                     val prefix = if (option.id == state.exercise.answer) "✓ " else ""
                     Text("$prefix${option.label} — ${option.rationale}", style = MaterialTheme.typography.bodySmall)
                 }
-                OutlinedButton(onClick = { onOpenDoc(vm.articlePath(state.exercise.id)) }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { onOpenDoc(vm.sourceId, vm.articlePath(state.exercise.id)) }, modifier = Modifier.fillMaxWidth()) {
                     Text("Read the grammar article")
                 }
                 Row(
@@ -120,11 +139,4 @@ private fun TypeAnswer(vm: GrammarQuizViewModel) {
 @Composable
 private fun GrammarRemaining(count: Int) {
     Text("Questions remaining: $count", style = MaterialTheme.typography.labelMedium)
-}
-
-@Composable
-private fun Prompt(exercise: GrammarExercise, answer: String? = null) {
-    val text = answer?.let { exercise.prompt.replace("____", it) } ?: exercise.prompt.replace("____", "（　）")
-    Text(text, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
-    Text(exercise.translation, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
 }

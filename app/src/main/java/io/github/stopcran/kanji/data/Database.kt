@@ -125,7 +125,7 @@ data class ReviewStateEntity(
 
 @Entity(
     tableName = "review_log",
-    indices = [Index(value = ["sourceId", "stack", "kanji", "mode"]), Index(value = ["atMs"])],
+    indices = [Index(value = ["sourceId", "stack", "kanji", "mode"]), Index(value = ["atMs"]), Index(value = ["sessionId"])],
 )
 data class ReviewLogEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -136,6 +136,21 @@ data class ReviewLogEntity(
     val grade: Int,
     val atMs: Long,
     @ColumnInfo(defaultValue = "''") val reading: String = "",
+    val sessionId: String? = null,
+)
+
+@Entity(tableName = "study_sessions")
+data class StudySessionEntity(
+    @PrimaryKey val id: String,
+    val sourceId: String,
+    val stack: String,
+    val mode: String,
+    val extra: Boolean,
+    val startedAtMs: Long,
+    val endedAtMs: Long? = null,
+    val endReason: String? = null,
+    val answered: Int? = null,
+    val correct: Int? = null,
 )
 
 @Entity(tableName = "sync_meta", primaryKeys = ["sourceId"])
@@ -199,6 +214,9 @@ interface ContentDao {
 
     @Query("SELECT * FROM words WHERE sourceId = :sourceId AND word = :word")
     suspend fun word(sourceId: String, word: String): WordEntity?
+
+    @Query("SELECT * FROM words WHERE sourceId = :sourceId AND word IN (:ids)")
+    suspend fun referencedWords(sourceId: String, ids: List<String>): List<WordEntity>
 
     @Query("SELECT * FROM articles WHERE sourceId = :sourceId AND slug = :slug")
     suspend fun article(sourceId: String, slug: String): ArticleEntity?
@@ -311,6 +329,18 @@ interface ContentDao {
 
 @Dao
 interface ReviewDao {
+    @Insert
+    suspend fun insertSession(session: StudySessionEntity)
+
+    @Query("SELECT * FROM study_sessions ORDER BY startedAtMs, id")
+    suspend fun allSessions(): List<StudySessionEntity>
+
+    @Query(
+        "UPDATE study_sessions SET endedAtMs = :atMs, endReason = :reason, answered = :answered, correct = :correct " +
+            "WHERE id = :id AND endedAtMs IS NULL",
+    )
+    suspend fun endSession(id: String, atMs: Long, reason: String, answered: Int, correct: Int): Int
+
     @Query("SELECT * FROM grammar_focus WHERE sourceId = :sourceId")
     suspend fun grammarFocus(sourceId: String): GrammarFocusEntity?
 
@@ -334,6 +364,9 @@ interface ReviewDao {
 
     @Query("SELECT * FROM review_state WHERE sourceId = :sourceId AND stack = :stack AND mode = :mode")
     suspend fun states(sourceId: String, stack: String, mode: String): List<ReviewStateEntity>
+
+    @Query("SELECT * FROM review_state WHERE sourceId = :sourceId AND mode = :mode")
+    suspend fun statesAcrossStacks(sourceId: String, mode: String): List<ReviewStateEntity>
 
     @Query("SELECT * FROM review_state WHERE sourceId = :sourceId AND stack = :stack AND mode = :mode")
     fun observeStates(sourceId: String, stack: String, mode: String): Flow<List<ReviewStateEntity>>
@@ -414,14 +447,26 @@ interface ReviewDao {
         KanjiEntity::class, WordEntity::class, ArticleEntity::class, CounterEntity::class, ImageEntity::class,
         GrammarEntity::class, GrammarResponseEntity::class, GrammarFocusEntity::class,
         WordSceneEntity::class,
-        ReviewStateEntity::class, ReviewLogEntity::class, SyncMetaEntity::class,
+        ReviewStateEntity::class, ReviewLogEntity::class, StudySessionEntity::class, SyncMetaEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun content(): ContentDao
     abstract fun reviews(): ReviewDao
+}
+
+val MIGRATION_10_11 = object : androidx.room.migration.Migration(10, 11) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE review_log ADD COLUMN sessionId TEXT")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_review_log_sessionId ON review_log (sessionId)")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS study_sessions (id TEXT NOT NULL PRIMARY KEY, sourceId TEXT NOT NULL, stack TEXT NOT NULL, " +
+                "mode TEXT NOT NULL, extra INTEGER NOT NULL, startedAtMs INTEGER NOT NULL, endedAtMs INTEGER, endReason TEXT, " +
+                "answered INTEGER, correct INTEGER)",
+        )
+    }
 }
 
 val MIGRATION_9_10 = object : androidx.room.migration.Migration(9, 10) {

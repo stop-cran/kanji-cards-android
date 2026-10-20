@@ -3,7 +3,6 @@ package io.github.stopcran.kanji.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.content.StrokeData
@@ -28,7 +27,6 @@ import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.practiceMinimum
 import io.github.stopcran.kanji.data.toSrs
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -57,7 +55,7 @@ sealed interface KanaStudyUi {
     ) : KanaStudyUi
 }
 
-class KanaStudyViewModel(private val app: Services) : ViewModel() {
+class KanaStudyViewModel(private val app: Services) : StudyViewModel(app) {
     private val fsrs = Fsrs()
     private val matcher = StrokeMatcher()
     private val recognizer = InkRecognizer()
@@ -111,7 +109,7 @@ class KanaStudyViewModel(private val app: Services) : ViewModel() {
             ui = KanaStudyUi.Empty(if (extra) "No kana available to practise." else "Nothing is due. Come back later or choose practice more.")
             return
         }
-        session = QuizSession(ids, { it }, confirm = false)
+        session = trackSession(QuizSession(ids, { it }, confirm = false), KANA_SOURCE_ID, script.id, mode.name, extra)
         showNext(cards.associateBy { it.kana })
     }
 
@@ -163,6 +161,7 @@ class KanaStudyViewModel(private val app: Services) : ViewModel() {
         draft = ""
         val id = session.take()
         if (id == null) {
+            finishSession()
             ui = if (session.answered == 0) KanaStudyUi.Empty("Nothing is due.") else KanaStudyUi.Done(session.answered, session.correct)
             return
         }
@@ -299,16 +298,17 @@ class KanaStudyViewModel(private val app: Services) : ViewModel() {
             state.reps,
             state.lapses,
         )
-        viewModelScope.launch(NonCancellable) {
+        recordSession {
             app.db.reviews().record(
                 entry,
-                ReviewLogEntity(0, KANA_SOURCE_ID, script.id, id, mode.name, result.grade.value, now.toEpochMilli()),
+                ReviewLogEntity(0, KANA_SOURCE_ID, script.id, id, mode.name, result.grade.value, now.toEpochMilli(), sessionId = reviewSessionId),
             )
         }
     }
 
     override fun onCleared() {
         recognizer.close()
+        super.onCleared()
     }
 
     private companion object {

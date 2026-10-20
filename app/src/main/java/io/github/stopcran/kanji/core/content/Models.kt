@@ -150,6 +150,9 @@ data class GrammarExercise(
     val acceptedAnswers: List<String>,
     val options: List<GrammarOption>,
     val jlpt: Int? = null,
+    val vocabulary: GrammarVocabularyData? = null,
+    /** Import diagnostic for optional vocabulary support; never supplied by authored content. */
+    val vocabularyProblem: String? = null,
 )
 
 @Serializable

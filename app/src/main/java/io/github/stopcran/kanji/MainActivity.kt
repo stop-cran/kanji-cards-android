@@ -1,6 +1,7 @@
 package io.github.stopcran.kanji
 
 import android.os.Bundle
+import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -66,6 +67,7 @@ private fun AppNav(app: KanjiApp) {
     fun push(route: String) { stack.add(route) }
     fun pop() {
         if (stack.size > 1) {
+            app.services.studySessions.leave(stack.last())
             holder.removeState(stateKey(stack.lastIndex, stack.last()))
             stack.removeAt(stack.lastIndex)
         }
@@ -80,6 +82,8 @@ private fun AppNav(app: KanjiApp) {
 
 /** Index in the key so the same document opened twice in one stack keeps separate scroll state. */
 private fun stateKey(index: Int, route: String) = "$index:$route"
+
+private fun sourceDocRoute(sourceId: String, path: String) = "source-doc:${Uri.encode(sourceId)}:${Uri.encode(path)}"
 
 @Composable
 private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, pop: () -> Unit) {
@@ -112,7 +116,7 @@ private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, p
             GrammarQuizScreen(
                 sessionKey = route,
                 onBack = pop,
-                onOpenDoc = { push("doc:$it") },
+                onOpenDoc = { sourceId, path -> push(sourceDocRoute(sourceId, path)) },
                 onPracticeMore = { pop(); push("grammarquiz:${System.currentTimeMillis()}:extra") },
             )
         } else if (route.startsWith("kreading:")) {
@@ -138,6 +142,9 @@ private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, p
                     push("kana-study:${script.id}:${mode.name}:${System.currentTimeMillis()}:extra")
                 },
             )
+        } else if (route.startsWith("source-doc:")) {
+            val (sourceId, path) = route.removePrefix("source-doc:").split(":", limit = 2).map(Uri::decode)
+            DocScreen(app, path, onBack = pop, onOpenDoc = { push(sourceDocRoute(sourceId, it)) }, sourceId = sourceId)
         } else if (route.startsWith("doc:")) {
             val path = route.removePrefix("doc:")
             DocScreen(app, path, onBack = pop, onOpenDoc = { push("doc:$it") })

@@ -3,7 +3,6 @@ package io.github.stopcran.kanji.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.content.CounterCard
@@ -57,7 +56,7 @@ sealed interface CounterUi {
 }
 
 /** One counter quiz session in a single [CounterMode]; answers are saved under the shared "counters" stack. */
-class CounterQuizViewModel(private val app: Services) : ViewModel() {
+class CounterQuizViewModel(private val app: Services) : StudyViewModel(app) {
     private val fsrs = Fsrs()
 
     var ui: CounterUi by mutableStateOf(CounterUi.Loading)
@@ -94,13 +93,14 @@ class CounterQuizViewModel(private val app: Services) : ViewModel() {
         val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
         val limit = if (extra) app.settings.practiceMinimum() else null
         val queue = CounterQueues.build(index, CounterQueueRequest(mode, states, choose, Instant.now(), budget, limit))
-        session = QuizSession(queue.map { it.kanji }, { it })
+        session = trackSession(QuizSession(queue.map { it.kanji }, { it }), sourceId, COUNTER_STACK, mode.mode.name, extra)
         showNext()
     }
 
     private fun showNext() {
         val id = session.take()
         if (id == null) {
+            finishSession()
             ui = if (session.answered == 0) CounterUi.Empty(emptyMessage()) else CounterUi.Done(session.answered, session.correct)
             return
         }
@@ -181,8 +181,8 @@ class CounterQuizViewModel(private val app: Services) : ViewModel() {
             firstSuccessCapDays = cap, fuzzSeed = Fsrs.seed(id, mode.mode.name, states[id]?.reps ?: 0),
         )
         states[id] = updated
-        viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
-            val log = ReviewLogEntity(0, sourceId, COUNTER_STACK, id, mode.mode.name, grade.value, now.toEpochMilli())
+        recordSession {
+            val log = ReviewLogEntity(0, sourceId, COUNTER_STACK, id, mode.mode.name, grade.value, now.toEpochMilli(), sessionId = reviewSessionId)
             app.db.reviews().record(updated.toEntity(sourceId, COUNTER_STACK, id, mode.mode), log)
         }
     }

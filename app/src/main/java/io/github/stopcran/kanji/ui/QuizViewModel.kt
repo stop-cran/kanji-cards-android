@@ -3,7 +3,6 @@ package io.github.stopcran.kanji.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.quiz.QuizBuilder
@@ -53,7 +52,7 @@ sealed interface QuizUi {
 }
 
 /** Quiz session: question state -> answer-check state per card; wrong answers are asked again a few cards later. */
-class QuizViewModel(private val app: Services) : ViewModel() {
+class QuizViewModel(private val app: Services) : StudyViewModel(app) {
     private val fsrs = Fsrs()
     private val random = Random.Default
 
@@ -103,7 +102,7 @@ class QuizViewModel(private val app: Services) : ViewModel() {
         } else {
             QueueBuilder.build(all.map { it.kanji }, states, Instant.now(), minOf(budget, capacity ?: budget)).map { it.kanji }
         }
-        session = QuizSession(items, { it })
+        session = trackSession(QuizSession(items, { it }), sourceId, stack, StudyMode.Quiz.name, extra)
         showNext()
     }
 
@@ -135,6 +134,7 @@ class QuizViewModel(private val app: Services) : ViewModel() {
     private fun showNext() {
         val kanji = session.take()
         if (kanji == null) {
+            finishSession()
             ui = if (session.answered == 0) QuizUi.Empty("Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings.") else QuizUi.Done(session.answered, session.correct)
             return
         }
@@ -182,8 +182,8 @@ class QuizViewModel(private val app: Services) : ViewModel() {
             )
             states[a.card.kanji] = updated
             val owner = owners[a.card.kanji] ?: stack
-            viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
-                val log = ReviewLogEntity(0, sourceId, owner, a.card.kanji, StudyMode.Quiz.name, grade.value, now.toEpochMilli())
+            recordSession {
+                val log = ReviewLogEntity(0, sourceId, owner, a.card.kanji, StudyMode.Quiz.name, grade.value, now.toEpochMilli(), sessionId = reviewSessionId)
                 app.db.reviews().record(updated.toEntity(sourceId, owner, a.card.kanji, StudyMode.Quiz), log)
             }
         }

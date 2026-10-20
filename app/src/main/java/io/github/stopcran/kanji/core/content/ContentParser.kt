@@ -41,9 +41,15 @@ object ContentParser {
         val grammarResolution = GrammarGroups.resolve(grammarSets)
         val grammarProblems = problems.filter { it.startsWith("grammar/") } + grammarResolution.errors
         problems += grammarResolution.errors + grammarResolution.warnings
+        val vocabularySets = GrammarVocabulary.resolveWords(grammarResolution.sets, words.mapTo(hashSetOf()) { it.word })
+        vocabularySets.forEach { set ->
+            set.exercises.forEach { exercise ->
+                exercise.vocabularyProblem?.let { problems += "Vocabulary (${set.id}/${exercise.id}): $it" }
+            }
+        }
         return ParsedContent(
             manifest, unique, words, text.articles, text.strokes, problems,
-            resolveCounters(text.counters, problems), images, grammarResolution.sets, grammarProblems,
+            resolveCounters(text.counters, problems), images, vocabularySets, grammarProblems,
         )
     }
 
@@ -141,7 +147,7 @@ object ContentParser {
     }
 
     fun parseGrammar(path: String, text: String): GrammarSet {
-        val set = try {
+        val (set, raw) = try {
             val raw = json.parseToJsonElement(text).jsonObject
             val groups = GrammarGroups.decode(raw["introductionGroups"])
             raw["exercises"]?.jsonArray?.forEach { item ->
@@ -153,13 +159,14 @@ object ContentParser {
                     }
                 }
             }
-            json.decodeFromJsonElement(GrammarSet.serializer(), raw).copy(introductionGroups = groups)
+            json.decodeFromJsonElement(GrammarSet.serializer(), GrammarVocabulary.withoutSupport(raw))
+                .copy(introductionGroups = groups) to raw
         } catch (e: Exception) {
             throw ContentException("invalid grammar JSON: ${e.message}")
         }
         validateGrammarSet(path, set)
         GrammarGroups.validate(set)
-        return set
+        return GrammarVocabulary.attach(set, raw)
     }
 
     private fun validateGrammarSet(path: String, set: GrammarSet) {

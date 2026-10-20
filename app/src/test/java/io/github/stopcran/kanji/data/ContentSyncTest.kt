@@ -3,6 +3,9 @@ package io.github.stopcran.kanji.data
 import android.app.Application
 import androidx.room.Room
 import io.github.stopcran.kanji.core.content.ContentParser
+import io.github.stopcran.kanji.core.content.GrammarVocabulary
+import io.github.stopcran.kanji.core.content.GrammarVocabularyData
+import io.github.stopcran.kanji.core.content.GrammarVocabularySpan
 import io.github.stopcran.kanji.core.content.GrammarSet
 import io.github.stopcran.kanji.core.content.Manifest
 import io.github.stopcran.kanji.core.content.RepoSource
@@ -15,6 +18,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -199,7 +203,7 @@ class ContentSyncTest {
         assertEquals(2, http.downloads)
         assertEquals(2, db.content().wordScenes(source.id).size)
         assertEquals(GrammarScope.N3, settings.grammarFor(source.id).newScope)
-        assertEquals(GRAMMAR_GROUP_EPOCH, settings.grammarFor(source.id).parserEpoch)
+        assertEquals(GrammarVocabulary.PARSER_EPOCH, settings.grammarFor(source.id).parserEpoch)
         assertEquals(listOf(grammar), db.grammarSets(source.id))
         assertEquals(before, Triple(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses()))
         http.headFails = true
@@ -308,7 +312,7 @@ class ContentSyncTest {
         assertEquals(SyncResult.Updated(1, 0, emptyList()), runBlocking { sync.syncOnLaunch(source) })
         assertEquals(2, http.downloads)
         assertEquals(listOf(4, null), runBlocking { db.grammarSets(source.id).single().exercises.map { it.jlpt } })
-        assertEquals(GrammarPreferences(GrammarScope.N3, GrammarScope.Unclassified, GRAMMAR_GROUP_EPOCH), settings.grammarFor(source.id))
+        assertEquals(GrammarPreferences(GrammarScope.N3, GrammarScope.Unclassified, GrammarVocabulary.PARSER_EPOCH), settings.grammarFor(source.id))
         assertEquals(before, runBlocking {
             Triple(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses())
         })
@@ -336,7 +340,7 @@ class ContentSyncTest {
         assertTrue(runBlocking { sync.syncOnLaunch(source) } is SyncResult.Updated)
         assertEquals(2, http.downloads)
         assertEquals(listOf(set), runBlocking { db.grammarSets(source.id) })
-        assertEquals(GRAMMAR_GROUP_EPOCH, settings.grammarFor(source.id).parserEpoch)
+        assertEquals(GrammarVocabulary.PARSER_EPOCH, settings.grammarFor(source.id).parserEpoch)
         val before = runBlocking { db.content().meta(source.id) }
         val broken = set.copy(introductionGroups = set.introductionGroups.map { it.copy(requires = listOf("absent")) })
         http.archiveBytes = archive("broken", mapOf("日" to "sun"), grammar = set.id to Json.encodeToString(GrammarSet.serializer(), broken))
@@ -345,6 +349,44 @@ class ContentSyncTest {
         assertEquals(before, runBlocking { db.content().meta(source.id) })
         assertEquals(listOf(set), runBlocking { db.grammarSets(source.id) })
         assertNull(before!!.grammarProblem)
+    }
+
+    @Test
+    fun vocabularyEpochRefreshesCachedHintsAndBrokenHintsDoNotBlockGrammar() = runBlocking {
+        val base = io.github.stopcran.kanji.core.grammarFixture().copy(article = "articles/pilot.md")
+        val first = base.exercises.first()
+        val hints = GrammarVocabularyData(1, ContentParser.rawSha256(first.prompt.toByteArray()), listOf(
+            GrammarVocabularySpan(0, 9, "Synthetic", "synthetic", "synthetic", "A test word"),
+        ))
+        val set = base.copy(exercises = base.exercises.mapIndexed { i, e -> if (i == 0) e.copy(vocabulary = hints) else e })
+        http.archiveBytes = archive("vocabulary", mapOf("日" to "sun"), grammar = set.id to Json.encodeToString(GrammarSet.serializer(), set))
+        assertTrue(sync.sync(source) is SyncResult.Updated)
+        db.content().insertGrammar(listOf(GrammarEntity(source.id, base.id, Json.encodeToString(GrammarSet.serializer(), base), 0)))
+        db.reviews().record(
+            ReviewStateEntity(source.id, GRAMMAR_STACK, first.id, "Grammar", "Review", 12.5, 5.0, 999, 500, 3, 1),
+            ReviewLogEntity(0, source.id, GRAMMAR_STACK, first.id, "Grammar", 3, 500),
+        )
+        val before = db.reviews().allStates() to db.reviews().allLog()
+        settings.setGrammarParserEpoch(source.id, GRAMMAR_GROUP_EPOCH)
+        settings.lastCheckMs = System.currentTimeMillis()
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
+        assertEquals(set, db.grammarSets(source.id).single())
+        assertEquals(2, http.downloads)
+        val broken = set.copy(exercises = set.exercises.mapIndexed { i, e ->
+            if (i == 0) e.copy(vocabulary = hints.copy(promptSha256 = "stale")) else e
+        })
+        http.headSha = SHA_B
+        http.archiveBytes = archive("broken-vocabulary", mapOf("日" to "sun"), grammar = set.id to Json.encodeToString(GrammarSet.serializer(), broken))
+        val result = sync.sync(source)
+        assertTrue(result is SyncResult.Updated)
+        assertTrue((result as SyncResult.Updated).problems.any { it.startsWith("Vocabulary (") })
+        assertNull(db.content().meta(source.id)!!.grammarProblem)
+        val cached = db.grammarSets(source.id).single()
+        assertEquals(base.introductionGroups, cached.introductionGroups)
+        assertEquals(base.exercises.size, cached.exercises.size)
+        assertNull(cached.exercises.first().vocabulary)
+        assertNotNull(cached.exercises.first().vocabularyProblem)
+        assertEquals(before, db.reviews().allStates() to db.reviews().allLog())
     }
 
     @Test

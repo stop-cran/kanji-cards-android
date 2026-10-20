@@ -3,7 +3,6 @@ package io.github.stopcran.kanji.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
 import androidx.compose.ui.graphics.ImageBitmap
@@ -84,7 +83,7 @@ class WordQuizViewModel(
     private val loadPicture: suspend (String, PictureScene) -> SceneImageResult = { source, scene ->
         app.db.content().sceneImage(source, scene.scene.image, scene.imageHash)
     },
-) : ViewModel() {
+) : StudyViewModel(app) {
     private val fsrs = Fsrs()
     private val random = Random.Default
 
@@ -146,7 +145,7 @@ class WordQuizViewModel(
         val minimum = app.settings.practiceMinimum()
         val base = WordQueues.build(direction, ids, states, other, Instant.now(), budget, extra, limit = if (extra) minimum else Int.MAX_VALUE).map { it.kanji }
         val items = if (extra) base + pad(base, minimum - base.size, ids, all) else base
-        session = QuizSession(items, { it })
+        session = trackSession(QuizSession(items, { it }), sourceId, stackId, direction.mode.name, extra)
         showNext()
     }
 
@@ -193,6 +192,7 @@ class WordQuizViewModel(
     }
 
     private fun finish() {
+        finishSession()
         ui = if (session.answered == 0) {
             WordQuizUi.Empty(
                 when (direction) {
@@ -292,8 +292,8 @@ class WordQuizViewModel(
         states[word] = updated
         val mode = direction.mode
         val stack = owners[word] ?: stackId
-        viewModelScope.launch(kotlinx.coroutines.NonCancellable) {
-            val log = ReviewLogEntity(0, sourceId, stack, word, mode.name, grade.value, now.toEpochMilli())
+        recordSession {
+            val log = ReviewLogEntity(0, sourceId, stack, word, mode.name, grade.value, now.toEpochMilli(), sessionId = reviewSessionId)
             app.db.reviews().record(updated.toEntity(sourceId, stack, word, mode), log)
         }
     }

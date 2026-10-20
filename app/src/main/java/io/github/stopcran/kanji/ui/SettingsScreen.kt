@@ -301,7 +301,7 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             progressExporter.launch("kanji-progress-$stamp.zip")
         }) { Text("Export progress") }
         Text(
-            "Review states, the answer history and settings, as JSON in a zip: a backup, or something to share when reporting a problem.",
+            "Review states, answer history, session boundaries, Grammar responses and settings as JSON in a ZIP. Keep exports private.",
             style = MaterialTheme.typography.bodySmall,
         )
         if (progressStatus.isNotEmpty()) Text(progressStatus, style = MaterialTheme.typography.bodySmall)
