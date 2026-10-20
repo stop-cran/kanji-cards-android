@@ -2,6 +2,7 @@ package io.github.stopcran.kanji.data
 
 import io.github.stopcran.kanji.core.content.ContentParser
 import io.github.stopcran.kanji.core.content.WordArticle
+import io.github.stopcran.kanji.core.content.WordScene
 import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.words.Advancement
@@ -53,6 +54,30 @@ class WordMappingTest {
             val entity = article.toEntity(source)
             assertEquals(WordEntity(source, "same-id", "reading", "meaning", "noun", "hard", "tag", "body", level), entity)
             assertEquals(WordCard("same-id", "reading", "meaning", "noun", listOf("hard"), listOf("tag"), level), entity.toCard())
+        }
+    }
+
+    @Test
+    fun pictureDirectionsUseEligibleVariantsNotTheArticleHeaderAndRetainTheirWordBudgetAndGate() {
+        val article = WordArticle(
+            "a", "a", "meaning", "wago", emptyList(), emptyList(), "body", jlpt = 5,
+            image = "images/diagram.webp", imageScene = "Labels",
+            scenes = listOf(
+                WordScene("diagram", "Diagram", "images/diagram.webp", "Labels", false),
+                WordScene("scene", "Usage", "images/scene.webp", "A scene", true),
+            ),
+        )
+        val eligible = article.toEntity(source)
+        val articleOnly = article.copy(word = "b", scenes = article.scenes.take(1)).toEntity(source)
+        assertEquals("images/diagram.webp", eligible.image)
+        assertEquals("images/scene.webp", eligible.toCard().image)
+        for (direction in listOf(WordDirection.Picture, WordDirection.WordToPicture)) {
+            val ids = listOf(eligible, articleOnly).forDirection(direction).map { it.word }
+            assertEquals(listOf("a"), ids)
+            assertTrue(WordQueues.build(direction, ids, emptyMap(), emptyMap(), now, 10).isEmpty())
+            assertTrue(WordQueues.build(direction, ids, emptyMap(), mapOf("a" to solid), now, 0).isEmpty())
+            assertEquals(listOf("a"), WordQueues.build(direction, ids, emptyMap(), mapOf("a" to solid), now, 1).map { it.kanji })
+            assertEquals(listOf("a"), WordQueues.build(direction, ids, mapOf("a" to solid), emptyMap(), now, 0).map { it.kanji })
         }
     }
 

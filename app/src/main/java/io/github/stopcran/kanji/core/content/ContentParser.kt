@@ -12,63 +12,108 @@ class ContentException(message: String) : Exception(message)
 object ContentParser {
     const val MAX_QUIZ_DISTRACTORS = 3
     const val MAX_IMAGE_BYTES = 150 * 1024
-    private val IMAGE_PATH = Regex("images/[^/\\\\\\s]+\\.webp")
+    internal val IMAGE_PATH = Regex("images/[^/\\\\\\s]+\\.webp")
 
     private val json = Json { ignoreUnknownKeys = true }
     private val grammarLevel = Regex("[1-5]")
 
-    fun parse(files: Map<String, ByteArray>): ParsedContent {
+    fun parse(
+        files: Map<String, ByteArray>,
+        imageValidator: (ByteArray) -> String? = { null },
+    ): ParsedContent {
+        val manifest = readManifest(files)
+        val text = readText(manifest, files)
+        val words = text.words
+        val problems = text.problems
+        resolveWordReferences(words, problems)
+        val titles = HashSet<String>()
+        val unique = text.kanji.filter { c ->
+            titles.add(c.title).also { if (!it) problems += "kanji/${c.kanji}.md: duplicate title '${c.title}'" }
+        }
+        val images = verifiedImages(manifest, files, words, problems, imageValidator)
+        val candidates = resolveGrammar(text.grammar, problems)
+        val articleIds = text.articles.mapTo(hashSetOf()) { "articles/${it.slug}.md" }
+        val grammarSets = candidates.filter { set ->
+            (set.article in articleIds).also {
+                if (!it) problems += "grammar/${set.id}.json: linked article '${set.article}' is missing"
+            }
+        }
+        val grammarResolution = GrammarGroups.resolve(grammarSets)
+        val grammarProblems = problems.filter { it.startsWith("grammar/") } + grammarResolution.errors
+        problems += grammarResolution.errors + grammarResolution.warnings
+        return ParsedContent(
+            manifest, unique, words, text.articles, text.strokes, problems,
+            resolveCounters(text.counters, problems), images, grammarResolution.sets, grammarProblems,
+        )
+    }
+
+    private fun readManifest(files: Map<String, ByteArray>): Manifest {
         val manifestBytes = files["manifest.json"] ?: throw ContentException("manifest.json is missing")
         val manifest = try {
             json.decodeFromString(Manifest.serializer(), manifestBytes.decodeToString())
         } catch (e: Exception) {
             throw ContentException("manifest.json is invalid: ${e.message}")
         }
-        if (manifest.schemaVersion != SUPPORTED_SCHEMA_VERSION) {
-            throw ContentException("Unsupported content schema ${manifest.schemaVersion}; this app supports $SUPPORTED_SCHEMA_VERSION")
-        }
+        return manifest
+    }
 
-        val problems = mutableListOf<String>()
+    private class TextContent {
         val kanji = mutableListOf<KanjiCard>()
         val words = mutableListOf<WordArticle>()
         val articles = mutableListOf<Article>()
         val strokes = mutableMapOf<String, StrokeData>()
         val counters = mutableListOf<CounterFile>()
         val grammar = mutableListOf<GrammarSet>()
+        val problems = mutableListOf<String>()
+
+        fun add(path: String, text: String) {
+            when (path.substringBefore('/') to path.substringAfterLast('.')) {
+                "kanji" to "md" -> kanji += parseKanji(path, text)
+                "words" to "md" -> words += parseWord(path, text)
+                "articles" to "md" -> articles += parseArticle(path, text)
+                "counters" to "json" -> counters += parseCounter(path, text)
+                "grammar" to "json" -> grammar += parseGrammar(path, text)
+                "strokes" to "json" -> parseStrokes(text).let { strokes[it.kanji] = it }
+            }
+        }
+    }
+
+    private fun parseStrokes(text: String): StrokeData {
+        val data = json.decodeFromString(StrokeData.serializer(), text)
+        require(data.schemaVersion == 1) { "unsupported strokes schema ${data.schemaVersion}" }
+        require(data.strokes.size == data.strokeCount) { "stroke count mismatch" }
+        require(data.strokes.all { it.points.size >= 2 && it.points.all { p -> p.size == 2 } }) { "bad stroke points" }
+        return data
+    }
+
+    private fun readText(manifest: Manifest, files: Map<String, ByteArray>): TextContent {
+        if (manifest.schemaVersion != SUPPORTED_SCHEMA_VERSION) {
+            throw ContentException("Unsupported content schema ${manifest.schemaVersion}; this app supports $SUPPORTED_SCHEMA_VERSION")
+        }
+        val content = TextContent()
         for ((path, expectedHash) in manifest.files.toSortedMap()) {
-            if (!isSafePath(path)) {
-                problems += "$path: unsafe path"
-                continue
-            }
             val bytes = files[path]
-            if (bytes == null) {
-                problems += "$path: listed in manifest but missing"
-                continue
+            val problem = when {
+                !isSafePath(path) -> "unsafe path"
+                path.startsWith("scenes/") -> "catalogs must be listed only in manifest.scenes"
+                bytes == null -> "listed in manifest but missing"
+                sha256(bytes) != expectedHash -> "hash mismatch"
+                else -> null
             }
-            if (sha256(bytes) != expectedHash) {
-                problems += "$path: hash mismatch"
+            if (problem != null) {
+                content.problems += "$path: $problem"
                 continue
             }
             try {
-                when {
-                    path.startsWith("kanji/") && path.endsWith(".md") -> kanji += parseKanji(path, bytes.decodeToString())
-                    path.startsWith("words/") && path.endsWith(".md") -> words += parseWord(path, bytes.decodeToString())
-                    path.startsWith("articles/") && path.endsWith(".md") -> articles += parseArticle(path, bytes.decodeToString())
-                    path.startsWith("counters/") && path.endsWith(".json") -> counters += parseCounter(path, bytes.decodeToString())
-                    path.startsWith("grammar/") && path.endsWith(".json") -> grammar += parseGrammar(path, bytes.decodeToString())
-                    path.startsWith("strokes/") && path.endsWith(".json") -> {
-                        val data = json.decodeFromString(StrokeData.serializer(), bytes.decodeToString())
-                        require(data.schemaVersion == 1) { "unsupported strokes schema ${data.schemaVersion}" }
-                        require(data.strokes.size == data.strokeCount) { "stroke count mismatch" }
-                        require(data.strokes.all { it.points.size >= 2 && it.points.all { p -> p.size == 2 } }) { "bad stroke points" }
-                        strokes[data.kanji] = data
-                    }
-                }
+                content.add(path, checkNotNull(bytes).decodeToString())
             } catch (e: Exception) {
-                problems += "$path: ${e.message}"
+                content.problems += "$path: ${e.message}"
             }
         }
+        return content
+    }
 
+    private fun resolveWordReferences(words: MutableList<WordArticle>, problems: MutableList<String>) {
         // A rejected word can make another word's references dangling; do not persist references to skipped files.
         while (true) {
             val wordIds = words.mapTo(hashSetOf()) { it.word }
@@ -93,25 +138,6 @@ object ContentParser {
             }
         }
 
-        val titles = HashSet<String>()
-        val unique = kanji.filter { c ->
-            titles.add(c.title).also { if (!it) problems += "kanji/${c.kanji}.md: duplicate title '${c.title}'" }
-        }
-        val images = verifiedImages(manifest, files, words, problems)
-        val candidates = resolveGrammar(grammar, problems)
-        val articleIds = articles.mapTo(hashSetOf()) { "articles/${it.slug}.md" }
-        val grammarSets = candidates.filter { set ->
-            (set.article in articleIds).also {
-                if (!it) problems += "grammar/${set.id}.json: linked article '${set.article}' is missing"
-            }
-        }
-        val grammarResolution = GrammarGroups.resolve(grammarSets)
-        val grammarProblems = problems.filter { it.startsWith("grammar/") } + grammarResolution.errors
-        problems += grammarResolution.errors + grammarResolution.warnings
-        return ParsedContent(
-            manifest, unique, words, articles, strokes, problems,
-            resolveCounters(counters, problems), images, grammarResolution.sets, grammarProblems,
-        )
     }
 
     fun parseGrammar(path: String, text: String): GrammarSet {
@@ -252,40 +278,27 @@ object ContentParser {
         files: Map<String, ByteArray>,
         words: MutableList<WordArticle>,
         problems: MutableList<String>,
+        imageValidator: (ByteArray) -> String?,
     ): Map<String, ByteArray> {
         val good = HashMap<String, ByteArray>()
         for ((path, expectedHash) in manifest.images.toSortedMap()) {
             val bytes = files[path]
-            val reason = imageProblem(path, bytes, expectedHash)
+            val reason = imageProblem(path, bytes, expectedHash) ?: bytes?.let(imageValidator)
             if (reason == null) good[path] = bytes!! else problems += "$path: $reason"
         }
-        val owners = HashMap<String, String>()
-        for (i in words.indices) {
-            val w = words[i]
-            val image = w.image ?: continue
-            val reason = when {
-                image !in good -> "image '$image' is missing or failed verification"
-                owners.putIfAbsent(image, w.word) != null -> "image '$image' is already used by ${owners[image]}"
-                else -> null
-            }
-            if (reason != null) {
-                problems += "words/${w.word}.md: $reason"
-                words[i] = w.copy(image = null, imageScene = null)
-            }
-        }
-        return good.filterKeys { it in owners }
+        return SceneCatalog.resolve(manifest, files, words, good, problems)
     }
 
     private fun imageProblem(path: String, bytes: ByteArray?, expectedHash: String): String? = when {
         !IMAGE_PATH.matches(path) -> "not a flat images/<name>.webp path"
         bytes == null -> "listed in manifest but missing"
         bytes.size > MAX_IMAGE_BYTES -> "larger than $MAX_IMAGE_BYTES bytes"
-        !isWebp(bytes) -> "not a WebP file"
+        !hasWebpEnvelope(bytes) -> "not a WebP file"
         rawSha256(bytes) != expectedHash -> "hash mismatch"
         else -> null
     }
 
-    private fun isWebp(bytes: ByteArray) = bytes.size > 12 &&
+    internal fun hasWebpEnvelope(bytes: ByteArray) = bytes.size > 12 &&
         String(bytes, 0, 4, Charsets.ISO_8859_1) == "RIFF" && String(bytes, 8, 4, Charsets.ISO_8859_1) == "WEBP" &&
         riffSize(bytes) + 8 == bytes.size.toLong()
 

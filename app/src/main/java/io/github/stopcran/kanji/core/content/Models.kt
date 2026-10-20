@@ -11,6 +11,8 @@ data class Manifest(
     val files: Map<String, String>,
     /** Raw-byte SHA-256 of each images/<name>.webp; absent in content that has no images. */
     val images: Map<String, String> = emptyMap(),
+    /** LF-normalised hashes of scenes/<word>.json, separate so older clients can ignore catalogs. */
+    val scenes: Map<String, String> = emptyMap(),
 )
 
 data class KanjiCard(
@@ -42,6 +44,21 @@ data class WordArticle(
     /** images/<name>.webp path of the scene picture, null when the word has none (or it failed verification). */
     val image: String? = null,
     val imageScene: String? = null,
+    val scenes: List<WordScene> = emptyList(),
+) {
+    val quizImage: String? get() = scenes.firstOrNull { it.quizEligible }?.image
+}
+
+@Serializable
+data class WordSceneFile(val schemaVersion: Int, val word: String, val scenes: List<WordScene>)
+
+@Serializable
+data class WordScene(
+    val id: String,
+    val sense: String,
+    val image: String,
+    val description: String,
+    val quizEligible: Boolean,
 )
 
 data class Article(val slug: String, val title: String, val body: String)

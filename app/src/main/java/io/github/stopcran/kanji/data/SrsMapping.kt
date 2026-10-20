@@ -1,6 +1,7 @@
 package io.github.stopcran.kanji.data
 
 import io.github.stopcran.kanji.core.content.WordArticle
+import io.github.stopcran.kanji.core.content.WordScene
 import io.github.stopcran.kanji.core.reading.ReadingId
 import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.SrsState
@@ -8,6 +9,7 @@ import io.github.stopcran.kanji.core.srs.Stack
 import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.srs.StudyMode
 import io.github.stopcran.kanji.core.words.WordCard
+import io.github.stopcran.kanji.core.words.PictureScene
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.WordStack
 import io.github.stopcran.kanji.core.words.WordStacks
@@ -36,17 +38,24 @@ fun List<KanjiEntity>.inStack(stackId: String): List<KanjiEntity> {
 
 fun List<KanjiEntity>.levels(): Map<String, Int?> = associate { it.kanji to it.jlpt }
 
-fun WordArticle.toEntity(sourceId: String) = WordEntity(sourceId, word, reading, title, type, kanji.joinSep(), tags.joinSep(), body, jlpt, quizExclusions.joinSep(), quizDistractors.joinSep(), image, imageScene)
+fun WordArticle.toEntity(sourceId: String) = WordEntity(
+    sourceId, word, reading, title, type, kanji.joinSep(), tags.joinSep(), body, jlpt,
+    quizExclusions.joinSep(), quizDistractors.joinSep(), image, imageScene, quizImage,
+)
 
 fun WordEntity.toCard() = WordCard(
     word, reading, title, type, kanji.splitSep(), tags.splitSep(), jlpt,
-    quizExclusions.splitSep(), quizDistractors.splitSep(), image,
+    quizExclusions.splitSep(), quizDistractors.splitSep(), quizImage,
+)
+
+fun WordSceneEntity.toPictureScene() = PictureScene(
+    word, WordScene(id, sense, image, description, quizEligible), imageHash,
 )
 
 /** The reading quiz skips words whose written form already gives the reading. */
 fun List<WordEntity>.forDirection(direction: WordDirection): List<WordEntity> = when (direction) {
     WordDirection.Reading -> filter { hasReadingToLearn(it.word, it.reading) }
-    WordDirection.Picture -> filter { it.image != null }
+    WordDirection.Picture, WordDirection.WordToPicture -> filter { it.quizImage != null }
     else -> this
 }
 

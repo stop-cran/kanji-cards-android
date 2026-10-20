@@ -7,6 +7,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
@@ -15,11 +20,13 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,7 +39,7 @@ import io.github.stopcran.kanji.data.splitSep
 
 private val originTags = setOf("wago", "kango", "gairaigo")
 
-/** Session key: "wquiz:<timestamp>:<jp|en|rd|ty>[:extra]". */
+/** Session key: "wquiz:<timestamp>:<jp|en|rd|ty|pc|wp>[:extra]". */
 @Composable
 fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit, onPracticeMore: (WordDirection?) -> Unit, vm: WordQuizViewModel = serviceViewModel(sessionKey) { WordQuizViewModel(it) }) {
     val parts = sessionKey.split(':')
@@ -45,10 +52,12 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
             WordDirection.Reading -> "Words: reading"
             WordDirection.Type -> "Words: type it"
             WordDirection.Picture -> "Words: picture → word"
+            WordDirection.WordToPicture -> "Words: word → picture"
         },
         onBack,
         scrollToTopOnBack = true,
     ) {
+        vm.pictureNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         when (val s = vm.ui) {
             WordQuizUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
             is WordQuizUi.Empty -> Text(s.message)
@@ -64,7 +73,11 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
             }
             is WordQuizUi.Question -> {
                 Text(stringResource(R.string.left, s.remaining), style = MaterialTheme.typography.labelMedium)
-                Prompt(s.word, s.direction, s.font, big = true)
+                if (s.direction == WordDirection.Picture) {
+                    val picture = requireNotNull(s.picture)
+                    val target = picture.question.target.scene
+                    SceneBitmap(picture.images.getValue(target.image), target.description)
+                } else Prompt(s.word, s.direction, s.font, big = true)
                 Text(
                     when (s.direction) {
                         WordDirection.JpToEn -> "What does it mean?"
@@ -72,11 +85,14 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
                         WordDirection.Reading -> "How is it read?"
                         WordDirection.Type -> ""
                         WordDirection.Picture -> "Which word fits this picture?"
+                        WordDirection.WordToPicture -> "Which picture fits this word?"
                     },
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center,
                 )
-                s.options.forEach { o ->
+                if (s.direction == WordDirection.WordToPicture) {
+                    PictureChoices(requireNotNull(s.picture), onPick = { vm.pick(it) })
+                } else s.options.forEach { o ->
                     OutlinedButton(onClick = { vm.pick(o.word) }, modifier = Modifier.fillMaxWidth()) { Text(o.label) }
                 }
                 DontKnowButton { vm.pick(NO_ANSWER) }
@@ -89,10 +105,8 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
 
 @Composable
 private fun Prompt(word: WordEntity, direction: WordDirection, font: io.github.stopcran.kanji.core.srs.KanjiFont, big: Boolean) {
-    val wordFirst = direction == WordDirection.JpToEn || direction == WordDirection.Reading
-    if (direction == WordDirection.Picture && big) {
-        WordImage(word.image, "Picture to name")
-    } else if (wordFirst || direction == WordDirection.Picture || !big) {
+    val wordFirst = direction == WordDirection.JpToEn || direction == WordDirection.Reading || direction.usesPictures
+    if (wordFirst || !big) {
         Text(word.word, fontSize = if (big) 64.sp else 48.sp, fontFamily = font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     } else {
         Text(word.title, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
@@ -152,9 +166,16 @@ private fun TypeAnswer(s: WordQuizUi.TypeAnswer, vm: WordQuizViewModel, onOpenDo
 
 @Composable
 private fun Answer(s: WordQuizUi.Answer, vm: WordQuizViewModel, onOpenDoc: (String) -> Unit) {
-    if (s.direction == WordDirection.Picture) WordImage(s.word.image, s.word.imageScene ?: s.word.title)
+    if (s.direction == WordDirection.Picture) {
+        val picture = requireNotNull(s.picture)
+        val target = picture.question.target.scene
+        SceneBitmap(picture.images.getValue(target.image), target.description)
+    }
     Text(s.word.word, fontSize = 56.sp, fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Text(stringResource(R.string.value_dash_detail, s.word.reading, s.word.title), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    s.picture?.question?.target?.scene?.let {
+        Text("${it.sense}: ${it.description}", style = MaterialTheme.typography.bodyMedium)
+    }
     Text(
         when {
             s.correct -> "Correct!"
@@ -169,7 +190,9 @@ private fun Answer(s: WordQuizUi.Answer, vm: WordQuizViewModel, onOpenDoc: (Stri
     s.pickedWord?.takeIf { !s.correct && s.direction != WordDirection.Reading }?.let {
         Text(stringResource(R.string.you_chose, it.word, it.reading, it.title), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     }
-    s.options.forEach { o ->
+    if (s.direction == WordDirection.WordToPicture) {
+        PictureChoices(requireNotNull(s.picture), picked = s.picked)
+    } else s.options.forEach { o ->
         AnswerOption(o.label, when {
             o.word == s.key -> Verdict.Correct
             o.word == s.picked -> Verdict.Wrong
@@ -182,4 +205,48 @@ private fun Answer(s: WordQuizUi.Answer, vm: WordQuizViewModel, onOpenDoc: (Stri
         if (s.correct) OutlinedButton(onClick = { vm.next(guessed = true) }) { Text(stringResource(R.string.i_guessed)) }
     }
     ArticleSection(s.correct, "w:${s.word.word}:${s.picked}:${s.remaining}", s.word.body, "words/${s.word.word}.md", onOpenDoc)
+}
+
+@Composable
+internal fun PictureChoices(picture: WordPictureUi, picked: String? = null, onPick: ((String) -> Unit)? = null) {
+    val target = picture.question.target.word
+    picture.question.options.chunked(2).forEachIndexed { row, options ->
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            options.forEachIndexed { column, option ->
+                val scene = picture.question.scenes.getValue(option.word).scene
+                val verdict = when {
+                    picked == null -> Verdict.Neutral
+                    option.word == target -> Verdict.Correct
+                    option.word == picked -> Verdict.Wrong
+                    else -> Verdict.Neutral
+                }
+                val color = when (verdict) {
+                    Verdict.Correct -> correctTextColor()
+                    Verdict.Wrong -> wrongTextColor()
+                    Verdict.Neutral -> MaterialTheme.colorScheme.outline
+                }
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(2.dp, color),
+                ) {
+                    Column(
+                        Modifier.clickable(enabled = onPick != null, role = Role.Button) { onPick?.invoke(option.word) }.padding(8.dp),
+                    ) {
+                        SceneBitmap(picture.images.getValue(scene.image), scene.description)
+                        Text(
+                            when {
+                                picked == null -> "Picture ${row * 2 + column + 1}"
+                                verdict == Verdict.Correct -> "Correct: ${option.label}"
+                                verdict == Verdict.Wrong -> "Your choice: ${option.label}"
+                                else -> option.label
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            }
+            if (options.size == 1) Spacer(Modifier.weight(1f))
+        }
+    }
 }

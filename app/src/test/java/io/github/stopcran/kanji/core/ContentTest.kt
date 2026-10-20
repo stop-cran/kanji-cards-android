@@ -7,6 +7,7 @@ import io.github.stopcran.kanji.core.content.FrontMatter
 import io.github.stopcran.kanji.core.content.GrammarSet
 import io.github.stopcran.kanji.core.content.Manifest
 import io.github.stopcran.kanji.core.content.SafeZip
+import io.github.stopcran.kanji.core.content.SceneCatalog
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -563,6 +564,8 @@ class ContentTest {
         assertEquals(setOf("manifest.json", "counters/mai.json"), SafeZip.read(ByteArrayInputStream(withCounters)).keys)
         val withGrammar = zip("repo/grammar/pilot.json" to "{}", "repo/grammar/sub/ignored.json" to "{}")
         assertEquals(setOf("grammar/pilot.json"), SafeZip.read(ByteArrayInputStream(withGrammar)).keys)
+        val withScenes = zip("repo/scenes/a.json" to "{}", "repo/scenes/sub/ignored.json" to "{}")
+        assertEquals(setOf("scenes/a.json"), SafeZip.read(ByteArrayInputStream(withScenes)).keys)
     }
 
     @Test
@@ -586,6 +589,14 @@ class ContentTest {
         assertEquals(120, index.ids(io.github.stopcran.kanji.core.counters.CounterMode.Choose).size)
         val serializer = GrammarSet.serializer()
         val declared = j.decodeFromString(Manifest.serializer(), files.getValue("manifest.json").decodeToString())
+        assertEquals(declared.images.keys, parsed.images.keys)
+        val words = parsed.words.associateBy { it.word }
+        for (path in declared.scenes.keys) {
+            val expected = SceneCatalog.parse(path, files.getValue(path).decodeToString())
+            val imported = words.getValue(expected.word)
+            assertEquals(path, expected.scenes, imported.scenes)
+            assertEquals(path, expected.scenes.firstOrNull { it.quizEligible }?.image, imported.quizImage)
+        }
         val expectedGrammar = declared.files.keys.filter { it.startsWith("grammar/") }.map { path ->
             j.decodeFromString(serializer, files.getValue(path).decodeToString())
         }.sortedBy { it.id }

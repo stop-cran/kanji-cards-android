@@ -4,8 +4,13 @@ import android.app.Application
 import androidx.room.Room
 import io.github.stopcran.kanji.core.content.ContentParser
 import io.github.stopcran.kanji.core.content.GrammarSet
+import io.github.stopcran.kanji.core.content.Manifest
 import io.github.stopcran.kanji.core.content.RepoSource
+import io.github.stopcran.kanji.core.content.SceneCatalog
+import io.github.stopcran.kanji.core.content.WordScene
+import io.github.stopcran.kanji.core.content.WordSceneFile
 import io.github.stopcran.kanji.core.grammar.GrammarScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.junit.After
@@ -18,6 +23,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.SQLiteMode
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -59,8 +65,20 @@ private fun archive(
         "articles/pilot.md" to "# Pilot\n".toByteArray(),
         "grammar/${grammar.first}.json" to grammar.second.toByteArray(),
     )
-    val entries = files.entries.joinToString(",") { (p, b) -> "\"$p\":\"${ContentParser.sha256(b)}\"" }
-    val manifest = """{"schemaVersion":1,"contentVersion":"$version","files":{$entries}}""".toByteArray()
+    return archiveFiles(version, files)
+}
+
+private fun archiveFiles(version: String, files: Map<String, ByteArray>): ByteArray {
+    val images = files.filterKeys { it.startsWith("images/") }
+    val scenes = files.filterKeys { it.startsWith("scenes/") }
+    val text = files - images.keys - scenes.keys
+    val manifest = Json.encodeToString(
+        Manifest.serializer(),
+        Manifest(
+            1, version, text.mapValues { ContentParser.sha256(it.value) },
+            images.mapValues { ContentParser.rawSha256(it.value) }, scenes.mapValues { ContentParser.sha256(it.value) },
+        ),
+    ).toByteArray()
     val out = ByteArrayOutputStream()
     ZipOutputStream(out).use { zip ->
         (files + ("manifest.json" to manifest)).forEach { (p, b) ->
@@ -102,6 +120,7 @@ private class FakeHttp : ContentHttp {
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], manifest = Config.NONE, application = Application::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @SQLiteMode(SQLiteMode.Mode.NATIVE)
 class ContentSyncTest {
     private val source = RepoSource("Owner", "Repo", "main")
@@ -126,6 +145,118 @@ class ContentSyncTest {
     }
 
     private fun run(force: Boolean = false) = runBlocking { sync.sync(source, force) }
+
+    private fun sceneArchive(
+        version: String = "scenes",
+        eligible: Boolean = true,
+        second: Boolean = false,
+        bytes: ByteArray = sceneWebp(),
+        grammar: Pair<String, String>? = null,
+    ): ByteArray {
+        val legacy = if (eligible) "image: images/a.webp\nimage_scene: A scene\n" else ""
+        val word = "---\nword: a\nreading: a\ntitle: warmth\nkanji: []\ntags: [onomatopoeia]\n$legacy---\nBody\n"
+        val catalog = WordSceneFile(
+            1, "a",
+            listOf(WordScene("warmth", "Warmth", "images/a.webp", "A scene", eligible)) +
+                if (second) listOf(WordScene("diagram", "Diagram", "images/b.webp", "A diagram", false)) else emptyList(),
+        )
+        return archiveFiles(version, buildMap {
+            put("kanji/日.md", kanjiMd("日", "sun").toByteArray())
+            put("words/a.md", word.toByteArray())
+            put("images/a.webp", bytes)
+            if (second) put("images/b.webp", sceneWebp(blue = true))
+            put("scenes/a.json", Json.encodeToString(WordSceneFile.serializer(), catalog).toByteArray())
+            grammar?.let {
+                put("articles/pilot.md", "# Pilot\n".toByteArray())
+                put("grammar/${it.first}.json", it.second.toByteArray())
+            }
+        })
+    }
+
+    @Test
+    fun sceneEpochRefreshesAnUnchangedSnapshotWithoutResettingWordOrGrammarProgress() = runBlocking {
+        val grammar = io.github.stopcran.kanji.core.grammarFixture().copy(article = "articles/pilot.md")
+        http.archiveBytes = sceneArchive(second = true, grammar = grammar.id to Json.encodeToString(GrammarSet.serializer(), grammar))
+        assertEquals(SyncResult.Updated(1, 1, emptyList()), sync.sync(source))
+        assertEquals(listOf(true, false), db.content().wordScenes(source.id).map { it.quizEligible })
+        assertEquals(SceneCatalog.PARSER_EPOCH, settings.sceneParserEpoch(source.id))
+        assertEquals(0, settings.sceneParserEpoch("other/repo"))
+        db.reviews().record(
+            ReviewStateEntity(source.id, "words-onomatopoeia", "a", "WordPicture", "Review", 12.5, 5.0, 999, 500, 3, 1),
+            ReviewLogEntity(0, source.id, "words-onomatopoeia", "a", "WordPicture", 3, 500),
+        )
+        db.reviews().recordGrammar(
+            ReviewStateEntity(source.id, GRAMMAR_STACK, "alpha-a-0", "Grammar", "Review", 12.5, 5.0, 999, 500, 3, 1),
+            ReviewLogEntity(0, source.id, GRAMMAR_STACK, "alpha-a-0", "Grammar", 3, 500),
+            GrammarResponseEntity(0, source.id, GRAMMAR_STACK, "alpha-a-0", "a", "contrast", "type", "a", true),
+        )
+        val before = Triple(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses())
+        db.content().clearScenes(source.id)
+        settings.setSceneParserEpoch(source.id, 0)
+        settings.setGrammarNewScope(source.id, GrammarScope.N3)
+        settings.lastCheckMs = System.currentTimeMillis()
+        assertEquals(SyncResult.Updated(1, 1, emptyList()), sync.syncOnLaunch(source))
+        assertEquals(2, http.downloads)
+        assertEquals(2, db.content().wordScenes(source.id).size)
+        assertEquals(GrammarScope.N3, settings.grammarFor(source.id).newScope)
+        assertEquals(GRAMMAR_GROUP_EPOCH, settings.grammarFor(source.id).parserEpoch)
+        assertEquals(listOf(grammar), db.grammarSets(source.id))
+        assertEquals(before, Triple(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses()))
+        http.headFails = true
+        http.archiveFails = true
+        assertTrue(sync.sync(source, force = true) is SyncResult.Failed)
+        assertEquals(2, db.content().wordScenes(source.id).size)
+        org.junit.Assert.assertArrayEquals(sceneWebp(), db.content().imageBytes(source.id, "a.webp"))
+    }
+
+    @Test
+    fun rejectedSceneInsertionRollsBackTheWholeSnapshotAndDoesNotMarkTheUpgradeComplete() = runBlocking {
+        http.archiveBytes = sceneArchive()
+        assertTrue(sync.sync(source) is SyncResult.Updated)
+        val beforeWords = db.content().words(source.id)
+        val beforeScenes = db.content().wordScenes(source.id)
+        val beforeMeta = db.content().meta(source.id)
+        db.content().insertWords(beforeWords.map { it.copy(sourceId = "other/repo") })
+        db.content().insertScenes(beforeScenes.map { it.copy(sourceId = "other/repo") })
+        db.content().insertImages(listOf(ImageEntity("other/repo", "a.webp", sceneWebp())))
+        db.openHelper.writableDatabase.execSQL(
+            "CREATE TRIGGER reject_scene BEFORE INSERT ON word_scenes BEGIN SELECT RAISE(ABORT, 'injected scene failure'); END",
+        )
+        settings.setSceneParserEpoch(source.id, 0)
+        http.headSha = SHA_B
+        http.archiveBytes = sceneArchive("changed", bytes = sceneWebp(blue = true))
+        val rejected = sync.sync(source)
+        assertTrue(rejected is SyncResult.Failed)
+        assertEquals(beforeWords, db.content().words(source.id))
+        assertEquals(beforeScenes, db.content().wordScenes(source.id))
+        assertEquals(beforeMeta, db.content().meta(source.id))
+        org.junit.Assert.assertArrayEquals(sceneWebp(), db.content().imageBytes(source.id, "a.webp"))
+        assertEquals(0, settings.sceneParserEpoch(source.id))
+        assertEquals(SHA_A, settings.syncedCommit("${source.id}@main"))
+        assertEquals(beforeScenes.map { it.copy(sourceId = "other/repo") }, db.content().wordScenes("other/repo"))
+    }
+
+    @Test
+    fun sceneUpdatesRemoveOldAssetsAndNeverQuizArticleOnlyOrUndecodableImages() = runBlocking {
+        http.archiveBytes = sceneArchive(second = true)
+        assertTrue(sync.sync(source) is SyncResult.Updated)
+        http.archiveBytes = sceneArchive("article-only", eligible = false, bytes = sceneWebp(blue = true))
+        assertEquals(SyncResult.Updated(1, 1, emptyList()), sync.sync(source, force = true))
+        assertEquals(1, db.content().wordScenes(source.id).size)
+        assertNull(db.content().imageBytes(source.id, "b.webp"))
+        org.junit.Assert.assertArrayEquals(sceneWebp(blue = true), db.content().imageBytes(source.id, "a.webp"))
+        assertEquals("images/a.webp", db.content().word(source.id, "a")!!.image)
+        assertNull(db.content().word(source.id, "a")!!.quizImage)
+        assertTrue(db.content().observeWordsLite(source.id).first().forDirection(io.github.stopcran.kanji.core.words.WordDirection.Picture).isEmpty())
+        val fake = "RIFF".toByteArray() + byteArrayOf(8, 0, 0, 0) + "WEBPxxxx".toByteArray()
+        http.archiveBytes = sceneArchive("undecodable", bytes = fake)
+        val result = sync.sync(source, force = true) as SyncResult.Updated
+        assertTrue(result.problems.any { "Picture" in it })
+        assertEquals(1, db.content().words(source.id).size)
+        assertNull(db.content().word(source.id, "a")!!.quizImage)
+        assertTrue(db.content().wordScenes(source.id).isEmpty())
+        assertNull(db.content().imageBytes(source.id, "a.webp"))
+    }
 
     @Test
     fun freshSyncImportsCards() {

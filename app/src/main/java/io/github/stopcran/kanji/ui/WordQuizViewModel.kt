@@ -5,6 +5,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.room.withTransaction
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.Confusion
@@ -15,6 +18,9 @@ import io.github.stopcran.kanji.core.srs.KanjiFont
 import io.github.stopcran.kanji.core.quiz.QuizSession
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.words.WordCard
+import io.github.stopcran.kanji.core.words.PictureQuestion
+import io.github.stopcran.kanji.core.words.PictureQuestions
+import io.github.stopcran.kanji.core.words.PictureScene
 import io.github.stopcran.kanji.core.words.PracticeSuggestion
 import io.github.stopcran.kanji.core.words.TypedAnswer
 import io.github.stopcran.kanji.core.words.TypedResult
@@ -25,6 +31,9 @@ import io.github.stopcran.kanji.core.words.WordQuizBuilder
 import io.github.stopcran.kanji.core.words.WordQueues
 import io.github.stopcran.kanji.core.words.WordStacks
 import io.github.stopcran.kanji.data.ReviewLogEntity
+import io.github.stopcran.kanji.data.SceneImageResult
+import io.github.stopcran.kanji.data.sceneImage
+import io.github.stopcran.kanji.data.toPictureScene
 import io.github.stopcran.kanji.data.WordEntity
 import io.github.stopcran.kanji.data.forDirection
 import io.github.stopcran.kanji.data.inWordStack
@@ -41,17 +50,21 @@ import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.toSrs
 import kotlinx.coroutines.launch
 import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
 import kotlin.random.Random
+
+data class WordPictureUi(val question: PictureQuestion, val images: Map<String, ImageBitmap>)
 
 sealed interface WordQuizUi {
     data object Loading : WordQuizUi
     data class Empty(val message: String) : WordQuizUi
-    data class Question(val word: WordEntity, val direction: WordDirection, val options: List<WordOption>, val remaining: Int, val font: KanjiFont) : WordQuizUi
+    data class Question(
+        val word: WordEntity, val direction: WordDirection, val options: List<WordOption>, val remaining: Int, val font: KanjiFont,
+        val picture: WordPictureUi? = null,
+    ) : WordQuizUi
     data class Answer(
         val word: WordEntity, val direction: WordDirection, val options: List<WordOption>, val picked: String, val remaining: Int, val font: KanjiFont, val heard: String? = null,
         val pickedWord: WordEntity? = null,
+        val picture: WordPictureUi? = null,
     ) : WordQuizUi {
         val key: String get() = if (direction == WordDirection.Reading) word.reading else word.word
         val correct: Boolean get() = picked == key
@@ -66,11 +79,19 @@ sealed interface WordQuizUi {
 }
 
 /** Word quiz session in one direction; only that direction's scheduling state is updated. */
-class WordQuizViewModel(private val app: Services) : ViewModel() {
+class WordQuizViewModel(
+    private val app: Services,
+    private val loadPicture: suspend (String, PictureScene) -> SceneImageResult = { source, scene ->
+        app.db.content().sceneImage(source, scene.scene.image, scene.imageHash)
+    },
+) : ViewModel() {
     private val fsrs = Fsrs()
     private val random = Random.Default
 
     var ui: WordQuizUi by mutableStateOf(WordQuizUi.Loading)
+        private set
+
+    var pictureNotice: String? by mutableStateOf(null)
         private set
 
     private var direction = WordDirection.JpToEn
@@ -79,6 +100,10 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
     private var wordList: List<WordEntity> = emptyList()
     private var words: Map<String, WordEntity> = emptyMap()
     private var cards: List<WordCard> = emptyList()
+    private var scenes: List<PictureScene> = emptyList()
+    private val unavailableImages = mutableSetOf<String>()
+    private val selectedScenes = mutableMapOf<String, String>()
+    private var lastPictureWord: String? = null
     private val states = mutableMapOf<String, SrsState>()
     private var session = QuizSession<String>(emptyList(), { it })
     private var started = false
@@ -96,7 +121,11 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
     private suspend fun start(extra: Boolean) {
         val source = app.settings.source.value
         sourceId = source.id
-        val allWords = app.db.content().words(sourceId)
+        val (allWords, storedScenes) = app.db.withTransaction {
+            app.db.content().words(sourceId) to
+                if (direction.usesPictures) app.db.content().wordScenes(sourceId) else emptyList()
+        }
+        scenes = storedScenes.map { it.toPictureScene() }
         val offered = allWords.offeredStacks(app.settings.n4Unlocked.value)
         val stack = WordStacks.find(app.settings.wordStack.value, offered)
         stackId = stack.id
@@ -146,20 +175,7 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
     private fun showNext() {
         val word = session.take()
         if (word == null) {
-            ui = if (session.answered == 0) {
-                WordQuizUi.Empty(
-                    when (direction) {
-                        WordDirection.EnToJp -> "Nothing is due. English → Japanese opens for words you have answered twice in Japanese → English."
-                        WordDirection.Reading -> "Nothing is due. The reading quiz opens for words with kanji that you have answered twice in Japanese → English."
-                        WordDirection.JpToEn -> "Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings."
-                        WordDirection.Type -> "Nothing is due. Typing opens for words you have answered twice in English → Japanese."
-                        WordDirection.Picture ->
-                            "Nothing is due. Picture questions open for words with a picture " +
-                                "that you have answered twice in Japanese → English."
-                    },
-                )
-            } else WordQuizUi.Done(session.answered, session.correct)
-            if (ui is WordQuizUi.Done) suggest()
+            finish()
             return
         }
         val entity = words.getValue(word)
@@ -168,7 +184,80 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
             ui = WordQuizUi.TypeQuestion(entity, session.pending + 1, nextFont(word))
             return
         }
+        if (direction.usesPictures) {
+            ui = WordQuizUi.Loading
+            viewModelScope.launch { showPicture(word) }
+            return
+        }
         ui = WordQuizUi.Question(entity, direction, WordQuizBuilder.options(entity.toCard(), cards, direction, random), session.pending + 1, nextFont(word))
+    }
+
+    private fun finish() {
+        ui = if (session.answered == 0) {
+            WordQuizUi.Empty(
+                when (direction) {
+                    WordDirection.EnToJp -> "Nothing is due. English → Japanese opens for words you have answered twice in Japanese → English."
+                    WordDirection.Reading -> "Nothing is due. The reading quiz opens for words with kanji that you have answered twice in Japanese → English."
+                    WordDirection.JpToEn -> "Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings."
+                    WordDirection.Type -> "Nothing is due. Typing opens for words you have answered twice in English → Japanese."
+                    WordDirection.Picture, WordDirection.WordToPicture ->
+                        "Nothing is due or has distinct usable picture choices. Picture questions open for words with an eligible picture " +
+                            "that you have answered twice in Japanese → English."
+                },
+            )
+        } else WordQuizUi.Done(session.answered, session.correct)
+        if (ui is WordQuizUi.Done) suggest()
+    }
+
+    private suspend fun showPicture(first: String) {
+        var word: String? = first
+        while (word != null) {
+            val entity = words.getValue(word)
+            val picture = if (word == lastPictureWord) {
+                if (session.pending > 0) session.defer(word, session.pending)
+                null
+            } else preparePicture(entity)
+            if (picture != null) {
+                selectedScenes[word] = picture.question.target.scene.id
+                lastPictureWord = word
+                ui = WordQuizUi.Question(entity, direction, picture.question.options, session.pending + 1, nextFont(word), picture)
+                return
+            }
+            if (pictureNotice == null) pictureNotice = "Skipped picture questions without distinct permitted choices."
+            word = session.take()
+        }
+        finish()
+    }
+
+    private suspend fun preparePicture(word: WordEntity): WordPictureUi? {
+        while (true) {
+            val available = scenes.filter { it.scene.image !in unavailableImages }
+            val question = PictureQuestions.build(word.toCard(), cards, available, random, selectedScenes[word.word]) ?: return null
+            val decoded = loadPictures(question)
+            if (decoded != null) return WordPictureUi(question, decoded)
+        }
+    }
+
+    private suspend fun loadPictures(question: PictureQuestion): Map<String, ImageBitmap>? {
+        val decoded = mutableMapOf<String, android.graphics.Bitmap>()
+        var delivered = false
+        try {
+            for (scene in question.requiredScenes(direction)) {
+                when (val result = loadPicture(sourceId, scene)) {
+                    is SceneImageResult.Ready -> decoded[scene.scene.image] = result.bitmap
+                    is SceneImageResult.Unavailable -> {
+                        unavailableImages += scene.scene.image
+                        pictureNotice = result.reason
+                        return null
+                    }
+                }
+            }
+            val bitmaps = decoded.mapValues { it.value.asImageBitmap() }
+            delivered = true
+            return bitmaps
+        } finally {
+            if (!delivered) decoded.values.forEach { it.recycle() }
+        }
     }
 
     /** The typed text of the current question; cleared whenever a new question (including a re-ask) is shown. */
@@ -211,13 +300,13 @@ class WordQuizViewModel(private val app: Services) : ViewModel() {
 
     fun pick(word: String, heard: String? = null) {
         val q = ui as? WordQuizUi.Question ?: return
-        ui = WordQuizUi.Answer(q.word, q.direction, q.options, word, q.remaining, q.font, heard, words[word])
+        ui = WordQuizUi.Answer(q.word, q.direction, q.options, word, q.remaining, q.font, heard, words[word], q.picture)
     }
 
     /** Takes back a voice pick that was misheard; nothing has been recorded before [next]. */
     fun retry() {
         val a = ui as? WordQuizUi.Answer ?: return
-        if (a.heard != null) ui = WordQuizUi.Question(a.word, a.direction, a.options, a.remaining, a.font)
+        if (a.heard != null) ui = WordQuizUi.Question(a.word, a.direction, a.options, a.remaining, a.font, a.picture)
     }
 
     /** At the end of a session, offers "Practice more" in a better-stocked direction when this one would give only a few cards. */

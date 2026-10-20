@@ -43,9 +43,12 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - **ViewModel scope:** `viewModel()` is scoped to the Activity, not to a route, so a quiz VM outlives leaving the screen and would resume
   mid-answer. The quiz route is `quiz:<timestamp>` and the VM is created with that key, giving each start a fresh session while still
   surviving rotation. Do the same for any new session-like screen.
-- **Back stack route strings:** `home`, `kanji-home`, `words-home`, `settings`, `about`, `cards`, `word-cards`, `doc:<repo path>`, and session routes `quiz:<ts>[:extra]`, `wquiz:<ts>:<jp|en|rd|ty>[:extra]`, `kreading:<ts>[:extra]`, `draw:<ts>[:extra]`. Wire new routes in `MainActivity`.
+- **Back stack route strings:** `home`, `kanji-home`, `words-home`, `settings`, `about`, `cards`, `word-cards`, `doc:<repo path>`, and session routes `quiz:<ts>[:extra]`, `wquiz:<ts>:<jp|en|rd|ty|pc|wp>[:extra]`, `kreading:<ts>[:extra]`, `draw:<ts>[:extra]`. Wire new routes in `MainActivity`.
 - **Manifest hashes** are computed over LF-normalised bytes (`tools/build_manifest.py` in the content repo and `ContentParser.sha256`). Keep
   both in sync, otherwise files fail with "hash mismatch" on Windows checkouts with CRLF.
+- Named word scenes use the separate manifest `scenes` map, never `files` (older clients discard that folder). A declared bad catalog
+  disables quiz eligibility rather than synthesizing a legacy fallback. Graded image questions use predecoded, hash-checked snapshots;
+  `WordImage` is only the live article loader. Scene IDs must never become SRS keys.
 - **Content is untrusted.** Parse defensively, skip bad files instead of failing the sync, never render raw HTML, cap archive sizes.
 - **Room:** list columns are joined with `SEP` (`\u001F`); use `joinSep()`/`splitSep()`. `review_log.id` is auto-generated, so pass `0`.
   Review state is keyed by (`sourceId` = lower-case `owner/repo`, stack, item, mode). Never key it by title or position; titles are editable.

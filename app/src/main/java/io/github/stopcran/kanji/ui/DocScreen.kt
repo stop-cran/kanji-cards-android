@@ -28,13 +28,9 @@ fun DocBody(app: KanjiApp, path: String, onOpenDoc: (String) -> Unit, modifier: 
     val source by app.settings.source.collectAsState()
     val doc by produceState<Pair<String, String>?>(null, source, path) { value = loadDoc(app, source.id, path) }
     val d = doc
-    val picture by produceState<Pair<String, String>?>(null, source, path) {
-        value = if (path.startsWith("words/")) {
-            app.db.content().word(source.id, path.substringAfter('/').removeSuffix(".md"))
-                ?.let { w -> w.image?.let { it to (w.imageScene ?: w.title) } }
-        } else null
-    }
-    val header: (@Composable () -> Unit)? = picture?.let { (image, scene) -> { WordImage(image, scene) } }
+    val header: (@Composable () -> Unit)? = if (path.startsWith("words/")) {
+        { WordSceneGallery(app, source.id, path.substringAfter('/').removeSuffix(".md")) }
+    } else null
     if (d == null) Text(stringResource(R.string.not_found_in_the_current), modifier) else LazyMarkdownView(d.second, path, onOpenDoc, modifier, header)
 }
 

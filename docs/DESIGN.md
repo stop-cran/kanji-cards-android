@@ -42,7 +42,7 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - Sync checks the branch head via `api.github.com`, then downloads the zip pinned to that commit SHA (`RepoSource.commitZipUrl`), so the
   archive cannot differ from the checked head. It is skipped when the head SHA equals the stored one, and the
   import is also skipped when `manifest.contentVersion` is unchanged, so **content changes must bump `contentVersion`** (`force` bypasses
-  both). A pending Grammar parser epoch also bypasses these shortcuts and the launch-check throttle, but not bad-content/shrink protection.
+  both). Pending Grammar or scene parser epochs also bypass these shortcuts and the launch-check throttle, but not bad-content/shrink protection.
   Epoch 2 is recorded per source only after atomic replacement, retaining JLPT and groups. Epoch-0 caches permit only unguided All new
   intake; epoch 1 permits level-aware unguided intake; started reviews remain available throughout.
   If the head lookup fails and content exists, the branch archive is downloaded at most once per 6h per source/branch (persisted
@@ -161,14 +161,39 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   allowance. Distractors come only from the stack's own words, so options are all onomatopoeia. `offeredStacks()` keeps home, quizzes and
   reminders in agreement; an unavailable saved stack falls back to N5. The N4 advancement offer needs the N5 word states, which exist only for
   the selected stack, so `shouldOfferN4` makes no offer while any other stack (including this one) is selected.
-- **Scene images and Picture → word** (phase 3): a word may carry `image`/`image_scene`. Images are untrusted binary input: the manifest lists
-  them under a separate `images` key with raw-byte SHA-256 (the `files` text hashes are LF-normalised, so old apps that ignore `images` still
-  verify), `SafeZip` admits only `images/*.webp` (150 KiB each), and `ContentParser` checks flat path, size, WebP header, hash and one owner
-  word per image. A failed image only drops that word's picture. Bytes live in the `word_images` table (DB v7) and are replaced in the same
-  transaction as the other content, so sync is atomic. `WordDirection.Picture` (`StudyMode.WordPicture`, code `pc`) is gated on JpToEn like
-  the other non-forward directions and offered only for words with a picture; its options come only from picture words of the stack and honour
-  `quiz_exclusions`. The question shows the picture with a neutral alt text; the answer and the article show `image_scene`. Scenes carry no
-  text so the picture never gives the answer away. Not device-tested beyond the emulator.
+- **Named scenes and picture practice** (#45): optional `scenes/<word>.json` catalogs declare stable word-scoped scene IDs, taught-sense
+  labels, English descriptions, image paths and explicit `quizEligible` booleans. Scene JSON uses a separate LF-normalized manifest
+  `scenes` map; images use the raw-byte-hashed `images` map. Both contribute to the content version without creating errors on older
+  clients that ignore the new map. Only an absent catalog synthesizes an eligible legacy `image`/`image_scene` scene. A declared but
+  rejected catalog cannot fall back around its restrictions; lexical content and any independently valid legacy article picture remain.
+  A retained legacy fallback must match an eligible named scene and its description, since older apps cannot understand article-only flags.
+- **Media integrity and storage:** the pure parser checks flat paths, hashes, size, complete WebP envelopes and one owning word per
+  image. The Android importer additionally decodes with `SceneImages`; no bitmap may exceed 2048 pixels on either side, and decoded
+  display images are sampled down to at most 512 pixels per side. Failed assets remove only their variants, with reported problems.
+  Room v10 adds `word_scenes` and `words.quizImage` (the first eligible representative, independent from the article header).
+  Its migration seeds legacy scenes from cached bytes without resetting content, sync metadata, schedules or Grammar focus/history.
+  Source-scoped scene parser epoch 1 is recorded only after transactional replacement; it refreshes previously ignored metadata even
+  at an unchanged revision. Images, scene metadata and words are replaced together and removed together for that source.
+- **Both directions:** Picture → word retains `WordDirection.Picture`, `StudyMode.WordPicture` and route `pc`. Word → picture uses
+  `WordToPicture` and `wp`. Both use the existing JpToEn gate, shared new-item allowance, stack membership, padding ownership and
+  practice suggestions. Each direction keeps its own **word-level** schedule; scene IDs never become SRS keys. Target variants vary
+  across sessions but remain fixed for an in-session retry. The shared option selector retains title/form deduplication, curated
+  distractors and symmetric non-transitive exclusions. Exact duplicate image bytes cannot form opposing picture choices; words
+  sharing an identical target variant are also withheld rather than treated as new lexical synonyms.
+- **Ready before grading:** a session captures word/scene metadata together and decodes every required image before publishing a
+  question. Stored image hashes guard against mid-session replacement. Missing, corrupt, changed or unaskable pictures are reported
+  and skipped without an answer, SRS log or spent introduction. A question needs at least two permitted choices. Question and answer
+  retain the same decoded images; no live image loader can swap or blank a graded prompt. Accessible English scene descriptions are
+  available before answering, but Japanese option labels for Word → picture appear only in feedback. Feedback names the selected
+  use; articles offer a one-image-at-a-time named-scene gallery, including explicitly marked article-only illustrations.
+  Skipping unusable intervening targets must not expose an immediate recorded retry of the same word; defer it behind a different
+  remaining item, or omit it when no such question can be asked.
+- **Completed #45 collection:** 200 word catalogs cover 395 named illustrations, preserving the original 120 image bytes and adding
+  80 missing primaries plus 195 further usage scenes. The reviewed snapshot has 273 quiz-eligible scenes across 194 words and 122
+  article-only scenes. These are content counts, not application limits. The content repository's
+  `docs/onomatopoeia-scene-images.json` records exact prompts, hashes, revisions and advisory observations separately from owner approval.
+  Native-decoder integration checks every declared image in the sibling content clone; real-repository parsing checks every catalog,
+  including eligibility and the derived quiz representative.
 - An explicit word `jlpt` wins, including for kana-only words or words with harder, unknown or missing kanji. Only when it is omitted does
   the level fall back to the **minimum** `jlpt` number among the word's kanji (N5 = 5 is easiest, so the minimum is the hardest).
   An unlabelled word with no kanji or an unknown kanji level appears only in "All words". Shared `inWordStack` filtering keeps home counts,

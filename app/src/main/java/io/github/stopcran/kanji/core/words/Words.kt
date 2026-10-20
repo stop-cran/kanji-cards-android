@@ -19,8 +19,9 @@ enum class WordDirection(val mode: StudyMode) {
     /** English prompt, free-text Japanese answer (no options). */
     Type(StudyMode.WordType),
 
-    /** A scene picture as the prompt; choose the Japanese word. Only words that have an image take part. */
+    /** A scene picture as the prompt; choose the Japanese word. Only words with eligible scenes take part. */
     Picture(StudyMode.WordPicture),
+    WordToPicture(StudyMode.WordToPicture),
     ;
 
     val other: WordDirection get() = if (this == JpToEn) EnToJp else JpToEn
@@ -30,9 +31,10 @@ enum class WordDirection(val mode: StudyMode) {
 
     /** Directions other than the forward one open only after their [gate] direction has been answered a couple of times. */
     val gated: Boolean get() = this != JpToEn
+    val usesPictures: Boolean get() = this == Picture || this == WordToPicture
 
     /** Route and display identity of the direction. */
-    val code: String get() = when (this) { JpToEn -> "jp"; EnToJp -> "en"; Reading -> "rd"; Type -> "ty"; Picture -> "pc" }
+    val code: String get() = when (this) { JpToEn -> "jp"; EnToJp -> "en"; Reading -> "rd"; Type -> "ty"; Picture -> "pc"; WordToPicture -> "wp" }
 
     val label: String get() = when (this) {
         JpToEn -> "Japanese → English"
@@ -40,6 +42,7 @@ enum class WordDirection(val mode: StudyMode) {
         Reading -> "reading"
         Type -> "type it"
         Picture -> "picture → word"
+        WordToPicture -> "word → picture"
     }
 
     companion object {
@@ -157,24 +160,37 @@ data class WordOption(val word: String, val label: String)
  * title/written-form duplicates and curated exclusion pairs apart; reading quizzes use distinct reading keys.
  */
 object WordQuizBuilder {
-    fun options(target: WordCard, all: List<WordCard>, direction: WordDirection, random: Random, count: Int = 4): List<WordOption> {
+    fun options(
+        target: WordCard, all: List<WordCard>, direction: WordDirection, random: Random, count: Int = 4,
+    ): List<WordOption> {
         if (direction == WordDirection.Reading) return ReadingOptions.build(target, all, random, count)
+        return select(target, all, random, count).map { WordOption(it.word, label(it, direction)) }
+    }
+
+    internal fun select(
+        target: WordCard, all: List<WordCard>, random: Random, count: Int = 4,
+        acceptCandidate: (WordCard) -> Boolean = { true },
+    ): List<WordCard> {
         val usedTitles = hashSetOf(target.title)
         val usedWords = hashSetOf(target.word)
         val chosen = ArrayList<WordCard>()
         fun excluded(a: WordCard, b: WordCard) = b.word in a.quizExclusions || a.word in b.quizExclusions
         fun tryAdd(c: WordCard) {
-            if (chosen.size < count - 1 && c.word !in usedWords &&
-                !excluded(target, c) && chosen.none { excluded(it, c) } && usedTitles.add(c.title)) {
-                usedWords += c.word
-                chosen += c
-            }
+            if (chosen.size >= count - 1 || c.word in usedWords || c.title in usedTitles) return
+            if (excluded(target, c) || chosen.any { excluded(it, c) }) return
+            if (!acceptCandidate(c)) return
+            usedTitles += c.title
+            usedWords += c.word
+            chosen += c
         }
-        fun score(c: WordCard) = 2 * c.tags.count { it in target.tags } + (if (c.type != null && c.type == target.type) 1 else 0) + (if (c.kanji.any { it in target.kanji }) 1 else 0)
         curatedDistractors(target, all, random, (count - 2).coerceAtLeast(0)).forEach(::tryAdd)
-        all.filter { it.word != target.word }.shuffled(random).sortedByDescending(::score).forEach(::tryAdd)
-        return (chosen + target).map { WordOption(it.word, label(it, direction)) }.shuffled(random)
+        all.filter { it.word != target.word }.shuffled(random).sortedByDescending { score(target, it) }.forEach(::tryAdd)
+        return (chosen + target).shuffled(random)
     }
+
+    private fun score(target: WordCard, c: WordCard) =
+        2 * c.tags.count { it in target.tags } + (if (c.type != null && c.type == target.type) 1 else 0) +
+            (if (c.kanji.any { it in target.kanji }) 1 else 0)
 
     /** Curated distractors come first, but at most [limit] of them so a slot is always left to the scored candidates and the options still vary. */
     private fun curatedDistractors(target: WordCard, all: List<WordCard>, random: Random, limit: Int): List<WordCard> {
@@ -186,7 +202,8 @@ object WordQuizBuilder {
 
     fun label(c: WordCard, direction: WordDirection): String = when (direction) {
         WordDirection.JpToEn -> c.title
-        WordDirection.EnToJp, WordDirection.Type, WordDirection.Picture -> if (c.word == c.reading) c.word else "${c.word} (${c.reading})"
+        WordDirection.EnToJp, WordDirection.Type, WordDirection.Picture, WordDirection.WordToPicture ->
+            if (c.word == c.reading) c.word else "${c.word} (${c.reading})"
         WordDirection.Reading -> c.reading
     }
 }

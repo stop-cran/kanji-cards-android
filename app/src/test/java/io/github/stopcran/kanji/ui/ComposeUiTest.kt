@@ -1,6 +1,7 @@
 package io.github.stopcran.kanji.ui
 
 import android.app.Application
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -24,6 +25,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /** Compose UI behaviour that does not need a database: answer feedback, article toggle, page chrome, link routing. */
 @RunWith(RobolectricTestRunner::class)
@@ -63,6 +65,43 @@ class ComposeUiTest {
         rule.onNodeWithContentDescription("Correct answer: wind").assertIsDisplayed()
         rule.onNodeWithContentDescription("Your answer, wrong: air").assertIsDisplayed()
         rule.onNodeWithContentDescription("spirit").assertIsDisplayed()
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun pictureChoicesExposeScenesButNotJapaneseAnswersUntilChecked() {
+        val words = listOf("correct", "wrong").map {
+            io.github.stopcran.kanji.core.words.WordCard(it, it, "Meaning $it", "wago", emptyList())
+        }
+        val scenes = words.mapIndexed { index, word ->
+            io.github.stopcran.kanji.core.words.PictureScene(
+                word.word,
+                io.github.stopcran.kanji.core.content.WordScene("scene", "Usage", "images/${word.word}.webp", "Visible scene $index", true),
+                "hash-$index",
+            )
+        }
+        val question = io.github.stopcran.kanji.core.words.PictureQuestions.build(words.first(), words, scenes, kotlin.random.Random(1))!!
+        val images = scenes.mapIndexed { index, scene ->
+            val decoded = io.github.stopcran.kanji.data.SceneImages.decode(
+                io.github.stopcran.kanji.data.sceneWebp(index),
+            ) as io.github.stopcran.kanji.data.SceneImageResult.Ready
+            scene.scene.image to decoded.bitmap.asImageBitmap()
+        }.toMap()
+        val picture = WordPictureUi(question, images)
+        val picked = androidx.compose.runtime.mutableStateOf<String?>(null)
+        rule.setContent {
+            androidx.compose.foundation.layout.Column {
+                PictureChoices(picture, picked.value, if (picked.value == null) { { picked.value = it } } else null)
+            }
+        }
+        rule.onNodeWithText("correct").assertDoesNotExist()
+        rule.onNodeWithText("wrong").assertDoesNotExist()
+        rule.onNodeWithContentDescription("Visible scene 0", useUnmergedTree = true).assertExists()
+        val index = question.options.indexOfFirst { it.word == "wrong" } + 1
+        rule.onNodeWithText("Picture $index").performClick()
+        assertEquals("wrong", picked.value)
+        rule.onNodeWithText("Correct: correct").assertIsDisplayed()
+        rule.onNodeWithText("Your choice: wrong").assertIsDisplayed()
     }
 
     @Test

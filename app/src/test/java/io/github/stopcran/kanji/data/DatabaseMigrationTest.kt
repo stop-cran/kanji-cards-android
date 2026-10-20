@@ -49,7 +49,7 @@ class DatabaseMigrationTest {
     }
 
     private fun openDatabase() = Room.databaseBuilder(context, AppDatabase::class.java, name)
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
         .allowMainThreadQueries()
         .build()
 
@@ -151,7 +151,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(9, db.openHelper.writableDatabase.version)
+                assertEquals(10, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(sources.first(), "all", "日", "KanjiOn", "Review", 12.5, 5.0, 999, 500, 3, 1, "にち"),
                     db.reviews().allStates().single(),
@@ -203,7 +203,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(9, db.openHelper.writableDatabase.version)
+                assertEquals(10, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(source, GRAMMAR_STACK, "alpha-a-0", "Grammar", "Review", 12.5, 5.0, 999, 500, 3, 1),
                     db.reviews().allStates().single(),
@@ -216,6 +216,81 @@ class DatabaseMigrationTest {
                 assertEquals(listOf(set), db.grammarSets(source))
                 assertEquals(SyncMetaEntity(source, "before-focus", 500, 0), db.content().meta(source))
                 assertNull(db.reviews().grammarFocus(source))
+            }
+        }
+    }
+
+    private fun seedVersion9SceneContent(): Pair<GrammarFocusEntity, io.github.stopcran.kanji.core.content.GrammarSet> {
+        val source = sources.first()
+        val cursor = io.github.stopcran.kanji.core.grammar.GrammarCursor(automaticOrdinal = 4, selectionNonce = 2)
+        val focus = GrammarFocusEntity(source, 11, Json.encodeToString(io.github.stopcran.kanji.core.grammar.GrammarCursor.serializer(), cursor))
+        val grammar = io.github.stopcran.kanji.core.grammarFixture()
+        val grammarJson = Json.encodeToString(io.github.stopcran.kanji.core.content.GrammarSet.serializer(), grammar)
+        createSchema(9) { sqlite ->
+            for ((index, owner) in sources.withIndex()) {
+                sqlite.execSQL(
+                    "INSERT INTO words (sourceId, word, reading, title, type, kanji, tags, body, image, imageScene) " +
+                        "VALUES (?, 'a', 'a', 'warmth', 'wago', '', 'onomatopoeia', 'body', 'images/a.webp', 'A scene')",
+                    arrayOf(owner),
+                )
+                sqlite.execSQL("INSERT INTO word_images VALUES (?, 'a.webp', ?)", arrayOf(owner, sceneWebp(blue = index == 1)))
+                sqlite.execSQL(
+                    "INSERT INTO review_state VALUES (?, 'words-onomatopoeia', 'a', 'WordPicture', 'Review', 12.5, 5.0, 999, 500, 3, 1, '')",
+                    arrayOf(owner),
+                )
+                sqlite.execSQL("INSERT INTO sync_meta VALUES (?, 'v9', 500, 0, NULL)", arrayOf(owner))
+            }
+            sqlite.execSQL(
+                "INSERT INTO words (sourceId, word, reading, title, kanji, tags, body, image, imageScene) " +
+                    "VALUES (?, 'missing', 'a', 'missing asset', '', '', 'body', 'images/missing.webp', 'Missing')",
+                arrayOf(source),
+            )
+            sqlite.execSQL("INSERT INTO grammar_sets VALUES (?, ?, ?, 0)", arrayOf(source, grammar.id, grammarJson))
+            sqlite.execSQL("INSERT INTO grammar_focus VALUES (?, ?, ?)", arrayOf(source, focus.revision, focus.json))
+            sqlite.execSQL(
+                "INSERT INTO review_state VALUES (?, 'grammar', 'alpha-a-0', 'Grammar', 'Review', 12.5, 5.0, 999, 500, 3, 1, '')",
+                arrayOf(source),
+            )
+            sqlite.execSQL("INSERT INTO review_log VALUES (7, ?, 'grammar', 'alpha-a-0', 'Grammar', 3, 500, '')", arrayOf(source))
+            sqlite.execSQL(
+                "INSERT INTO grammar_responses VALUES (7, ?, 'grammar', 'alpha-a-0', 'a', 'contrast', 'type', 'a', 1)",
+                arrayOf(source),
+            )
+            sqlite.execSQL("INSERT INTO review_log VALUES (8, ?, 'words-onomatopoeia', 'a', 'WordPicture', 3, 500, '')", arrayOf(source))
+        }
+        return focus to grammar
+    }
+
+    @Test
+    fun version9UpgradeKeepsWordPictureHistoryAndGrammarFocusWhileSeedingLegacyScenes() = runBlocking {
+        val source = sources.first()
+        val (focus, grammar) = seedVersion9SceneContent()
+        repeat(2) {
+            withDatabase { db ->
+                for ((index, owner) in sources.withIndex()) {
+                    val bytes = sceneWebp(blue = index == 1)
+                    assertEquals(
+                        listOf(WordSceneEntity(owner, "a", "legacy", "Illustrated usage", "images/a.webp", "A scene", true, ContentParser.rawSha256(bytes), 0)),
+                        db.content().wordScenes(owner),
+                    )
+                    org.junit.Assert.assertArrayEquals(bytes, db.content().imageBytes(owner, "a.webp"))
+                    assertEquals("images/a.webp", db.content().word(owner, "a")!!.quizImage)
+                    assertEquals(
+                        ReviewStateEntity(owner, "words-onomatopoeia", "a", "WordPicture", "Review", 12.5, 5.0, 999, 500, 3, 1),
+                        db.reviews().states(owner, "words-onomatopoeia", "WordPicture").single(),
+                    )
+                    assertEquals(SyncMetaEntity(owner, "v9", 500, 0), db.content().meta(owner))
+                }
+                assertNull(db.content().word(source, "missing")!!.quizImage)
+                assertEquals(listOf("a"), db.content().observeWordsLite(source).first().forDirection(WordDirection.Picture).map { it.word })
+                assertEquals(focus, db.reviews().grammarFocus(source))
+                assertEquals(listOf(grammar), db.grammarSets(source))
+                assertEquals(3, db.reviews().allStates().size)
+                assertEquals(setOf("Grammar", "WordPicture"), db.reviews().allLog().map { it.mode }.toSet())
+                assertEquals(
+                    GrammarResponseEntity(7, source, GRAMMAR_STACK, "alpha-a-0", "a", "contrast", "type", "a", true),
+                    db.reviews().allGrammarResponses().single(),
+                )
             }
         }
     }

@@ -34,6 +34,13 @@ class Settings(context: Context) {
 
     fun grammarFor(sourceId: String): GrammarPreferences = _grammarPreferences.value[sourceId] ?: GrammarPreferences()
 
+    fun sceneParserEpoch(sourceId: String): Int = prefs.getInt("$SCENE_EPOCH$sourceId", 0)
+
+    fun setSceneParserEpoch(sourceId: String, epoch: Int) {
+        require(epoch >= 0) { "Scene parser epoch must not be negative." }
+        prefs.edit().putInt("$SCENE_EPOCH$sourceId", epoch).apply()
+    }
+
     fun setGrammarNewScope(sourceId: String, scope: GrammarScope) {
         prefs.edit().putString("$GRAMMAR_NEW$sourceId", scope.id).apply()
         _grammarPreferences.update { it + (sourceId to (it[sourceId] ?: GrammarPreferences()).copy(newScope = scope)) }
@@ -288,5 +295,6 @@ class Settings(context: Context) {
         const val GRAMMAR_BROWSE = "grammarBrowse:"
         const val GRAMMAR_EPOCH = "grammarParserEpoch:"
         const val GRAMMAR_GUIDED = "grammarGuided:"
+        const val SCENE_EPOCH = "sceneParserEpoch:"
     }
 }

@@ -54,11 +54,25 @@ data class WordEntity(
     @ColumnInfo(defaultValue = "''") val quizDistractors: String = "",
     val image: String? = null,
     val imageScene: String? = null,
+    val quizImage: String? = image,
 )
 
 /** A verified scene picture (WebP bytes), replaced together with the rest of the snapshot. */
 @Entity(tableName = "word_images", primaryKeys = ["sourceId", "name"])
 class ImageEntity(val sourceId: String, val name: String, val bytes: ByteArray)
+
+@Entity(tableName = "word_scenes", primaryKeys = ["sourceId", "word", "id"])
+data class WordSceneEntity(
+    val sourceId: String,
+    val word: String,
+    val id: String,
+    val sense: String,
+    val image: String,
+    val description: String,
+    val quizEligible: Boolean,
+    val imageHash: String,
+    val position: Int,
+)
 
 @Entity(tableName = "articles", primaryKeys = ["sourceId", "slug"])
 data class ArticleEntity(val sourceId: String, val slug: String, val title: String, val body: String)
@@ -141,6 +155,7 @@ data class ContentRows(
     val counters: List<CounterEntity> = emptyList(),
     val images: List<ImageEntity> = emptyList(),
     val grammar: List<GrammarEntity> = emptyList(),
+    val scenes: List<WordSceneEntity> = emptyList(),
 )
 
 @Dao
@@ -157,7 +172,7 @@ interface ContentDao {
     fun observeKanjiLite(sourceId: String): Flow<List<KanjiEntity>>
 
     @Query(
-        "SELECT sourceId, word, reading, title, type, kanji, tags, '' AS body, jlpt, quizExclusions, quizDistractors, image, imageScene " +
+        "SELECT sourceId, word, reading, title, type, kanji, tags, '' AS body, jlpt, quizExclusions, quizDistractors, image, imageScene, quizImage " +
             "FROM words WHERE sourceId = :sourceId ORDER BY word"
     )
     fun observeWordsLite(sourceId: String): Flow<List<WordEntity>>
@@ -227,6 +242,18 @@ interface ContentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertImages(items: List<ImageEntity>)
 
+    @Query("SELECT * FROM word_scenes WHERE sourceId = :sourceId ORDER BY word, position")
+    suspend fun wordScenes(sourceId: String): List<WordSceneEntity>
+
+    @Query("SELECT * FROM word_scenes WHERE sourceId = :sourceId AND word = :word ORDER BY position")
+    fun observeWordScenes(sourceId: String, word: String): Flow<List<WordSceneEntity>>
+
+    @Query("DELETE FROM word_scenes WHERE sourceId = :sourceId")
+    suspend fun clearScenes(sourceId: String)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertScenes(items: List<WordSceneEntity>)
+
     @Query("SELECT * FROM counters WHERE sourceId = :sourceId ORDER BY position")
     suspend fun counters(sourceId: String): List<CounterEntity>
 
@@ -269,12 +296,14 @@ interface ContentDao {
         clearCounters(sourceId)
         clearGrammar(sourceId)
         clearImages(sourceId)
+        clearScenes(sourceId)
         insertKanji(rows.kanji)
         insertWords(rows.words)
         insertArticles(rows.articles)
         insertCounters(rows.counters)
         insertGrammar(rows.grammar)
         insertImages(rows.images)
+        insertScenes(rows.scenes)
         putMeta(meta)
         invalidateGrammarFocus(sourceId)
     }
@@ -384,14 +413,43 @@ interface ReviewDao {
     entities = [
         KanjiEntity::class, WordEntity::class, ArticleEntity::class, CounterEntity::class, ImageEntity::class,
         GrammarEntity::class, GrammarResponseEntity::class, GrammarFocusEntity::class,
+        WordSceneEntity::class,
         ReviewStateEntity::class, ReviewLogEntity::class, SyncMetaEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun content(): ContentDao
     abstract fun reviews(): ReviewDao
+}
+
+val MIGRATION_9_10 = object : androidx.room.migration.Migration(9, 10) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE words ADD COLUMN quizImage TEXT")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS word_scenes (sourceId TEXT NOT NULL, word TEXT NOT NULL, id TEXT NOT NULL, " +
+                "sense TEXT NOT NULL, image TEXT NOT NULL, description TEXT NOT NULL, quizEligible INTEGER NOT NULL, " +
+                "imageHash TEXT NOT NULL, position INTEGER NOT NULL, PRIMARY KEY(sourceId, word, id))",
+        )
+        db.query(
+            "SELECT w.sourceId, w.word, w.image, w.imageScene, i.bytes FROM words w " +
+                "JOIN word_images i ON i.sourceId = w.sourceId AND i.name = substr(w.image, 8) " +
+                "WHERE w.image IS NOT NULL AND w.imageScene IS NOT NULL",
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val source = cursor.getString(0)
+                val word = cursor.getString(1)
+                val image = cursor.getString(2)
+                db.execSQL(
+                    "INSERT INTO word_scenes VALUES (?, ?, 'legacy', 'Illustrated usage', ?, ?, 1, ?, 0)",
+                    arrayOf(source, word, image, cursor.getString(3),
+                        io.github.stopcran.kanji.core.content.ContentParser.rawSha256(cursor.getBlob(4))),
+                )
+                db.execSQL("UPDATE words SET quizImage = ? WHERE sourceId = ? AND word = ?", arrayOf(image, source, word))
+            }
+        }
+    }
 }
 
 val MIGRATION_8_9 = object : androidx.room.migration.Migration(8, 9) {

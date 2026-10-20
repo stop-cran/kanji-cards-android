@@ -4,6 +4,7 @@ import io.github.stopcran.kanji.core.content.ContentException
 import io.github.stopcran.kanji.core.content.ContentParser
 import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.content.SafeZip
+import io.github.stopcran.kanji.core.content.SceneCatalog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -31,20 +32,47 @@ private fun io.github.stopcran.kanji.core.content.ParsedContent.toSyncMeta(sourc
     grammarProblems.takeIf { it.isNotEmpty() }?.joinToString("\n"),
 )
 
+private fun io.github.stopcran.kanji.core.content.ParsedContent.toRows(sourceId: String): ContentRows {
+    val kanjiRows = kanji.mapIndexed { i, c ->
+        KanjiEntity(
+            sourceId, c.kanji, c.title, c.jlpt, c.tags.joinSep(), c.strokeCount, c.radical, c.phonetic,
+            c.onyomi.joinSep(), c.kunyomi.joinSep(), c.distractors.joinSep(), c.body,
+            strokes[c.kanji]?.let { Json.encodeToString(io.github.stopcran.kanji.core.content.StrokeData.serializer(), it) },
+            i,
+        )
+    }
+    val counterRows = counters.mapIndexed { i, c ->
+        CounterEntity(sourceId, c.id, Json.encodeToString(io.github.stopcran.kanji.core.content.CounterFile.serializer(), c), i)
+    }
+    val sceneRows = words.flatMap { word ->
+        word.scenes.mapIndexed { index, scene ->
+            WordSceneEntity(
+                sourceId, word.word, scene.id, scene.sense, scene.image, scene.description,
+                scene.quizEligible, manifest.images.getValue(scene.image), index,
+            )
+        }
+    }
+    return ContentRows(
+        kanjiRows, words.map { it.toEntity(sourceId) }, articles.map { ArticleEntity(sourceId, it.slug, it.title, it.body) },
+        counterRows, images.map { (path, bytes) -> ImageEntity(sourceId, path.removePrefix("images/"), bytes) },
+        grammar.toGrammarEntities(sourceId), sceneRows,
+    )
+}
+
 class ContentSync(private val db: AppDatabase, private val settings: Settings, private val http: ContentHttp = UrlConnectionHttp) {
-    private val json = Json
     private val lock = Mutex()
 
     /** Cheap check at app start: at most every [LAUNCH_INTERVAL_MS], and only downloads when the branch head moved. */
     suspend fun syncOnLaunch(source: RepoSource): SyncResult {
         val now = System.currentTimeMillis()
-        if (!needsGrammarRefresh(source) && now - settings.lastCheckMs < LAUNCH_INTERVAL_MS) return SyncResult.UpToDate
+        if (!needsParserRefresh(source) && now - settings.lastCheckMs < LAUNCH_INTERVAL_MS) return SyncResult.UpToDate
         val result = sync(source)
         if (result !is SyncResult.Failed) settings.lastCheckMs = now
         return result
     }
 
-    private fun needsGrammarRefresh(source: RepoSource): Boolean = !settings.grammarFor(source.id).groupsReady
+    private fun needsParserRefresh(source: RepoSource): Boolean =
+        !settings.grammarFor(source.id).groupsReady || settings.sceneParserEpoch(source.id) < SceneCatalog.PARSER_EPOCH
 
     /** Head commit of the branch via the GitHub API (one tiny request); null when unavailable, e.g. offline or rate limited. */
     private fun headCommit(source: RepoSource): String? {
@@ -74,7 +102,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
     }
     suspend fun sync(source: RepoSource, force: Boolean = false): SyncResult = lock.withLock { withContext(Dispatchers.IO) {
         try {
-            val maySkipImport = !force && !needsGrammarRefresh(source)
+            val maySkipImport = !force && !needsParserRefresh(source)
             val commitKey = "${source.id}@${source.branch}"
             val head = headCommit(source)
             // Rate-limited or offline: fall back to the branch archive, but at most once per interval so launches and worker retries cannot hammer codeload.
@@ -89,7 +117,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             val headUnchanged = head != null && head == settings.syncedCommit(commitKey)
             if (maySkipImport && headUnchanged && db.content().meta(source.id) != null) return@withContext SyncResult.UpToDate
             val files = download(url) { SafeZip.read(it) }
-            val parsed = ContentParser.parse(files)
+            val parsed = ContentParser.parse(files, SceneImages::problem)
             val dao = db.content()
             if (maySkipImport && dao.meta(source.id)?.contentVersion == parsed.manifest.contentVersion) {
                 head?.let { settings.setSyncedCommit(commitKey, it) }
@@ -103,26 +131,13 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
                     "${parsed.problems.size} files rejected (${parsed.problems.first()}); keeping previous cards", retryable = true,
                 )
             }
-            val kanji = parsed.kanji.mapIndexed { i, c ->
-                KanjiEntity(
-                    source.id, c.kanji, c.title, c.jlpt, c.tags.joinSep(), c.strokeCount, c.radical, c.phonetic,
-                    c.onyomi.joinSep(), c.kunyomi.joinSep(), c.distractors.joinSep(), c.body,
-                    parsed.strokes[c.kanji]?.let { json.encodeToString(io.github.stopcran.kanji.core.content.StrokeData.serializer(), it) },
-                    i,
-                )
-            }
-            val words = parsed.words.map { it.toEntity(source.id) }
-            val articles = parsed.articles.map { ArticleEntity(source.id, it.slug, it.title, it.body) }
-            val counters = parsed.counters.mapIndexed { i, c ->
-                CounterEntity(source.id, c.id, json.encodeToString(io.github.stopcran.kanji.core.content.CounterFile.serializer(), c), i)
-            }
-            val grammar = parsed.grammar.toGrammarEntities(source.id)
-            val images = parsed.images.map { (path, bytes) -> ImageEntity(source.id, path.removePrefix("images/"), bytes) }
+            val rows = parsed.toRows(source.id)
             val meta = parsed.toSyncMeta(source.id)
-            dao.replaceContent(source.id, ContentRows(kanji, words, articles, counters, images, grammar), meta)
+            dao.replaceContent(source.id, rows, meta)
             settings.setGrammarParserEpoch(source.id, GRAMMAR_GROUP_EPOCH)
+            settings.setSceneParserEpoch(source.id, SceneCatalog.PARSER_EPOCH)
             head?.let { settings.setSyncedCommit(commitKey, it) }
-            SyncResult.Updated(kanji.size, words.size, parsed.problems)
+            SyncResult.Updated(rows.kanji.size, rows.words.size, parsed.problems)
         } catch (e: ContentException) {
             SyncResult.Failed(e.message ?: "Invalid content", retryable = false)
         } catch (e: java.io.IOException) {

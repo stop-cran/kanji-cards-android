@@ -16,7 +16,7 @@ object SafeZip {
         val maxInflatedBytes: Long = 100L * 1024 * 1024,
     )
 
-    private val allowedFolders = setOf("kanji", "words", "articles", "strokes", "counters", "grammar")
+    private val allowedFolders = setOf("kanji", "words", "articles", "strokes", "counters", "grammar", "scenes")
 
     /** Returns repo-relative path -> bytes for manifest.json and the content folders; the archive's top-level folder is stripped. */
     fun read(input: InputStream, limits: Limits = Limits()): Map<String, ByteArray> {

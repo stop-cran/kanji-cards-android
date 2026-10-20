@@ -6,12 +6,23 @@ in the default repo `stop-cran/learning-japanese`.
 What the app enforces when importing (`core/content/ContentParser.kt`, `FrontMatter.kt`, `SafeZip.kt`):
 
 - The repo archive (`codeload.github.com/<owner>/<repo>/zip/refs/heads/<branch>`) must contain `manifest.json` with `schemaVersion` 1.
-- Only `manifest.json` and files directly in `kanji/`, `words/`, `articles/`, `strokes/`, `counters/`, `grammar/` are read, plus `images/*.webp`
+- Only `manifest.json` and files directly in `kanji/`, `words/`, `articles/`, `strokes/`, `counters/`, `grammar/`, `scenes/` are read, plus `images/*.webp`
   (at most 150 KiB each). Zip-slip paths, more than 8,000 entries, wanted text files over 2 MiB or wanted data over 50 MiB are rejected.
   The separate 100 MiB inflated limit includes skipped entries too.
 - Images are listed in the manifest's separate `images` map with SHA-256 over the raw bytes (no LF normalisation). A word's `image` and
   `image_scene` keys are read together; an image that is missing, oversize, not WebP, hash-mismatched or shared by two words is reported as a
   problem and only that word's picture is dropped.
+- Optional `scenes/<word>.json` catalogs use a separate manifest `scenes` map with LF-normalized hashes, included in `contentVersion`.
+  They must not appear under `files`, because older clients discard this directory. A catalog has integer `schemaVersion: 1`,
+  a filename-matching `word` and a nonempty `scenes` array. Each entry requires unique word-scoped lowercase kebab-case `id`,
+  nonblank English `sense`/`description`, a unique flat WebP `image` path and an explicit JSON boolean `quizEligible`.
+  Article-only variants remain imported but are not quiz candidates. Asset ownership stays word-scoped, including legacy references.
+- A declared catalog is authoritative. Missing, hash-mismatched or invalid catalogs disable that word's picture eligibility without
+  deleting its lexical card. Only absence permits a synthetic eligible legacy scene. Retained legacy fields must match an eligible
+  catalog scene and its description exactly; otherwise the catalog is rejected. A failed individual asset drops only its variants.
+- The Android sync boundary checks actual WebP decoding, not just its envelope, and rejects sides outside 1-2048 pixels. Display
+  decoding is downsampled to at most 512 pixels per side. Picture questions require all of their images to be ready and at least
+  two permitted choices; unavailable media never counts as a wrong answer. Article-only scenes do not enter either picture direction.
 - Every file listed in the manifest must match its SHA-256 (computed over LF-normalised bytes); mismatching, missing or malformed files are
   skipped and counted as problems instead of failing the sync. Duplicate kanji titles are rejected (titles are quiz answers).
 - Front matter is a restricted subset: `key: value` scalars and inline `[a, b]` lists (commas inside quotes are kept; an unterminated quote
@@ -54,6 +65,11 @@ level or exclusions. It clears only sync metadata so normal home-screen sync rei
 that older app versions ignored. Cached content remains usable with legacy behavior while offline. Version 1 databases upgrade through both
 registered migrations. The content manifest remains schema version 1; regenerate hashes and `contentVersion` when changing word metadata.
 `contentVersion` is the update contract: a new commit with an unchanged `contentVersion` is treated as up to date and not imported.
+
+Room v10 adds `word_scenes` and nullable `words.quizImage`. The v9 migration retains every existing schedule and Grammar record and
+synthesizes named legacy metadata for stored word images. Scene parser epoch 1 is source-scoped and independent of Grammar epochs;
+until refreshed it bypasses revision/version/launch-throttle skips. It is recorded only after successful snapshot replacement.
+The existing Picture mode remains `WordPicture` (`pc`); the inverse is `WordToPicture` (`wp`). Both schedule words, not scene IDs.
 
 ## Grammar content JSON v1
 
