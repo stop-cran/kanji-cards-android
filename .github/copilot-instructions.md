@@ -50,6 +50,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   disables quiz eligibility rather than synthesizing a legacy fallback. Graded image questions use predecoded, hash-checked snapshots;
   `WordImage` is only the live article loader. Scene IDs must never become SRS keys.
 - **Content is untrusted.** Parse defensively, skip bad files instead of failing the sync, never render raw HTML, cap archive sizes.
+- Grammar additional correct choices are authored, not derived from typed spellings. Use the captured presentation for grading,
+  both correct highlights, rationales and response export; bind callbacks to its instance because different exercises can reuse IDs.
+  Advance `ContentParser.GRAMMAR_PARSER_EPOCH` for newly retained Grammar metadata, not the historical level/group readiness thresholds.
 - **Room:** list columns are joined with `SEP` (`\u001F`); use `joinSep()`/`splitSep()`. `review_log.id` is auto-generated, so pass `0`.
   Review state is keyed by (`sourceId` = lower-case `owner/repo`, stack, item, mode). Never key it by title or position; titles are editable.
 - **Quiz semantics:** options are meaning titles and unique by title (one correct answer). Wrong = Again (re-asked after 3 cards),

@@ -10,6 +10,7 @@ class ContentException(message: String) : Exception(message)
 
 /** Turns a map of repo-relative path -> bytes into validated content. Everything here is treated as untrusted input. */
 object ContentParser {
+    const val GRAMMAR_PARSER_EPOCH = 4
     const val MAX_QUIZ_DISTRACTORS = 3
     const val MAX_IMAGE_BYTES = 150 * 1024
     internal val IMAGE_PATH = Regex("images/[^/\\\\\\s]+\\.webp")
@@ -152,6 +153,7 @@ object ContentParser {
             val groups = GrammarGroups.decode(raw["introductionGroups"])
             raw["exercises"]?.jsonArray?.forEach { item ->
                 val exercise = item.jsonObject
+                io.github.stopcran.kanji.core.grammar.GrammarChoices.validateDeclaration(exercise["additionalCorrectOptions"])
                 if ("jlpt" in exercise) {
                     val level = exercise["jlpt"] as? JsonPrimitive
                     require(level != null && !level.isString && grammarLevel.matches(level.content)) {
@@ -254,6 +256,7 @@ object ContentParser {
         require(exercise.acceptedAnswers.any { it.trim() == answerLabel }) {
             "${exercise.id}: acceptedAnswers must include the answer label"
         }
+        io.github.stopcran.kanji.core.grammar.GrammarChoices.validate(exercise)
     }
 
     private fun resolveGrammar(sets: List<GrammarSet>, problems: MutableList<String>): List<GrammarSet> {

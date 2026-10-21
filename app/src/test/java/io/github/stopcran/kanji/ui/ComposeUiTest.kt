@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import io.github.stopcran.kanji.core.grammarFixture
 import io.github.stopcran.kanji.core.familiarEvents
 import io.github.stopcran.kanji.core.recommending
@@ -50,6 +51,35 @@ class ComposeUiTest {
         rule.onNodeWithText("From foundation (foundation), importance 3: Compare foundation with beta.").assertIsDisplayed()
         rule.onNodeWithText("Supported source facet a: 2 positive contexts, 1 typed, 24h span within 21 days.").assertIsDisplayed()
         rule.onNodeWithText("Supported source facet b: 2 positive contexts, 1 typed, 24h span within 21 days.").assertIsDisplayed()
+    }
+
+    @Test
+    @Config(qualifiers = "notnight")
+    fun grammarMistakesAndGiveUpHighlightBothCorrectChoicesWithExplicitMarkers() {
+        val exercise = grammarFixture().exercises.first().copy(
+            additionalCorrectOptions = listOf(io.github.stopcran.kanji.core.content.GrammarOption("alt", "alternative", "Also fits.")),
+        )
+        val choices = io.github.stopcran.kanji.core.grammar.GrammarChoices.build(
+            exercise, io.github.stopcran.kanji.core.GrammarChoiceRandom(),
+        )
+        val answer = androidx.compose.runtime.mutableStateOf(GrammarUi.Answer(exercise, "choose", "b", false, 1, choices))
+        rule.setContent {
+            androidx.compose.foundation.layout.Column { GrammarOptionFeedback(answer.value) }
+        }
+        fun assertBothCorrect() {
+            for (text in listOf("✓ Correct: a — Rationale.", "✓ Correct: alternative — Also fits.")) {
+                val node = rule.onNodeWithText(text).assertIsDisplayed()
+                val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+                node.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+                assertEquals(androidx.compose.ui.graphics.Color(0xFF2E7D32), layouts.single().layoutInput.style.color)
+            }
+        }
+        assertBothCorrect()
+        rule.onNodeWithText("✗ Your answer: b — Rationale.").assertIsDisplayed()
+        rule.runOnIdle { answer.value = answer.value.copy(response = "") }
+        assertBothCorrect()
+        rule.onNodeWithText("✗ Your answer: b — Rationale.").assertDoesNotExist()
+        rule.onNodeWithText("b — Rationale.").assertIsDisplayed()
     }
 
     @Test

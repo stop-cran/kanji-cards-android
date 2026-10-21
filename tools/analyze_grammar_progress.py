@@ -140,7 +140,7 @@ def _session_link(log, sessions):
 
 def _join(bundle, version):
     rows = _rows(bundle, "review_log.json")
-    sessions = _sessions(bundle) if version == 3 else {}
+    sessions = _sessions(bundle) if version >= 3 else {}
     session_counts = defaultdict(int)
     logs = {}
     for row in rows:
@@ -149,7 +149,7 @@ def _join(bundle, version):
         _text(row, "reading", empty=True)
         _integer(row, "grade", 1, 4)
         _integer(row, "atMs")
-        if version == 3:
+        if version >= 3:
             _session_link(row, sessions)
             if row["sessionId"] is not None:
                 session_counts[row["sessionId"]] += 1
@@ -257,7 +257,7 @@ def analyze(path):
         manifest = bundle["export_manifest.json"]
         if not isinstance(manifest, dict):
             raise ExportError("Unsupported export manifest")
-        version = _integer(manifest, "formatVersion", 2, 3)
+        version = _integer(manifest, "formatVersion", 2, 4)
         if set(bundle) != (V2_ENTRIES if version == 2 else V3_ENTRIES):
             raise ExportError("Export members do not match the declared format version")
     _rows(bundle, "review_state.json")

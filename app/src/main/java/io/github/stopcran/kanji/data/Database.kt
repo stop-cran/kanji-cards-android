@@ -103,6 +103,7 @@ data class GrammarResponseEntity(
     val promptType: String,
     val response: String,
     val correct: Boolean,
+    val choiceSnapshot: String? = null,
 )
 
 /** Scheduling state per (content source, stack, kanji, mode); survives content updates and card edits. */
@@ -449,12 +450,18 @@ interface ReviewDao {
         WordSceneEntity::class,
         ReviewStateEntity::class, ReviewLogEntity::class, StudySessionEntity::class, SyncMetaEntity::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun content(): ContentDao
     abstract fun reviews(): ReviewDao
+}
+
+val MIGRATION_11_12 = object : androidx.room.migration.Migration(11, 12) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE grammar_responses ADD COLUMN choiceSnapshot TEXT")
+    }
 }
 
 val MIGRATION_10_11 = object : androidx.room.migration.Migration(10, 11) {

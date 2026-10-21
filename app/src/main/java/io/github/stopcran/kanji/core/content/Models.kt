@@ -153,6 +153,7 @@ data class GrammarExercise(
     val vocabulary: GrammarVocabularyData? = null,
     /** Import diagnostic for optional vocabulary support; never supplied by authored content. */
     val vocabularyProblem: String? = null,
+    val additionalCorrectOptions: List<GrammarOption> = emptyList(),
 )
 
 @Serializable

@@ -36,6 +36,9 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   The bounded formal-noun pilot has 401 reviewed exercises in 32 sets, including five mixed sets (content commit `c2a9844`).
   This is scoped coverage, not a claim to cover every use or all Japanese grammar. Accepted alternatives share one exercise identity;
   every literal completion must fit the visible task, and accepted equivalents must not become distractors.
+  Optional `additionalCorrectOptions` explicitly authors alternative choice realizations with their own IDs, labels and rationales.
+  Base `options` retains exactly one correct representative for old clients. Additional labels must be accepted typed forms;
+  normalized labels are distinct across both lists, and declared malformed grading metadata rejects the set.
   Optional exercise `jlpt` is one strict integer 1-5; omission is unclassified, not a vocabulary-derived fallback or inferred easiest level.
 - `manifest.json` maps path to SHA-256 over LF-normalised bytes; files failing the hash are skipped. The content repo's
   `tools/build_manifest.py` and `ContentParser.sha256` must stay in sync.
@@ -43,7 +46,8 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   archive cannot differ from the checked head. It is skipped when the head SHA equals the stored one, and the
   import is also skipped when `manifest.contentVersion` is unchanged, so **content changes must bump `contentVersion`** (`force` bypasses
   both). Pending Grammar or scene parser epochs also bypass these shortcuts and the launch-check throttle, but not bad-content/shrink protection.
-  Epoch 2 is recorded per source only after atomic replacement, retaining JLPT and groups. Epoch-0 caches permit only unguided All new
+  Current Grammar parser epoch 4 is recorded per source only after atomic replacement, retaining JLPT, groups, vocabulary and authored
+  additional correct choices. The readiness thresholds stay at 1 for levels and 2 for groups. Epoch-0 caches permit only unguided All new
   intake; epoch 1 permits level-aware unguided intake; started reviews remain available throughout.
   If the head lookup fails and content exists, the branch archive is downloaded at most once per 6h per source/branch (persisted
   `fallback:` timestamp; throttled calls return a non-retryable failure so the worker does not loop); with no content it downloads at once.
@@ -94,7 +98,13 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - **Architecture:** the Grammar, Quiz, Word, Reading and Draw session ViewModels share the pure `core/quiz/QuizSession` (queue, tallies, grade choice, `Relearn` reinsertion; Draw uses `confirm = false`). They receive `Services(db, settings, context)` through `serviceViewModel(key) { … }` instead of casting `Application`. `HomeData` loads the seven state maps as one non-null `StateSet`; the N4 offer is the pure `shouldOfferN4`. `InkRecognizer` and `ContentSync` rethrow `CancellationException` and turn any other failure into a fallback / `SyncResult.Failed`.
 - **Grammar questions:** a session starts with a shuffled choice question and alternates choose/type, including re-asks. Both show the
   complete Japanese prompt and English meaning; checking reveals evidence, explanation and all option rationales. The article opens on
-  the normal document stack and Back preserves the current question/answer. Choice checks the answer ID; typing trims and NFKC-normalizes
+  the normal document stack and Back preserves the current question/answer. Grammar-only choices with authored alternatives independently
+  show two correct options on 20% of eligible choice appearances, not 20% of all questions and not a session quota. One random alternative
+  is appended to the primary and every original distractor, then shuffled. No frequency setting or spelling-derived choices are added.
+  One tap on any displayed correct option is sufficient. The captured order/labels/rationales/correct-ID set governs grading and feedback;
+  callbacks carry the originating presentation identity so reused IDs cannot grade a later question. After a mistake or give-up, both
+  correct options have explicit checkmarks/labels and correct colors; a selected wrong option is separately marked. A correct alternate
+  completes the answer-side prompt with its captured label. Counters and all other quiz modes are unchanged. Typing trims and NFKC-normalizes
   both input and all accepted answers, then requires exact membership (no script folding, transliteration or typo tolerance).
   Input is limited to 80 characters. Empty Check does nothing; "I don't know" is Again. Correct is Good, or Hard when a correct-choice user
   selects "I guessed"; choice first success is capped at one day, typing is not. Advancing a recorded answer atomically saves one state,
@@ -322,6 +332,11 @@ The route registry closes sessions on actual navigation removal, not composition
 Completion and early exit store the UI answer totals, including practice-only confirmations; process death leaves an unknown ending.
 Historical answers remain unassigned. See `CONTENT-SCHEMA.md` for linkage, mixed readings/padding and timestamp limitations.
 
+Room v12 adds nullable `grammar_responses.choiceSnapshot`. Export v4 includes its structured versioned choose-any policy, actual ordered
+options and correct IDs for each newly recorded choice. Legacy/typed rows remain null. This is interpretation context for the same
+single canonical answer, not additional reviews; neither old presentations nor per-answer source revisions are reconstructed.
+The local analyzer accepts v4 and preserves v3 session validation and existing target-level metrics without exposing option prose.
+
 The stdlib-only `tools/analyze_grammar_progress.py` gives two overlapping post-hoc views of those events (recorded construction and
 relationship IDs), with choice/type and first-observed/repeated strata. Retain both for diagnosing where contextual contrasts need attention,
 not as separate mastery measures or schedules. A repeated set-local ID may conflate labels; functional answer classes do not measure each
@@ -344,6 +359,6 @@ within #46; scope those separately if a concrete need emerges. No real export, t
 - **Portability**: progress ZIP export is available; import/restore is not implemented, and iOS is out of scope.
 - **Grammar**: #48's [phased contract](GRAMMAR-INTRODUCTIONS.md) implements cumulative JLPT scope, focused introductions and relationship-aware
   new-material selection. The conservative pilot heuristics, incomplete classifications and editorial links are not a validated curriculum.
-  Two-correct fixed-option interaction/counter applicability is
-  separate #47. Neither is implemented by the bounded #46 pilot, and learning effectiveness remains unestablished.
+  #47 adds occasional choose-any two-correct Grammar presentations. Counter applicability and select-all interaction remain out of scope;
+  learning effectiveness remains unestablished.
 - **Release**: Play listing, data-safety form, check the image model's output terms for the icon (`RELEASE.md`).

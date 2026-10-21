@@ -52,7 +52,7 @@ class DatabaseMigrationTest {
     private fun openDatabase() = Room.databaseBuilder(context, AppDatabase::class.java, name)
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
-            MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
+            MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
         )
         .allowMainThreadQueries()
         .build()
@@ -126,7 +126,7 @@ class DatabaseMigrationTest {
             assertEquals(1, ProgressExport.write(db, Settings(context), output))
             val entries = zipEntries(output)
             val json = Json
-            assertEquals(3, json.parseToJsonElement(entries.getValue("export_manifest.json")).jsonObject.getValue("formatVersion").jsonPrimitive.int)
+            assertEquals(4, json.parseToJsonElement(entries.getValue("export_manifest.json")).jsonObject.getValue("formatVersion").jsonPrimitive.int)
             assertEquals(6, entries.size)
             assertEquals(1, json.parseToJsonElement(entries.getValue("review_log.json")).jsonArray.size)
             val exported = json.parseToJsonElement(entries.getValue("grammar_responses.json")).jsonArray.single().jsonObject
@@ -140,6 +140,53 @@ class DatabaseMigrationTest {
             assertEquals("completed", exportedSession.getValue("endReason").jsonPrimitive.content)
             assertEquals(2, exportedSession.getValue("answered").jsonPrimitive.int)
             assertEquals(2, exportedSession.getValue("correct").jsonPrimitive.int)
+        }
+    }
+
+    @Test
+    fun version11UpgradePreservesLegacyEventsAndReopensNewChoiceSnapshots() = runBlocking {
+        val owner = sources.first()
+        createSchema(11) { sqlite ->
+            sqlite.execSQL(
+                "INSERT INTO grammar_responses VALUES (7, ?, 'grammar', 'old', 'a', 'contrast', 'choose', 'a', 1)",
+                arrayOf(owner),
+            )
+            sqlite.execSQL("INSERT INTO review_log VALUES (7, ?, 'grammar', 'old', 'Grammar', 3, 500, '', NULL)", arrayOf(owner))
+            sqlite.execSQL(
+                "INSERT INTO review_state VALUES (?, 'grammar', 'old', 'Grammar', 'Review', 12.5, 5.0, 999, 500, 3, 1, '')",
+                arrayOf(owner),
+            )
+        }
+        val question = io.github.stopcran.kanji.core.grammar.GrammarChoiceSnapshot(
+            listOf(
+                io.github.stopcran.kanji.core.content.GrammarOption("a", "Primary", "Fits."),
+                io.github.stopcran.kanji.core.content.GrammarOption("alt", "Alternative", "Fits too."),
+                io.github.stopcran.kanji.core.content.GrammarOption("b", "Wrong", "Does not fit."),
+            ),
+            setOf("a", "alt"),
+        )
+        val snapshot = io.github.stopcran.kanji.core.grammar.GrammarChoices.encode(question)
+        withDatabase { db ->
+            assertNull(db.reviews().allGrammarResponses().single().choiceSnapshot)
+            val old = db.reviews().allStates().single()
+            db.reviews().recordGrammar(
+                old.copy(kanji = "new"),
+                ReviewLogEntity(0, owner, GRAMMAR_STACK, "new", "Grammar", 3, 600),
+                GrammarResponseEntity(0, owner, GRAMMAR_STACK, "new", "a", "contrast", "choose", "alt", true, snapshot),
+            )
+        }
+        withDatabase { db ->
+            val records = db.reviews().allGrammarResponses().associateBy { it.exerciseId }
+            assertNull(records.getValue("old").choiceSnapshot)
+            assertEquals(snapshot, records.getValue("new").choiceSnapshot)
+            assertEquals(3, db.reviews().allStates().single { it.kanji == "old" }.reps)
+            assertEquals(2, db.reviews().allLog().size)
+            val output = ByteArrayOutputStream()
+            assertEquals(2, ProgressExport.write(db, Settings(context), output))
+            val exported = Json.parseToJsonElement(zipEntries(output).getValue("grammar_responses.json")).jsonArray
+                .associate { it.jsonObject.getValue("exerciseId").jsonPrimitive.content to it.jsonObject }
+            assertEquals(JsonNull, exported.getValue("old").getValue("choiceSnapshot"))
+            assertEquals(Json.parseToJsonElement(snapshot), exported.getValue("new").getValue("choiceSnapshot"))
         }
     }
 
@@ -158,7 +205,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(11, db.openHelper.writableDatabase.version)
+                assertEquals(12, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(sources.first(), "all", "日", "KanjiOn", "Review", 12.5, 5.0, 999, 500, 3, 1, "にち"),
                     db.reviews().allStates().single(),
@@ -250,7 +297,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(11, db.openHelper.writableDatabase.version)
+                assertEquals(12, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(source, GRAMMAR_STACK, "alpha-a-0", "Grammar", "Review", 12.5, 5.0, 999, 500, 3, 1),
                     db.reviews().allStates().single(),

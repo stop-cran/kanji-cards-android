@@ -119,6 +119,29 @@ class GrammarAnalysisTest(unittest.TestCase):
                 with self.assertRaises(ExportError):
                     self.read(bundle)
 
+    def test_v4_choice_snapshots_do_not_duplicate_events_or_disclose_option_text(self):
+        bundle = session_fixture()
+        expected = self.read(bundle)
+        expected["export_format_version"] = 4
+        bundle["export_manifest.json"]["formatVersion"] = 4
+        for row in bundle["grammar_responses.json"]:
+            row["choiceSnapshot"] = None
+        row = bundle["grammar_responses.json"][2]
+        row["response"] = "alternate"
+        row["choiceSnapshot"] = {
+            "schemaVersion": 1, "interaction": "choose-any",
+            "options": [dict(id=key, label="PRIVATE_OPTION_" + key, rationale="PRIVATE_RATIONALE")
+                            for key in ("class-b", "alternate", "wrong")],
+            "correctOptionIds": ["class-b", "alternate"],
+        }
+        report = self.read(bundle)
+        self.assertEqual(expected, report)
+        self.assertNotIn("PRIVATE_OPTION", json.dumps(report))
+        self.assertNotIn("PRIVATE_RATIONALE", json.dumps(report))
+        bundle["review_log.json"][0]["sessionId"] = "missing"
+        with self.assertRaises(ExportError):
+            self.read(bundle)
+
     def test_v3_mixed_readings_and_borrowed_stacks_share_a_session(self):
         bundle = session_fixture()
         bundle["grammar_responses.json"] = []

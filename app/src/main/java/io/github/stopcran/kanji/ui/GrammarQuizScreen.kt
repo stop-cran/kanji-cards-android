@@ -68,11 +68,15 @@ private fun GrammarSessionBody(
             is GrammarUi.Choose -> {
                 GrammarRemaining(state.remaining)
                 GrammarPrompt(vm, state.exercise)
-                Text("Choose the construction that best fits the context.", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                Text(
+                    if (state.choices.correctOptionIds.size > 1) "Choose any one of the correct answers."
+                    else "Choose the construction that best fits the context.",
+                    Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
+                )
                 state.options.forEach { option ->
-                    OutlinedButton(onClick = { vm.pick(option.id) }, modifier = Modifier.fillMaxWidth()) { Text(option.label) }
+                    OutlinedButton(onClick = { vm.pick(option.id, state) }, modifier = Modifier.fillMaxWidth()) { Text(option.label) }
                 }
-                DontKnowButton { vm.pick(null) }
+                DontKnowButton { vm.pick(null, state) }
             }
             is GrammarUi.Type -> {
                 GrammarRemaining(state.remaining)
@@ -88,19 +92,13 @@ private fun GrammarSessionBody(
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center,
                 )
-                GrammarPrompt(vm, state.exercise, state.exercise.options.first { it.id == state.exercise.answer }.label)
+                GrammarPrompt(vm, state.exercise, state.completion)
                 if (state.response.isNotEmpty()) {
-                    val response = if (state.type == "choose") {
-                        state.exercise.options.firstOrNull { it.id == state.response }?.label ?: state.response
-                    } else state.response
-                    Text("Your answer: $response", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                    Text("Your answer: ${state.responseLabel}", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 }
+                GrammarOptionFeedback(state)
                 Text(state.exercise.evidence, style = MaterialTheme.typography.bodyMedium)
                 Text(state.exercise.explanation, style = MaterialTheme.typography.bodyLarge)
-                state.exercise.options.forEach { option ->
-                    val prefix = if (option.id == state.exercise.answer) "✓ " else ""
-                    Text("$prefix${option.label} — ${option.rationale}", style = MaterialTheme.typography.bodySmall)
-                }
                 OutlinedButton(onClick = { onOpenDoc(vm.sourceId, vm.articlePath(state.exercise.id)) }, modifier = Modifier.fillMaxWidth()) {
                     Text("Read the grammar article")
                 }
@@ -109,13 +107,32 @@ private fun GrammarSessionBody(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(top = 4.dp),
                 ) {
-                    Button(onClick = { vm.next() }, modifier = Modifier.weight(1f)) { Text(if (state.correct) "Next" else "Next (will repeat)") }
+                    Button(onClick = { vm.next(origin = state) }, modifier = Modifier.weight(1f)) { Text(if (state.correct) "Next" else "Next (will repeat)") }
                     if (state.correct && state.type == "choose") {
-                        OutlinedButton(onClick = { vm.next(guessed = true) }) { Text("I guessed") }
+                        OutlinedButton(onClick = { vm.next(guessed = true, origin = state) }) { Text("I guessed") }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+internal fun GrammarOptionFeedback(state: GrammarUi.Answer) {
+    state.options.forEach { option ->
+        val correct = option.id in state.correctOptionIds
+        val selectedWrong = !correct && state.type == "choose" && option.id == state.response
+        val prefix = when {
+            correct -> "✓ Correct: "
+            selectedWrong -> "✗ Your answer: "
+            else -> ""
+        }
+        val color = when {
+            correct -> correctTextColor()
+            selectedWrong -> wrongTextColor()
+            else -> MaterialTheme.colorScheme.onSurface
+        }
+        Text("$prefix${option.label} — ${option.rationale}", color = color, style = MaterialTheme.typography.bodySmall)
     }
 }
 

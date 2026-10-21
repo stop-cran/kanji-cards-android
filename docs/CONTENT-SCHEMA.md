@@ -89,6 +89,19 @@ Translation, evidence and explanation are required, nonblank strings. Options ha
 and `rationale`, at least two choices, and exactly one occurrence of the answer ID. The nonempty `acceptedAnswers` list contains no blank
 forms and must include the correct option label after trimming.
 
+Optional `additionalCorrectOptions` is an array (default empty; explicit null is invalid) of `{id, label, rationale}` objects.
+Each field is a nonblank string; IDs are lowercase slugs local to the exercise, distinct from every base/additional option ID.
+They identify authored realizations, not constructions or new schedules. Every additional label must match an accepted typed answer
+after trim then NFKC normalization. All base/additional labels must remain distinct after that normalization; no base distractor
+may match any accepted answer. Malformed declared grading metadata rejects the set, unlike optional vocabulary hints.
+Old clients ignore this additive field and keep the safe one-correct base `options`.
+
+Grammar choice presentations independently sample one in five eligible appearances: append one randomly selected authored alternative,
+retain the primary and all base distractors, then shuffle. Other appearances show only base options; typing is unchanged.
+One tap on either displayed correct option completes the question. The question captures order, labels, rationales and correct IDs;
+callbacks are bound to that presentation instance. Feedback highlights both displayed correct answers after mistakes or give-up and
+separately marks the chosen wrong answer. Typed feedback can explain all authored alternatives without limiting typed acceptance.
+
 An exercise may also contain one optional `jlpt` integer in 1..5. Omission means Unclassified; explicit `null`, strings, booleans,
 fractions and out-of-range values reject the set. Do not duplicate the level as tags or add cumulative memberships. The level describes
 the required grammar/contrast, not incidental vocabulary or every accepted alternative. New-material scope is cumulative (`jlpt >= selected
@@ -130,18 +143,20 @@ Missing article references are removed while preserving local glosses. These dia
 Grammar errors and never populate `sync_meta.grammarProblem` or block otherwise valid guided introductions.
 
 `vocabularyProblem` is an internal import/cache diagnostic, not an authored field; supplied values are stripped before import.
-Typed Room serialization retains hints and real diagnostics. Grammar parser epoch **3** forces a reimport even at the same
-commit/manifest, recovering fields that an older client discarded from its typed cache. No additional Room migration is needed.
+Typed Room serialization retains hints and real diagnostics. Epoch **3** introduced vocabulary support; the current Grammar parser
+epoch is **4**, also recovering additional correct choices discarded by older typed caches even at the same commit/manifest.
+Vocabulary support itself needs no additional Room migration.
 The maintained content repository has a revision-bound authoring/coverage gate; the app does not require its inventory or mandatory
 annotations from legacy/fork content. See that repository's `docs/content-format.md` for editorial exclusions and provenance.
 
 ## Room content replacement
 
-The current Room version is **11**. The 7-to-8 migration creates `grammar_sets` (key: source + set ID) and `grammar_responses`
+The current Room version is **12**. The 7-to-8 migration creates `grammar_sets` (key: source + set ID) and `grammar_responses`
 (key: `reviewLogId`) and clears only sync metadata to force a content reimport. Existing content, review states and history are preserved;
 all older versions use the registered migration chain, with no destructive fallback.
 The additive 8-to-9 migration preserves that snapshot and all history, creates source-keyed `grammar_focus` (`revision`, cursor JSON),
 and adds nullable `sync_meta.grammarProblem`. Atomic replacement invalidates outstanding focus tickets and stores snapshot diagnostics.
+The 11-to-12 migration adds nullable `grammar_responses.choiceSnapshot` JSON without reconstructing old presentations or resetting history.
 
 Grammar uses `(sourceId, stack="grammar", item=exerciseId, mode="Grammar", reading="")` as its review-state identity. The generic Room
 `kanji` column holds the exercise ID. Choose and type are presentations, not separate modes or schedules. Editing a set's prose without
@@ -157,22 +172,22 @@ Epoch 0 permits only unguided All new intake; epoch 1 permits level-aware unguid
 Started reviews remain safe throughout, and the selected scope/pilot is never silently changed. Failed downloads retain the previous snapshot
 and diagnostics, rather than marking last-known-good content invalid.
 
-`DatabaseMigrationTest` checks upgrades from versions 1, 2, 3, 7 and 8, native-SQLite reopen preservation and the Grammar event/export join.
+`DatabaseMigrationTest` checks upgrades from versions 1, 2, 3, 7, 8, 9 and 11, native-SQLite reopen preservation and the Grammar event/export join.
 `ContentSyncTest` checks a changed Grammar snapshot without losing its existing progress or response history.
 `GrammarFocusPersistenceTest` covers reservation/reopen, stale tickets, rollback and source isolation. Cursor updates share the answer's
 state/log/detail transaction. The cursor retains automatic ordinal, manual selection nonce, active group/origin/seed and recorded exposure
 IDs with their facet/context keys. It is omitted from progress ZIPs; Android backup includes the database and preferences normally.
 
-## Progress export v3
+## Progress export v4
 
 **Settings → Export progress** writes six UTF-8 JSON members. Database rows are read in one transaction:
 
 | ZIP member | Meaning |
 | --- | --- |
-| `export_manifest.json` | `{"formatVersion":3}`; independent of content JSON/manifest schema versions. |
+| `export_manifest.json` | `{"formatVersion":4}`; independent of content JSON/manifest schema versions. |
 | `review_state.json` | Current SRS rows: `sourceId`, `stack`, `kanji`, `mode`, `reading`, `phase`, `stability`, `difficulty`, `dueMs`, `lastReviewMs`, `reps`, `lapses`. |
 | `review_log.json` | Canonical recorded events: `id`, `sourceId`, `stack`, `kanji`, `mode`, `reading`, `grade`, `atMs` (Unix milliseconds), nullable `sessionId`. Grades: Again=1, Hard=2, Good=3, Easy=4. |
-| `grammar_responses.json` | `reviewLogId`, `sourceId`, `stack`, `exerciseId`, `constructionId`, `relationshipId`, `promptType` (`choose`/`type`), `response`, `correct`. |
+| `grammar_responses.json` | `reviewLogId`, `sourceId`, `stack`, `exerciseId`, `constructionId`, `relationshipId`, `promptType` (`choose`/`type`), `response`, `correct`, nullable structured `choiceSnapshot`. |
 | `study_sessions.json` | Session `id`, `sourceId`, selected `stack`, `mode`, `extra`, `startedAtMs`, nullable `endedAtMs`, `endReason`, `answered`, `correct`. |
 | `settings.json` | Stored preferences, including source configuration and cached sync metadata. |
 
@@ -182,6 +197,11 @@ ID, typing `response` is normalized text, and give-up records an empty string. D
 relationship, not the wrong choice's construction. There is no separate guessed flag: the current UI's correct-choice "I guessed" yields
 Hard. Successful practice confirmations create no state update, log or detail, even though the session's displayed tally includes them.
 The export's answer count is the number of canonical log rows, not log rows plus details.
+
+New choice records contain `choiceSnapshot: {"schemaVersion":1,"interaction":"choose-any","options":[...],"correctOptionIds":[...]}`.
+Options retain their actual displayed order and `{id,label,rationale}`; the correct-ID set contains one or two displayed IDs.
+The selected response is interpreted against this snapshot, never current content. Typed and pre-v12 records have null snapshots.
+There is no second answer event for the unselected correct option and no retroactive reconstruction of historical choices.
 
 Join a non-null `review_log.sessionId` to `study_sessions.id`. Each prepared study queue gets a UUID; repeated answers keep it,
 and a new start or "Practice more" gets another. `extra=false` means the ordinary due/new queue, not necessarily due-only cards.
@@ -196,13 +216,14 @@ Room v11 preserves old state/log/detail rows; pre-tracking log rows have `sessio
 
 Legacy exports have only `review_state.json`, `review_log.json` and `settings.json`, with no version manifest, log `id` fields or Grammar details.
 They provide no Grammar evidence. V2 has five members and Grammar details, but no sessions or session links.
-A v2/v3 export missing its required files or linked details is corruption, not legacy absence.
+A v2/v3/v4 export missing its required files or linked details is corruption, not legacy absence.
 The export has no per-answer content revision or set ID. `sha:<source>@<branch>` settings give last-synced commit hints, but cannot establish
 which snapshot a historical answer used (a session can retain questions loaded before a later sync).
 
 `tools/analyze_grammar_progress.py` validates the canonical/detail join and emits local aggregates without response text or general settings.
 It rejects duplicate JSON keys/ZIP members, incomplete v2 data, invalid types and mismatched/duplicate/orphan links rather than counting them
-as evidence. It also validates v3 session links and final counts without treating confirmations as extra SRS reviews.
+as evidence. It also validates v3/v4 session links and final counts without treating confirmations as extra SRS reviews.
+V4 choice snapshots do not change these aggregates: the tool does not infer per-option mastery or independently regrade their text.
 First-observed/repeated attempts use `(sourceId, stack, exerciseId)` in `(atMs, id)` order, still across sessions. Both recorded-ID views use the same
 events; reused set-local IDs cannot be disambiguated from this export alone. This is an observability tool, not an import/restore feature or
 proof of grammatical mastery or learning benefit.

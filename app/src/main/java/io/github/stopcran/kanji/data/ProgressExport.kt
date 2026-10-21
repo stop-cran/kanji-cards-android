@@ -25,7 +25,7 @@ object ProgressExport {
             zip.entry("review_log.json", JsonArray(snapshot.log.map(::logJson)))
             zip.entry("grammar_responses.json", JsonArray(snapshot.grammarResponses.map(::grammarResponseJson)))
             zip.entry("study_sessions.json", JsonArray(snapshot.sessions.map(::sessionJson)))
-            zip.entry("export_manifest.json", JsonObject(mapOf("formatVersion" to JsonPrimitive(3))))
+            zip.entry("export_manifest.json", JsonObject(mapOf("formatVersion" to JsonPrimitive(4))))
             zip.entry("settings.json", JsonObject(settings.snapshot().mapValues { primitive(it.value) }))
         }
         return snapshot.log.size
@@ -85,6 +85,7 @@ object ProgressExport {
             "stack" to JsonPrimitive(r.stack), "exerciseId" to JsonPrimitive(r.exerciseId),
             "constructionId" to JsonPrimitive(r.constructionId), "relationshipId" to JsonPrimitive(r.relationshipId),
             "promptType" to JsonPrimitive(r.promptType), "response" to JsonPrimitive(r.response), "correct" to JsonPrimitive(r.correct),
+            "choiceSnapshot" to (r.choiceSnapshot?.let(json::parseToJsonElement) ?: JsonNull),
         ),
     )
 }

@@ -1,5 +1,6 @@
 package io.github.stopcran.kanji.ui
 
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -11,6 +12,8 @@ import io.github.stopcran.kanji.core.content.GrammarOption
 import io.github.stopcran.kanji.core.content.GrammarVocabularySpan
 import io.github.stopcran.kanji.core.words.Advancement
 import io.github.stopcran.kanji.core.grammar.GRAMMAR_NOT_DUE
+import io.github.stopcran.kanji.core.grammar.GrammarChoices
+import io.github.stopcran.kanji.core.grammar.GrammarChoiceSnapshot
 import io.github.stopcran.kanji.core.quiz.QuizSession
 import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.Grade
@@ -28,14 +31,16 @@ import io.github.stopcran.kanji.data.toEntity
 import io.github.stopcran.kanji.data.toSrs
 import io.github.stopcran.kanji.data.WordEntity
 import kotlinx.coroutines.launch
-import java.text.Normalizer
 import java.time.Instant
+import kotlin.random.Random
 
 sealed interface GrammarUi {
     data object Loading : GrammarUi
     data class Empty(val message: String) : GrammarUi
     data class Done(val answered: Int, val correct: Int) : GrammarUi
-    data class Choose(val exercise: GrammarExercise, val options: List<GrammarOption>, val remaining: Int) : GrammarUi
+    data class Choose(val exercise: GrammarExercise, val choices: GrammarChoiceSnapshot, val remaining: Int) : GrammarUi {
+        val options: List<GrammarOption> get() = choices.options
+    }
     data class Type(val exercise: GrammarExercise, val remaining: Int) : GrammarUi
     data class Answer(
         val exercise: GrammarExercise,
@@ -43,11 +48,20 @@ sealed interface GrammarUi {
         val response: String,
         val correct: Boolean,
         val remaining: Int,
-    ) : GrammarUi
+        val choices: GrammarChoiceSnapshot? = null,
+    ) : GrammarUi {
+        val options: List<GrammarOption> get() = choices?.options ?: (exercise.options + exercise.additionalCorrectOptions)
+        val correctOptionIds: Set<String> get() = choices?.correctOptionIds
+            ?: (setOf(exercise.answer) + exercise.additionalCorrectOptions.map { it.id })
+        val responseLabel: String get() = if (choices == null || response.isEmpty()) response
+            else choices.options.first { it.id == response }.label
+        val completion: String get() = if (correct && choices != null) responseLabel
+            else exercise.options.first { it.id == exercise.answer }.label
+    }
 }
 
 /** One SRS queue per authored exercise; the choose/type prompt is presentation detail, not another schedule. */
-class GrammarQuizViewModel(private val app: Services) : StudyViewModel(app) {
+class GrammarQuizViewModel(private val app: Services, private val choiceRandom: Random = Random.Default) : StudyViewModel(app) {
     private val fsrs = Fsrs()
     var ui: GrammarUi by mutableStateOf(GrammarUi.Loading)
         private set
@@ -159,15 +173,22 @@ class GrammarQuizViewModel(private val app: Services) : StudyViewModel(app) {
         val remaining = session.pending + 1
         val exercise = exercises.getValue(id)
         ui = if (asked++ % 2 == 0) {
-            GrammarUi.Choose(exercise, exercise.options.shuffled(), remaining)
+            GrammarUi.Choose(exercise, GrammarChoices.build(exercise, choiceRandom), remaining)
         } else {
             GrammarUi.Type(exercise, remaining)
         }
     }
 
-    fun pick(optionId: String?) {
+    fun pick(optionId: String?, origin: GrammarUi.Choose? = ui as? GrammarUi.Choose) {
         val question = ui as? GrammarUi.Choose ?: return
-        ui = GrammarUi.Answer(question.exercise, "choose", optionId.orEmpty(), optionId == question.exercise.answer, question.remaining)
+        if (question !== origin || (optionId != null && question.options.none { it.id == optionId })) {
+            Log.w("GrammarQuiz", "Ignored stale or non-displayed choice")
+            return
+        }
+        ui = GrammarUi.Answer(
+            question.exercise, "choose", optionId.orEmpty(), optionId in question.choices.correctOptionIds,
+            question.remaining, question.choices,
+        )
     }
 
     fun onDraft(value: String) {
@@ -176,14 +197,18 @@ class GrammarQuizViewModel(private val app: Services) : StudyViewModel(app) {
 
     fun check(giveUp: Boolean = false) {
         val question = ui as? GrammarUi.Type ?: return
-        val typed = if (giveUp) "" else normalize(draft)
+        val typed = if (giveUp) "" else GrammarChoices.normalizeAnswer(draft)
         if (!giveUp && typed.isEmpty()) return
-        val accepted = question.exercise.acceptedAnswers.map(::normalize)
+        val accepted = question.exercise.acceptedAnswers.map(GrammarChoices::normalizeAnswer)
         ui = GrammarUi.Answer(question.exercise, "type", typed, typed in accepted, question.remaining)
     }
 
-    fun next(guessed: Boolean = false) {
+    fun next(guessed: Boolean = false, origin: GrammarUi.Answer? = ui as? GrammarUi.Answer) {
         val answer = ui as? GrammarUi.Answer ?: return
+        if (answer !== origin) {
+            Log.w("GrammarQuiz", "Ignored stale answer advancement")
+            return
+        }
         val result = session.answer(answer.exercise.id, answer.correct, guessed)
         if (result.record) record(answer, result.grade)
         showNext()
@@ -209,6 +234,7 @@ class GrammarQuizViewModel(private val app: Services) : StudyViewModel(app) {
             promptType = answer.type,
             response = answer.response,
             correct = answer.correct,
+            choiceSnapshot = answer.choices?.let(GrammarChoices::encode),
         )
         recordSession {
             val log = ReviewLogEntity(
@@ -220,8 +246,6 @@ class GrammarQuizViewModel(private val app: Services) : StudyViewModel(app) {
             if (error != null) focusNotice = error
         }
     }
-
-    private fun normalize(value: String): String = Normalizer.normalize(value.trim(), Normalizer.Form.NFKC)
 
     private companion object {
         const val MAX_TYPED_LENGTH = 80

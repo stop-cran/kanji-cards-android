@@ -171,6 +171,45 @@ class ContentTest {
     }
 
     @Test
+    fun additionalCorrectChoicesAreStrictAndSurviveTheTypedCache() {
+        val path = "grammar/sample-set.json"
+        val extra = """[{"id":"alternate","label":"alternate","rationale":"Fits too."}]"""
+        fun text(raw: String) = grammarJson
+            .replace("\"id\":\"alpha-example\"", "\"id\":\"alpha-example\",\"additionalCorrectOptions\":$raw")
+            .replace("\"acceptedAnswers\":[\"甲\"]", "\"acceptedAnswers\":[\"甲\",\"alternate\"]")
+        val parsed = ContentParser.parseGrammar(path, text(extra))
+        assertEquals("alternate", parsed.exercises.first().additionalCorrectOptions.single().label)
+        val encoded = kotlinx.serialization.json.Json.encodeToString(GrammarSet.serializer(), parsed)
+        assertEquals(parsed, ContentParser.parseGrammar(path, encoded))
+        assertTrue(ContentParser.parseGrammar(path, grammarJson).exercises.all { it.additionalCorrectOptions.isEmpty() })
+        assertTrue(ContentParser.parseGrammar(path, text("[]")).exercises.all { it.additionalCorrectOptions.isEmpty() })
+        val invalid = listOf(
+            "null", "{}", "\"alternate\"", "[null]",
+            extra.replace("\"id\":\"alternate\"", "\"id\":3"),
+            extra.replace("\"id\":\"alternate\"", "\"id\":\"alpha\""),
+            extra.replace("\"id\":\"alternate\"", "\"id\":\"Not a slug\""),
+            extra.replace("\"label\":\"alternate\"", "\"label\":true"),
+            extra.replace("\"label\":\"alternate\"", "\"label\":\"unknown\""),
+            extra.replace("\"label\":\"alternate\"", "\"label\":\"甲\""),
+            extra.replace("\"Fits too.\"", "\" \""),
+            extra.replace("\"rationale\":", "\"unexpected\":true,\"rationale\":"),
+            extra.dropLast(1) + """,{"id":"other","label":"ａｌｔｅｒｎａｔｅ","rationale":"Duplicate."}]""",
+        )
+        for (raw in invalid) {
+            val files = sample() + (path to text(raw).toByteArray())
+            val rejected = ContentParser.parse(files + ("manifest.json" to manifest(files)))
+            assertTrue("$raw should reject grading metadata", rejected.grammar.isEmpty())
+            assertTrue("$raw should be reported", rejected.problems.isNotEmpty())
+            assertEquals(1, rejected.articles.size)
+        }
+        val collision = text(extra).replace("\"label\":\"乙\"", "\"label\":\"ａｌｔｅｒｎａｔｅ\"")
+        val files = sample() + (path to collision.toByteArray())
+        val rejected = ContentParser.parse(files + ("manifest.json" to manifest(files)))
+        assertTrue(rejected.grammar.isEmpty())
+        assertTrue(rejected.problems.any { it.contains("normalized option labels") || it.contains("distractor") })
+    }
+
+    @Test
     fun parsesExplicitWordLevelsIncludingKanaOnlyWords() {
         for (level in 1..5) {
             val word = ContentParser.parseWord("words/ねこ.md", wordMd("jlpt: $level"))
