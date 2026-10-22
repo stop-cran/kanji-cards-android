@@ -23,13 +23,16 @@ suspend fun AppDatabase.newAllowance(settings: Settings, sourceId: String, now: 
     val today = now.atZone(zone).toLocalDate()
     val startOfDay = today.atStartOfDay(zone).toInstant().toEpochMilli()
     val r = reviews()
-    val perDay = r.reviewTimesSince(sourceId, today.minusDays(CAPACITY_WINDOW_DAYS).atStartOfDay(zone).toInstant().toEpochMilli())
+    val perDay = r.reviewTimesSince(sourceId, today.minusDays(CAPACITY_WINDOW_DAYS).atStartOfDay(zone).toInstant().toEpochMilli(),
+        excludedMode = io.github.stopcran.kanji.core.listening.LISTENING_MODE)
         .groupingBy { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }.eachCount()
         .filterKeys { it != today }.values.toList()
     val level = DayLevel.parseWeek(settings.weekPlan.value)[today.dayOfWeek.value - 1]
-    return Pacing.allowance(
+    val allowance = Pacing.allowance(
         base = settings.dailyNewCards.value, level = level,
         introducedToday = r.itemsIntroducedSince(sourceId, startOfDay),
-        due = r.dueCount(sourceId, now.toEpochMilli()), capacity = Pacing.capacity(perDay),
+        due = r.dueCount(sourceId, now.toEpochMilli(), excludedMode = io.github.stopcran.kanji.core.listening.LISTENING_MODE),
+        capacity = Pacing.capacity(perDay),
     )
+    return allowance.copy(remaining = (allowance.remaining - listening().reservedNew(sourceId)).coerceAtLeast(0))
 }

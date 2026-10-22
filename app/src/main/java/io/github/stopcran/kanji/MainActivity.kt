@@ -41,13 +41,13 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** Identifies this process; a saved back stack from another process (process death) must not resume a half-finished session. */
+/** Ephemeral quizzes restart after process death; listening routes resume their durable captured encounter. */
 private val processToken = System.nanoTime().toString()
 private val sessionPrefixes = listOf("quiz:", "wquiz:", "cquiz:", "grammarquiz:", "draw:", "kreading:", "kana-study:")
 
 /**
  * Back stack of route strings: "home", "kanji-home", "words-home", "settings", "cards", "word-cards", "quiz:..", "doc:<path>". Survives rotation via
- * rememberSaveable; after process death session routes are dropped, which returns to the page the session was started from.
+ * rememberSaveable; after process death ephemeral session routes are dropped. Durable listening encounters are restored.
  */
 @Composable
 private fun AppNav(app: KanjiApp) {
@@ -92,7 +92,10 @@ private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, p
         "about" -> AboutScreen(onBack = pop)
         "cards" -> CardsScreen(app, onBack = pop, onOpen = { push("doc:kanji/$it.md") }, onOpenDoc = { push("doc:$it") })
         "word-cards" -> WordCardsScreen(app, onBack = pop, onOpen = { push("doc:words/$it.md") }, onOpenDoc = { push("doc:$it") })
-        else -> if (route.startsWith("quiz:")) {
+        "listening-home" -> io.github.stopcran.kanji.ui.ListeningPage(app, pop, push)
+        else -> if (route.startsWith("listening:")) {
+            io.github.stopcran.kanji.ui.ListeningScreen(route, pop) { source, path -> push(sourceDocRoute(source, path)) }
+        } else if (route.startsWith("quiz:")) {
             QuizScreen(
                 sessionKey = route,
                 onBack = pop,
@@ -161,6 +164,7 @@ private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, p
                     onWordsPage = { push("words-home") },
                     onCountersPage = { push("counters-home") },
                     onGrammarPage = { push("grammar-home") },
+                    onListeningPage = { push("listening-home") },
                     onOpenDoc = { push("doc:$it") },
                     onKanaPage = { push("kana-home") },
                     onKanaStudy = { script, mode, extra ->

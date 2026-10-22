@@ -6,8 +6,9 @@ in the default repo `stop-cran/learning-japanese`.
 What the app enforces when importing (`core/content/ContentParser.kt`, `FrontMatter.kt`, `SafeZip.kt`):
 
 - The repo archive (`codeload.github.com/<owner>/<repo>/zip/refs/heads/<branch>`) must contain `manifest.json` with `schemaVersion` 1.
-- Only `manifest.json` and files directly in `kanji/`, `words/`, `articles/`, `strokes/`, `counters/`, `grammar/`, `scenes/` are read, plus `images/*.webp`
-  (at most 150 KiB each). Zip-slip paths, more than 8,000 entries, wanted text files over 2 MiB or wanted data over 50 MiB are rejected.
+- Only `manifest.json` and files directly in `kanji/`, `words/`, `articles/`, `strokes/`, `counters/`, `grammar/`, `scenes/`, `listening/` are read,
+  plus `images/*.webp` (at most 150 KiB each) and `audio/*.ogg` (at most 512 KiB each).
+  Zip-slip paths, more than 8,000 entries, wanted text files over 2 MiB or wanted data over 50 MiB are rejected.
   The separate 100 MiB inflated limit includes skipped entries too.
 - Images are listed in the manifest's separate `images` map with SHA-256 over the raw bytes (no LF normalisation). A word's `image` and
   `image_scene` keys are read together; an image that is missing, oversize, not WebP, hash-mismatched or shared by two words is reported as a
@@ -178,17 +179,38 @@ and diagnostics, rather than marking last-known-good content invalid.
 state/log/detail transaction. The cursor retains automatic ordinal, manual selection nonce, active group/origin/seed and recorded exposure
 IDs with their facet/context keys. It is omitted from progress ZIPs; Android backup includes the database and preferences normally.
 
-## Progress export v4
+## Listening JSON v1
 
-**Settings → Export progress** writes six UTF-8 JSON members. Database rows are read in one transaction:
+See the authoritative [N5 schema and authoring contract](https://github.com/stop-cran/learning-japanese/blob/main/docs/listening-n5.md).
+Listening documents and binary audio use separate manifest `listening` and `audio` maps; legacy `files` cannot contain them.
+JSON hashes are LF-normalized; audio hashes are raw bytes. Both maps affect `contentVersion`. Listening parser epoch 1 forces
+reimport of formerly ignored content even at an unchanged commit/version. Room v13 preserves existing progress while adding
+passages, hash-keyed audio and durable encounters.
+
+Only schema 1 and integer JLPT 5 are supported. Stable filename-matched IDs identify one or two speakers, ordered turns,
+exactly three four-option questions with one main point, vocabulary tips and optional hash-bound contextual WebP.
+Generated mono Ogg Opus is limited to 15-60 seconds and 512 KiB. Container framing, sequence, CRC, duration and hashes are
+checked; actual playback still must succeed. Audio metadata includes ordered exact turn boundaries.
+
+`contentSha256` is canonical UTF-8 JSON over the whole package except `audio` and `audioReview`: sorted object keys,
+preserved arrays, unescaped Unicode, integer numbers and no optional whitespace. The audio and declared final listening
+approval both bind that hash and the recording hash. Changed questions, pronunciation or picture bytes invalidate approval.
+Absent audio/review is an explicit pending draft, not grading-ready content. A bad listening import preserves an existing
+listening snapshot even with force; valid pending drafts may replace old content. Active encounters pin their original audio
+and presentation independently of later content changes.
+
+## Progress export v5
+
+**Settings → Export progress** writes seven UTF-8 JSON members. Database rows are read in one transaction:
 
 | ZIP member | Meaning |
 | --- | --- |
-| `export_manifest.json` | `{"formatVersion":4}`; independent of content JSON/manifest schema versions. |
+| `export_manifest.json` | `{"formatVersion":5}`; independent of content JSON/manifest schema versions. |
 | `review_state.json` | Current SRS rows: `sourceId`, `stack`, `kanji`, `mode`, `reading`, `phase`, `stability`, `difficulty`, `dueMs`, `lastReviewMs`, `reps`, `lapses`. |
 | `review_log.json` | Canonical recorded events: `id`, `sourceId`, `stack`, `kanji`, `mode`, `reading`, `grade`, `atMs` (Unix milliseconds), nullable `sessionId`. Grades: Again=1, Hard=2, Good=3, Easy=4. |
 | `grammar_responses.json` | `reviewLogId`, `sourceId`, `stack`, `exerciseId`, `constructionId`, `relationshipId`, `promptType` (`choose`/`type`), `response`, `correct`, nullable structured `choiceSnapshot`. |
 | `study_sessions.json` | Session `id`, `sourceId`, selected `stack`, `mode`, `extra`, `startedAtMs`, nullable `endedAtMs`, `endReason`, `answered`, `correct`. |
+| `listening_encounters.json` | Source/passage identity, captured JSON/hash/audio hash, current playback state, immutable submitted `response`, exposure/first-encounter timestamps, reservation/introduction flags, canonical review link and closure. No image/audio bytes. |
 | `settings.json` | Stored preferences, including source configuration and cached sync metadata. |
 
 For a recorded Grammar answer, state, canonical log and response detail are written in one transaction. Join `reviewLogId` to the unique
@@ -216,13 +238,19 @@ Room v11 preserves old state/log/detail rows; pre-tracking log rows have `sessio
 
 Legacy exports have only `review_state.json`, `review_log.json` and `settings.json`, with no version manifest, log `id` fields or Grammar details.
 They provide no Grammar evidence. V2 has five members and Grammar details, but no sessions or session links.
-A v2/v3/v4 export missing its required files or linked details is corruption, not legacy absence.
-The export has no per-answer content revision or set ID. `sha:<source>@<branch>` settings give last-synced commit hints, but cannot establish
+A v2/v3/v4/v5 export missing its required files or linked details is corruption, not legacy absence.
+Listening encounters retain their own captured content and bind a non-null `reviewLogId` to one canonical Listening event.
+Unscored study/discarded encounters have no event. A discarded Listening session may use `endReason="discarded"`.
+Current playback `state` may change during feedback study; the submitted `response` cannot. First-encounter status is not inferred
+from SRS absence. These timestamps are exposure markers, not proof that every sound was heard or every displayed word read.
+The grammar analyzer checks the new member's basic array shape but does not audit or report listening response details.
+
+Other modes still have no per-answer content revision or set ID. `sha:<source>@<branch>` settings give last-synced commit hints, but cannot establish
 which snapshot a historical answer used (a session can retain questions loaded before a later sync).
 
 `tools/analyze_grammar_progress.py` validates the canonical/detail join and emits local aggregates without response text or general settings.
 It rejects duplicate JSON keys/ZIP members, incomplete v2 data, invalid types and mismatched/duplicate/orphan links rather than counting them
-as evidence. It also validates v3/v4 session links and final counts without treating confirmations as extra SRS reviews.
+as evidence. It also validates v3-v5 session links and final counts without treating confirmations as extra SRS reviews.
 V4 choice snapshots do not change these aggregates: the tool does not infer per-option mastery or independently regrade their text.
 First-observed/repeated attempts use `(sourceId, stack, exerciseId)` in `(atMs, id)` order, still across sessions. Both recorded-ID views use the same
 events; reused set-local IDs cannot be disambiguated from this export alone. This is an observability tool, not an import/restore feature or

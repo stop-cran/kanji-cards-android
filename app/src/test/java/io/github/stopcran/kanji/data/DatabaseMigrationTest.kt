@@ -36,6 +36,25 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
+internal fun createMigrationSchema(context: Context, name: String, version: Int, seed: (android.database.sqlite.SQLiteDatabase) -> Unit) {
+    val schema = Json.parseToJsonElement(
+        File("schemas", "io.github.stopcran.kanji.data.AppDatabase${File.separator}$version.json").readText(),
+    ).jsonObject.getValue("database").jsonObject
+    context.openOrCreateDatabase(name, Context.MODE_PRIVATE, null).use { sqlite ->
+        schema.getValue("entities").jsonArray.forEach { item ->
+            val entity = item.jsonObject
+            val table = entity.getValue("tableName").jsonPrimitive.content
+            sqlite.execSQL(entity.getValue("createSql").jsonPrimitive.content.replace("\${TABLE_NAME}", table))
+            entity["indices"]?.jsonArray?.forEach {
+                sqlite.execSQL(it.jsonObject.getValue("createSql").jsonPrimitive.content.replace("\${TABLE_NAME}", table))
+            }
+        }
+        schema.getValue("setupQueries").jsonArray.forEach { sqlite.execSQL(it.jsonPrimitive.content) }
+        seed(sqlite)
+        sqlite.version = version
+    }
+}
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], manifest = Config.NONE, application = Application::class)
 @SQLiteMode(SQLiteMode.Mode.NATIVE)
@@ -52,7 +71,7 @@ class DatabaseMigrationTest {
     private fun openDatabase() = Room.databaseBuilder(context, AppDatabase::class.java, name)
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
-            MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
+            MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13,
         )
         .allowMainThreadQueries()
         .build()
@@ -126,8 +145,8 @@ class DatabaseMigrationTest {
             assertEquals(1, ProgressExport.write(db, Settings(context), output))
             val entries = zipEntries(output)
             val json = Json
-            assertEquals(4, json.parseToJsonElement(entries.getValue("export_manifest.json")).jsonObject.getValue("formatVersion").jsonPrimitive.int)
-            assertEquals(6, entries.size)
+            assertEquals(5, json.parseToJsonElement(entries.getValue("export_manifest.json")).jsonObject.getValue("formatVersion").jsonPrimitive.int)
+            assertEquals(7, entries.size)
             assertEquals(1, json.parseToJsonElement(entries.getValue("review_log.json")).jsonArray.size)
             val exported = json.parseToJsonElement(entries.getValue("grammar_responses.json")).jsonArray.single().jsonObject
             val exportedLog = json.parseToJsonElement(entries.getValue("review_log.json")).jsonArray.single().jsonObject
@@ -205,7 +224,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(12, db.openHelper.writableDatabase.version)
+                assertEquals(13, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(sources.first(), "all", "日", "KanjiOn", "Review", 12.5, 5.0, 999, 500, 3, 1, "にち"),
                     db.reviews().allStates().single(),
@@ -258,24 +277,8 @@ class DatabaseMigrationTest {
             }
         }
 
-    private fun createSchema(version: Int, seed: (android.database.sqlite.SQLiteDatabase) -> Unit) {
-        val schema = Json.parseToJsonElement(
-            File("schemas", "io.github.stopcran.kanji.data.AppDatabase${File.separator}$version.json").readText(),
-        ).jsonObject.getValue("database").jsonObject
-        context.openOrCreateDatabase(name, Context.MODE_PRIVATE, null).use { sqlite ->
-            schema.getValue("entities").jsonArray.forEach { item ->
-                val entity = item.jsonObject
-                val table = entity.getValue("tableName").jsonPrimitive.content
-                sqlite.execSQL(entity.getValue("createSql").jsonPrimitive.content.replace("\${TABLE_NAME}", table))
-                entity["indices"]?.jsonArray?.forEach {
-                    sqlite.execSQL(it.jsonObject.getValue("createSql").jsonPrimitive.content.replace("\${TABLE_NAME}", table))
-                }
-            }
-            schema.getValue("setupQueries").jsonArray.forEach { sqlite.execSQL(it.jsonPrimitive.content) }
-            seed(sqlite)
-            sqlite.version = version
-        }
-    }
+    private fun createSchema(version: Int, seed: (android.database.sqlite.SQLiteDatabase) -> Unit) =
+        createMigrationSchema(context, name, version, seed)
 
     @Test
     fun version8UpgradePreservesGrammarSnapshotAndCanonicalHistoryWithoutInventingFocus() = runBlocking {
@@ -297,7 +300,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(12, db.openHelper.writableDatabase.version)
+                assertEquals(13, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(source, GRAMMAR_STACK, "alpha-a-0", "Grammar", "Review", 12.5, 5.0, 999, 500, 3, 1),
                     db.reviews().allStates().single(),

@@ -6,6 +6,7 @@ import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.content.SafeZip
 import io.github.stopcran.kanji.core.content.SceneCatalog
 import kotlinx.coroutines.Dispatchers
+import androidx.room.withTransaction
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -30,6 +31,7 @@ private fun List<io.github.stopcran.kanji.core.content.GrammarSet>.toGrammarEnti
 private fun io.github.stopcran.kanji.core.content.ParsedContent.toSyncMeta(sourceId: String) = SyncMetaEntity(
     sourceId, manifest.contentVersion, System.currentTimeMillis(), problems.size,
     grammarProblems.takeIf { it.isNotEmpty() }?.joinToString("\n"),
+    listeningProblems.takeIf { it.isNotEmpty() }?.joinToString("\n"),
 )
 
 private fun io.github.stopcran.kanji.core.content.ParsedContent.toRows(sourceId: String): ContentRows {
@@ -56,6 +58,11 @@ private fun io.github.stopcran.kanji.core.content.ParsedContent.toRows(sourceId:
         kanjiRows, words.map { it.toEntity(sourceId) }, articles.map { ArticleEntity(sourceId, it.slug, it.title, it.body) },
         counterRows, images.map { (path, bytes) -> ImageEntity(sourceId, path.removePrefix("images/"), bytes) },
         grammar.toGrammarEntities(sourceId), sceneRows,
+        listening.mapIndexed { index, record ->
+            ListeningEntity(sourceId, record.passage.id, record.json, record.contentHash,
+                record.passage.audio?.sha256, record.passage.audio?.durationMs, record.ready, record.reason, index)
+        },
+        audio.map { (hash, bytes) -> ListeningAudioEntity(sourceId, hash, bytes) },
     )
 }
 
@@ -72,7 +79,9 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
     }
 
     private fun needsParserRefresh(source: RepoSource): Boolean =
-        settings.grammarFor(source.id).parserEpoch < ContentParser.GRAMMAR_PARSER_EPOCH || settings.sceneParserEpoch(source.id) < SceneCatalog.PARSER_EPOCH
+        settings.grammarFor(source.id).parserEpoch < ContentParser.GRAMMAR_PARSER_EPOCH ||
+            settings.sceneParserEpoch(source.id) < SceneCatalog.PARSER_EPOCH ||
+            settings.listeningParserEpoch(source.id) < io.github.stopcran.kanji.core.listening.ListeningContent.PARSER_EPOCH
 
     /** Head commit of the branch via the GitHub API (one tiny request); null when unavailable, e.g. offline or rate limited. */
     private fun headCommit(source: RepoSource): String? {
@@ -119,6 +128,11 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             val files = download(url) { SafeZip.read(it) }
             val parsed = ContentParser.parse(files, SceneImages::problem)
             val dao = db.content()
+            if (parsed.listeningProblems.isNotEmpty() && db.listening().passages(source.id).isNotEmpty()) {
+                return@withContext SyncResult.Failed(
+                    "Listening content rejected (${parsed.listeningProblems.first()}); keeping previous playable content", retryable = false,
+                )
+            }
             if (maySkipImport && dao.meta(source.id)?.contentVersion == parsed.manifest.contentVersion) {
                 head?.let { settings.setSyncedCommit(commitKey, it) }
                 return@withContext SyncResult.UpToDate
@@ -133,9 +147,13 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             }
             val rows = parsed.toRows(source.id)
             val meta = parsed.toSyncMeta(source.id)
-            dao.replaceContent(source.id, rows, meta)
+            db.withTransaction {
+                dao.replaceContent(source.id, rows, meta)
+                db.listening().pruneAudio(source.id)
+            }
             settings.setGrammarParserEpoch(source.id, ContentParser.GRAMMAR_PARSER_EPOCH)
             settings.setSceneParserEpoch(source.id, SceneCatalog.PARSER_EPOCH)
+            settings.setListeningParserEpoch(source.id, io.github.stopcran.kanji.core.listening.ListeningContent.PARSER_EPOCH)
             head?.let { settings.setSyncedCommit(commitKey, it) }
             SyncResult.Updated(rows.kanji.size, rows.words.size, parsed.problems)
         } catch (e: ContentException) {

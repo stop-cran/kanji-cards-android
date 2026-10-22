@@ -12,6 +12,7 @@ reviews with FSRS.
 - **Stacks** – filter by tag (Starter, JLPT N5…N1); every stack keeps its own FSRS schedule.
 - **Word quizzes** – explicit vocabulary JLPT levels include kana-only words in N5/N4; unlabelled words retain the hardest-kanji fallback. N4 words include N5, with separate schedules for each stack and quiz direction.
 - **Grammar pilot** – contextual contrasts with alternating choice and typing questions, full English meaning, explanatory feedback and linked articles. Both presentations share one schedule per exercise; suitable alternative completions are accepted.
+- **N5 listening** – offline dialogues and monologues with three questions, one passage-level schedule, resumable playback, and transcript/vocabulary feedback. The initial collection has twelve original recordings using four Japanese voices.
 - **Search** in Browse cards: kanji, meaning, kana (katakana prefers on'yomi, hiragana kun'yomi) and romaji.
 - **Gentle reminder** (optional) that backs off while ignored; **brushes**, stroke-number hints and an opt-in drawing log with zip export.
 
@@ -56,7 +57,7 @@ level. Practice more stays unguided within the unseen-item scope, outside the or
 before level-dependent or guided intake is available; safe unguided intake and started reviews remain usable. See the
 [introduction contract](docs/GRAMMAR-INTRODUCTIONS.md) for focus, evidence and metadata-error handling.
 
-**Settings → Export progress** saves review states, the canonical answer log, settings and linked Grammar response details as a ZIP.
+**Settings → Export progress** saves review states, the canonical answer log, settings, linked Grammar responses and durable listening encounters as a ZIP.
 Recorded typed responses are stored automatically on the device; the separate drawing log remains opt-in. Exports contain private study
 history and typed text: do not commit or upload them. See [privacy](docs/PRIVACY.md) and the [export contract](docs/CONTENT-SCHEMA.md#progress-export-v2).
 

@@ -629,6 +629,9 @@ class ContentTest {
         val serializer = GrammarSet.serializer()
         val declared = j.decodeFromString(Manifest.serializer(), files.getValue("manifest.json").decodeToString())
         assertEquals(declared.images.keys, parsed.images.keys)
+        assertEquals(declared.listening.keys, parsed.listening.map { "listening/${it.passage.id}.json" }.toSet())
+        assertEquals(declared.audio.values.toSet(), parsed.audio.keys)
+        assertTrue(parsed.listening.all { it.ready == (it.passage.audioReview != null) })
         val words = parsed.words.associateBy { it.word }
         for (path in declared.scenes.keys) {
             val expected = SceneCatalog.parse(path, files.getValue(path).decodeToString())

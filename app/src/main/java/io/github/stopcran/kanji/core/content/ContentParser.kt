@@ -31,7 +31,14 @@ object ContentParser {
         val unique = text.kanji.filter { c ->
             titles.add(c.title).also { if (!it) problems += "kanji/${c.kanji}.md: duplicate title '${c.title}'" }
         }
-        val images = verifiedImages(manifest, files, words, problems, imageValidator)
+        val listeningCatalog = io.github.stopcran.kanji.core.listening.ListeningContent.read(manifest, files)
+        val verified = verifiedImages(manifest, files, problems, imageValidator)
+        val listeningImages = listeningCatalog.records.mapNotNullTo(hashSetOf()) { it.passage.image?.path }
+        val images = SceneCatalog.resolve(manifest, files, words, verified, problems) + verified.filterKeys { it in listeningImages }
+        val listening = io.github.stopcran.kanji.core.listening.ListeningContent.resolveReferences(
+            listeningCatalog, words.mapTo(hashSetOf()) { it.word }, images, manifest,
+        )
+        problems += listening.problems
         val candidates = resolveGrammar(text.grammar, problems)
         val articleIds = text.articles.mapTo(hashSetOf()) { "articles/${it.slug}.md" }
         val grammarSets = candidates.filter { set ->
@@ -51,6 +58,7 @@ object ContentParser {
         return ParsedContent(
             manifest, unique, words, text.articles, text.strokes, problems,
             resolveCounters(text.counters, problems), images, vocabularySets, grammarProblems,
+            listening.records, listening.audio, listening.problems,
         )
     }
 
@@ -103,6 +111,7 @@ object ContentParser {
             val problem = when {
                 !isSafePath(path) -> "unsafe path"
                 path.startsWith("scenes/") -> "catalogs must be listed only in manifest.scenes"
+                path.startsWith("listening/") || path.startsWith("audio/") -> "listening content needs its separate manifest namespace"
                 bytes == null -> "listed in manifest but missing"
                 sha256(bytes) != expectedHash -> "hash mismatch"
                 else -> null
@@ -286,7 +295,6 @@ object ContentParser {
     private fun verifiedImages(
         manifest: Manifest,
         files: Map<String, ByteArray>,
-        words: MutableList<WordArticle>,
         problems: MutableList<String>,
         imageValidator: (ByteArray) -> String?,
     ): Map<String, ByteArray> {
@@ -296,7 +304,7 @@ object ContentParser {
             val reason = imageProblem(path, bytes, expectedHash) ?: bytes?.let(imageValidator)
             if (reason == null) good[path] = bytes!! else problems += "$path: $reason"
         }
-        return SceneCatalog.resolve(manifest, files, words, good, problems)
+        return good
     }
 
     private fun imageProblem(path: String, bytes: ByteArray?, expectedHash: String): String? = when {

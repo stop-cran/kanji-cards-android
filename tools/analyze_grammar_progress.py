@@ -14,6 +14,7 @@ MAX_TOTAL_BYTES = 32 * 1024 * 1024
 LEGACY_ENTRIES = {"review_state.json", "review_log.json", "settings.json"}
 V2_ENTRIES = LEGACY_ENTRIES | {"export_manifest.json", "grammar_responses.json"}
 V3_ENTRIES = V2_ENTRIES | {"study_sessions.json"}
+V5_ENTRIES = V3_ENTRIES | {"listening_encounters.json"}
 LIMITATIONS = [
     "These are recorded reviews, not all screen answers: successful practice confirmations are not logged.",
     "First-observed means first in this export for (source, stack, exercise), not first-ever learning.",
@@ -51,8 +52,8 @@ def _load(path):
         names = {entry.filename for entry in entries}
         if len(names) != len(entries):
             raise ExportError("Duplicate ZIP entry")
-        if names not in (LEGACY_ENTRIES, V2_ENTRIES, V3_ENTRIES):
-            raise ExportError("Expected a complete legacy, v2 or v3 export")
+        if names not in (LEGACY_ENTRIES, V2_ENTRIES, V3_ENTRIES, V5_ENTRIES):
+            raise ExportError("Expected a complete legacy or v2-v5 export")
         if sum(entry.file_size for entry in entries) > MAX_TOTAL_BYTES:
             raise ExportError("Export exceeds the 32 MiB total JSON limit")
         result = {}
@@ -97,7 +98,7 @@ def _rows(bundle, name):
     return value
 
 
-def _sessions(bundle):
+def _sessions(bundle, version):
     sessions = {}
     for row in _rows(bundle, "study_sessions.json"):
         session_id = _text(row, "id")
@@ -116,7 +117,10 @@ def _sessions(bundle):
                 raise ExportError("Unfinished session has final counts or an end reason")
         else:
             _integer(row, "endedAtMs")
-            if row["endReason"] not in ("completed", "left"):
+            reasons = {"completed", "left"}
+            if version >= 5 and row["mode"] == "Listening":
+                reasons.add("discarded")
+            if row["endReason"] not in reasons:
                 raise ExportError("Invalid session end reason")
             _integer(row, "correct", maximum=_integer(row, "answered"))
         sessions[session_id] = row
@@ -140,7 +144,7 @@ def _session_link(log, sessions):
 
 def _join(bundle, version):
     rows = _rows(bundle, "review_log.json")
-    sessions = _sessions(bundle) if version >= 3 else {}
+    sessions = _sessions(bundle, version) if version >= 3 else {}
     session_counts = defaultdict(int)
     logs = {}
     for row in rows:
@@ -257,9 +261,12 @@ def analyze(path):
         manifest = bundle["export_manifest.json"]
         if not isinstance(manifest, dict):
             raise ExportError("Unsupported export manifest")
-        version = _integer(manifest, "formatVersion", 2, 4)
-        if set(bundle) != (V2_ENTRIES if version == 2 else V3_ENTRIES):
+        version = _integer(manifest, "formatVersion", 2, 5)
+        expected = V5_ENTRIES if version == 5 else V2_ENTRIES if version == 2 else V3_ENTRIES
+        if set(bundle) != expected:
             raise ExportError("Export members do not match the declared format version")
+    if version >= 5:
+        _rows(bundle, "listening_encounters.json")
     _rows(bundle, "review_state.json")
     settings = bundle["settings.json"]
     if not isinstance(settings, dict):

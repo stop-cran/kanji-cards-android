@@ -171,6 +171,44 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - Each session screen is keyed by its route (`quiz:<ts>[:extra]`, `wquiz:<ts>:<jp|en|rd|ty>[:extra]`, `draw:<ts>[:extra]`, `kreading:<ts>[:extra]`) so a ViewModel
   survives rotation and following a doc link, but a new start is a fresh session. Start sessions from `LaunchedEffect`, not `init`.
 
+### N5 listening
+
+Listening schedules whole passages, not their three questions: `(sourceId, "listening", passageId, "Listening", "")`.
+The N5-only learning contract is [owned with the content](https://github.com/stop-cran/learning-japanese/blob/main/docs/listening-n5.md).
+It includes essential spoken vocabulary and speech demands, unlike grammar-only exercise classification.
+Unapproved or invalid recordings are visibly unavailable and never produce a failure grade.
+
+An encounter captures the complete JSON package, audio hash, optional picture bytes, word-article bodies and shuffled option order.
+Initial playback precedes all questions; all three answers precede feedback. Wrong main point, fewer than two correct or give-up
+is Again; two including the main point is Hard; all three is Good unless extra replay, extra slowing or declared guessing caps it
+at Hard. The first complete replay is normal. There is no Easy or response-time grade. Only Listening uses a 24-hour Again step;
+first success keeps the existing one-day multiple-choice cap. Submission atomically writes one state, canonical log and immutable
+response snapshot. Subsequent feedback replay cannot rewrite the submitted assistance or answers.
+
+Room v13 keeps durable exposure independently from SRS. Opening neutral context is not exposure; actual playback or revealing
+study text is. Study and discarding do not debit introductions or invent reviews. After unscored study/discard, fresh scored entry
+waits 24 hours after the last exposure; stored FSRS due dates remain untouched. Resuming the same encounter preserves first-encounter
+status, assistance and position. First encounter means first in that content source and is labeled separately from familiar-passage
+results; neither demonstrates unseen-listening proficiency.
+
+Full/light/rest days permit at most 2/1/0 new passages and 300/150/0 estimated seconds, within the shared new-item budget.
+The captured estimate is twice the recording duration plus 90 seconds, charged once on the first recorded review, including Again.
+Listening backlog reduces new time by `clamp(2 - actionableDueSeconds / 300, 0, 1)`; cooldown/media-blocked passages do not count.
+Listening rows are excluded from other modes' count-based capacity/backlog calculation but contribute to shared introductions and
+study-day history. Due reviews are not time-capped. An unfinished new encounter reserves one shared unit. One encounter per source
+must be resumed or discarded before another starts. Previously permitted submissions remain valid after midnight/settings changes,
+with their debit on the submission date; reservations are not reviews and are released on submission/discard.
+
+The platform `MediaPlayer` reads verified in-memory mono Opus, requests transient speech audio focus, pauses on focus loss,
+headphone unplugging or backgrounding, and never automatically resumes. Deliberate extra slowdown preserves pitch. Full completion,
+not a timer or a successful header check, unlocks questions; decoder errors block submission without changing SRS.
+Interruption also invalidates a pending seek/start. Successful full playback can clear a transient player-error block offline, but
+only after rechecking the current approved package and cached audio; it cannot approve replacement drafts or repair corrupt bytes.
+`listening:<encounter UUID>` routes deliberately survive process recreation, unlike ephemeral quiz routes.
+Source changes do not retarget an encounter. In-use audio remains pinned through content replacement; unused old audio is pruned.
+Export v5 adds source-bound encounters, exposure, captured content and immutable responses without binary media. The grammar
+analyzer accepts the new member but does not interpret listening responses as grammar evidence.
+
 ## 5. Words, levels and advancement
 
 - Word stacks are cumulative in *membership* (`words-n4` includes N5 words) but keyed independently in SRS state, so switching from `words-n5`
@@ -283,7 +321,8 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   Card browsing lives on each page, since the sets differ: the Kanji page shows the card count and "Browse cards" (route `cards`, `CardSearch`), the
   Words page shows the word count and "Browse words" (route `word-cards`, `WordSearch`: written form, kana in either script, romaji ranked below kana,
   English title words). Both open the card's article; the main screen only notes the source when it is not the default repo.
-  After process death session routes are dropped from the restored back stack (a session is not resumable) and the user lands on the page they started from.
+  After process death ephemeral session routes are dropped from the restored back stack and the user lands on the page they started from.
+  Durable listening encounter routes are retained and restore their captured package and playback/answer state.
 - **Kana progression:** Hiragana and katakana have independent review state. Yōon cards unlock per script and per mode only when both plain component kana are in Review with at least seven days of FSRS stability; voiced and semi-voiced kana (が, ぱ…) unlock the same way once their unvoiced base (か, は) is in Review with at least three days (`VOICED_UNLOCK_STABILITY_DAYS`; a first Good already gives about 3.2 days, so this is deliberately light, tune it from real use). A card already started in that mode stays available. Locked cards are excluded from that mode's study queues, quiz distractors and new-card counts, and the Kana page reports one total of locked kana per mode. In Kana drawing, a card with no prior Draw review is first shown with the faint numbered reference; this is a practice-only trace, then the card returns later to be drawn from memory without recording the trace attempt.
 - Home loads asynchronously. The nine main flows (kanji, words, seven review-state sets) start as null = "not yet" and the screen shows a progress
   bar until all emit; empty means "no data". The new-card-introduced counts still start at 0 (meaning "none today") and settle a moment later.
@@ -327,7 +366,8 @@ guided introduction, omitted from progress exports, and included in normal Andro
 The local focus readout contains aggregate evidence and decision reasons, never raw typed responses; no new telemetry is added.
 
 Room v11 adds `study_sessions` and nullable `review_log.sessionId`; export v3 adds the sixth member `study_sessions.json`.
-All study ViewModels use `StudyViewModel` for start/end tracking and ordered review persistence, without changing `QuizSession` or FSRS.
+Ephemeral study ViewModels use `StudyViewModel` for start/end tracking and ordered review persistence, without changing `QuizSession` or FSRS.
+Listening uses its separate durable `ListeningStudy` orchestration and records the same canonical session/review tables.
 The route registry closes sessions on actual navigation removal, not composition disposal (article links/rotation).
 Completion and early exit store the UI answer totals, including practice-only confirmations; process death leaves an unknown ending.
 Historical answers remain unassigned. See `CONTENT-SCHEMA.md` for linkage, mixed readings/padding and timestamp limitations.

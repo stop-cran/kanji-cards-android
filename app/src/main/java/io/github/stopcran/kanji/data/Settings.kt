@@ -36,6 +36,13 @@ class Settings(context: Context) {
 
     fun sceneParserEpoch(sourceId: String): Int = prefs.getInt("$SCENE_EPOCH$sourceId", 0)
 
+    fun listeningParserEpoch(sourceId: String): Int = prefs.getInt("listeningParserEpoch:$sourceId", 0)
+
+    fun setListeningParserEpoch(sourceId: String, epoch: Int) {
+        require(epoch >= 0) { "Listening parser epoch must not be negative." }
+        prefs.edit().putInt("listeningParserEpoch:$sourceId", epoch).apply()
+    }
+
     fun setSceneParserEpoch(sourceId: String, epoch: Int) {
         require(epoch >= 0) { "Scene parser epoch must not be negative." }
         prefs.edit().putInt("$SCENE_EPOCH$sourceId", epoch).apply()

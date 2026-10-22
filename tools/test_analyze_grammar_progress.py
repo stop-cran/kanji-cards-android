@@ -119,6 +119,25 @@ class GrammarAnalysisTest(unittest.TestCase):
                 with self.assertRaises(ExportError):
                     self.read(bundle)
 
+    def test_v5_listening_is_required_but_does_not_become_grammar_evidence(self):
+        bundle = session_fixture()
+        expected = self.read(bundle)
+        expected["export_format_version"] = 5
+        bundle["export_manifest.json"]["formatVersion"] = 5
+        bundle["listening_encounters.json"] = [{"response": "PRIVATE_LISTENING_RESPONSE"}]
+        bundle["study_sessions.json"].append(dict(
+            id="listening", sourceId="owner/repo", stack="listening", mode="Listening", extra=False,
+            startedAtMs=600, endedAtMs=700, endReason="discarded", answered=0, correct=0,
+        ))
+        self.assertEqual(expected, self.read(bundle))
+        self.assertNotIn("PRIVATE_LISTENING_RESPONSE", json.dumps(self.read(bundle)))
+        bundle["listening_encounters.json"] = {}
+        with self.assertRaises(ExportError):
+            self.read(bundle)
+        bundle.pop("listening_encounters.json")
+        with self.assertRaises(ExportError):
+            self.read(bundle)
+
     def test_v4_choice_snapshots_do_not_duplicate_events_or_disclose_option_text(self):
         bundle = session_fixture()
         expected = self.read(bundle)

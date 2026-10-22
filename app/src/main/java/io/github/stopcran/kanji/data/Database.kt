@@ -161,6 +161,7 @@ data class SyncMetaEntity(
     val syncedAtMs: Long,
     val problems: Int,
     val grammarProblem: String? = null,
+    val listeningProblem: String? = null,
 )
 
 /** Everything a content snapshot stores for one source. */
@@ -172,6 +173,8 @@ data class ContentRows(
     val images: List<ImageEntity> = emptyList(),
     val grammar: List<GrammarEntity> = emptyList(),
     val scenes: List<WordSceneEntity> = emptyList(),
+    val listening: List<ListeningEntity> = emptyList(),
+    val audio: List<ListeningAudioEntity> = emptyList(),
 )
 
 @Dao
@@ -273,6 +276,15 @@ interface ContentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertScenes(items: List<WordSceneEntity>)
 
+    @Query("DELETE FROM listening_passages WHERE sourceId = :sourceId")
+    suspend fun clearListening(sourceId: String)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertListening(items: List<ListeningEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertListeningAudio(items: List<ListeningAudioEntity>)
+
     @Query("SELECT * FROM counters WHERE sourceId = :sourceId ORDER BY position")
     suspend fun counters(sourceId: String): List<CounterEntity>
 
@@ -316,6 +328,7 @@ interface ContentDao {
         clearGrammar(sourceId)
         clearImages(sourceId)
         clearScenes(sourceId)
+        clearListening(sourceId)
         insertKanji(rows.kanji)
         insertWords(rows.words)
         insertArticles(rows.articles)
@@ -323,6 +336,8 @@ interface ContentDao {
         insertGrammar(rows.grammar)
         insertImages(rows.images)
         insertScenes(rows.scenes)
+        insertListening(rows.listening)
+        insertListeningAudio(rows.audio)
         putMeta(meta)
         invalidateGrammarFocus(sourceId)
     }
@@ -411,11 +426,12 @@ interface ReviewDao {
     suspend fun itemsIntroducedSince(sourceId: String, sinceMs: Long): Int
 
     /** Cards that were reviewed before and are due at [nowMs], in any mode. */
-    @Query("SELECT COUNT(*) FROM review_state WHERE sourceId = :sourceId AND phase != 'New' AND dueMs <= :nowMs")
-    suspend fun dueCount(sourceId: String, nowMs: Long): Int
+    @Query("SELECT COUNT(*) FROM review_state WHERE sourceId = :sourceId AND phase != 'New' AND dueMs <= :nowMs " +
+        "AND (:excludedMode IS NULL OR mode != :excludedMode)")
+    suspend fun dueCount(sourceId: String, nowMs: Long, excludedMode: String? = null): Int
 
-    @Query("SELECT atMs FROM review_log WHERE sourceId = :sourceId AND atMs >= :sinceMs")
-    suspend fun reviewTimesSince(sourceId: String, sinceMs: Long): List<Long>
+    @Query("SELECT atMs FROM review_log WHERE sourceId = :sourceId AND atMs >= :sinceMs AND (:excludedMode IS NULL OR mode != :excludedMode)")
+    suspend fun reviewTimesSince(sourceId: String, sinceMs: Long, excludedMode: String? = null): List<Long>
 
     /** Reading cards (kanji + reading) whose first review happened since [sinceMs]; each used a unit of the daily budget. */
     @Query("SELECT COUNT(*) FROM (SELECT 1 FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode IN ('KanjiOn', 'KanjiKun') AND reading != '' GROUP BY mode, kanji, reading HAVING MIN(atMs) >= :sinceMs)")
@@ -448,14 +464,16 @@ interface ReviewDao {
         KanjiEntity::class, WordEntity::class, ArticleEntity::class, CounterEntity::class, ImageEntity::class,
         GrammarEntity::class, GrammarResponseEntity::class, GrammarFocusEntity::class,
         WordSceneEntity::class,
+        ListeningEntity::class, ListeningAudioEntity::class, ListeningEncounterEntity::class,
         ReviewStateEntity::class, ReviewLogEntity::class, StudySessionEntity::class, SyncMetaEntity::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun content(): ContentDao
     abstract fun reviews(): ReviewDao
+    abstract fun listening(): ListeningDao
 }
 
 val MIGRATION_11_12 = object : androidx.room.migration.Migration(11, 12) {

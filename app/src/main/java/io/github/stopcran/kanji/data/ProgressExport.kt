@@ -18,14 +18,16 @@ object ProgressExport {
     /** Returns the number of logged answers written. */
     suspend fun write(db: AppDatabase, settings: Settings, out: OutputStream): Int {
         val snapshot = db.withTransaction {
-            Snapshot(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses(), db.reviews().allSessions())
+            Snapshot(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses(),
+                db.reviews().allSessions(), db.listening().allEncounters())
         }
         ZipOutputStream(out).use { zip ->
             zip.entry("review_state.json", JsonArray(snapshot.states.map(::stateJson)))
             zip.entry("review_log.json", JsonArray(snapshot.log.map(::logJson)))
             zip.entry("grammar_responses.json", JsonArray(snapshot.grammarResponses.map(::grammarResponseJson)))
             zip.entry("study_sessions.json", JsonArray(snapshot.sessions.map(::sessionJson)))
-            zip.entry("export_manifest.json", JsonObject(mapOf("formatVersion" to JsonPrimitive(4))))
+            zip.entry("listening_encounters.json", JsonArray(snapshot.listening.map(::listeningJson)))
+            zip.entry("export_manifest.json", JsonObject(mapOf("formatVersion" to JsonPrimitive(5))))
             zip.entry("settings.json", JsonObject(settings.snapshot().mapValues { primitive(it.value) }))
         }
         return snapshot.log.size
@@ -36,6 +38,7 @@ object ProgressExport {
         val log: List<ReviewLogEntity>,
         val grammarResponses: List<GrammarResponseEntity>,
         val sessions: List<StudySessionEntity>,
+        val listening: List<ListeningEncounterEntity>,
     )
 
     private fun ZipOutputStream.entry(name: String, element: JsonElement) {
@@ -86,6 +89,21 @@ object ProgressExport {
             "constructionId" to JsonPrimitive(r.constructionId), "relationshipId" to JsonPrimitive(r.relationshipId),
             "promptType" to JsonPrimitive(r.promptType), "response" to JsonPrimitive(r.response), "correct" to JsonPrimitive(r.correct),
             "choiceSnapshot" to (r.choiceSnapshot?.let(json::parseToJsonElement) ?: JsonNull),
+        ),
+    )
+
+    private fun listeningJson(e: ListeningEncounterEntity) = JsonObject(
+        mapOf(
+            "id" to primitive(e.id), "sourceId" to primitive(e.sourceId), "passageId" to primitive(e.passageId),
+            "content" to json.parseToJsonElement(e.contentJson), "contentHash" to primitive(e.contentHash),
+            "audioHash" to primitive(e.audioHash), "state" to json.parseToJsonElement(e.stateJson),
+            "response" to (e.responseJson?.let(json::parseToJsonElement) ?: JsonNull),
+            "kind" to primitive(e.kind), "createdAtMs" to primitive(e.createdAtMs), "estimatedMs" to primitive(e.estimatedMs),
+            "newReservation" to primitive(e.newReservation), "exposedAtMs" to primitive(e.exposedAtMs),
+            "lastExposureAtMs" to primitive(e.lastExposureAtMs), "lastStudyAtMs" to primitive(e.lastStudyAtMs),
+            "firstEncounter" to primitive(e.firstEncounter), "reviewLogId" to primitive(e.reviewLogId),
+            "submittedAtMs" to primitive(e.submittedAtMs), "introduced" to primitive(e.introduced),
+            "closedAtMs" to primitive(e.closedAtMs), "closeReason" to primitive(e.closeReason),
         ),
     )
 }

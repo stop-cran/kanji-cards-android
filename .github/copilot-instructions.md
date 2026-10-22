@@ -55,6 +55,13 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   Advance `ContentParser.GRAMMAR_PARSER_EPOCH` for newly retained Grammar metadata, not the historical level/group readiness thresholds.
 - **Room:** list columns are joined with `SEP` (`\u001F`); use `joinSep()`/`splitSep()`. `review_log.id` is auto-generated, so pass `0`.
   Review state is keyed by (`sourceId` = lower-case `owner/repo`, stack, item, mode). Never key it by title or position; titles are editable.
+- **Listening:** persist exposure separately from SRS and retain the captured package/assistance through process recreation.
+  Only a completed full playback unlocks questions. Technical errors and unscored study never manufacture failure reviews.
+  `responseJson` is immutable after submission; feedback playback updates only encounter state/exposure.
+  Focus/headphone interruptions must invalidate pending starts, not just active playback. Recover transient media blocks only after
+  full playback and current approval/hash verification; invalid cache discovered during start must be blocked outside its rolled-back transaction.
+  Key the listening page by phase so answer feedback starts at the result rather than retaining the questions' scroll offset.
+  Export-version changes must update `tools/analyze_grammar_progress.py`, not just Kotlin export tests.
 - **Quiz semantics:** options are meaning titles and unique by title (one correct answer). Wrong = Again (re-asked after 3 cards),
   right = Good, "I guessed" = Hard. Time-based Easy was dropped: with 4 options a fast answer is often luck.
 - **Daily new-card budget** counts kanji whose first review log entry is today (`newCardsIntroducedSince`), per mode.

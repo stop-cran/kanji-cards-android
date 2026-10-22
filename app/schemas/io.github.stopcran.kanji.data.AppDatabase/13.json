@@ -1,0 +1,1093 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 13,
+    "identityHash": "be92ac705b3ac3844214e5a1aa848f96",
+    "entities": [
+      {
+        "tableName": "kanji",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `kanji` TEXT NOT NULL, `title` TEXT NOT NULL, `jlpt` INTEGER, `tags` TEXT NOT NULL, `strokeCount` INTEGER, `radical` TEXT, `phonetic` TEXT, `onyomi` TEXT NOT NULL, `kunyomi` TEXT NOT NULL, `distractors` TEXT NOT NULL, `body` TEXT NOT NULL, `strokesJson` TEXT, `position` INTEGER NOT NULL, PRIMARY KEY(`sourceId`, `kanji`))",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kanji",
+            "columnName": "kanji",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "jlpt",
+            "columnName": "jlpt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "tags",
+            "columnName": "tags",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "strokeCount",
+            "columnName": "strokeCount",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "radical",
+            "columnName": "radical",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "phonetic",
+            "columnName": "phonetic",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "onyomi",
+            "columnName": "onyomi",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kunyomi",
+            "columnName": "kunyomi",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "distractors",
+            "columnName": "distractors",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "body",
+            "columnName": "body",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "strokesJson",
+            "columnName": "strokesJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId",
+            "kanji"
+          ]
+        }
+      },
+      {
+        "tableName": "words",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `word` TEXT NOT NULL, `reading` TEXT NOT NULL, `title` TEXT NOT NULL, `type` TEXT, `kanji` TEXT NOT NULL, `tags` TEXT NOT NULL, `body` TEXT NOT NULL, `jlpt` INTEGER, `quizExclusions` TEXT NOT NULL DEFAULT '', `quizDistractors` TEXT NOT NULL DEFAULT '', `image` TEXT, `imageScene` TEXT, `quizImage` TEXT, PRIMARY KEY(`sourceId`, `word`))",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "word",
+            "columnName": "word",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reading",
+            "columnName": "reading",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "kanji",
+            "columnName": "kanji",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tags",
+            "columnName": "tags",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "body",
+            "columnName": "body",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "jlpt",
+            "columnName": "jlpt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "quizExclusions",
+            "columnName": "quizExclusions",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "quizDistractors",
+            "columnName": "quizDistractors",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "image",
+            "columnName": "image",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "imageScene",
+            "columnName": "imageScene",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "quizImage",
+            "columnName": "quizImage",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId",
+            "word"
+          ]
+        }
+      },
+      {
+        "tableName": "articles",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `slug` TEXT NOT NULL, `title` TEXT NOT NULL, `body` TEXT NOT NULL, PRIMARY KEY(`sourceId`, `slug`))",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "slug",
+            "columnName": "slug",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "body",
+            "columnName": "body",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId",
+            "slug"
+          ]
+        }
+      },
+      {
+        "tableName": "counters",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `id` TEXT NOT NULL, `json` TEXT NOT NULL, `position` INTEGER NOT NULL, PRIMARY KEY(`sourceId`, `id`))",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "json",
+            "columnName": "json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId",
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "word_images",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `name` TEXT NOT NULL, `bytes` BLOB NOT NULL, PRIMARY KEY(`sourceId`, `name`))",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bytes",
+            "columnName": "bytes",
+            "affinity": "BLOB",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId",
+            "name"
+          ]
+        }
+      },
+      {
+        "tableName": "grammar_sets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `id` TEXT NOT NULL, `json` TEXT NOT NULL, `position` INTEGER NOT NULL, PRIMARY KEY(`sourceId`, `id`))",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "json",
+            "columnName": "json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId",
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "grammar_responses",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`reviewLogId` INTEGER NOT NULL, `sourceId` TEXT NOT NULL, `stack` TEXT NOT NULL, `exerciseId` TEXT NOT NULL, `constructionId` TEXT NOT NULL, `relationshipId` TEXT NOT NULL, `promptType` TEXT NOT NULL, `response` TEXT NOT NULL, `correct` INTEGER NOT NULL, `choiceSnapshot` TEXT, PRIMARY KEY(`reviewLogId`))",
+        "fields": [
+          {
+            "fieldPath": "reviewLogId",
+            "columnName": "reviewLogId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stack",
+            "columnName": "stack",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exerciseId",
+            "columnName": "exerciseId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "constructionId",
+            "columnName": "constructionId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "relationshipId",
+            "columnName": "relationshipId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "promptType",
+            "columnName": "promptType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "response",
+            "columnName": "response",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "correct",
+            "columnName": "correct",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "choiceSnapshot",
+            "columnName": "choiceSnapshot",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "reviewLogId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_grammar_responses_sourceId_stack_relationshipId",
+            "unique": false,
+            "columnNames": [
+              "sourceId",
+              "stack",
+              "relationshipId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_grammar_responses_sourceId_stack_relationshipId` ON `${TABLE_NAME}` (`sourceId`, `stack`, `relationshipId`)"
+          },
+          {
+            "name": "index_grammar_responses_exerciseId",
+            "unique": false,
+            "columnNames": [
+              "exerciseId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_grammar_responses_exerciseId` ON `${TABLE_NAME}` (`exerciseId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "grammar_focus",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `revision` INTEGER NOT NULL, `json` TEXT NOT NULL, PRIMARY KEY(`sourceId`))",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revision",
+            "columnName": "revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "json",
+            "columnName": "json",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId"
+          ]
+        }
+      },
+      {
+        "tableName": "word_scenes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `word` TEXT NOT NULL, `id` TEXT NOT NULL, `sense` TEXT NOT NULL, `image` TEXT NOT NULL, `description` TEXT NOT NULL, `quizEligible` INTEGER NOT NULL, `imageHash` TEXT NOT NULL, `position` INTEGER NOT NULL, PRIMARY KEY(`sourceId`, `word`, `id`))",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "word",
+            "columnName": "word",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sense",
+            "columnName": "sense",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "image",
+            "columnName": "image",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "quizEligible",
+            "columnName": "quizEligible",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imageHash",
+            "columnName": "imageHash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId",
+            "word",
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "listening_passages",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `id` TEXT NOT NULL, `json` TEXT NOT NULL, `contentHash` TEXT NOT NULL, `audioHash` TEXT, `durationMs` INTEGER, `ready` INTEGER NOT NULL, `reason` TEXT, `position` INTEGER NOT NULL, PRIMARY KEY(`sourceId`, `id`))",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "json",
+            "columnName": "json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentHash",
+            "columnName": "contentHash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "audioHash",
+            "columnName": "audioHash",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "ready",
+            "columnName": "ready",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reason",
+            "columnName": "reason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId",
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "listening_audio",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `sha256` TEXT NOT NULL, `bytes` BLOB NOT NULL, PRIMARY KEY(`sourceId`, `sha256`))",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sha256",
+            "columnName": "sha256",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bytes",
+            "columnName": "bytes",
+            "affinity": "BLOB",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId",
+            "sha256"
+          ]
+        }
+      },
+      {
+        "tableName": "listening_encounters",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `sourceId` TEXT NOT NULL, `passageId` TEXT NOT NULL, `contentJson` TEXT NOT NULL, `contentHash` TEXT NOT NULL, `audioHash` TEXT NOT NULL, `imageBytes` BLOB, `stateJson` TEXT NOT NULL, `kind` TEXT NOT NULL, `createdAtMs` INTEGER NOT NULL, `estimatedMs` INTEGER NOT NULL, `newReservation` INTEGER NOT NULL, `exposedAtMs` INTEGER, `lastExposureAtMs` INTEGER, `lastStudyAtMs` INTEGER, `firstEncounter` INTEGER NOT NULL, `reviewLogId` INTEGER, `responseJson` TEXT, `submittedAtMs` INTEGER, `introduced` INTEGER NOT NULL, `closedAtMs` INTEGER, `closeReason` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "passageId",
+            "columnName": "passageId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentJson",
+            "columnName": "contentJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentHash",
+            "columnName": "contentHash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "audioHash",
+            "columnName": "audioHash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imageBytes",
+            "columnName": "imageBytes",
+            "affinity": "BLOB"
+          },
+          {
+            "fieldPath": "stateJson",
+            "columnName": "stateJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtMs",
+            "columnName": "createdAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "estimatedMs",
+            "columnName": "estimatedMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "newReservation",
+            "columnName": "newReservation",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exposedAtMs",
+            "columnName": "exposedAtMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastExposureAtMs",
+            "columnName": "lastExposureAtMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastStudyAtMs",
+            "columnName": "lastStudyAtMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "firstEncounter",
+            "columnName": "firstEncounter",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reviewLogId",
+            "columnName": "reviewLogId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "responseJson",
+            "columnName": "responseJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "submittedAtMs",
+            "columnName": "submittedAtMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "introduced",
+            "columnName": "introduced",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "closedAtMs",
+            "columnName": "closedAtMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "closeReason",
+            "columnName": "closeReason",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_listening_encounters_sourceId_passageId",
+            "unique": false,
+            "columnNames": [
+              "sourceId",
+              "passageId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_listening_encounters_sourceId_passageId` ON `${TABLE_NAME}` (`sourceId`, `passageId`)"
+          },
+          {
+            "name": "index_listening_encounters_sourceId_closedAtMs",
+            "unique": false,
+            "columnNames": [
+              "sourceId",
+              "closedAtMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_listening_encounters_sourceId_closedAtMs` ON `${TABLE_NAME}` (`sourceId`, `closedAtMs`)"
+          },
+          {
+            "name": "index_listening_encounters_reviewLogId",
+            "unique": true,
+            "columnNames": [
+              "reviewLogId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_listening_encounters_reviewLogId` ON `${TABLE_NAME}` (`reviewLogId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "review_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `stack` TEXT NOT NULL, `kanji` TEXT NOT NULL, `mode` TEXT NOT NULL, `phase` TEXT NOT NULL, `stability` REAL NOT NULL, `difficulty` REAL NOT NULL, `dueMs` INTEGER NOT NULL, `lastReviewMs` INTEGER, `reps` INTEGER NOT NULL, `lapses` INTEGER NOT NULL, `reading` TEXT NOT NULL DEFAULT '', PRIMARY KEY(`sourceId`, `stack`, `kanji`, `mode`, `reading`))",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stack",
+            "columnName": "stack",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kanji",
+            "columnName": "kanji",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mode",
+            "columnName": "mode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "phase",
+            "columnName": "phase",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stability",
+            "columnName": "stability",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "difficulty",
+            "columnName": "difficulty",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dueMs",
+            "columnName": "dueMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastReviewMs",
+            "columnName": "lastReviewMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "reps",
+            "columnName": "reps",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lapses",
+            "columnName": "lapses",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reading",
+            "columnName": "reading",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId",
+            "stack",
+            "kanji",
+            "mode",
+            "reading"
+          ]
+        }
+      },
+      {
+        "tableName": "review_log",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `sourceId` TEXT NOT NULL, `stack` TEXT NOT NULL, `kanji` TEXT NOT NULL, `mode` TEXT NOT NULL, `grade` INTEGER NOT NULL, `atMs` INTEGER NOT NULL, `reading` TEXT NOT NULL DEFAULT '', `sessionId` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stack",
+            "columnName": "stack",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kanji",
+            "columnName": "kanji",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mode",
+            "columnName": "mode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grade",
+            "columnName": "grade",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "atMs",
+            "columnName": "atMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reading",
+            "columnName": "reading",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "sessionId",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_review_log_sourceId_stack_kanji_mode",
+            "unique": false,
+            "columnNames": [
+              "sourceId",
+              "stack",
+              "kanji",
+              "mode"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_review_log_sourceId_stack_kanji_mode` ON `${TABLE_NAME}` (`sourceId`, `stack`, `kanji`, `mode`)"
+          },
+          {
+            "name": "index_review_log_atMs",
+            "unique": false,
+            "columnNames": [
+              "atMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_review_log_atMs` ON `${TABLE_NAME}` (`atMs`)"
+          },
+          {
+            "name": "index_review_log_sessionId",
+            "unique": false,
+            "columnNames": [
+              "sessionId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_review_log_sessionId` ON `${TABLE_NAME}` (`sessionId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "study_sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `sourceId` TEXT NOT NULL, `stack` TEXT NOT NULL, `mode` TEXT NOT NULL, `extra` INTEGER NOT NULL, `startedAtMs` INTEGER NOT NULL, `endedAtMs` INTEGER, `endReason` TEXT, `answered` INTEGER, `correct` INTEGER, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stack",
+            "columnName": "stack",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mode",
+            "columnName": "mode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "extra",
+            "columnName": "extra",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtMs",
+            "columnName": "startedAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endedAtMs",
+            "columnName": "endedAtMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "endReason",
+            "columnName": "endReason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "answered",
+            "columnName": "answered",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "correct",
+            "columnName": "correct",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "sync_meta",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `contentVersion` TEXT NOT NULL, `syncedAtMs` INTEGER NOT NULL, `problems` INTEGER NOT NULL, `grammarProblem` TEXT, `listeningProblem` TEXT, PRIMARY KEY(`sourceId`))",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentVersion",
+            "columnName": "contentVersion",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncedAtMs",
+            "columnName": "syncedAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "problems",
+            "columnName": "problems",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grammarProblem",
+            "columnName": "grammarProblem",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "listeningProblem",
+            "columnName": "listeningProblem",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'be92ac705b3ac3844214e5a1aa848f96')"
+    ]
+  }
+}

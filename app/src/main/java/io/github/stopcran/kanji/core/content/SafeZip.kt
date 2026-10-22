@@ -11,12 +11,13 @@ object SafeZip {
         val maxFileBytes: Long = 2L * 1024 * 1024,
         /** Scene images are small by contract (<= 100 KiB in the content validator); a larger one is hostile or broken. */
         val maxImageBytes: Long = 150L * 1024,
+        val maxAudioBytes: Long = 512L * 1024,
         val maxTotalBytes: Long = 50L * 1024 * 1024,
         /** Everything inflated from the archive, including entries we skip; bounds CPU spent on a hostile zip. */
         val maxInflatedBytes: Long = 100L * 1024 * 1024,
     )
 
-    private val allowedFolders = setOf("kanji", "words", "articles", "strokes", "counters", "grammar", "scenes")
+    private val allowedFolders = setOf("kanji", "words", "articles", "strokes", "counters", "grammar", "scenes", "listening")
 
     /** Returns repo-relative path -> bytes for manifest.json and the content folders; the archive's top-level folder is stripped. */
     fun read(input: InputStream, limits: Limits = Limits()): Map<String, ByteArray> {
@@ -35,7 +36,11 @@ object SafeZip {
                 }
                 val relative = name.substringAfter('/', missingDelimiterValue = "")
                 val wanted = relative.isNotEmpty() && isWanted(relative)
-                val limit = if (relative.startsWith("images/")) limits.maxImageBytes else limits.maxFileBytes
+                val limit = when {
+                    relative.startsWith("images/") -> limits.maxImageBytes
+                    relative.startsWith("audio/") -> limits.maxAudioBytes
+                    else -> limits.maxFileBytes
+                }
                 val bytes = readLimited(zip, if (wanted) limit else Long.MAX_VALUE, keep = wanted) {
                     inflated += it
                     if (inflated > limits.maxInflatedBytes) throw ContentException("Archive is too large")
@@ -53,7 +58,8 @@ object SafeZip {
         if (relative == "manifest.json") return true
         val parts = relative.split('/')
         if (parts.size != 2 || parts[1].isEmpty()) return false
-        return parts[0] in allowedFolders || (parts[0] == "images" && parts[1].endsWith(".webp"))
+        return parts[0] in allowedFolders || (parts[0] == "images" && parts[1].endsWith(".webp")) ||
+            (parts[0] == "audio" && parts[1].endsWith(".ogg"))
     }
 
     /** Drains the current entry; the bytes are kept only when [keep], and [onBytes] sees every inflated chunk. */

@@ -55,6 +55,7 @@ class HomeActions(
     val onWordsPage: () -> Unit,
     val onCountersPage: () -> Unit,
     val onGrammarPage: () -> Unit,
+    val onListeningPage: () -> Unit,
     val onOpenDoc: (String) -> Unit,
     val onKanaPage: () -> Unit,
     val onKanaStudy: (KanaScript, KanaMode, extra: Boolean) -> Unit,
@@ -109,6 +110,7 @@ private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeA
         Entry("Counters", counters.summary(), ArtSet.current.counters, a.onCountersPage)
         val grammar = rememberGrammarHome(app).value
         Entry("Grammar", grammar.summary(), null, a.onGrammarPage)
+        Entry("Listening", rememberListeningHome(app).value.summary(), null, a.onListeningPage)
     }
 }
 

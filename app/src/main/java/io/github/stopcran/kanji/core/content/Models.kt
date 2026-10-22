@@ -13,6 +13,8 @@ data class Manifest(
     val images: Map<String, String> = emptyMap(),
     /** LF-normalised hashes of scenes/<word>.json, separate so older clients can ignore catalogs. */
     val scenes: Map<String, String> = emptyMap(),
+    val listening: Map<String, String> = emptyMap(),
+    val audio: Map<String, String> = emptyMap(),
 )
 
 data class KanjiCard(
@@ -191,4 +193,7 @@ data class ParsedContent(
     val images: Map<String, ByteArray> = emptyMap(),
     val grammar: List<GrammarSet> = emptyList(),
     val grammarProblems: List<String> = emptyList(),
+    val listening: List<io.github.stopcran.kanji.core.listening.ListeningRecord> = emptyList(),
+    val audio: Map<String, ByteArray> = emptyMap(),
+    val listeningProblems: List<String> = emptyList(),
 )
