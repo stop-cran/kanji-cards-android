@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @Composable
 internal fun rememberListeningHome(app: KanjiApp): State<ListeningHomeState> {
@@ -187,7 +188,9 @@ internal fun ListeningEncounterView(vm: ListeningViewModel, onBack: () -> Unit, 
                 TextButton(onClick = { vm.submit(giveUp = true) }, enabled = ready && row.exposedAtMs != null) { Text("I cannot follow this (Again)") }
             } else {
                 vm.response?.let { result ->
-                    Text("${result.correct}/3 - ${Grade.entries.single { it.value == result.grade }.name}", style = MaterialTheme.typography.headlineSmall)
+                    val percent = (requireNotNull(result.correct) * 100.0 / 3).roundToInt()
+                    Text("${result.correct}/3 ($percent%) - ${Grade.entries.single { it.value == result.grade }.name}",
+                        style = MaterialTheme.typography.headlineSmall)
                     Text(if (row.firstEncounter) "First encounter in this source" else "Previously encountered passage")
                     Text("This measures this passage, not your ability to understand unseen speech.", style = MaterialTheme.typography.bodySmall)
                     if (result.assistance.isNotEmpty()) Text("Help used: ${result.assistance.joinToString()}")
