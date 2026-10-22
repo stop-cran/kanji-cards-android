@@ -309,6 +309,8 @@ analyzer accepts the new member but does not interpret listening responses as gr
 
 - Everything goes through `ui/Page` (edge-to-edge insets, scrolling). Back is a string-route stack in `MainActivity`.
 - Theme follows the system (light/dark); drawing canvases stay paper-white on purpose.
+- Kanji, Words, Counters, Grammar and Listening share four rotating home-art sets. Matching default/night drawable names provide
+  transparent dark-ink/pale-ink variants; all use the same ArtCard scrims, chevron halo and decorative image semantics.
 - **Large screens:** `Page` caps content at 720dp (centred). Cards/Words browsing goes two-pane (list 40%, article 60%, `maxWidth` 1400dp) when `isExpandedWidth()` (>= 840dp); selecting a card shows the article in place, links inside it push a normal doc route. Articles render in a `LazyColumn` (`LazyMarkdownView`; `DocBody`), so a long article composes only visible blocks. A `weight` modifier must go on the `SelectionContainer` wrapper, not its child (parent data is lost otherwise). Checked on the Pixel Tablet AVD only.
 - **Strings:** composable `Text("...")` literals live in `res/values/strings.xml` (`stringResource`, `%1$s` args). ViewModel messages, content descriptions and notification text are still literals; there are no translations yet.
 - **Rare glyphs:** old components in articles (e.g. 𠯑 in 話) are CJK Ext. A/B/radical characters that phone system fonts often lack. `RareHan` draws

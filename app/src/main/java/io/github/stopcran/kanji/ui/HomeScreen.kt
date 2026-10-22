@@ -110,8 +110,8 @@ private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeA
         val counters = rememberCounterHome(app)
         Entry("Counters", counters.summary(), ArtSet.current.counters, a.onCountersPage)
         val grammar = rememberGrammarHome(app).value
-        Entry("Grammar", grammar.summary(), null, a.onGrammarPage)
-        Entry("Listening", rememberListeningHome(app).value.summary(), null, a.onListeningPage)
+        Entry("Grammar", grammar.summary(), ArtSet.current.grammar, a.onGrammarPage)
+        Entry("Listening", rememberListeningHome(app).value.summary(), ArtSet.current.listening, a.onListeningPage)
     }
 }
 

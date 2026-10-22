@@ -105,3 +105,43 @@ Illustration in the style of minimalist Zen ink drawing with ma (generous emptin
 ### words-light
 
 Illustration in the style of minimalist Zen ink drawing with ma (generous emptiness), few confident strokes, restrained detail. Subject: a bundle of books wrapped in a furoshiki cloth tied with a knot, with one falling maple leaf. Black and grey sumi ink on a plain warm off-white washi paper background (#F6F1E7), tiny touches of pale beige wash, monochrome. Wide landscape banner composition. The subject sits in the left and centre of the frame, vertically centred, occupying roughly the left 60% of the width; the right 40% is calm empty paper with at most a few faint wisps. Generous empty margins above and below the subject. Soft, low-contrast, quiet and delicate, never busy. No text, no letters, no characters, no watermark, no signature, no border, no frame, no seal stamp.
+
+## Grammar and Listening additions
+
+Generated with Azure OpenAI (`gpt-image-2.5-sunburst`, version `2026-09-08`, 1536x1024, medium quality). These eight original light-paper sources extend all four rotating sets. No existing image was supplied as input.
+
+Each source produces a matching light/dark pair: extract its full-image ink silhouette, mirror and fit it into the existing right-aligned 1440x288 transparent banner, then recolor the same alpha mask with dark ink `#2E2922` or pale ink `#E8E0D0`. The full silhouette is fitted without a preliminary center crop. WebP quality is 82; the existing ArtCard scrims and opacity remain unchanged.
+
+Exact prompts as submitted:
+
+### art1_grammar
+
+Original illustration in the style of sumi-e ink wash painting (suibokuga), loose expressive brush strokes with soft gradients of diluted ink and visible dry-brush texture. Subject: four simple unmarked wooden jigsaw puzzle pieces interlocked into a short horizontal chain, with one small loose piece beside them ready to join. A quiet visual metaphor for joining sentence parts into a structure. Make the interlocking tabs clear and the composition uncluttered. Black and grey sumi ink on plain warm off-white paper (#F6F1E7), monochrome, with no strong paper texture. Wide landscape composition. The complete subject sits in the left and centre, occupying at most the left 60% of the width. Keep every part inside the middle third of the image height with large empty margins above and below; the right 40% is empty paper. No text, letters, characters, numbers, logos, watermark, signature, frame or seal stamp.
+
+### art1_listening
+
+Original illustration in the style of sumi-e ink wash painting (suibokuga), loose expressive brush strokes with soft gradients of diluted ink and visible dry-brush texture. Subject: one simple unbranded pair of over-ear headphones, with a softly curved headband, two rounded ear cushions and two delicate curved sound ripples beside them. Recognizable at a small size, quiet and uncluttered, with no controls or decorative symbols. Black and grey sumi ink on plain warm off-white paper (#F6F1E7), monochrome, with no strong paper texture. Wide landscape composition. The complete subject sits in the left and centre, occupying at most the left 60% of the width. Keep every part, including the headband and ripples, inside the middle third of the image height with large empty margins above and below; the right 40% is empty paper. No text, letters, characters, numbers, logos, watermark, signature, frame or seal stamp.
+
+### art2_grammar
+
+Original illustration in the style of delicate fine-line ink drawing (hakubyo), thin precise brush outlines with very light grey wash and little shading. Subject: three smooth unmarked rectangular wooden puzzle tiles joined by clearly fitting jigsaw tabs, arranged in a short horizontal sequence, with one flat blank paper strip beneath them. A restrained visual metaphor for combining sentence parts, not an abacus or a pile of books. Black and grey sumi ink on plain warm off-white paper (#F6F1E7), monochrome, with no strong paper texture. Wide landscape composition. The complete subject sits in the left and centre, occupying at most the left 60% of the width. Keep every part inside the middle third of the image height with large empty margins above and below; the right 40% is empty paper. No text, letters, characters, numbers, logos, watermark, signature, frame or seal stamp.
+
+### art2_listening
+
+Original illustration in the style of delicate fine-line ink drawing (hakubyo), thin precise brush outlines with very light grey wash and little shading. Subject: one slim unbranded pair of over-ear headphones seen at a slight angle, with two small curved sound lines beside an ear cushion. Show the complete headband and both ear cups in a clear, simple silhouette. Black and grey sumi ink on plain warm off-white paper (#F6F1E7), monochrome, with no strong paper texture. Wide landscape composition. The complete subject sits in the left and centre, occupying at most the left 60% of the width. Keep every part inside the middle third of the image height with large empty margins above and below; the right 40% is empty paper. No text, letters, characters, numbers, logos, watermark, signature, frame or seal stamp.
+
+### art3_grammar
+
+Original illustration in the style of soft misty bokashi ink wash, gradual gradients, rounded forms and a little drifting ink mist. Subject: three rounded unmarked wooden jigsaw pieces joined together in a horizontal arrangement, with their connecting tabs clearly visible and one extra piece resting beside the open end. A gentle visual metaphor for building a sentence from connected parts. Keep the objects distinct rather than dissolving their outlines completely. Black and grey sumi ink on plain warm off-white paper (#F6F1E7), monochrome, with no strong paper texture. Wide landscape composition. The complete subject sits in the left and centre, occupying at most the left 60% of the width. Keep every part inside the middle third of the image height with large empty margins above and below; the right 40% is empty paper. No text, letters, characters, numbers, logos, watermark, signature, frame or seal stamp.
+
+### art3_listening
+
+Original illustration in the style of soft misty bokashi ink wash, gradual gradients, rounded forms and a little drifting ink mist. Subject: one softly outlined unbranded pair of over-ear headphones beside two small completely empty speech bubbles, suggesting listening to a short conversation. Keep the headphones clearly recognizable and the bubbles understated. Black and grey sumi ink on plain warm off-white paper (#F6F1E7), monochrome, with no strong paper texture. Wide landscape composition. The complete subject sits in the left and centre, occupying at most the left 60% of the width. Keep every part inside the middle third of the image height with large empty margins above and below; the right 40% is empty paper. No text inside the bubbles or elsewhere, no letters, characters, numbers, logos, watermark, signature, frame or seal stamp.
+
+### art4_grammar
+
+Original illustration in the style of minimalist Zen ink drawing with ma, generous emptiness, few confident strokes and restrained detail. Subject: two large simple unmarked jigsaw puzzle pieces fitting together, shown as a short horizontal form with one unmistakable connecting tab. A clear visual metaphor for the structure and connections of a sentence. No other objects. Black and grey sumi ink on plain warm off-white paper (#F6F1E7), monochrome, with no strong paper texture. Wide landscape composition. The complete subject sits in the left and centre, occupying at most the left 60% of the width. Keep every part inside the middle third of the image height with large empty margins above and below; the right 40% is empty paper. No text, letters, characters, numbers, logos, watermark, signature, frame or seal stamp.
+
+### art4_listening
+
+Original illustration in the style of minimalist Zen ink drawing with ma, generous emptiness, few confident strokes and restrained detail. Subject: one unbranded pair of headphones rendered with a single broad curved headband and two soft oval ear cushions, with two faint sound-wave arcs beside them. A simple clear listening silhouette with no extra objects. Black and grey sumi ink on plain warm off-white paper (#F6F1E7), monochrome, with no strong paper texture. Wide landscape composition. The complete subject sits in the left and centre, occupying at most the left 60% of the width. Keep every part inside the middle third of the image height with large empty margins above and below; the right 40% is empty paper. No text, letters, characters, numbers, logos, watermark, signature, frame or seal stamp.
