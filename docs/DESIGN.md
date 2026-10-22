@@ -190,6 +190,9 @@ study text is. Study and discarding do not debit introductions or invent reviews
 waits 24 hours after the last exposure; stored FSRS due dates remain untouched. Resuming the same encounter preserves first-encounter
 status, assistance and position. First encounter means first in that content source and is labeled separately from familiar-passage
 results; neither demonstrates unseen-listening proficiency.
+The overview separates cooldowns from content/audio problems and explains the shared new-item allowance independently from listening
+time. Cooldown deadlines remain exact instants for eligibility; the UI shows local, locale-formatted date/time rounded up to the next
+minute, without seconds, so a displayed deadline never promises an early unlock.
 
 Full/light/rest days permit at most 2/1/0 new passages and 300/150/0 estimated seconds, within the shared new-item budget.
 The captured estimate is twice the recording duration plus 90 seconds, charged once on the first recorded review, including Again.

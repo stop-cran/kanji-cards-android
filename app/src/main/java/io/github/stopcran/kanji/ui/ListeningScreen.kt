@@ -81,9 +81,15 @@ fun ListeningPage(app: KanjiApp, onBack: () -> Unit, onEncounter: (String) -> Un
                 val next = data.due.firstOrNull() ?: data.fresh.firstOrNull()
                 Button(onClick = { next?.let { start(data.sourceId, it, false) } }, enabled = next != null && !busy,
                     modifier = Modifier.fillMaxWidth()) { Text("Start listening") }
-                Text("New passages: up to ${data.allowance.count}; ${data.allowance.milliseconds / 1_000} estimated seconds remain today.")
+                Text("Shared new-item allowance: ${data.sharedAllowance.remaining} of ${data.sharedAllowance.total} remaining today.")
+                Text("Listening time budget: ${data.allowance.milliseconds / 1_000} estimated seconds remaining today.")
+                pacingExplanation(data.sharedAllowance)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                home.newPassageHint()?.let { Text(it) }
+                Text("New passages need both a shared slot and enough listening time. Due reviews do not use these daily budgets.",
+                    style = MaterialTheme.typography.bodySmall)
             }
-            Text("Study does not change your score. It records exposure and delays a fresh scored encounter by 24 hours.")
+            Text("Study does not use these daily budgets or change your score. " +
+                "It records exposure and delays a new scored attempt until 24 hours after the latest exposure.")
             if (data.passages.isEmpty()) Text(
                 "Sync an N5 listening collection in Settings. Recordings need a final listening approval before they can be studied or scored.",
             )
@@ -93,7 +99,8 @@ fun ListeningPage(app: KanjiApp, onBack: () -> Unit, onEncounter: (String) -> Un
                     HorizontalDivider()
                     Text(record.passage.title, style = MaterialTheme.typography.titleMedium)
                     Text("${record.passage.kind} - ${row.durationMs?.div(1_000)?.let { "${it}s" } ?: "No recording"}")
-                    data.blocked[row.id]?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    data.cooldowns[row.id]?.let { Text(listeningCooldownText(it), style = MaterialTheme.typography.bodySmall) }
+                    data.blocked[row.id]?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                     OutlinedButton(onClick = { start(data.sourceId, row.id, true) },
                         enabled = row.ready && data.active == null && !busy) { Text("Study without scoring") }
                 }

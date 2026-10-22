@@ -6,6 +6,7 @@ import io.github.stopcran.kanji.core.listening.*
 import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.DayLevel
 import io.github.stopcran.kanji.core.srs.Fsrs
+import io.github.stopcran.kanji.core.srs.NewAllowance
 import io.github.stopcran.kanji.core.srs.QueueBuilder
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.StudyMode
@@ -25,8 +26,11 @@ data class ListeningOverview(
     val due: List<String>,
     val fresh: List<String>,
     val blocked: Map<String, String>,
+    val cooldowns: Map<String, Instant>,
     val active: ListeningEncounterEntity?,
     val allowance: ListeningAllowance,
+    val sharedAllowance: NewAllowance,
+    val minimumNewMs: Long?,
     val notice: String?,
 )
 
@@ -66,19 +70,20 @@ class ListeningStudy(
             .associate { it.kanji to it.toSrs() }
         val exposure = dao.exposures(sourceId).associate { it.passageId to it.lastPracticeAtMs }
         val blocked = mutableMapOf<String, String>()
+        val cooldowns = mutableMapOf<String, Instant>()
         rows.forEach { row ->
             val last = exposure[row.id]
             when {
                 !row.ready -> blocked[row.id] = row.reason ?: "Listening content is not ready"
                 last != null && now.toEpochMilli() < last + ListeningPolicy.COOLDOWN_MS ->
-                    blocked[row.id] = "Practice only until ${Instant.ofEpochMilli(last + ListeningPolicy.COOLDOWN_MS)}"
+                    cooldowns[row.id] = Instant.ofEpochMilli(last + ListeningPolicy.COOLDOWN_MS)
             }
         }
         val known = rows.mapTo(hashSetOf()) { it.id }
         states.filter { (id, state) -> id !in known && !state.due.isAfter(now) }.forEach { (id, _) ->
             blocked[id] = "Previously started passage is unavailable in this content snapshot"
         }
-        val ready = rows.filter { it.ready && it.id !in blocked }
+        val ready = rows.filter { it.ready && it.id !in cooldowns }
         val due = QueueBuilder.build(ready.map { it.id }, states, now, newCardsRemainingToday = 0).map { it.kanji }
         val byId = rows.associateBy { it.id }
         val dueTime = due.sumOf { ListeningPolicy.estimatedMs(requireNotNull(byId.getValue(it).durationMs)) }
@@ -88,12 +93,16 @@ class ListeningStudy(
         val day = DayLevel.parseWeek(settings.weekPlan.value)[today.dayOfWeek.value - 1]
         val allowance = ListeningPolicy.allowance(shared.remaining, day, introduced.count, introduced.estimatedMs, dueTime)
         var remaining = allowance.milliseconds
-        val fresh = ready.filter { states[it.id]?.phase.let { phase -> phase == null || phase == CardPhase.New } }
-            .shuffled(Random("$sourceId|$today".hashCode())).filter { row ->
-                val estimate = ListeningPolicy.estimatedMs(requireNotNull(row.durationMs))
-                (estimate <= remaining).also { if (it) remaining -= estimate }
-            }.take(allowance.count).map { it.id }
-        return ListeningOverview(sourceId, rows, due, fresh, blocked, dao.active(sourceId), allowance, db.content().meta(sourceId)?.listeningProblem)
+        val unseen = ready.filter { states[it.id]?.phase.let { phase -> phase == null || phase == CardPhase.New } }
+        val minimumNewMs = unseen.minOfOrNull { ListeningPolicy.estimatedMs(requireNotNull(it.durationMs)) }
+        val fresh = unseen.shuffled(Random("$sourceId|$today".hashCode())).filter { row ->
+            val estimate = ListeningPolicy.estimatedMs(requireNotNull(row.durationMs))
+            (estimate <= remaining).also { if (it) remaining -= estimate }
+        }.take(allowance.count).map { it.id }
+        return ListeningOverview(
+            sourceId, rows, due, fresh, blocked, cooldowns, dao.active(sourceId), allowance, shared, minimumNewMs,
+            db.content().meta(sourceId)?.listeningProblem,
+        )
     }
 
     suspend fun start(sourceId: String, passageId: String, study: Boolean = false): String = lock.withLock {

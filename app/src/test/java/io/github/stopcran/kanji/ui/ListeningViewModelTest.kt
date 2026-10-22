@@ -5,7 +5,10 @@ import androidx.lifecycle.ViewModelStore
 import androidx.room.Room
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.approvedListening
+import io.github.stopcran.kanji.core.listening.ListeningAllowance
 import io.github.stopcran.kanji.core.srs.Grade
+import io.github.stopcran.kanji.core.srs.NewAllowance
+import io.github.stopcran.kanji.core.srs.PacingNote
 import io.github.stopcran.kanji.data.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -25,6 +28,9 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.SQLiteMode
 import java.io.IOException
+import java.time.Instant
+import java.time.ZoneId
+import java.util.Locale
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -64,6 +70,51 @@ class ListeningViewModelTest {
         waitUntil { vm.encounter != null && !vm.busy }
         assertNull(vm.error)
         return vm
+    }
+
+    @Test fun summarySeparatesCooldownsFromContentProblems() = runBlocking {
+        services.listening.close(id, discard = true)
+        val home = ListeningHomeState(services.listening.overview(source).copy(
+            fresh = emptyList(),
+            cooldowns = mapOf("one" to Instant.EPOCH, "two" to Instant.EPOCH),
+            blocked = mapOf("broken" to "Cached audio is invalid; sync again"),
+        ))
+        assertEquals("0 due, 0 new available, 2 on cooldown, 1 content/audio problems", home.summary())
+        val ready = home.copy(overview = home.overview!!.copy(cooldowns = emptyMap(), blocked = emptyMap()))
+        assertEquals("0 due, 0 new available", ready.summary())
+    }
+
+    @Test fun hintsDistinguishSharedAllowanceFromListeningCountAndTimeLimits() = runBlocking {
+        services.listening.close(id, discard = true)
+        val base = services.listening.overview(source).copy(fresh = emptyList())
+        val shared = ListeningHomeState(base.copy(
+            sharedAllowance = NewAllowance(10, 0, PacingNote.None, 0, 40),
+            allowance = ListeningAllowance(0, 300_000),
+        ))
+        assertTrue(shared.newPassageHint()!!.contains("No shared new-item allowance"))
+        val backlog = base.sharedAllowance.copy(total = 0, remaining = 0, note = PacingNote.BacklogPaused, due = 80)
+        assertTrue(pacingExplanation(backlog)!!.contains("80 reviews are waiting, so new items are paused"))
+        assertTrue(ListeningHomeState(base.copy(sharedAllowance = backlog)).newPassageHint()!!.contains("shared"))
+        val count = ListeningHomeState(base.copy(allowance = ListeningAllowance(0, 40_000)))
+        assertTrue(count.newPassageHint()!!.contains("passage limit"))
+        val time = ListeningHomeState(base.copy(allowance = ListeningAllowance(1, 129_999)))
+        assertTrue(time.newPassageHint()!!.contains("130 estimated seconds"))
+        val waiting = ListeningHomeState(base.copy(minimumNewMs = null))
+        assertTrue(waiting.newPassageHint()!!.contains("No eligible new passages"))
+    }
+
+    @Test fun cooldownLabelsRoundUpInLocalTimeAcrossDateAndDaylightSavingBoundaries() {
+        val cases = listOf(
+            Triple("2026-10-22T09:59:59.999Z", "Pacific/Kiritimati", "23 Oct 2026, 00:00"),
+            Triple("2026-10-23T00:15:00Z", "America/Los_Angeles", "22 Oct 2026, 17:15"),
+            Triple("2026-10-25T00:59:59Z", "Europe/Berlin", "25 Oct 2026, 02:00 CET"),
+        )
+        cases.forEach { (instant, zone, expected) ->
+            val text = listeningCooldownText(Instant.parse(instant), ZoneId.of(zone), Locale.UK)
+            assertTrue(text, text.startsWith("Practice only until $expected"))
+            assertTrue(text, text.endsWith("(local time)"))
+            assertFalse(text, Regex("\\d{2}:\\d{2}:\\d{2}").containsMatchIn(text))
+        }
     }
 
     @Test fun interruptionAndRecreationResumeTheSameUnrevealedAttemptWithoutAnExtraReplay() = runBlocking {

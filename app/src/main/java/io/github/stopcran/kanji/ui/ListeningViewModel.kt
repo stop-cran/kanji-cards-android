@@ -13,6 +13,7 @@ import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.listening.ListeningAttempt
 import io.github.stopcran.kanji.core.listening.ListeningPassage
 import io.github.stopcran.kanji.core.listening.ListeningTiming
+import io.github.stopcran.kanji.core.srs.PacingNote
 import io.github.stopcran.kanji.data.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -23,13 +24,55 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.time.temporal.ChronoUnit
+import java.util.Locale
 
 internal data class ListeningHomeState(val overview: ListeningOverview? = null, val error: String? = null) {
     fun summary(): String = overview?.let {
         if (it.active != null) "Unfinished encounter"
         else if (it.passages.isEmpty()) "No recordings yet"
-        else "${it.due.size} due, ${it.fresh.size} new today, ${it.blocked.size} unavailable"
+        else buildList {
+            add("${it.due.size} due")
+            add("${it.fresh.size} new available")
+            if (it.cooldowns.isNotEmpty()) add("${it.cooldowns.size} on cooldown")
+            if (it.blocked.isNotEmpty()) add("${it.blocked.size} content/audio problems")
+        }.joinToString(", ")
     } ?: error ?: "Loading..."
+
+    fun newPassageHint(): String? = overview?.let {
+        when {
+            it.fresh.isNotEmpty() -> null
+            it.sharedAllowance.remaining == 0 -> if (
+                it.sharedAllowance.total == 0 &&
+                (it.sharedAllowance.note == PacingNote.None || it.sharedAllowance.note == PacingNote.LightDay)
+            ) {
+                "New items are turned off by your daily limit in Settings."
+            } else {
+                "No shared new-item allowance remains today. New listening shares this limit with other learning modes."
+            }
+            it.allowance.count == 0 -> "Today's new-listening passage limit has been reached."
+            it.minimumNewMs == null -> "No eligible new passages right now. Started passages return when due; cooldowns are listed below."
+            it.minimumNewMs > it.allowance.milliseconds ->
+                "No new passage fits the remaining listening time. " +
+                    "The shortest eligible passage needs ${(it.minimumNewMs + 999) / 1_000} estimated seconds."
+            else -> null
+        }
+    }
+}
+
+internal fun listeningCooldownText(
+    until: Instant, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault(),
+): String {
+    val minute = until.truncatedTo(ChronoUnit.MINUTES)
+    // Never advertise an unlock before the exact deadline.
+    val rounded = if (minute.isBefore(until)) minute.plus(1, ChronoUnit.MINUTES) else minute
+    val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withLocale(locale).withZone(zone)
+    val zoneName = DateTimeFormatter.ofPattern("z", locale).withZone(zone).format(rounded)
+    return "Practice only until ${formatter.format(rounded)} $zoneName (local time)"
 }
 
 internal suspend fun listeningAction(onError: (String) -> Unit, action: suspend () -> Unit) {

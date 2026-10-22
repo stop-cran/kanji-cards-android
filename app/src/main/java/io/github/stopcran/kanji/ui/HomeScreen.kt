@@ -35,6 +35,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import io.github.stopcran.kanji.Defaults
 import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.core.srs.NewAllowance
 import io.github.stopcran.kanji.core.srs.PacingNote
 import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.home.ModeState
@@ -210,14 +211,16 @@ private fun PacingHint(data: HomeData) {
         Text("Finish your current ${it.occupancy} kanji first: new kanji come in as they are learned in every mode.", style = MaterialTheme.typography.bodySmall)
     }
     if (p == null) return
-    val text = when (p.note) {
-        PacingNote.None -> return
-        PacingNote.RestDay -> "Rest day in your weekly rhythm: no new items today, reviews are still available."
-        PacingNote.LightDay -> "Light day: ${p.total} new items today."
-        PacingNote.BacklogReduced -> "${p.due} reviews are waiting, so new items are reduced to ${p.total} today."
-        PacingNote.BacklogPaused -> "${p.due} reviews are waiting, so new items are paused. A short review session now keeps things from piling up."
-    }
+    val text = pacingExplanation(p) ?: return
     Text(text, style = MaterialTheme.typography.bodySmall)
+}
+
+internal fun pacingExplanation(p: NewAllowance): String? = when (p.note) {
+    PacingNote.None -> null
+    PacingNote.RestDay -> "Rest day in your weekly rhythm: no new items today, reviews are still available."
+    PacingNote.LightDay -> "Light day: ${p.total} new items today."
+    PacingNote.BacklogReduced -> "${p.due} reviews are waiting, so new items are reduced to ${p.total} today."
+    PacingNote.BacklogPaused -> "${p.due} reviews are waiting, so new items are paused. A short review session now keeps things from piling up."
 }
 
 @Composable

@@ -117,7 +117,11 @@ class ListeningStudyTest {
         study.close(studyId)
         assertTrue(db.reviews().allLog().isEmpty())
         assertEquals(0, db.listening().reservedNew(source))
-        assertTrue(study.overview(source).fresh.isEmpty())
+        val cooling = study.overview(source)
+        assertTrue(cooling.fresh.isEmpty())
+        assertTrue(cooling.blocked.isEmpty())
+        assertEquals(mapOf("example" to now.plusSeconds(86_400)), cooling.cooldowns)
+        assertNull(cooling.minimumNewMs)
         rejected { study.start(source, "example") }
         now = now.plusSeconds(86_400)
         val id = study.start(source, "example")
@@ -130,6 +134,27 @@ class ListeningStudyTest {
         assertTrue(study.overview(source).fresh.isEmpty())
         now = now.plusSeconds(1)
         assertEquals(listOf("example"), study.overview(source).fresh)
+        assertTrue(study.overview(source).cooldowns.isEmpty())
+    }
+
+    @Test fun sharedIntroductionsExplainZeroNewListeningDespiteAnUnusedTimeBudget() = runBlocking {
+        settings.setDailyNewCards(1)
+        db.reviews().insertLog(ReviewLogEntity(
+            sourceId = source, stack = "all", kanji = "other-mode-item", mode = "Quiz", grade = Grade.Good.value,
+            atMs = now.toEpochMilli(),
+        ))
+        val home = study.overview(source)
+        assertEquals(1, home.sharedAllowance.total)
+        assertEquals(0, home.sharedAllowance.remaining)
+        assertEquals(ListeningAllowance(0, 300_000), home.allowance)
+        assertEquals(130_000L, home.minimumNewMs)
+        assertTrue(home.fresh.isEmpty())
+        assertTrue(home.blocked.isEmpty() && home.cooldowns.isEmpty())
+        rejected { study.start(source, "example") }
+        val studyId = study.start(source, "example", study = true)
+        study.revealStudy(studyId)
+        assertEquals(1, db.reviews().allLog().size)
+        assertEquals(0, db.listening().reservedNew(source))
     }
 
     @Test fun unplayedDiscardDoesNotCreateExposureAndInterruptedAssistanceSurvivesServiceRecreation() = runBlocking {
@@ -184,6 +209,8 @@ class ListeningStudyTest {
         assertNull(db.listening().active(source))
         val unavailable = study.overview(source)
         assertFalse(unavailable.passages.single().ready)
+        assertEquals("Cached audio is invalid; sync again", unavailable.blocked["replacement"])
+        assertFalse("replacement" in unavailable.cooldowns)
         assertTrue(unavailable.fresh.isEmpty())
         assertTrue(unavailable.due.isEmpty())
     }
