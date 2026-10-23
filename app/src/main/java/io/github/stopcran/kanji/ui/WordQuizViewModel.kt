@@ -26,6 +26,7 @@ import io.github.stopcran.kanji.core.words.TypedResult
 import io.github.stopcran.kanji.core.words.TypedVerdict
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.WordOption
+import io.github.stopcran.kanji.core.words.WordKanjiHelp
 import io.github.stopcran.kanji.core.words.WordQuizBuilder
 import io.github.stopcran.kanji.core.words.WordQueues
 import io.github.stopcran.kanji.core.words.WordStacks
@@ -59,11 +60,13 @@ sealed interface WordQuizUi {
     data class Question(
         val word: WordEntity, val direction: WordDirection, val options: List<WordOption>, val remaining: Int, val font: KanjiFont,
         val picture: WordPictureUi? = null,
+        val kanjiHelp: Map<String, WordKanjiHelp> = emptyMap(),
     ) : WordQuizUi
     data class Answer(
         val word: WordEntity, val direction: WordDirection, val options: List<WordOption>, val picked: String, val remaining: Int, val font: KanjiFont, val heard: String? = null,
         val pickedWord: WordEntity? = null,
         val picture: WordPictureUi? = null,
+        val kanjiHelp: Map<String, WordKanjiHelp> = emptyMap(),
     ) : WordQuizUi {
         val key: String get() = if (direction == WordDirection.Reading) word.reading else word.word
         val correct: Boolean get() = picked == key
@@ -76,6 +79,8 @@ sealed interface WordQuizUi {
         val word: WordEntity, val typed: String, val result: TypedResult, val remaining: Int, val font: KanjiFont, val gaveUp: Boolean,
     ) : WordQuizUi
 }
+
+class WordReadingTip(val question: WordQuizUi.Question, val help: WordKanjiHelp)
 
 /** Word quiz session in one direction; only that direction's scheduling state is updated. */
 class WordQuizViewModel(
@@ -93,12 +98,18 @@ class WordQuizViewModel(
     var pictureNotice: String? by mutableStateOf(null)
         private set
 
+    var readingTip: WordReadingTip? by mutableStateOf(null)
+        private set
+    var voiceGeneration: Int by mutableStateOf(0)
+        private set
+
     private var direction = WordDirection.JpToEn
     private var sourceId = ""
     private var stackId = WordStacks.n5.id
     private var wordList: List<WordEntity> = emptyList()
     private var words: Map<String, WordEntity> = emptyMap()
     private var cards: List<WordCard> = emptyList()
+    private var kanjiHelp: Map<String, WordKanjiHelp> = emptyMap()
     private var scenes: List<PictureScene> = emptyList()
     private val unavailableImages = mutableSetOf<String>()
     private val selectedScenes = mutableMapOf<String, String>()
@@ -119,17 +130,24 @@ class WordQuizViewModel(
 
     private suspend fun start(extra: Boolean) {
         val source = app.settings.source.value
+        val selectedStack = app.settings.wordStack.value
+        val n4Unlocked = app.settings.n4Unlocked.value
         sourceId = source.id
-        val (allWords, storedScenes) = app.db.withTransaction {
-            app.db.content().words(sourceId) to
-                if (direction.usesPictures) app.db.content().wordScenes(sourceId) else emptyList()
+        val (allWords, storedScenes, levels) = app.db.withTransaction {
+            Triple(
+                app.db.content().words(sourceId),
+                if (direction.usesPictures) app.db.content().wordScenes(sourceId) else emptyList(),
+                app.db.content().kanji(sourceId).levels(),
+            )
         }
         scenes = storedScenes.map { it.toPictureScene() }
-        val offered = allWords.offeredStacks(app.settings.n4Unlocked.value)
-        val stack = WordStacks.find(app.settings.wordStack.value, offered)
+        val offered = allWords.offeredStacks(n4Unlocked)
+        val stack = WordStacks.find(selectedStack, offered)
         stackId = stack.id
-        val levels = app.db.content().kanji(sourceId).levels()
         val all = allWords.inWordStack(stack, levels)
+        kanjiHelp = allWords.mapNotNull { word ->
+            WordKanjiHelp.build(word.word, word.reading, stack, levels)?.let { word.word to it }
+        }.toMap()
         if (all.size < 2) {
             ui = WordQuizUi.Empty("No words yet. Sync the content first (⚙ settings).")
             return
@@ -172,6 +190,8 @@ class WordQuizViewModel(
     }
 
     private fun showNext() {
+        readingTip = null
+        voiceGeneration++
         val word = session.take()
         if (word == null) {
             finish()
@@ -188,7 +208,18 @@ class WordQuizViewModel(
             viewModelScope.launch { showPicture(word) }
             return
         }
-        ui = WordQuizUi.Question(entity, direction, WordQuizBuilder.options(entity.toCard(), cards, direction, random), session.pending + 1, nextFont(word))
+        val options = WordQuizBuilder.options(entity.toCard(), cards, direction, random)
+        ui = WordQuizUi.Question(entity, direction, options, session.pending + 1, nextFont(word),
+            kanjiHelp = questionHelp(word, options))
+    }
+
+    private fun questionHelp(word: String, options: List<WordOption>): Map<String, WordKanjiHelp> {
+        val ids = when (direction) {
+            WordDirection.JpToEn, WordDirection.WordToPicture -> listOf(word)
+            WordDirection.EnToJp, WordDirection.Picture -> options.map { it.word }
+            WordDirection.Reading, WordDirection.Type -> emptyList()
+        }
+        return ids.mapNotNull { id -> kanjiHelp[id]?.let { id to it } }.toMap()
     }
 
     private fun finish() {
@@ -220,7 +251,8 @@ class WordQuizViewModel(
             if (picture != null) {
                 selectedScenes[word] = picture.question.target.scene.id
                 lastPictureWord = word
-                ui = WordQuizUi.Question(entity, direction, picture.question.options, session.pending + 1, nextFont(word), picture)
+                ui = WordQuizUi.Question(entity, direction, picture.question.options, session.pending + 1, nextFont(word), picture,
+                    questionHelp(word, picture.question.options))
                 return
             }
             if (pictureNotice == null) pictureNotice = "Skipped picture questions without distinct permitted choices."
@@ -298,15 +330,32 @@ class WordQuizViewModel(
         }
     }
 
-    fun pick(word: String, heard: String? = null) {
-        val q = ui as? WordQuizUi.Question ?: return
-        ui = WordQuizUi.Answer(q.word, q.direction, q.options, word, q.remaining, q.font, heard, words[word], q.picture)
+    fun openReadingTip(origin: WordQuizUi.Question) {
+        if (ui !== origin || origin.direction !in setOf(WordDirection.JpToEn, WordDirection.WordToPicture)) return
+        val help = origin.kanjiHelp[origin.word.word] ?: return
+        voiceGeneration++
+        readingTip = WordReadingTip(origin, help)
+    }
+
+    fun closeReadingTip(origin: WordReadingTip) {
+        if (readingTip === origin) readingTip = null
+    }
+
+    fun pick(
+        word: String, heard: String? = null, origin: WordQuizUi.Question? = ui as? WordQuizUi.Question,
+        generation: Int = voiceGeneration,
+    ) {
+        val q = origin ?: return
+        if (ui !== q || readingTip != null) return
+        if (heard != null && generation != voiceGeneration) return
+        ui = WordQuizUi.Answer(q.word, q.direction, q.options, word, q.remaining, q.font, heard, words[word], q.picture, q.kanjiHelp)
     }
 
     /** Takes back a voice pick that was misheard; nothing has been recorded before [next]. */
-    fun retry() {
-        val a = ui as? WordQuizUi.Answer ?: return
-        if (a.heard != null) ui = WordQuizUi.Question(a.word, a.direction, a.options, a.remaining, a.font, a.picture)
+    fun retry(origin: WordQuizUi.Answer? = ui as? WordQuizUi.Answer) {
+        val a = origin ?: return
+        if (ui !== a) return
+        if (a.heard != null) ui = WordQuizUi.Question(a.word, a.direction, a.options, a.remaining, a.font, a.picture, a.kanjiHelp)
     }
 
     /** At the end of a session, offers "Practice more" in a better-stocked direction when this one would give only a few cards. */
@@ -330,7 +379,8 @@ class WordQuizViewModel(
     }
 
     /** Wrong answers (and "don't know") are graded Again and relearned in-session; right ones Good, or Hard when guessed. */
-    fun next(guessed: Boolean = false) {
+    fun next(guessed: Boolean = false, origin: WordQuizUi = ui) {
+        if (ui !== origin) return
         (ui as? WordQuizUi.TypeAnswer)?.let { return nextTyped(it) }
         val a = ui as? WordQuizUi.Answer ?: return
         val result = session.answer(a.word.word, a.correct, guessed)

@@ -3,12 +3,20 @@ package io.github.stopcran.kanji.ui
 import android.app.Application
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
+import io.github.stopcran.kanji.core.srs.KanjiFont
+import io.github.stopcran.kanji.core.words.WordDirection
+import io.github.stopcran.kanji.core.words.WordKanjiHelp
+import io.github.stopcran.kanji.core.words.WordOption
+import io.github.stopcran.kanji.core.words.WordStacks
+import io.github.stopcran.kanji.data.WordEntity
 import io.github.stopcran.kanji.core.grammarFixture
 import io.github.stopcran.kanji.core.familiarEvents
 import io.github.stopcran.kanji.core.recommending
@@ -132,6 +140,91 @@ class ComposeUiTest {
         assertEquals("wrong", picked.value)
         rule.onNodeWithText("Correct: correct").assertIsDisplayed()
         rule.onNodeWithText("Your choice: wrong").assertIsDisplayed()
+    }
+
+    @Test
+    fun wordToPictureReadingLinksAndLargeButtonShowOnlyTheWholeWordReading() {
+        val word = WordEntity("owner/repo", "卵音", "たまご", "Secret meaning", null, "", "", "Secret article", 5)
+        val help = WordKanjiHelp.build(word.word, word.reading, WordStacks.n5, emptyMap())!!
+        val question = WordQuizUi.Question(word, WordDirection.WordToPicture, emptyList(), 2, KanjiFont.Gothic)
+        val tip = androidx.compose.runtime.mutableStateOf<WordReadingTip?>(null)
+        var opens = 0
+        rule.setContent {
+            androidx.compose.foundation.layout.Column {
+                WordQuizPrompt(word, WordDirection.WordToPicture, KanjiFont.Gothic, true, help) {
+                    opens++
+                    tip.value = WordReadingTip(question, help)
+                }
+            }
+            tip.value?.let { WordReadingTipDialog(it) { tip.value = null } }
+        }
+        rule.onNodeWithText(word.reading).assertDoesNotExist()
+        rule.onNodeWithText("Show word reading").performClick()
+        rule.onNodeWithText("Reading of 卵音").assertIsDisplayed()
+        rule.onNodeWithText(word.reading).assertIsDisplayed()
+        rule.onNodeWithText("This is the reading of the whole word, not of an individual kanji.").assertIsDisplayed()
+        rule.onNodeWithText("Unclassified kanji: 卵, 音.").assertIsDisplayed()
+        rule.onNodeWithText(word.title).assertDoesNotExist()
+        rule.onNodeWithText(word.body).assertDoesNotExist()
+        rule.onNodeWithText("Read the article").assertDoesNotExist()
+        rule.onNodeWithText("Close").performClick()
+        val prompt = rule.onNodeWithText(word.word)
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        prompt.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        prompt.performTouchInput { click(layouts.single().getBoundingBox(0).center) }
+        rule.onNodeWithText("Reading of 卵音").assertIsDisplayed()
+        assertEquals(2, opens)
+    }
+
+    @Test
+    fun japaneseOptionHighlightsKeepExactLabelsAndHaveNoNestedHelpActions() {
+        val labels = listOf("難音 (なんおん)", "卵音 (たまご)")
+        val helps = labels.map { label ->
+            WordKanjiHelp.build(label.substringBefore(" "), label.substringAfter("(").removeSuffix(")"),
+                WordStacks.n5, mapOf("難" to 3, "音" to 5))!!
+        }
+        var picks = 0
+        val word = WordEntity("owner/repo", "難音", "なんおん", "Sound", null, "", "", "", 5)
+        val options = labels.mapIndexed { index, label -> WordOption(helps[index].word, label) }
+        val question = WordQuizUi.Question(word, WordDirection.EnToJp, options, 2, KanjiFont.Gothic,
+            kanjiHelp = helps.associateBy { it.word })
+        rule.setContent {
+            androidx.compose.foundation.layout.Column {
+                WordQuizChoices(question) { picks++ }
+            }
+        }
+        labels.forEachIndexed { index, label ->
+            val node = rule.onNodeWithText(label)
+            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            node.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val annotated = layouts.single().layoutInput.text
+            assertEquals(label, annotated.text)
+            assertTrue(annotated.getLinkAnnotations(0, label.length).isEmpty())
+            val style = annotated.spanStyles.single().item
+            assertEquals(androidx.compose.ui.text.style.TextDecoration.Underline, style.textDecoration)
+            assertEquals(
+                if (index == 0) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal,
+                style.fontWeight,
+            )
+            node.performClick()
+        }
+        rule.onNodeWithContentDescription("${labels[0]}. Kanji beyond this deck's level: 難.").assertExists()
+        rule.onNodeWithContentDescription("${labels[1]}. Unclassified kanji: 卵.").assertExists()
+        rule.onNodeWithText("Show word reading").assertDoesNotExist()
+        assertEquals(2, picks)
+    }
+
+    @Test
+    fun englishChoicesNeverApplyTheJapanesePromptsHighlightOffsets() {
+        val word = WordEntity("owner/repo", "卵難音", "たまご", "egg", null, "", "", "", 5)
+        val help = WordKanjiHelp.build(word.word, word.reading, WordStacks.n5, emptyMap())!!
+        val question = WordQuizUi.Question(word, WordDirection.JpToEn, listOf(WordOption(word.word, "egg")), 1, KanjiFont.Gothic,
+            kanjiHelp = mapOf(word.word to help))
+        rule.setContent { WordQuizChoices(question) {} }
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        rule.onNodeWithText("egg").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertTrue(layouts.single().layoutInput.text.spanStyles.isEmpty())
+        rule.onNodeWithText("Show word reading").assertDoesNotExist()
     }
 
     @Test

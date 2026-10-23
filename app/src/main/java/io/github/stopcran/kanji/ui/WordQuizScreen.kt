@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.TypedVerdict
+import io.github.stopcran.kanji.core.words.WordKanjiHelp
 import androidx.compose.ui.focus.focusRequester
 import io.github.stopcran.kanji.data.WordEntity
 import io.github.stopcran.kanji.data.splitSep
@@ -45,6 +47,9 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
     val parts = sessionKey.split(':')
     val direction = WordDirection.fromCode(parts.getOrNull(2))
     LaunchedEffect(sessionKey) { vm.ensureStarted(direction, sessionKey.endsWith(":extra")) }
+    vm.readingTip?.let { tip ->
+        WordReadingTipDialog(tip) { vm.closeReadingTip(tip) }
+    }
     Page(
         when (direction) {
             WordDirection.JpToEn -> "Words: Japanese → English"
@@ -77,7 +82,8 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
                     val picture = requireNotNull(s.picture)
                     val target = picture.question.target.scene
                     SceneBitmap(picture.images.getValue(target.image), target.description)
-                } else Prompt(s.word, s.direction, s.font, big = true)
+                } else WordQuizPrompt(s.word, s.direction, s.font, big = true,
+                    help = s.kanjiHelp[s.word.word], onRead = { vm.openReadingTip(s) })
                 Text(
                     when (s.direction) {
                         WordDirection.JpToEn -> "What does it mean?"
@@ -91,12 +97,17 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
                     textAlign = TextAlign.Center,
                 )
                 if (s.direction == WordDirection.WordToPicture) {
-                    PictureChoices(requireNotNull(s.picture), onPick = { vm.pick(it) })
-                } else s.options.forEach { o ->
-                    OutlinedButton(onClick = { vm.pick(o.word) }, modifier = Modifier.fillMaxWidth()) { Text(o.label) }
+                    PictureChoices(requireNotNull(s.picture), onPick = { vm.pick(it, origin = s) })
+                } else WordQuizChoices(s) { vm.pick(it, origin = s) }
+                DontKnowButton { vm.pick(NO_ANSWER, origin = s) }
+                if (s.direction == WordDirection.JpToEn && vm.readingTip == null) {
+                    val generation = vm.voiceGeneration
+                    key(s, generation) {
+                        VoiceButton(s.options.map { it.label }, { i, heard ->
+                            vm.pick(s.options[i].word, heard, s, generation)
+                        })
+                    }
                 }
-                DontKnowButton { vm.pick(NO_ANSWER) }
-                if (s.direction == WordDirection.JpToEn) VoiceButton(s.options.map { it.label }, { i, heard -> vm.pick(s.options[i].word, heard) })
             }
             is WordQuizUi.Answer -> Answer(s, vm, onOpenDoc)
         }
@@ -104,10 +115,28 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
 }
 
 @Composable
-private fun Prompt(word: WordEntity, direction: WordDirection, font: io.github.stopcran.kanji.core.srs.KanjiFont, big: Boolean) {
+internal fun WordQuizChoices(question: WordQuizUi.Question, onPick: (String) -> Unit) {
+    val japaneseOptions = question.direction in setOf(WordDirection.EnToJp, WordDirection.Picture)
+    if (japaneseOptions && question.kanjiHelp.isNotEmpty()) {
+        Text(stringResource(R.string.word_kanji_options_legend), style = MaterialTheme.typography.bodySmall)
+    }
+    question.options.forEach { option ->
+        OutlinedButton(onClick = { onPick(option.word) }, modifier = Modifier.fillMaxWidth()) {
+            WordOptionLabel(option.label, if (japaneseOptions) question.kanjiHelp[option.word] else null)
+        }
+    }
+}
+
+@Composable
+internal fun WordQuizPrompt(
+    word: WordEntity, direction: WordDirection, font: io.github.stopcran.kanji.core.srs.KanjiFont, big: Boolean,
+    help: WordKanjiHelp? = null, onRead: (() -> Unit)? = null,
+) {
     val wordFirst = direction == WordDirection.JpToEn || direction == WordDirection.Reading || direction.usesPictures
     if (wordFirst || !big) {
-        Text(word.word, fontSize = if (big) 64.sp else 48.sp, fontFamily = font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        Text(wordKanjiText(word.word, help, onRead), fontSize = if (big) 64.sp else 48.sp,
+            fontFamily = font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        if (help != null && onRead != null) WordReadingHelp(help, onRead)
     } else {
         Text(word.title, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         val hint = (listOfNotNull(word.type) + word.tags.splitSep()).filter { it !in originTags }.distinct().joinToString(" · ")
@@ -120,7 +149,7 @@ private fun TypeQuestion(s: WordQuizUi.TypeQuestion, vm: WordQuizViewModel) {
     val focus = androidx.compose.runtime.remember { androidx.compose.ui.focus.FocusRequester() }
     LaunchedEffect(s) { runCatching { focus.requestFocus() } }
     Text(stringResource(R.string.left, s.remaining), style = MaterialTheme.typography.labelMedium)
-    Prompt(s.word, WordDirection.Type, s.font, big = true)
+    WordQuizPrompt(s.word, WordDirection.Type, s.font, big = true)
     Text("Type it in Japanese", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     androidx.compose.material3.OutlinedTextField(
         value = vm.draft,
@@ -160,7 +189,7 @@ private fun TypeAnswer(s: WordQuizUi.TypeAnswer, vm: WordQuizViewModel, onOpenDo
         Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     }
     val ok = verdict != TypedVerdict.Wrong
-    Button(onClick = { vm.next() }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) { Text(if (ok) "Next" else "Next (will repeat)") }
+    Button(onClick = { vm.next(origin = s) }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) { Text(if (ok) "Next" else "Next (will repeat)") }
     ArticleSection(ok, "t:${s.word.word}:${s.typed}:${s.remaining}", s.word.body, "words/${s.word.word}.md", onOpenDoc)
 }
 
@@ -199,10 +228,10 @@ private fun Answer(s: WordQuizUi.Answer, vm: WordQuizViewModel, onOpenDoc: (Stri
             else -> Verdict.Neutral
         })
     }
-    s.heard?.let { VoiceHeard(it, vm::retry) }
+    s.heard?.let { VoiceHeard(it) { vm.retry(s) } }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-        Button(onClick = { vm.next() }, modifier = Modifier.weight(1f)) { Text(if (s.correct) "Next" else "Next (will repeat)") }
-        if (s.correct) OutlinedButton(onClick = { vm.next(guessed = true) }) { Text(stringResource(R.string.i_guessed)) }
+        Button(onClick = { vm.next(origin = s) }, modifier = Modifier.weight(1f)) { Text(if (s.correct) "Next" else "Next (will repeat)") }
+        if (s.correct) OutlinedButton(onClick = { vm.next(guessed = true, origin = s) }) { Text(stringResource(R.string.i_guessed)) }
     }
     ArticleSection(s.correct, "w:${s.word.word}:${s.picked}:${s.remaining}", s.word.body, "words/${s.word.word}.md", onOpenDoc)
 }

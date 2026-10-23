@@ -8,6 +8,8 @@ import io.github.stopcran.kanji.core.words.WordBlend
 import io.github.stopcran.kanji.core.words.WordCard
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.WordGate
+import io.github.stopcran.kanji.core.words.WordKanjiHelp
+import io.github.stopcran.kanji.core.words.WordKanjiRange
 import io.github.stopcran.kanji.core.words.WordQueues
 import io.github.stopcran.kanji.core.words.WordQuizBuilder
 import io.github.stopcran.kanji.core.words.WordStacks
@@ -60,6 +62,37 @@ class WordsTest {
         assertTrue(WordStacks.all.contains(null))
         assertEquals(listOf(WordStacks.n5), WordStacks.offered(false))
         assertEquals(WordStacks.n5, WordStacks.find("words-n4", WordStacks.offered(false)))
+    }
+
+    @Test
+    fun readingHelpUsesTheCumulativeDeckAndDistinguishesMissingLevels() {
+        val levels = mapOf("音" to 5, "開" to 4, "難" to 3, "京" to null)
+        val n5 = WordKanjiHelp.build("音開難京卵々", "authored whole-word reading", WordStacks.n5, levels)!!
+        assertEquals(
+            listOf(WordKanjiRange(1, 2, 4), WordKanjiRange(2, 3, 3), WordKanjiRange(3, 4, null), WordKanjiRange(4, 5, null)),
+            n5.ranges,
+        )
+        val n4 = WordKanjiHelp.build(n5.word, n5.reading, WordStacks.n4, levels)!!
+        assertEquals(n5.ranges.drop(1), n4.ranges)
+        assertEquals(n5.reading, n4.reading)
+        assertNull(WordKanjiHelp.build("音開", "おとかい", WordStacks.n4, levels))
+    }
+
+    @Test
+    fun readingHelpKeepsRepeatedSupplementaryAndCombiningSequencesWhole() {
+        val word = "難\uFE0F難\u0301\uD840\uDC00\uDB40\uDD00々"
+        val help = WordKanjiHelp.build(word, "irregular unsplit reading", WordStacks.n5, mapOf("難" to 3))!!
+        assertEquals(listOf(WordKanjiRange(0, 2, 3), WordKanjiRange(2, 4, 3), WordKanjiRange(4, 8, null)), help.ranges)
+        assertEquals(word, help.word)
+        assertEquals("irregular unsplit reading", help.reading)
+    }
+
+    @Test
+    fun readingHelpDoesNotInventAThresholdForAllOrTagDecksOrFlagKana() {
+        for (stack in listOf(WordStacks.all, WordStacks.onomatopoeia)) {
+            assertNull(WordKanjiHelp.build("卵", "たまご", stack, emptyMap()))
+        }
+        assertNull(WordKanjiHelp.build("たまご々", "たまご", WordStacks.n5, emptyMap()))
     }
 
     @Test

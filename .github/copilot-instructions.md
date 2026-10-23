@@ -51,6 +51,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - Named word scenes use the separate manifest `scenes` map, never `files` (older clients discard that folder). A declared bad catalog
   disables quiz eligibility rather than synthesizing a legacy fallback. Graded image questions use predecoded, hash-checked snapshots;
   `WordImage` is only the live article loader. Scene IDs must never become SRS keys.
+- Word reading help uses a per-run transactional word/scene/kanji snapshot and the selected vocabulary deck's cumulative level.
+  Japanese choices already show kana: highlight only, never nest a help action in an answer button. Reading/typing get no answer-revealing aid.
 - **Content is untrusted.** Parse defensively, skip bad files instead of failing the sync, never render raw HTML, cap archive sizes.
 - Grammar additional correct choices are authored, not derived from typed spellings. Use the captured presentation for grading,
   both correct highlights, rationales and response export; bind callbacks to its instance because different exercises can reuse IDs.

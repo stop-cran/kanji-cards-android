@@ -149,6 +149,16 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   Options deduplicate exact titles and written forms. A curated `quiz_exclusions` declaration on either word keeps the pair apart,
   both against the target and among chosen options, in both directions; exclusions are not transitive and do not infer synonyms.
   Scoring applies only to eligible candidates. A small pool yields fewer options, possibly only the target, rather than restoring an excluded word.
+- **Word reading assistance:** natural vocabulary spelling and independent word JLPT eligibility stay unchanged. In cumulative level decks,
+  kanji beyond the selected word deck's level are bold-underlined; missing cards/levels are underlined and explicitly unclassified.
+  All/thematic decks have no new highlighting or help. Japanese-to-English and word-to-picture prompts offer character links plus a large
+  reading button only when flagged kanji occur. The panel contains the authored **whole-word** reading, never component readings,
+  meanings or articles. English-to-Japanese and picture-to-word options keep their existing kana and get noninteractive highlights only,
+  uniformly for target/distractors; English choices, reading tests and typing get no pre-answer assistance.
+  Each route-keyed run atomically captures words, scenes and character levels; padding, re-asks and voice retries reuse that snapshot.
+  Popup state lives beside the question and survives rotation without changing options/font. Presentation-identity guards reject stale
+  picks/retries/dismissals; opening help cancels and invalidates pending voice input. Help never writes reviews, enrolls kanji, spends an
+  introduction or changes ordinary Good/Hard/Again grading. A new run refreshes metadata, not a sync/source/stack change mid-question.
 - Reading quiz (`WordDirection.Reading`): shows the word and asks for its kana reading. Only words whose reading differs from the written form
   (`hasReadingToLearn`) are asked. Options (`ReadingOptions`) are all distinct readings, never equal to the correct one: generated
   look-alikes (voiced/unvoiced, long/short vowel, small っ) first, then real readings of words sharing a kanji or of similar shape. The option

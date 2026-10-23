@@ -85,4 +85,12 @@
     <string name="select_a_word">Select a word.</string>
     <string name="value_dash_detail">%1$s — %2$s</string>
     <string name="you_chose">You chose %1$s (%2$s) — %3$s.</string>
+    <string name="word_kanji_prompt_legend">Bold underline: beyond this deck\'s level. Underline: level unknown. Tap an underlined kanji or show the word reading.</string>
+    <string name="word_kanji_options_legend">Bold underline: beyond this deck\'s level. Underline: level unknown. Readings are already shown beside each word.</string>
+    <string name="word_kanji_beyond">Kanji beyond this deck\'s level: %1$s.</string>
+    <string name="word_kanji_unclassified">Unclassified kanji: %1$s.</string>
+    <string name="word_reading_show">Show word reading</string>
+    <string name="word_reading_title">Reading of %1$s</string>
+    <string name="word_reading_whole_word">This is the reading of the whole word, not of an individual kanji.</string>
+    <string name="word_reading_close">Close</string>
 </resources>
