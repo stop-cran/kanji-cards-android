@@ -69,8 +69,7 @@ internal fun listeningCooldownText(
     // Never advertise an unlock before the exact deadline.
     val rounded = if (minute.isBefore(until)) minute.plus(1, ChronoUnit.MINUTES) else minute
     val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withLocale(locale).withZone(zone)
-    val zoneName = DateTimeFormatter.ofPattern("z", locale).withZone(zone).format(rounded)
-    return "Practice only until ${formatter.format(rounded)} $zoneName (local time)"
+    return "Practice only until ${formatter.format(rounded)}"
 }
 
 internal suspend fun listeningAction(onError: (String) -> Unit, action: suspend () -> Unit) {

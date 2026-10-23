@@ -194,7 +194,8 @@ The home and overview summary shows `N due, M new`, or `All caught up` when both
 Unfinished-encounter notices and content/audio warnings remain visible; individual cooldowns stay in the Listening overview, which
 explains the shared new-item allowance independently from listening time.
 Cooldown deadlines remain exact instants for eligibility; the UI shows local, locale-formatted date/time rounded up to the next
-minute, without seconds, so a displayed deadline never promises an early unlock.
+minute, without seconds, an explicit timezone or a "local time" suffix; the device's local timezone is implied.
+Rounding up ensures a displayed deadline never promises an early unlock.
 
 Full/light/rest days permit at most 2/1/0 new passages and 300/150/0 estimated seconds, within the shared new-item budget.
 The captured estimate is twice the recording duration plus 90 seconds, charged once on the first recorded review, including Again.

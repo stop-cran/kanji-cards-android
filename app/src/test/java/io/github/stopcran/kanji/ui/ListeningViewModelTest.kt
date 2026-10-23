@@ -129,13 +129,11 @@ class ListeningViewModelTest {
         val cases = listOf(
             Triple("2026-10-22T09:59:59.999Z", "Pacific/Kiritimati", "23 Oct 2026, 00:00"),
             Triple("2026-10-23T00:15:00Z", "America/Los_Angeles", "22 Oct 2026, 17:15"),
-            Triple("2026-10-25T00:59:59Z", "Europe/Berlin", "25 Oct 2026, 02:00 CET"),
+            Triple("2026-10-25T00:59:59Z", "Europe/Berlin", "25 Oct 2026, 02:00"),
         )
         cases.forEach { (instant, zone, expected) ->
             val text = listeningCooldownText(Instant.parse(instant), ZoneId.of(zone), Locale.UK)
-            assertTrue(text, text.startsWith("Practice only until $expected"))
-            assertTrue(text, text.endsWith("(local time)"))
-            assertFalse(text, Regex("\\d{2}:\\d{2}:\\d{2}").containsMatchIn(text))
+            assertEquals("Practice only until $expected", text)
         }
     }
 
