@@ -57,6 +57,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - Grammar additional correct choices are authored, not derived from typed spellings. Use the captured presentation for grading,
   both correct highlights, rationales and response export; bind callbacks to its instance because different exercises can reuse IDs.
   Advance `ContentParser.GRAMMAR_PARSER_EPOCH` for newly retained Grammar metadata, not the historical level/group readiness thresholds.
+- Grammar roadmap catalog errors stay separate from `grammarProblem`: a navigation-only failure must not block valid lessons.
+  An authored group without a chapter is not an unowned compatibility group. A valid leaf DAG can collapse into a chapter cycle;
+  validate both graphs without deleting true prerequisites or inventing an "Ungrouped" prerequisite chapter.
 - **Room:** list columns are joined with `SEP` (`\u001F`); use `joinSep()`/`splitSep()`. `review_log.id` is auto-generated, so pass `0`.
   Review state is keyed by (`sourceId` = lower-case `owner/repo`, stack, item, mode). Never key it by title or position; titles are editable.
 - **Listening:** persist exposure separately from SRS and retain the captured package/assistance through process recreation.

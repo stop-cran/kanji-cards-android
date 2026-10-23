@@ -132,6 +132,12 @@ focus choice, or fallback when no authored group can introduce new material.
 
 ## Familiarity and coverage
 
+**Roadmap series implementation boundary (#59):** the optional chapter/import/graph foundation is separate from this implemented
+21-day policy. Its schema and failure isolation are documented in [CONTENT-SCHEMA](CONTENT-SCHEMA.md#optional-grammar-chapters-navigation-foundation).
+Partial chapter mapping retains all real leaf prerequisites and does not give unowned compatibility groups authored credentials.
+The proposed persistent attained-readiness policy has not been approved or implemented; the plan requires explicit owner confirmation
+before that contract is frozen. No chapter publication or parser epoch can by itself change old clients' rolling-window gate behavior.
+
 Use only canonical recorded Grammar events joined one-to-one to their response details for the current
 source. An event must match an imported member's exercise ID, target and relationship. Old events have
 no set ID or per-event content revision: stable exercise meaning and unambiguous current mapping are

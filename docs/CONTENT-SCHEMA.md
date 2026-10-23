@@ -6,7 +6,7 @@ in the default repo `stop-cran/learning-japanese`.
 What the app enforces when importing (`core/content/ContentParser.kt`, `FrontMatter.kt`, `SafeZip.kt`):
 
 - The repo archive (`codeload.github.com/<owner>/<repo>/zip/refs/heads/<branch>`) must contain `manifest.json` with `schemaVersion` 1.
-- Only `manifest.json` and files directly in `kanji/`, `words/`, `articles/`, `strokes/`, `counters/`, `grammar/`, `scenes/`, `listening/` are read,
+- Only `manifest.json` and files directly in `kanji/`, `words/`, `articles/`, `strokes/`, `counters/`, `grammar/`, `scenes/`, `listening/`, `curriculum/` are read,
   plus `images/*.webp` (at most 150 KiB each) and `audio/*.ogg` (at most 512 KiB each).
   Zip-slip paths, more than 8,000 entries, wanted text files over 2 MiB or wanted data over 50 MiB are rejected.
   The separate 100 MiB inflated limit includes skipped entries too.
@@ -145,19 +145,58 @@ Grammar errors and never populate `sync_meta.grammarProblem` or block otherwise 
 
 `vocabularyProblem` is an internal import/cache diagnostic, not an authored field; supplied values are stripped before import.
 Typed Room serialization retains hints and real diagnostics. Epoch **3** introduced vocabulary support; the current Grammar parser
-epoch is **4**, also recovering additional correct choices discarded by older typed caches even at the same commit/manifest.
+epoch is **5**, also recovering additional correct choices and optional chapter metadata discarded by older caches even at the same commit/manifest.
 Vocabulary support itself needs no additional Room migration.
 The maintained content repository has a revision-bound authoring/coverage gate; the app does not require its inventory or mandatory
 annotations from legacy/fork content. See that repository's `docs/content-format.md` for editorial exclusions and provenance.
 
+### Optional Grammar chapters (navigation foundation)
+
+The additive manifest field `curriculum` is a map containing only `"curriculum/grammar.json": "<LF-normalized SHA-256>"`.
+Omission or `{}` means absent. Explicit null, other value shapes, unsupported paths, malformed hashes, missing bytes and hash mismatches
+produce a **roadmap-only diagnostic**. Keep this catalog out of `manifest.files`: older clients ignore the separate namespace and folder.
+Any content-side publisher must include the catalog hash in `contentVersion`; authoring tooling/publication is a later gated change.
+
+The catalog has strict integer `schemaVersion: 1` and a required `chapters` array:
+
+```json
+{
+  "schemaVersion": 1,
+  "chapters": [
+    {"id": "example-chapter", "label": "Example chapter", "groups": ["existing-source-global-group"]}
+  ]
+}
+```
+
+This shape example assumes that the referenced authored group exists in the same accepted snapshot.
+Chapter IDs use `[a-z0-9-]+`; labels are nonblank strings; each chapter has a nonempty list of authored group-ID strings.
+Reject unknown object fields, duplicate chapter IDs, repeated/conflicting membership and nonexistent groups. An empty chapter array
+is valid and leaves all authored groups unmapped, not completed. Chapters do not own exercises directly or create SRS identities.
+
+Partial mapping is valid: a mapped group can require an existing authored foundation with no chapter. Its real leaf gate and authored
+identity remain intact; it must not become a virtual compatibility group. Derive chapter arrows only from direct leaf edges between
+different mapped chapters, retaining exact supporting pairs. Never synthesize transitive arrows through unmapped groups or a blocking
+"Ungrouped" chapter. Recommendations do not produce blocking edges. Check the collapsed DAG as well as the leaf graph; later chapter
+assignment may expose a collapsed cycle without making the underlying exercises invalid.
+
+Catalog failure does not populate `grammarProblem`, reject otherwise valid exercises or alter current prerequisite scheduling.
+The read-only source-scoped provider reports pending refresh, absent, invalid (with reason), or ready. The existing set browser remains
+the available fallback; diagram navigation is not implemented in this foundation. Genuine missing/cyclic leaf prerequisites retain
+their existing rejecting behavior. This format is not negotiation of a new readiness policy: do not publish new blocking gates until
+the remaining #59 contract/compatibility work and explicit owner policy confirmation are complete.
+
 ## Room content replacement
 
-The current Room version is **12**. The 7-to-8 migration creates `grammar_sets` (key: source + set ID) and `grammar_responses`
+The current Room version is **14**. The 7-to-8 migration creates `grammar_sets` (key: source + set ID) and `grammar_responses`
 (key: `reviewLogId`) and clears only sync metadata to force a content reimport. Existing content, review states and history are preserved;
 all older versions use the registered migration chain, with no destructive fallback.
 The additive 8-to-9 migration preserves that snapshot and all history, creates source-keyed `grammar_focus` (`revision`, cursor JSON),
 and adds nullable `sync_meta.grammarProblem`. Atomic replacement invalidates outstanding focus tickets and stores snapshot diagnostics.
 The 11-to-12 migration adds nullable `grammar_responses.choiceSnapshot` JSON without reconstructing old presentations or resetting history.
+The 13-to-14 migration adds nullable `sync_meta.grammarCurriculumJson` and `grammarCurriculumProblem`, preserving the old snapshot,
+focus and learning history. The catalog or its diagnostic is replaced atomically with the same source's content. Failed downloads retain
+the old catalog; a successful snapshot with invalid catalog metadata records its error instead of silently using a stale chapter map.
+Neither column is learner progress; Android database backup includes them, and the progress ZIP schema is unchanged.
 
 Grammar uses `(sourceId, stack="grammar", item=exerciseId, mode="Grammar", reading="")` as its review-state identity. The generic Room
 `kanji` column holds the exercise ID. Choose and type are presentations, not separate modes or schedules. Editing a set's prose without

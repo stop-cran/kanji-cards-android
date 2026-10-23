@@ -10,7 +10,7 @@ class ContentException(message: String) : Exception(message)
 
 /** Turns a map of repo-relative path -> bytes into validated content. Everything here is treated as untrusted input. */
 object ContentParser {
-    const val GRAMMAR_PARSER_EPOCH = 4
+    const val GRAMMAR_PARSER_EPOCH = 5
     const val MAX_QUIZ_DISTRACTORS = 3
     const val MAX_IMAGE_BYTES = 150 * 1024
     internal val IMAGE_PATH = Regex("images/[^/\\\\\\s]+\\.webp")
@@ -55,10 +55,12 @@ object ContentParser {
                 exercise.vocabularyProblem?.let { problems += "Vocabulary (${set.id}/${exercise.id}): $it" }
             }
         }
+        val curriculum = GrammarCurriculum.read(manifest, files, vocabularySets)
+        if (curriculum is GrammarCurriculumState.Invalid) problems += curriculum.reason
         return ParsedContent(
             manifest, unique, words, text.articles, text.strokes, problems,
             resolveCounters(text.counters, problems), images, vocabularySets, grammarProblems,
-            listening.records, listening.audio, listening.problems,
+            listening.records, listening.audio, listening.problems, curriculum,
         )
     }
 
@@ -111,6 +113,7 @@ object ContentParser {
             val problem = when {
                 !isSafePath(path) -> "unsafe path"
                 path.startsWith("scenes/") -> "catalogs must be listed only in manifest.scenes"
+                path.startsWith("curriculum/") -> "catalogs must be listed only in manifest.curriculum"
                 path.startsWith("listening/") || path.startsWith("audio/") -> "listening content needs its separate manifest namespace"
                 bytes == null -> "listed in manifest but missing"
                 sha256(bytes) != expectedHash -> "hash mismatch"

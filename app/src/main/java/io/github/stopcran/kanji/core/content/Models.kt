@@ -1,6 +1,8 @@
 package io.github.stopcran.kanji.core.content
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 
 const val SUPPORTED_SCHEMA_VERSION = 1
 
@@ -15,6 +17,8 @@ data class Manifest(
     val scenes: Map<String, String> = emptyMap(),
     val listening: Map<String, String> = emptyMap(),
     val audio: Map<String, String> = emptyMap(),
+    /** Raw shape keeps malformed optional navigation metadata from rejecting otherwise valid content. */
+    val curriculum: JsonElement = JsonObject(emptyMap()),
 )
 
 data class KanjiCard(
@@ -196,4 +200,5 @@ data class ParsedContent(
     val listening: List<io.github.stopcran.kanji.core.listening.ListeningRecord> = emptyList(),
     val audio: Map<String, ByteArray> = emptyMap(),
     val listeningProblems: List<String> = emptyList(),
+    val curriculum: GrammarCurriculumState = GrammarCurriculumState.Absent,
 )

@@ -71,7 +71,7 @@ class DatabaseMigrationTest {
     private fun openDatabase() = Room.databaseBuilder(context, AppDatabase::class.java, name)
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
-            MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13,
+            MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14,
         )
         .allowMainThreadQueries()
         .build()
@@ -82,6 +82,45 @@ class DatabaseMigrationTest {
             block(db)
         } finally {
             db.close()
+        }
+    }
+
+    @Test
+    fun version13UpgradePreservesSnapshotAndHistoryAndReopensCurriculumMetadata() = runBlocking {
+        val source = sources.first()
+        val set = io.github.stopcran.kanji.core.grammarFixture()
+        val setJson = Json.encodeToString(io.github.stopcran.kanji.core.content.GrammarSet.serializer(), set)
+        createSchema(13) { sqlite ->
+            sqlite.execSQL("INSERT INTO grammar_sets VALUES (?, ?, ?, 0)", arrayOf(source, set.id, setJson))
+            sqlite.execSQL("INSERT INTO sync_meta VALUES (?, 'same-version', 500, 0, NULL, NULL)", arrayOf(source))
+            sqlite.execSQL("INSERT INTO grammar_focus VALUES (?, 9, '{}')", arrayOf(source))
+            sqlite.execSQL("INSERT INTO review_log VALUES (7, ?, 'grammar', 'alpha-a-0', 'Grammar', 3, 500, '', NULL)", arrayOf(source))
+            sqlite.execSQL(
+                "INSERT INTO review_state VALUES (?, 'grammar', 'alpha-a-0', 'Grammar', 'Review', 12.5, 5.0, 999, 500, 3, 1, '')",
+                arrayOf(source),
+            )
+            sqlite.execSQL(
+                "INSERT INTO grammar_responses VALUES (7, ?, 'grammar', 'alpha-a-0', 'a', 'contrast', 'type', 'a', 1, NULL)",
+                arrayOf(source),
+            )
+        }
+        val catalog = """{"schemaVersion":1,"chapters":[{"id":"first","label":"First","groups":["alpha"]}]}"""
+        withDatabase { db ->
+            assertEquals(listOf(set), db.grammarSets(source))
+            val meta = db.content().meta(source)!!
+            assertEquals("same-version", meta.contentVersion)
+            assertNull(meta.grammarCurriculumJson)
+            assertNull(meta.grammarCurriculumProblem)
+            db.content().putMeta(meta.copy(grammarCurriculumJson = catalog))
+        }
+        withDatabase { db ->
+            assertEquals(catalog, db.content().meta(source)!!.grammarCurriculumJson)
+            assertEquals(listOf(set), db.grammarSets(source))
+            assertEquals(9L, db.reviews().grammarFocus(source)!!.revision)
+            assertEquals(3, db.reviews().allStates().single().reps)
+            assertEquals(7L, db.reviews().allLog().single().id)
+            assertEquals(7L, db.reviews().allGrammarResponses().single().reviewLogId)
+            assertNull(db.content().meta(sources.last()))
         }
     }
 
@@ -224,7 +263,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(13, db.openHelper.writableDatabase.version)
+                assertEquals(14, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(sources.first(), "all", "日", "KanjiOn", "Review", 12.5, 5.0, 999, 500, 3, 1, "にち"),
                     db.reviews().allStates().single(),
@@ -300,7 +339,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(13, db.openHelper.writableDatabase.version)
+                assertEquals(14, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(source, GRAMMAR_STACK, "alpha-a-0", "Grammar", "Review", 12.5, 5.0, 999, 500, 3, 1),
                     db.reviews().allStates().single(),

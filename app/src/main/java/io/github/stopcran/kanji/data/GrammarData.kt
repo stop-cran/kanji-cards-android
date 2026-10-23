@@ -1,6 +1,8 @@
 package io.github.stopcran.kanji.data
 
 import io.github.stopcran.kanji.core.content.GrammarSet
+import io.github.stopcran.kanji.core.content.GrammarCurriculum
+import io.github.stopcran.kanji.core.content.GrammarCurriculumState
 import androidx.room.withTransaction
 import io.github.stopcran.kanji.core.grammar.GrammarCursor
 import io.github.stopcran.kanji.core.grammar.GrammarEvidence
@@ -31,6 +33,21 @@ suspend fun AppDatabase.grammarSets(sourceId: String): List<GrammarSet> =
 
 suspend fun AppDatabase.grammarStates(sourceId: String): Map<String, SrsState> =
     reviews().states(sourceId, GRAMMAR_STACK, StudyMode.Grammar.name).associate { it.kanji to it.toSrs() }
+
+/** Read navigation and its group references from the same accepted snapshot, without touching progress or focus. */
+suspend fun AppDatabase.grammarCurriculum(settings: Settings, sourceId: String): GrammarCurriculumState = withTransaction {
+    if (settings.grammarFor(sourceId).parserEpoch < GrammarCurriculum.PARSER_EPOCH) {
+        return@withTransaction GrammarCurriculumState.PendingRefresh
+    }
+    val meta = content().meta(sourceId) ?: return@withTransaction GrammarCurriculumState.PendingRefresh
+    meta.grammarCurriculumProblem?.let { return@withTransaction GrammarCurriculumState.Invalid(it) }
+    val text = meta.grammarCurriculumJson ?: return@withTransaction GrammarCurriculumState.Absent
+    try {
+        GrammarCurriculum.decode(text, grammarSets(sourceId))
+    } catch (e: IllegalArgumentException) {
+        GrammarCurriculumState.Invalid("Stored Grammar roadmap is invalid: ${e.message}")
+    }
+}
 
 data class GrammarFocusTicket(
     val revision: Long,

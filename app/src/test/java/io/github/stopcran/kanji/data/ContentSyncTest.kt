@@ -7,6 +7,8 @@ import io.github.stopcran.kanji.core.content.GrammarVocabulary
 import io.github.stopcran.kanji.core.content.GrammarVocabularyData
 import io.github.stopcran.kanji.core.content.GrammarVocabularySpan
 import io.github.stopcran.kanji.core.content.GrammarSet
+import io.github.stopcran.kanji.core.content.GrammarCurriculum
+import io.github.stopcran.kanji.core.content.GrammarCurriculumState
 import io.github.stopcran.kanji.core.content.Manifest
 import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.content.SceneCatalog
@@ -16,6 +18,8 @@ import io.github.stopcran.kanji.core.grammar.GrammarScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -75,12 +79,14 @@ private fun archive(
 private fun archiveFiles(version: String, files: Map<String, ByteArray>): ByteArray {
     val images = files.filterKeys { it.startsWith("images/") }
     val scenes = files.filterKeys { it.startsWith("scenes/") }
-    val text = files - images.keys - scenes.keys
+    val curriculum = files.filterKeys { it.startsWith("curriculum/") }
+    val text = files - images.keys - scenes.keys - curriculum.keys
     val manifest = Json.encodeToString(
         Manifest.serializer(),
         Manifest(
             1, version, text.mapValues { ContentParser.sha256(it.value) },
             images.mapValues { ContentParser.rawSha256(it.value) }, scenes.mapValues { ContentParser.sha256(it.value) },
+            curriculum = JsonObject(curriculum.mapValues { JsonPrimitive(ContentParser.sha256(it.value)) }),
         ),
     ).toByteArray()
     val out = ByteArrayOutputStream()
@@ -323,6 +329,60 @@ class ContentSyncTest {
         assertEquals(before, runBlocking {
             Triple(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses())
         })
+    }
+
+    @Test
+    fun curriculumRefreshAndFailuresPreserveLearningAndDistinguishAbsentFromInvalid() = runBlocking {
+        val set = io.github.stopcran.kanji.core.grammarFixture()
+        val text = Json.encodeToString(GrammarSet.serializer(), set)
+        val catalog = """{"schemaVersion":1,"chapters":[{"id":"first","label":"First","groups":["alpha"]}]}"""
+        val files = mapOf(
+            "kanji/日.md" to kanjiMd("日", "sun").toByteArray(),
+            "articles/x.md" to "# Fixture\n".toByteArray(),
+            "grammar/${set.id}.json" to text.toByteArray(),
+            GrammarCurriculum.PATH to catalog.toByteArray(),
+        )
+        http.archiveBytes = archiveFiles("curriculum", files)
+        assertEquals(GrammarCurriculumState.PendingRefresh, db.grammarCurriculum(settings, source.id))
+        assertTrue(sync.sync(source) is SyncResult.Updated)
+        val ready = db.grammarCurriculum(settings, source.id)
+        assertTrue(ready is GrammarCurriculumState.Ready)
+        db.reviews().recordGrammar(
+            ReviewStateEntity(source.id, GRAMMAR_STACK, "alpha-a-0", "Grammar", "Review", 12.5, 5.0, 999, 500, 3, 1),
+            ReviewLogEntity(0, source.id, GRAMMAR_STACK, "alpha-a-0", "Grammar", 3, 500),
+            GrammarResponseEntity(0, source.id, GRAMMAR_STACK, "alpha-a-0", "a", "contrast", "type", "a", true),
+        )
+        val history = Triple(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses())
+        settings.setGrammarGuided(source.id, true)
+        val ordinary = db.grammarStudy(settings, source.id, java.time.Instant.now()).ordinaryIds
+        db.content().putMeta(db.content().meta(source.id)!!.copy(grammarCurriculumJson = null))
+        settings.setGrammarParserEpoch(source.id, 4)
+        settings.lastCheckMs = System.currentTimeMillis()
+        assertEquals(GrammarCurriculumState.PendingRefresh, db.grammarCurriculum(settings, source.id))
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
+        assertEquals(2, http.downloads)
+        assertEquals(ready, db.grammarCurriculum(settings, source.id))
+
+        http.archiveFails = true
+        assertTrue(sync.sync(source, force = true) is SyncResult.Failed)
+        assertEquals(ready, db.grammarCurriculum(settings, source.id))
+        http.archiveFails = false
+        http.headSha = SHA_B
+        http.archiveBytes = archiveFiles("bad-curriculum", files + (GrammarCurriculum.PATH to "{}".toByteArray()))
+        val invalid = sync.sync(source)
+        assertTrue(invalid is SyncResult.Updated)
+        assertTrue((invalid as SyncResult.Updated).problems.any { it.startsWith("curriculum/") })
+        assertTrue(db.grammarCurriculum(settings, source.id) is GrammarCurriculumState.Invalid)
+        assertNull(db.content().meta(source.id)!!.grammarProblem)
+        assertEquals(listOf(set), db.grammarSets(source.id))
+        assertEquals(ordinary, db.grammarStudy(settings, source.id, java.time.Instant.now()).ordinaryIds)
+        assertEquals(history, Triple(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses()))
+        assertEquals(GrammarCurriculumState.PendingRefresh, db.grammarCurriculum(settings, "another/repo"))
+
+        http.archiveBytes = archiveFiles("no-curriculum", files - GrammarCurriculum.PATH)
+        assertTrue(sync.sync(source, force = true) is SyncResult.Updated)
+        assertEquals(GrammarCurriculumState.Absent, db.grammarCurriculum(settings, source.id))
+        assertEquals(history, Triple(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses()))
     }
 
     @Test

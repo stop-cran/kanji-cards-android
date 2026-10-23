@@ -85,7 +85,7 @@ object GrammarGroups {
         }
         while (true) {
             val groups = kept.flatMap { it.introductionGroups }.associateBy { it.id }
-            val invalid = invalidPrerequisites(groups)
+            val invalid = invalidPrerequisites(groups.mapValues { it.value.requires })
             val next = kept.filter { set ->
                 val rejected = set.introductionGroups.filter { it.id in invalid }
                 if (rejected.isNotEmpty()) {
@@ -109,9 +109,9 @@ object GrammarGroups {
         return Resolution(kept, errors, warnings)
     }
 
-    private fun invalidPrerequisites(groups: Map<String, GrammarIntroductionGroup>): Set<String> {
-        val remaining = groups.mapValues { it.value.requires.size }.toMutableMap()
-        val dependents = groups.values.flatMap { group -> group.requires.map { it to group.id } }.groupBy({ it.first }, { it.second })
+    internal fun invalidPrerequisites(requirements: Map<String, List<String>>): Set<String> {
+        val remaining = requirements.mapValues { it.value.size }.toMutableMap()
+        val dependents = requirements.flatMap { (group, parents) -> parents.map { it to group } }.groupBy({ it.first }, { it.second })
         val ready = ArrayDeque(remaining.filterValues { it == 0 }.keys)
         while (ready.isNotEmpty()) {
             val id = ready.removeFirst()

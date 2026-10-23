@@ -162,6 +162,8 @@ data class SyncMetaEntity(
     val problems: Int,
     val grammarProblem: String? = null,
     val listeningProblem: String? = null,
+    val grammarCurriculumJson: String? = null,
+    val grammarCurriculumProblem: String? = null,
 )
 
 /** Everything a content snapshot stores for one source. */
@@ -467,13 +469,20 @@ interface ReviewDao {
         ListeningEntity::class, ListeningAudioEntity::class, ListeningEncounterEntity::class,
         ReviewStateEntity::class, ReviewLogEntity::class, StudySessionEntity::class, SyncMetaEntity::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun content(): ContentDao
     abstract fun reviews(): ReviewDao
     abstract fun listening(): ListeningDao
+}
+
+val MIGRATION_13_14 = object : androidx.room.migration.Migration(13, 14) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE sync_meta ADD COLUMN grammarCurriculumJson TEXT")
+        db.execSQL("ALTER TABLE sync_meta ADD COLUMN grammarCurriculumProblem TEXT")
+    }
 }
 
 val MIGRATION_11_12 = object : androidx.room.migration.Migration(11, 12) {

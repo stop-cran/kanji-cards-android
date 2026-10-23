@@ -2,6 +2,8 @@ package io.github.stopcran.kanji.data
 
 import io.github.stopcran.kanji.core.content.ContentException
 import io.github.stopcran.kanji.core.content.ContentParser
+import io.github.stopcran.kanji.core.content.GrammarCurriculumData
+import io.github.stopcran.kanji.core.content.GrammarCurriculumState
 import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.content.SafeZip
 import io.github.stopcran.kanji.core.content.SceneCatalog
@@ -32,6 +34,8 @@ private fun io.github.stopcran.kanji.core.content.ParsedContent.toSyncMeta(sourc
     sourceId, manifest.contentVersion, System.currentTimeMillis(), problems.size,
     grammarProblems.takeIf { it.isNotEmpty() }?.joinToString("\n"),
     listeningProblems.takeIf { it.isNotEmpty() }?.joinToString("\n"),
+    (curriculum as? GrammarCurriculumState.Ready)?.let { Json.encodeToString(GrammarCurriculumData.serializer(), it.curriculum) },
+    (curriculum as? GrammarCurriculumState.Invalid)?.reason,
 )
 
 private fun io.github.stopcran.kanji.core.content.ParsedContent.toRows(sourceId: String): ContentRows {
