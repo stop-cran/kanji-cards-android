@@ -38,6 +38,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 
 - **Edge-to-edge on API 35:** content draws under the status/navigation bars; a button there is visible but untouchable. Every screen goes
   through `ui/Page`, which applies `statusBarsPadding`/`navigationBarsPadding` and a scroll container. Don't build screens without it.
+- **Keyboard on older Android:** keep `MainActivity`'s `adjustResize` and use `Page(ime = true)` for text entry. Pre-Android 11 needs
+  resize mode for edge-to-edge IME insets; default panning clips short exercises without creating a scroll range. Check API 29 and 35.
 - **System back:** `BackHandler` in `AppNav` pops the route stack; without it back closes the app.
 - **Screen state across navigation:** `AppNav` composes only the top route, wrapped in `SaveableStateProvider` keyed `<index>:<route>`; `pop()` calls `removeState` so popped routes don't leak. Without it `rememberSaveable` state (search text, scroll) is lost when a screen pushes another. Lists that must keep scroll use an explicit `rememberLazyListState()`.
 - **ViewModel scope:** `viewModel()` is scoped to the Activity, not to a route, so a quiz VM outlives leaving the screen and would resume

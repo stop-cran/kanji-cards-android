@@ -308,6 +308,9 @@ analyzer accepts the new member but does not interpret listening responses as gr
 ## 7. UI and platform constraints
 
 - Everything goes through `ui/Page` (edge-to-edge insets, scrolling). Back is a string-route stack in `MainActivity`.
+- **Keyboard resizing:** `MainActivity` explicitly requests `adjustResize`; text-entry pages use `Page(ime = true)` so the keyboard
+  reduces the scroll viewport while the heading stays visible. Pre-Android 11 needs this mode to deliver edge-to-edge IME insets:
+  the default `adjustPan` can move a short, otherwise non-scrollable exercise above the screen without giving it a scroll range.
 - Theme follows the system (light/dark); drawing canvases stay paper-white on purpose.
 - Kanji, Words, Counters, Grammar and Listening share four rotating home-art sets. Matching default/night drawable names provide
   transparent dark-ink/pale-ink variants; all use the same ArtCard scrims, chevron halo and decorative image semantics.
