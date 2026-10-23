@@ -36,9 +36,7 @@ internal data class ListeningHomeState(val overview: ListeningOverview? = null, 
         if (it.active != null) "Unfinished encounter"
         else if (it.passages.isEmpty()) "No recordings yet"
         else buildList {
-            add("${it.due.size} due")
-            add("${it.fresh.size} new available")
-            if (it.cooldowns.isNotEmpty()) add("${it.cooldowns.size} on cooldown")
+            add(if (it.due.isEmpty() && it.fresh.isEmpty()) "All caught up" else "${it.due.size} due, ${it.fresh.size} new")
             if (it.blocked.isNotEmpty()) add("${it.blocked.size} content/audio problems")
         }.joinToString(", ")
     } ?: error ?: "Loading..."

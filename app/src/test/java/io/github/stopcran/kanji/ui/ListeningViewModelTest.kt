@@ -72,16 +72,38 @@ class ListeningViewModelTest {
         return vm
     }
 
-    @Test fun summarySeparatesCooldownsFromContentProblems() = runBlocking {
+    @Test fun summaryShowsCaughtUpWithoutHidingContentProblems() = runBlocking {
+        assertEquals("Unfinished encounter", ListeningHomeState(services.listening.overview(source)).summary())
         services.listening.close(id, discard = true)
         val home = ListeningHomeState(services.listening.overview(source).copy(
+            due = emptyList(),
             fresh = emptyList(),
             cooldowns = mapOf("one" to Instant.EPOCH, "two" to Instant.EPOCH),
             blocked = mapOf("broken" to "Cached audio is invalid; sync again"),
         ))
-        assertEquals("0 due, 0 new available, 2 on cooldown, 1 content/audio problems", home.summary())
-        val ready = home.copy(overview = home.overview!!.copy(cooldowns = emptyMap(), blocked = emptyMap()))
-        assertEquals("0 due, 0 new available", ready.summary())
+        assertEquals("All caught up, 1 content/audio problems", home.summary())
+        val ready = home.copy(overview = home.overview!!.copy(blocked = emptyMap()))
+        assertEquals("All caught up", ready.summary())
+        assertEquals("No recordings yet", ready.copy(overview = ready.overview!!.copy(passages = emptyList())).summary())
+    }
+
+    @Test fun summaryShowsCompactActionableCountsWithoutCooldowns() = runBlocking {
+        services.listening.close(id, discard = true)
+        val base = services.listening.overview(source).copy(
+            cooldowns = mapOf("cooling" to Instant.EPOCH),
+            blocked = emptyMap(),
+        )
+        val cases = listOf(
+            Triple(listOf("due"), emptyList(), "1 due, 0 new"),
+            Triple(emptyList(), listOf("new"), "0 due, 1 new"),
+            Triple(listOf("due-one", "due-two"), listOf("new"), "2 due, 1 new"),
+        )
+        cases.forEach { (due, fresh, expected) ->
+            val home = ListeningHomeState(base.copy(due = due, fresh = fresh))
+            assertEquals(expected, home.summary())
+            assertEquals("$expected, 1 content/audio problems",
+                home.copy(overview = home.overview!!.copy(blocked = mapOf("broken" to "Sync again"))).summary())
+        }
     }
 
     @Test fun hintsDistinguishSharedAllowanceFromListeningCountAndTimeLimits() = runBlocking {
