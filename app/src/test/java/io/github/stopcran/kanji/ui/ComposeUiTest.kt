@@ -3,6 +3,7 @@ package io.github.stopcran.kanji.ui
 import android.app.Application
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -17,6 +18,11 @@ import io.github.stopcran.kanji.core.words.WordKanjiHelp
 import io.github.stopcran.kanji.core.words.WordOption
 import io.github.stopcran.kanji.core.words.WordStacks
 import io.github.stopcran.kanji.data.WordEntity
+import io.github.stopcran.kanji.data.ListeningOverview
+import io.github.stopcran.kanji.data.ListeningEncounterEntity
+import io.github.stopcran.kanji.core.listening.ListeningAllowance
+import io.github.stopcran.kanji.core.srs.NewAllowance
+import io.github.stopcran.kanji.core.srs.PacingNote
 import io.github.stopcran.kanji.core.grammarFixture
 import io.github.stopcran.kanji.core.familiarEvents
 import io.github.stopcran.kanji.core.recommending
@@ -225,6 +231,44 @@ class ComposeUiTest {
         rule.onNodeWithText("egg").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertTrue(layouts.single().layoutInput.text.spanStyles.isEmpty())
         rule.onNodeWithText("Show word reading").assertDoesNotExist()
+    }
+
+    @Test
+    fun listeningEntryOffersScoredExtraOnlyAfterScheduledWorkAndHonorsBusyActiveAndEmptyStates() {
+        val base = ListeningOverview(
+            "owner/repo", emptyList(), emptyList(), emptyList(), emptyMap(), emptyMap(), null,
+            ListeningAllowance(0, 0), NewAllowance(0, 0, PacingNote.RestDay, 0, 40), null, null,
+            extra = listOf("outside-plan"),
+        )
+        val data = androidx.compose.runtime.mutableStateOf(base)
+        val busy = androidx.compose.runtime.mutableStateOf(false)
+        var selected: Pair<String, Boolean>? = null
+        rule.setContent {
+            androidx.compose.foundation.layout.Column {
+                ListeningStartButton(data.value, busy.value) { id, extra -> selected = id to extra }
+            }
+        }
+        rule.onNodeWithText("Practice more").performClick()
+        assertEquals("outside-plan" to true, selected)
+        rule.runOnIdle { data.value = base.copy(due = listOf("due"), fresh = listOf("new")) }
+        rule.onNodeWithText("Practice more").assertDoesNotExist()
+        rule.onNodeWithText("Start listening").performClick()
+        assertEquals("due" to false, selected)
+        rule.runOnIdle { data.value = base.copy(fresh = listOf("new")) }
+        rule.onNodeWithText("Start listening").performClick()
+        assertEquals("new" to false, selected)
+        rule.runOnIdle { data.value = base; busy.value = true }
+        rule.onNodeWithText("Practice more").assertIsNotEnabled()
+        rule.runOnIdle {
+            busy.value = false
+            data.value = base.copy(active = ListeningEncounterEntity(
+                "active", "owner/repo", "outside-plan", "", "", "", null, "", "graded", 0, 0, false,
+            ))
+        }
+        rule.onNodeWithText("Practice more").assertIsNotEnabled()
+        rule.runOnIdle { data.value = base.copy(extra = emptyList(), cooldowns = mapOf("cooling" to Instant.MAX)) }
+        rule.onNodeWithText("Practice more").assertDoesNotExist()
+        rule.onNodeWithText("Start listening").assertIsNotEnabled()
     }
 
     @Test

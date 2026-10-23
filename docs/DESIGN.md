@@ -207,13 +207,21 @@ Cooldown deadlines remain exact instants for eligibility; the UI shows local, lo
 minute, without seconds, an explicit timezone or a "local time" suffix; the device's local timezone is implied.
 Rounding up ensures a displayed deadline never promises an early unlock.
 
-Full/light/rest days permit at most 2/1/0 new passages and 300/150/0 estimated seconds, within the shared new-item budget.
+Full/light/rest days plan at most 2/1/0 new passages and 300/150/0 estimated seconds, within the shared new-item budget.
 The captured estimate is twice the recording duration plus 90 seconds, charged once on the first recorded review, including Again.
 Listening backlog reduces new time by `clamp(2 - actionableDueSeconds / 300, 0, 1)`; cooldown/media-blocked passages do not count.
 Listening rows are excluded from other modes' count-based capacity/backlog calculation but contribute to shared introductions and
 study-day history. Due reviews are not time-capped. An unfinished new encounter reserves one shared unit. One encounter per source
 must be resumed or discarded before another starts. Previously permitted submissions remain valid after midnight/settings changes,
 with their debit on the submission date; reservations are not reviews and are released on submission/discard.
+
+When scheduled due/new work is empty, the overview offers **Practice more** if any approved, media-ready passage is outside cooldown.
+It starts an ordinary scored encounter, using the shared extra-queue ordering (overdue, unseen, upcoming; deterministic overview order).
+Explicit extra practice may exceed shared new-item, new-passage count and listening-time plans, even on rest days; it never bypasses
+cooldown, media integrity, source isolation or the one-active-encounter rule. Early reviews use normal FSRS. Extra introductions reserve
+and debit actual shared items/count/time exactly once, so subsequent scheduled availability includes the extra work.
+The existing session `extra` flag marks both unscored Study and scored extra practice; encounter `kind` still distinguishes them,
+including unfinished/discarded encounters. No schema/export-format change is needed. Done returns to the overview for another passage.
 
 The platform `MediaPlayer` reads verified in-memory mono Opus, requests transient speech audio focus, pauses on focus loss,
 headphone unplugging or backgrounding, and never automatically resumes. Deliberate extra slowdown preserves pitch. Full completion,

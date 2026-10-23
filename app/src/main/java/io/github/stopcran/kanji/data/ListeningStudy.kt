@@ -32,6 +32,7 @@ data class ListeningOverview(
     val sharedAllowance: NewAllowance,
     val minimumNewMs: Long?,
     val notice: String?,
+    val extra: List<String> = emptyList(),
 )
 
 private const val PLAYBACK_PROBLEM = "Playback failed; retry the encounter or sync again"
@@ -102,16 +103,18 @@ class ListeningStudy(
         return ListeningOverview(
             sourceId, rows, due, fresh, blocked, cooldowns, dao.active(sourceId), allowance, shared, minimumNewMs,
             db.content().meta(sourceId)?.listeningProblem,
+            QueueBuilder.extra(ready.map { it.id }, states, now, limit = Int.MAX_VALUE, noise = 0.0).map { it.kanji },
         )
     }
 
-    suspend fun start(sourceId: String, passageId: String, study: Boolean = false): String = lock.withLock {
+    suspend fun start(sourceId: String, passageId: String, study: Boolean = false, extra: Boolean = false): String = lock.withLock {
+        require(!study || !extra) { "Extra listening practice is scored, not unscored study" }
         try {
-            db.withTransaction { createEncounter(sourceId, passageId, study) }
+            db.withTransaction { createEncounter(sourceId, passageId, study, extra) }
         } catch (e: InvalidListeningAudio) { blockInvalidAudio(e) }
     }
 
-    private suspend fun createEncounter(sourceId: String, passageId: String, study: Boolean): String {
+    private suspend fun createEncounter(sourceId: String, passageId: String, study: Boolean, extra: Boolean): String {
         require(settings.source.value.id == sourceId) { "The selected content source changed; reopen Listening" }
         val dao = db.listening()
         dao.active(sourceId)?.let { active ->
@@ -122,7 +125,8 @@ class ListeningStudy(
         val home = overviewInside(sourceId, now)
         val row = requireNotNull(home.passages.find { it.id == passageId }) { "Listening passage is no longer available" }
         require(row.ready) { row.reason ?: "Listening audio has not been approved" }
-        require(study || passageId in home.due || passageId in home.fresh) { "This passage is not eligible for a new scored attempt now" }
+        val eligible = if (extra) home.extra else home.due + home.fresh
+        require(study || passageId in eligible) { "This passage is not eligible for a new scored attempt now" }
         val record = ListeningContent.parse("listening/$passageId.json", row.json)
         val audio = requireNotNull(record.passage.audio)
         require(record.ready && record.contentHash == row.contentHash && audio.sha256 == row.audioHash) { "Listening content changed; sync again" }
@@ -139,15 +143,20 @@ class ListeningStudy(
             phase = if (study) "study" else "listen", vocabularyBodies = words,
         )
         val id = "listening:${UUID.randomUUID()}"
+        val reviewed = reviewState(sourceId, passageId).phase != CardPhase.New
         val encounter = ListeningEncounterEntity(
             id, sourceId, passageId, row.json, row.contentHash, audio.sha256, imageBytes,
             encode(state), if (study) "study" else "graded", now.toEpochMilli(),
-            ListeningPolicy.estimatedMs(audio.durationMs), newReservation = !study && passageId in home.fresh,
+            ListeningPolicy.estimatedMs(audio.durationMs), newReservation = !study && !reviewed,
         )
         dao.putEncounter(encounter)
-        db.reviews().insertSession(StudySessionEntity(id, sourceId, LISTENING_STACK, LISTENING_MODE, study, now.toEpochMilli()))
+        db.reviews().insertSession(StudySessionEntity(id, sourceId, LISTENING_STACK, LISTENING_MODE, study || extra, now.toEpochMilli()))
         return id
     }
+
+    private suspend fun reviewState(sourceId: String, passageId: String): SrsState =
+        db.reviews().states(sourceId, LISTENING_STACK, LISTENING_MODE)
+            .singleOrNull { it.kanji == passageId && it.reading.isEmpty() }?.toSrs() ?: SrsState()
 
     suspend fun audio(id: String): ByteArray = withContext(Dispatchers.IO) {
         val row = requireNotNull(db.listening().encounter(id)) { "Listening encounter no longer exists" }
@@ -249,8 +258,7 @@ class ListeningStudy(
         }
         val assistance = state.assistance + if (guessed) setOf("guessed") else emptySet()
         val result = ListeningPolicy.grade(passage, state.answers, assistance.isNotEmpty(), giveUp)
-        val previous = db.reviews().states(row.sourceId, LISTENING_STACK, LISTENING_MODE)
-            .singleOrNull { it.kanji == row.passageId && it.reading.isEmpty() }?.toSrs() ?: SrsState()
+        val previous = reviewState(row.sourceId, row.passageId)
         val next = ListeningPolicy.scheduler.review(
             previous, result.grade, Instant.ofEpochMilli(now), firstSuccessCapDays = Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS,
             fuzzSeed = Fsrs.seed(row.passageId, LISTENING_MODE, previous.reps),

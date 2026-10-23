@@ -20,11 +20,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.R
+import io.github.stopcran.kanji.data.ListeningOverview
 import io.github.stopcran.kanji.core.listening.*
 import io.github.stopcran.kanji.core.srs.Grade
 import kotlinx.coroutines.delay
@@ -60,10 +63,10 @@ fun ListeningPage(app: KanjiApp, onBack: () -> Unit, onEncounter: (String) -> Un
     val scope = rememberCoroutineScope()
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
-    fun start(source: String, id: String, study: Boolean) {
+    fun start(source: String, id: String, study: Boolean, extra: Boolean = false) {
         busy = true
         scope.launch {
-            try { listeningAction({ error = it }) { onEncounter(app.services.listening.start(source, id, study)) } }
+            try { listeningAction({ error = it }) { onEncounter(app.services.listening.start(source, id, study, extra)) } }
             finally { busy = false }
         }
     }
@@ -78,14 +81,12 @@ fun ListeningPage(app: KanjiApp, onBack: () -> Unit, onEncounter: (String) -> Un
                 Button(onClick = { onEncounter(data.active.id) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Resume encounter") }
                 Text("Resume or discard the unfinished encounter before starting another passage.")
             } else {
-                val next = data.due.firstOrNull() ?: data.fresh.firstOrNull()
-                Button(onClick = { next?.let { start(data.sourceId, it, false) } }, enabled = next != null && !busy,
-                    modifier = Modifier.fillMaxWidth()) { Text("Start listening") }
+                ListeningStartButton(data, busy) { id, extra -> start(data.sourceId, id, false, extra) }
                 Text("Shared new-item allowance: ${data.sharedAllowance.remaining} of ${data.sharedAllowance.total} remaining today.")
                 Text("Listening time budget: ${data.allowance.milliseconds / 1_000} estimated seconds remaining today.")
                 pacingExplanation(data.sharedAllowance)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 home.newPassageHint()?.let { Text(it) }
-                Text("New passages need both a shared slot and enough listening time. Due reviews do not use these daily budgets.",
+                Text("Scheduled new passages need both a shared slot and enough listening time. Due reviews do not use these daily budgets.",
                     style = MaterialTheme.typography.bodySmall)
             }
             Text("Study does not use these daily budgets or change your score. " +
@@ -106,6 +107,24 @@ fun ListeningPage(app: KanjiApp, onBack: () -> Unit, onEncounter: (String) -> Un
                 }
             }
             data.blocked.filterKeys { id -> data.passages.none { it.id == id } }.forEach { (id, reason) -> Text("$id: $reason") }
+        }
+    }
+}
+
+@Composable
+internal fun ListeningStartButton(data: ListeningOverview, busy: Boolean, onStart: (String, Boolean) -> Unit) {
+    val scheduled = data.due.firstOrNull() ?: data.fresh.firstOrNull()
+    val extra = scheduled == null && data.extra.isNotEmpty()
+    val next = scheduled ?: data.extra.firstOrNull()
+    val enabled = next != null && data.active == null && !busy
+    if (extra) {
+        OutlinedButton(onClick = { next?.let { onStart(it, true) } }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.practice_more))
+        }
+        Text(stringResource(R.string.listening_extra_practice), style = MaterialTheme.typography.bodySmall)
+    } else {
+        Button(onClick = { next?.let { onStart(it, false) } }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+            Text("Start listening")
         }
     }
 }

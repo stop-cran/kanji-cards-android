@@ -137,6 +137,120 @@ class ListeningStudyTest {
         assertTrue(study.overview(source).cooldowns.isEmpty())
     }
 
+    @Test fun extraScoredReviewWaitsForCooldownThenReviewsEarlyWithoutAnotherIntroduction() = runBlocking {
+        val first = study.start(source, "example")
+        heard(first)
+        answers(first)
+        study.submit(first)
+        study.close(first)
+        val previous = db.reviews().allStates().single()
+        db.reviews().putState(previous.copy(dueMs = now.plusSeconds(7 * 86_400).toEpochMilli()))
+        assertTrue(study.overview(source).extra.isEmpty())
+        rejected { study.start(source, "example", extra = true) }
+        now = now.plusMillis(ListeningPolicy.COOLDOWN_MS - 1)
+        assertTrue(study.overview(source).extra.isEmpty())
+        rejected { study.start(source, "example", extra = true) }
+        now = now.plusMillis(1)
+        val home = study.overview(source)
+        assertTrue(home.due.isEmpty() && home.fresh.isEmpty())
+        assertEquals(listOf("example"), home.extra)
+        rejected { study.start(source, "example") }
+        val id = study.start(source, "example", extra = true)
+        assertFalse(db.listening().encounter(id)!!.newReservation)
+        assertTrue(db.reviews().allSessions().single { it.id == id }.extra)
+        heard(id)
+        answers(id)
+        val result = study.submit(id)
+        assertEquals("graded", result.kind)
+        assertFalse(result.firstEncounter || result.introduced)
+        assertEquals(Grade.Good.value, study.response(result)!!.grade)
+        assertEquals(previous.reps + 1, db.reviews().allStates().single().reps)
+        assertEquals(2, db.reviews().allLog().size)
+        val today = now.atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
+        assertEquals(ListeningIntroductions(0, 0), db.listening().introductions(source, today))
+        study.close(id)
+        assertTrue(study.overview(source).extra.isEmpty())
+    }
+
+    @Test fun extraIntroductionsExceedDailyPlansButStillReserveAndDebitActualScoredWork() = runBlocking {
+        settings.setDailyNewCards(0)
+        settings.setWeekPlan("OOOOOOO")
+        install(approvedListening("second"))
+        install(approvedListening("third"))
+        val home = study.overview(source)
+        assertEquals(ListeningAllowance(0, 0), home.allowance)
+        assertEquals(0, home.sharedAllowance.remaining)
+        assertTrue(home.due.isEmpty() && home.fresh.isEmpty())
+        assertEquals(home.extra, study.overview(source).extra)
+        rejected { study.start(source, "example") }
+        rejected { study.start(source, "example", study = true, extra = true) }
+        for (passage in listOf("example", "second", "third")) {
+            val id = study.start(source, passage, extra = true)
+            assertEquals(1, db.listening().reservedNew(source))
+            assertTrue(db.listening().encounter(id)!!.newReservation)
+            assertTrue(db.reviews().allSessions().single { it.id == id }.extra)
+            rejected { study.revealStudy(id) }
+            rejected { study.submit(id) }
+            heard(id)
+            answers(id)
+            val result = study.submit(id)
+            assertTrue(result.introduced && result.firstEncounter)
+            assertEquals("graded", result.kind)
+            assertEquals(Grade.Good.value, study.response(result)!!.grade)
+            assertEquals(0, db.listening().reservedNew(source))
+            assertEquals(result, study.submit(id))
+            study.close(id)
+        }
+        val today = now.atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
+        assertEquals(ListeningIntroductions(3, 390_000), db.listening().introductions(source, today))
+        assertEquals(3, db.reviews().allLog().size)
+        assertEquals(3, db.reviews().allStates().size)
+        assertEquals(0, db.newAllowance(settings, source, now, zone).remaining)
+        assertTrue(study.overview(source).extra.isEmpty())
+    }
+
+    @Test fun extraCandidatesKeepSharedQueueOrderAndExcludeCoolingAndBlockedPassages() = runBlocking {
+        for (id in listOf("overdue", "upcoming", "cooling", "blocked")) install(approvedListening(id))
+        for ((id, days) in listOf("overdue" to -1L, "upcoming" to 3L)) {
+            db.reviews().putState(ReviewStateEntity(source, LISTENING_STACK, id, LISTENING_MODE, "Review", 5.0, 5.0,
+                now.plusSeconds(days * 86_400).toEpochMilli(), now.minusSeconds(2 * 86_400).toEpochMilli(), 3, 0))
+        }
+        val cooling = study.start(source, "cooling", study = true)
+        study.revealStudy(cooling)
+        study.close(cooling)
+        val blocked = db.listening().passage(source, "blocked")!!
+        db.content().insertListening(listOf(blocked.copy(ready = false, reason = "Recording is not approved")))
+        val home = study.overview(source)
+        assertEquals(listOf("overdue", "example", "upcoming"), home.extra)
+        assertEquals(home.extra, study.overview(source).extra)
+        rejected { study.start(source, "blocked", extra = true) }
+        rejected { study.start(source, "cooling", extra = true) }
+        assertTrue(db.reviews().allLog().isEmpty())
+    }
+
+    @Test fun extraEntryRevalidatesSourceActiveEncounterAndMediaInsteadOfTrustingOverview() = runBlocking {
+        install(approvedListening("other"))
+        val candidate = study.overview(source).extra.first()
+        settings.setSource("https://github.com/other/source", "main")
+        rejected { study.start(source, candidate, extra = true) }
+        settings.setSource("https://github.com/$source", "main")
+        val id = study.start(source, candidate, extra = true)
+        val other = study.overview(source).passages.first { it.id != candidate }.id
+        rejected { study.start(source, other, extra = true) }
+        study = ListeningStudy(db, settings, { now }, { zone })
+        assertEquals(id, study.start(source, candidate, extra = true))
+        heard(id)
+        study.close(id, discard = true)
+        rejected { study.start(source, candidate, extra = true) }
+        db.content().insertListeningAudio(listOf(ListeningAudioEntity(source, fixture.passage.audio!!.sha256, byteArrayOf(1))))
+        rejected { study.start(source, other, extra = true) }
+        assertNull(db.listening().active(source))
+        assertEquals(0, db.listening().reservedNew(source))
+        assertTrue(study.overview(source).extra.isEmpty())
+        assertTrue(db.reviews().allLog().isEmpty())
+        assertTrue(db.reviews().allStates().isEmpty())
+    }
+
     @Test fun sharedIntroductionsExplainZeroNewListeningDespiteAnUnusedTimeBudget() = runBlocking {
         settings.setDailyNewCards(1)
         db.reviews().insertLog(ReviewLogEntity(

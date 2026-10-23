@@ -93,4 +93,5 @@
     <string name="word_reading_title">Reading of %1$s</string>
     <string name="word_reading_whole_word">This is the reading of the whole word, not of an individual kanji.</string>
     <string name="word_reading_close">Close</string>
+    <string name="listening_extra_practice">Extra practice is scored normally and can exceed today\'s daily plan. Cooldowns still apply.</string>
 </resources>

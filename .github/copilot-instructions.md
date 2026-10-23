@@ -60,6 +60,7 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - **Room:** list columns are joined with `SEP` (`\u001F`); use `joinSep()`/`splitSep()`. `review_log.id` is auto-generated, so pass `0`.
   Review state is keyed by (`sourceId` = lower-case `owner/repo`, stack, item, mode). Never key it by title or position; titles are editable.
 - **Listening:** persist exposure separately from SRS and retain the captured package/assistance through process recreation.
+  Scored Practice more bypasses daily plans, never exposure cooldowns/media checks; reserve extra unseen passages even outside the normal fresh list.
   Only a completed full playback unlocks questions. Technical errors and unscored study never manufacture failure reviews.
   `responseJson` is immutable after submission; feedback playback updates only encounter state/exposure.
   Focus/headphone interruptions must invalidate pending starts, not just active playback. Recover transient media blocks only after

@@ -48,12 +48,13 @@ internal data class ListeningHomeState(val overview: ListeningOverview? = null, 
                 it.sharedAllowance.total == 0 &&
                 (it.sharedAllowance.note == PacingNote.None || it.sharedAllowance.note == PacingNote.LightDay)
             ) {
-                "New items are turned off by your daily limit in Settings."
+                "Scheduled new items are turned off by your daily limit in Settings."
             } else {
                 "No shared new-item allowance remains today. New listening shares this limit with other learning modes."
             }
-            it.allowance.count == 0 -> "Today's new-listening passage limit has been reached."
-            it.minimumNewMs == null -> "No eligible new passages right now. Started passages return when due; cooldowns are listed below."
+            it.allowance.count == 0 -> "Today's planned new-listening passage limit has been reached."
+            it.minimumNewMs == null ->
+                "No eligible new passages right now. Started passages return to the scheduled queue when due; cooldowns are listed below."
             it.minimumNewMs > it.allowance.milliseconds ->
                 "No new passage fits the remaining listening time. " +
                     "The shortest eligible passage needs ${(it.minimumNewMs + 999) / 1_000} estimated seconds."

@@ -109,6 +109,8 @@ class ListeningViewModelTest {
     @Test fun hintsDistinguishSharedAllowanceFromListeningCountAndTimeLimits() = runBlocking {
         services.listening.close(id, discard = true)
         val base = services.listening.overview(source).copy(fresh = emptyList())
+        val dailyOff = base.sharedAllowance.copy(total = 0, remaining = 0, note = PacingNote.None)
+        assertTrue(ListeningHomeState(base.copy(sharedAllowance = dailyOff)).newPassageHint()!!.startsWith("Scheduled new items"))
         val shared = ListeningHomeState(base.copy(
             sharedAllowance = NewAllowance(10, 0, PacingNote.None, 0, 40),
             allowance = ListeningAllowance(0, 300_000),
