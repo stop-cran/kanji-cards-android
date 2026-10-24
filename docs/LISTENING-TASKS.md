@@ -3,7 +3,8 @@
 Design deliverable for [A / #66](https://github.com/stop-cran/kanji-cards-android/issues/66).
 **Independently reviewed implementation contract, adopted under delegated autonomous decision-making.**
 Installment B supplies the shared importer, persistence, accounting and staged-player foundation;
-new guided renderers, approved runtime content and the assessment wrapper remain C-F deliverables.
+C supplies the common guided host and focused renderers. Spoken choices, approved runtime content
+and the assessment wrapper remain D-F deliverables.
 Implementation order is B (shared infrastructure), C (focused tasks/common host), D (spoken choices),
 E (approved original content), F (assessment). The review of A's issue plan did not approve these decisions.
 The concrete design was subsequently reviewed and its reservation finding resolved. The conservative

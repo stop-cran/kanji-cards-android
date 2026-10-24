@@ -50,6 +50,7 @@ data class ListeningEncounterEntity(
 
 data class ListeningExposure(val passageId: String, val lastPracticeAtMs: Long?)
 data class ListeningIntroductions(val count: Int, val estimatedMs: Long)
+data class ListeningResume(val id: String, val sourceId: String)
 
 @Dao
 interface ListeningDao {
@@ -92,6 +93,12 @@ interface ListeningDao {
 
     @Query("SELECT * FROM listening_encounters WHERE sourceId = :sourceId AND closedAtMs IS NULL ORDER BY createdAtMs LIMIT 1")
     fun observeActive(sourceId: String): Flow<ListeningEncounterEntity?>
+
+    @Query("SELECT id, sourceId FROM listening_encounters WHERE closedAtMs IS NULL ORDER BY createdAtMs")
+    fun observeOpen(): Flow<List<ListeningResume>>
+
+    @Query("SELECT id, sourceId FROM listening_encounters WHERE closedAtMs IS NULL ORDER BY createdAtMs")
+    suspend fun open(): List<ListeningResume>
 
     @Query("SELECT * FROM listening_encounters ORDER BY createdAtMs, id")
     suspend fun allEncounters(): List<ListeningEncounterEntity>

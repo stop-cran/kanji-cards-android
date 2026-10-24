@@ -41,12 +41,15 @@ class ListeningTaskStudy(
     internal suspend fun overview(sourceId: String): ListeningQueue =
         db.withTransaction { db.listeningQueue(settings, sourceId, clock(), zone(), supportedTypes) }
 
-    suspend fun start(sourceId: String, taskId: String, study: Boolean = false, extra: Boolean = false): String = db.withTransaction {
+    suspend fun start(
+        sourceId: String, taskId: String, study: Boolean = false, extra: Boolean = false, described: Boolean = false,
+    ): String = db.withTransaction {
         require(settings.source.value.id == sourceId) { "Selected content source changed; reopen Listening" }
-        require(!study || !extra) { "Extra practice is scored, not unscored study" }
+        checkMode(study, extra, described)
         val dao = db.listeningTasks()
         dao.active(sourceId)?.let {
-            require(it.taskId == taskId && (it.kind == "study") == study) { "Resume or discard the unfinished listening activity first" }
+            require(it.taskId == taskId && (it.kind == "study") == study &&
+                attempt(it).describedStudy == described) { "Resume or discard the unfinished listening activity first" }
             return@withTransaction it.id
         }
         db.requireNoOtherListeningActivity(sourceId)
@@ -57,12 +60,13 @@ class ListeningTaskStudy(
         val captured = ListeningTaskContent.parse("listening-tasks/$taskId.json", requireNotNull(row.json))
         require(captured.ready && captured.contentHash == row.contentHash && captured.task.exposureId == row.exposureId) { "Task changed; sync again" }
         require(study || captured.task.usage == TaskUsage.Scored) { "Worked examples are unscored" }
+        require(!described || captured.task.visual != null) { "This task has no described picture presentation" }
         checkAssets(sourceId, captured)
         val sync = requireNotNull(dao.sync(sourceId)) { "Task source revision is missing" }
         val words = db.content().referencedWords(sourceId, captured.task.vocabulary.mapNotNull { it.word })
         require(words.mapTo(hashSetOf()) { it.word }.containsAll(captured.task.vocabulary.mapNotNull { it.word })) { "A task word article is missing" }
         val id = "listening-task:${UUID.randomUUID()}"
-        val state = ListeningTaskAttempt(phase = if (study) "study" else "listen")
+        val state = ListeningTaskAttempt(phase = if (study) "study" else "listen", describedStudy = described)
         val prior = queue.states[taskId] ?: SrsState()
         dao.putEncounter(ListeningTaskEncounterEntity(
             id, sourceId, taskId, captured.task.exposureId, requireNotNull(sync.acceptedBranch), sync.acceptedRevision,
@@ -74,6 +78,11 @@ class ListeningTaskStudy(
         dao.pin(captured.assetHashes.map { ListeningAssetPinEntity(sourceId, "encounter", id, it) })
         db.reviews().insertSession(StudySessionEntity(id, sourceId, LISTENING_STACK, LISTENING_MODE, study || extra, now.toEpochMilli()))
         id
+    }
+
+    private fun checkMode(study: Boolean, extra: Boolean, described: Boolean) {
+        require(!study || !extra) { "Extra practice is scored, not unscored study" }
+        require(!described || study) { "Described presentation is explicitly unscored study" }
     }
 
     private fun checkEligibility(queue: ListeningQueue, row: ListeningTaskEntity, study: Boolean, extra: Boolean) {

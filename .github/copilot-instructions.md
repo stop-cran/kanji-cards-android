@@ -114,6 +114,15 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   Cancelling an unstarted seek must retain restart provenance when its position was reset; ordinary resume must not erase that help.
   API-35 codec instrumentation must foreground an activity: a background-only runner cannot acquire target-35 audio focus.
   On this Windows host, SwiftShader crashed the emulator between native cases; host graphics with Vulkan disabled passed.
+  New-task renderers share `ListeningTaskEncounterView`/`ListeningTaskViewModel` and the staged coordinator.
+  Record preview exposure from clipped visible bounds, not composition: offscreen choices are not seen evidence.
+  Commit visible exposure outside the playback-action mutex; a held generic instruction must not delay that durable write.
+  Technical-error controls need their own scroll body for landscape/large text; do not leave recovery actions above the scrolling subtree.
+  Keep phase-keyed scroll outside article/layout branches; native article Back caught lost nested saved scroll.
+  Pause/persist native position before closing the player. A sequence token also stops between-stage continuation.
+  Described study is a captured, unscored choice, never an automatic accessibility conversion. Picture accessibility labels
+  remain neutral; answer-bearing descriptions belong only to explicit help/feedback/study.
+  Check enlarged dialogs with actual system font scaling too; a test-local density override does not scale their separate window.
 - **Quiz semantics:** options are meaning titles and unique by title (one correct answer). Wrong = Again (re-asked after 3 cards),
   right = Good, "I guessed" = Hard. Time-based Easy was dropped: with 4 options a fast answer is often luck.
 - **Daily new-card budget** counts kanji whose first review log entry is today (`newCardsIntroducedSince`), per mode.

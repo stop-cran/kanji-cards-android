@@ -223,7 +223,8 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 
 The adopted [Japanese task/assessment contract](LISTENING-TASKS.md) settles the design gate for #66
 under delegated autonomous decision-making. B supplies the shared data/media infrastructure described below;
-C/D's guided renderers and F's assessment orchestration remain separate installments. The following passage rules remain the legacy contract.
+C adds the common guided host and focused formats; D's spoken choices and F's assessment orchestration remain separate installments.
+The following passage rules remain the legacy contract.
 
 Listening schedules whole passages, not their three questions: `(sourceId, "listening", passageId, "Listening", "")`.
 The N5-only learning contract is [owned with the content](https://github.com/stop-cran/learning-japanese/blob/main/docs/listening-n5.md).
@@ -288,7 +289,7 @@ One transactional Listening admission guard spans legacy, guided/study and futur
 Both catalogs share cooldowns, due-time estimates, daily introductions and cross-mode reservations.
 Familiar-but-unintroduced scored tasks still reserve a new unit. Legacy history seeds only recorded
 exposure; equivalent stories share familiarity without sharing genuinely different scored skills.
-Parser support does not enable a renderer: B's production new-task capability set is intentionally empty.
+Parser support does not enable a renderer: C enables only task-based and key-point presentations.
 
 `ListeningTaskStudy` captures source/branch/revision, package/policy, all assets and word bodies, and
 atomically records one immutable response/review/debit. `ListeningTaskPlayback` connects its durable
@@ -303,6 +304,41 @@ Catalog, encounter and assessment pins are separate owners; replacing content ca
 capture's media. Closing releases encounter pins without changing its immutable response. Export v6
 keeps the original seven members and adds task encounters, diagnostic assessments and shared exposures
 without binaries. The grammar analyzer shape-checks these arrays but does not count them as Grammar.
+
+#### Focused guided presentations (C)
+
+One Listening browser combines the existing English listen-first mode with separately labeled task
+formats. Filters select from the shared queue; they do not reallocate budgets, change captured intent
+or reveal answers. Current-source ownership blocks new starts; explicit resume links also retain
+unfinished captures from other sources. `listening-task:<UUID>` routes survive process recreation.
+
+The common `ListeningTaskEncounterView` and `ListeningTaskViewModel` use B's captured service and
+native coordinator, not a parallel grader or importer. Task-based and key-point share
+instruction -> focus question -> passage -> identical focus repeat, but show their distinct objectives.
+Text options are readable previews; numbered pictures keep their authored ordering and hide descriptive
+labels until help/feedback. All required stages must finish before answer selection. Feedback begins
+with the immutable result; captured word articles retain their source and return to the feedback scroll.
+Scroll ownership sits outside the article and portrait/landscape branches, keyed by encounter/phase.
+
+Playback is sequential and explicitly cancellable between stages. Lifecycle/Back interruption preserves
+the native position before closing the player; premature close would reset that position to zero.
+The rendered-evidence modifier checks clipped window bounds: an offscreen composed choice is not
+exposure. Visible pictures/text, deliberate help and acknowledged native starts use the same durable
+exposure service. Neutral preflight alone never creates familiarity or consumes a first encounter.
+Visible exposure commits independently of the long-running playback action, so scrolling choices
+into view during generic instructions cannot lose familiarity until the sequence ends.
+
+Essential pictures stay outside the body scroll, with a side-by-side layout on wide landscape screens.
+Enlargement supports bounded zoom, touch/accessibility pan, and playback controls without answer-bearing
+alternative text. Explicit described study persists as unscored study, with no reservation or SRS
+result; it never silently converts a graded capture or infers a disability from accessibility settings.
+Missing required evidence offers a fully scrollable retry/discard presentation, not a wrong-answer
+grade. Releasing a presentation clears its decoded picture; resuming rechecks the captured bytes.
+
+D extends these same host, feedback, picture and sequencing components with the two numbered
+spoken-choice formats, then enables their renderer capabilities. It must keep option text hidden until
+permitted help/feedback and preserve B's completion/assistance rules. Synthetic diagram/short-tone
+fixtures exercise the host and native UI only; they are not linguistic or production-media approval.
 
 ## 5. Words, levels and advancement
 

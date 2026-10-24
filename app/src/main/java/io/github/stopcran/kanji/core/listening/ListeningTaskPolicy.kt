@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class ListeningTaskAttempt(
+    val describedStudy: Boolean = false,
     val stageIndex: Int = 0,
     val completedStages: Set<String> = emptySet(),
     val wholePass: Int = 0,
@@ -32,8 +33,7 @@ data class TaskPlayRequest(
 )
 
 object ListeningTaskPolicy {
-    // B installs the contracts without enabling unfinished C/D renderers.
-    val supportedTypes: Set<ListeningTaskType> = emptySet()
+    val supportedTypes: Set<ListeningTaskType> = setOf(ListeningTaskType.TaskBased, ListeningTaskType.KeyPoint)
 
     fun request(
         task: ListeningTaskPackage, state: ListeningTaskAttempt, request: TaskPlayRequest,

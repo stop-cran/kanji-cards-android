@@ -25,7 +25,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.room.withTransaction
 import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.data.ListeningOverview
 import io.github.stopcran.kanji.core.listening.*
@@ -34,23 +36,38 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @Composable
 internal fun rememberListeningHome(app: KanjiApp): State<ListeningHomeState> {
-    val source by app.settings.source.collectAsState()
-    val budget by app.settings.dailyNewCards.collectAsState()
-    val week by app.settings.weekPlan.collectAsState()
+    return rememberListeningHome(app.services)
+}
+
+@Composable
+internal fun rememberListeningHome(services: Services): State<ListeningHomeState> {
+    val source by services.settings.source.collectAsState()
+    val budget by services.settings.dailyNewCards.collectAsState()
+    val week by services.settings.weekPlan.collectAsState()
     return key(source.id, budget, week) {
         produceState(ListeningHomeState()) {
             listeningAction({ value = ListeningHomeState(error = it) }) {
-                combine(
-                    app.db.listening().observePassages(source.id), app.db.listening().observeActive(source.id),
-                    app.db.reviews().observeStates(source.id, LISTENING_STACK, LISTENING_MODE),
+                combine(listOf(
+                    services.db.listening().observePassages(source.id).map { Unit }, services.db.listening().observeOpen().map { Unit },
+                    services.db.listeningTasks().observeTasks(source.id).map { Unit }, services.db.listeningTasks().observeOpen().map { Unit },
+                    services.db.listeningTasks().observeSync(source.id).map { Unit },
+                    services.db.listeningTasks().observeActiveAssessment(source.id).map { Unit },
+                    services.db.reviews().observeStates(source.id, LISTENING_STACK, LISTENING_MODE).map { Unit },
                     flow { while (true) { emit(Unit); delay(30_000) } },
-                ) { _, _, _, _ -> Unit }.collectLatest {
-                    value = ListeningHomeState(app.services.listening.overview(source.id))
+                )) { Unit }.collectLatest {
+                    value = services.db.withTransaction {
+                        ListeningHomeState(services.listening.overview(source.id),
+                            queue = services.listeningTasks.overview(source.id),
+                            resumes = services.db.listening().open() + services.db.listeningTasks().open(),
+                            assessmentPending = services.db.listeningTasks().activeAssessment(source.id) != null,
+                            taskNotice = services.db.listeningTasks().sync(source.id)?.problem)
+                    }
                 }
             }
         }
@@ -59,56 +76,7 @@ internal fun rememberListeningHome(app: KanjiApp): State<ListeningHomeState> {
 
 @Composable
 fun ListeningPage(app: KanjiApp, onBack: () -> Unit, onEncounter: (String) -> Unit) {
-    val home by rememberListeningHome(app)
-    val scope = rememberCoroutineScope()
-    var error by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
-    fun start(source: String, id: String, study: Boolean, extra: Boolean = false) {
-        busy = true
-        scope.launch {
-            try { listeningAction({ error = it }) { onEncounter(app.services.listening.start(source, id, study, extra)) } }
-            finally { busy = false }
-        }
-    }
-    Page("Listening - N5", onBack) {
-        Text(home.summary())
-        Text("Listen first, then answer three questions. One complete replay is normal. Extra replay, slower playback or guessing limits success to Hard.")
-        (error ?: home.error)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        home.overview?.let { data ->
-            Text("Source: ${data.sourceId}", style = MaterialTheme.typography.bodySmall)
-            data.notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            if (data.active != null) {
-                Button(onClick = { onEncounter(data.active.id) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Resume encounter") }
-                Text("Resume or discard the unfinished encounter before starting another passage.")
-            } else {
-                ListeningStartButton(data, busy) { id, extra -> start(data.sourceId, id, false, extra) }
-                Text("Shared new-item allowance: ${data.sharedAllowance.remaining} of ${data.sharedAllowance.total} remaining today.")
-                Text("Listening time budget: ${data.allowance.milliseconds / 1_000} estimated seconds remaining today.")
-                pacingExplanation(data.sharedAllowance)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                home.newPassageHint()?.let { Text(it) }
-                Text("Scheduled new passages need both a shared slot and enough listening time. Due reviews do not use these daily budgets.",
-                    style = MaterialTheme.typography.bodySmall)
-            }
-            Text("Study does not use these daily budgets or change your score. " +
-                "It records exposure and delays a new scored attempt until 24 hours after the latest exposure.")
-            if (data.passages.isEmpty()) Text(
-                "Sync an N5 listening collection in Settings. Recordings need a final listening approval before they can be studied or scored.",
-            )
-            data.passages.forEach { row ->
-                key(row.id, row.contentHash) {
-                    val record = remember(row.json) { ListeningContent.parse("listening/${row.id}.json", row.json) }
-                    HorizontalDivider()
-                    Text(record.passage.title, style = MaterialTheme.typography.titleMedium)
-                    Text("${record.passage.kind} - ${row.durationMs?.div(1_000)?.let { "${it}s" } ?: "No recording"}")
-                    data.cooldowns[row.id]?.let { Text(listeningCooldownText(it), style = MaterialTheme.typography.bodySmall) }
-                    data.blocked[row.id]?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-                    OutlinedButton(onClick = { start(data.sourceId, row.id, true) },
-                        enabled = row.ready && data.active == null && !busy) { Text("Study without scoring") }
-                }
-            }
-            data.blocked.filterKeys { id -> data.passages.none { it.id == id } }.forEach { (id, reason) -> Text("$id: $reason") }
-        }
-    }
+    ListeningBrowser(app.services, onBack, onEncounter)
 }
 
 @Composable

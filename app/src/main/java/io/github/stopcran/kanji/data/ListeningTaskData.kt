@@ -129,6 +129,12 @@ interface ListeningTaskDao {
     @Query("SELECT * FROM listening_task_encounters WHERE sourceId = :sourceId AND assessmentId IS NULL AND closedAtMs IS NULL LIMIT 1")
     fun observeActive(sourceId: String): Flow<ListeningTaskEncounterEntity?>
 
+    @Query("SELECT id, sourceId FROM listening_task_encounters WHERE assessmentId IS NULL AND closedAtMs IS NULL ORDER BY createdAtMs")
+    fun observeOpen(): Flow<List<ListeningResume>>
+
+    @Query("SELECT id, sourceId FROM listening_task_encounters WHERE assessmentId IS NULL AND closedAtMs IS NULL ORDER BY createdAtMs")
+    suspend fun open(): List<ListeningResume>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putEncounter(row: ListeningTaskEncounterEntity)
 

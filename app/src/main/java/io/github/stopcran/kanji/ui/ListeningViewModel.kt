@@ -31,15 +31,24 @@ import java.time.format.FormatStyle
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 
-internal data class ListeningHomeState(val overview: ListeningOverview? = null, val error: String? = null) {
+internal data class ListeningHomeState(
+    val overview: ListeningOverview? = null, val error: String? = null,
+    val queue: ListeningQueue? = null, val resumes: List<ListeningResume> = emptyList(),
+    val assessmentPending: Boolean = false, val taskNotice: String? = null,
+) {
     fun summary(): String = overview?.let {
-        if (it.active != null) "Unfinished encounter"
-        else if (it.passages.isEmpty()) "No recordings yet"
-        else buildList {
-            add(if (it.due.isEmpty() && it.fresh.isEmpty()) "All caught up" else "${it.due.size} due, ${it.fresh.size} new")
-            if (it.blocked.isNotEmpty()) add("${it.blocked.size} content/audio problems")
-        }.joinToString(", ")
+        if (it.active != null || resumes.any { pending -> pending.sourceId == it.sourceId } || assessmentPending) "Unfinished encounter"
+        else if (it.passages.isEmpty() && queue?.tasks.orEmpty().isEmpty()) "No recordings yet"
+        else counts(it)
     } ?: error ?: "Loading..."
+
+    private fun counts(data: ListeningOverview): String = buildList {
+        val due = queue?.due ?: data.due
+        val fresh = queue?.fresh ?: data.fresh
+        val blocked = queue?.blocked ?: data.blocked
+        add(if (due.isEmpty() && fresh.isEmpty()) "All caught up" else "${due.size} due, ${fresh.size} new")
+        if (blocked.isNotEmpty()) add("${blocked.size} content/audio problems")
+    }.joinToString(", ")
 
     fun newPassageHint(): String? = overview?.let {
         when {
