@@ -1,5 +1,6 @@
 package io.github.stopcran.kanji.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,11 +15,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -27,7 +31,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import io.github.stopcran.kanji.R
+import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.grammar.GrammarPracticeTarget
+import io.github.stopcran.kanji.data.grammarChanges
+import kotlinx.coroutines.flow.collectLatest
 
 @Composable
 fun GrammarQuizScreen(
@@ -35,25 +43,77 @@ fun GrammarQuizScreen(
     onBack: () -> Unit,
     onOpenDoc: (String, String) -> Unit,
     onPracticeMore: () -> Unit,
+    onOpenTopic: (GrammarPracticeTarget) -> Unit,
+    onBrowse: () -> Unit,
     target: GrammarPracticeTarget? = null,
     interrupted: Boolean = false,
     vm: GrammarQuizViewModel = serviceViewModel(sessionKey) { GrammarQuizViewModel(it, target = target) },
 ) {
     LaunchedEffect(sessionKey) { vm.ensureStarted(sessionKey.endsWith(":extra"), interrupted) }
+    if (target != null) GrammarPreviewUpdates(vm, sessionKey)
     val holder = rememberSaveableStateHolder()
     val article = vm.lookupArticle
-    holder.SaveableStateProvider(if (article == null) "question" else "vocabulary:${article.word}") {
+    val details = target != null && vm.approvedPractice == null
+    val returningToTopic = target != null && !details
+    BackHandler(enabled = returningToTopic) { onPracticeMore() }
+    holder.SaveableStateProvider(when {
+        article != null -> "vocabulary:${article.word}"
+        details -> "details"
+        else -> "question:$sessionKey"
+    }) {
         if (article != null) {
             GrammarVocabularyArticle(article, vm::closeLookupArticle) { onOpenDoc(vm.sourceId, it) }
+        } else if (details) {
+            GrammarTopicDetails(vm, requireNotNull(target), sessionKey, onBack, onOpenDoc, onOpenTopic, onBrowse)
         } else {
-            GrammarSessionBody(vm, onBack, onOpenDoc, onPracticeMore)
+            GrammarSessionBody(vm, sessionKey, if (returningToTopic) onPracticeMore else onBack, onOpenDoc, onPracticeMore)
         }
+    }
+}
+
+@Composable
+private fun GrammarPreviewUpdates(vm: GrammarQuizViewModel, sessionKey: String) {
+    val app = LocalContext.current.applicationContext as KanjiApp
+    val source by app.settings.source.collectAsState()
+    val preferences by app.settings.grammarPreferences.collectAsState()
+    val daily by app.settings.dailyNewCards.collectAsState()
+    val week by app.settings.weekPlan.collectAsState()
+    LaunchedEffect(sessionKey, source, preferences[source.id], daily, week) {
+        app.db.grammarChanges(source.id).collectLatest { vm.refreshTargeted() }
+    }
+}
+
+@Composable
+private fun GrammarTopicDetails(
+    vm: GrammarQuizViewModel,
+    target: GrammarPracticeTarget,
+    sessionKey: String,
+    onBack: () -> Unit,
+    onOpenDoc: (String, String) -> Unit,
+    onOpenTopic: (GrammarPracticeTarget) -> Unit,
+    onBrowse: () -> Unit,
+) {
+    val app = LocalContext.current.applicationContext as KanjiApp
+    val source = remember(target) { requireNotNull(RepoSource.parse("https://github.com/${target.sourceId}", target.branch)) }
+    val (actions, message) = rememberGrammarMapActions(app, source, { destination ->
+        val next = destination.target()
+        if (next == null) onBrowse() else onOpenTopic(next)
+    }, { onOpenDoc(target.sourceId, it) })
+    val state = vm.ui
+    val loaded = when (state) {
+        is GrammarUi.Preview -> GrammarMapState.Ready(requireNotNull(vm.practiceDetails))
+        is GrammarUi.Empty -> GrammarMapState.Unavailable(state.message)
+        else -> GrammarMapState.Loading
+    }
+    GrammarRoadmapPage(loaded, GrammarMapDestination.from(target), actions, onBack, message) {
+        if (state is GrammarUi.Preview) GrammarPracticePreviewContent(state, sessionKey, embedded = true) { vm.startTargeted(it, state) }
     }
 }
 
 @Composable
 private fun GrammarSessionBody(
     vm: GrammarQuizViewModel,
+    sessionKey: String,
     onBack: () -> Unit,
     onOpenDoc: (String, String) -> Unit,
     onPracticeMore: () -> Unit,
@@ -65,12 +125,12 @@ private fun GrammarSessionBody(
         vm.focusNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         when (val state = vm.ui) {
             GrammarUi.Loading -> Text("Loading…", Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-            is GrammarUi.Preview -> GrammarPracticePreviewContent(state) { vm.startTargeted(it, state) }
+            is GrammarUi.Preview -> GrammarPracticePreviewContent(state, sessionKey) { vm.startTargeted(it, state) }
             is GrammarUi.Empty -> Text(state.message)
             is GrammarUi.Done -> {
                 Text("Session complete", style = MaterialTheme.typography.headlineSmall)
                 Text("${state.correct} of ${state.answered} answers correct")
-                Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Done") }
+                if (vm.target == null) Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Done") }
                 OutlinedButton(onClick = onPracticeMore, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(if (vm.target == null) R.string.practice_more else R.string.grammar_practice_topic_again))
                 }

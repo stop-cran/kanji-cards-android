@@ -20,6 +20,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.core.content.GrammarCurriculumState
@@ -64,7 +65,16 @@ class GrammarRoadmapPerformanceTest {
                 density = LocalDensity.current.density
                 val route = realRoute.value
                 if (route != null) {
-                    key(route) { GrammarRoadmapScreen(app, route, {}, { realRoute.value = it }) }
+                    key(route) {
+                        if (route == "grammar-home") {
+                            GrammarPage(app, {}, { _, _ -> }, {}, { realRoute.value = GrammarPracticeRoutes.create(it) })
+                        } else {
+                            GrammarQuizScreen(
+                                route, {}, { _, _ -> }, {}, { realRoute.value = GrammarPracticeRoutes.create(it) },
+                                { realRoute.value = "grammar-home" }, target = GrammarPracticeRoutes.target(route),
+                            )
+                        }
+                    }
                 } else {
                     Page("Roadmap performance fixture") {
                         if (shown.value) GrammarRoadmapDiagram(layout, nodes) {} else Text("Initializing renderer")
@@ -112,24 +122,33 @@ class GrammarRoadmapPerformanceTest {
         val snapshot = runBlocking { app.db.grammarRoadmap(app.settings, source, Instant.now()) }
         val catalog = snapshot.curriculum as GrammarCurriculumState.Ready
         val largest = catalog.curriculum.chapters.maxBy { it.groups.size }
+        val largestSet = snapshot.study.sets.maxBy { it.exercises.size }
         val overview = GrammarMapDestination(source.id, source.branch)
-        val times = listOf(overview, overview.chapter(largest.id), overview).map { destination ->
+        val preferences = app.settings.grammarBrowserFor(source)
+        app.settings.setGrammarBrowser(source, io.github.stopcran.kanji.data.GrammarBrowserPreferences())
+        val destinations = listOf(overview, overview.chapter(largest.id), overview.set(largestSet.id), overview)
+        val times = try { destinations.map { destination ->
             measureNanoTime {
-                rule.runOnIdle { route.value = GrammarRoadmapRoutes.create(destination) }
+                rule.runOnIdle {
+                    route.value?.let(app.services.studySessions::leave)
+                    route.value = destination.target()?.let { GrammarPracticeRoutes.create(it) } ?: "grammar-home"
+                }
                 rule.waitUntil(timeoutMillis = 10_000) {
                     rule.onAllNodesWithTag("grammar-diagram").fetchSemanticsNodes().isNotEmpty()
                 }
+                rule.onNodeWithTag("grammar-diagram").performScrollTo()
                 rule.waitForIdle()
             } / 1_000_000.0
-        }
-        rule.runOnIdle { route.value = GrammarRoadmapRoutes.create(overview.chapter(largest.id)) }
+        } } finally { app.settings.setGrammarBrowser(source, preferences) }
+        rule.runOnIdle { route.value = GrammarPracticeRoutes.create(requireNotNull(overview.chapter(largest.id).target())) }
         rule.waitUntil(timeoutMillis = 10_000) { rule.onAllNodesWithTag("grammar-diagram").fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithText("Practice this chapter").assertIsEnabled()
+        rule.onNodeWithText("Practice").performScrollTo().assertIsEnabled()
         val report = JSONObject().put("source", source.id).put("chapters", catalog.curriculum.chapters.size)
             .put("authoredGroups", snapshot.groups.values.count { it.group.authored })
             .put("compatibilityGroups", snapshot.groups.values.count { !it.group.authored })
             .put("exercises", snapshot.study.sets.sumOf { it.exercises.size })
             .put("largestChapter", largest.id).put("largestChapterGroups", largest.groups.size)
+            .put("largestSet", largestSet.id).put("largestSetExercises", largestSet.exercises.size)
             .put("navigationToInteractiveMs", JSONArray(times))
         File(app.cacheDir, "roadmap-real-benchmark.json").writeText(report.toString(2))
         Log.i("RoadmapPerf", report.toString())

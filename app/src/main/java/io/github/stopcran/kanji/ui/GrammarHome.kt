@@ -19,6 +19,7 @@ import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.core.content.GrammarSet
 import io.github.stopcran.kanji.core.grammar.GRAMMAR_LEVEL_SYNC_NEEDED
 import io.github.stopcran.kanji.core.grammar.GrammarScope
+import io.github.stopcran.kanji.core.grammar.GrammarPracticeTarget
 import io.github.stopcran.kanji.core.grammar.GrammarFocusDecision
 import io.github.stopcran.kanji.core.grammar.FocusCandidate
 import io.github.stopcran.kanji.core.home.ModeState
@@ -47,8 +48,6 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import androidx.compose.ui.res.stringResource
 import io.github.stopcran.kanji.R
-import io.github.stopcran.kanji.core.grammar.GrammarPracticeTarget
-import io.github.stopcran.kanji.core.grammar.GrammarTargetKind
 
 internal class GrammarHome(
     val sourceId: String,
@@ -92,58 +91,56 @@ internal fun rememberGrammarHome(app: KanjiApp): State<GrammarHome> {
 }
 
 @Composable
-fun GrammarPage(app: KanjiApp, onBack: () -> Unit, onOpenDoc: (String) -> Unit, a: HomeActions) {
-    val home = rememberGrammarHome(app).value
-    val preferences = home.preferences
-    val coroutineScope = rememberCoroutineScope()
-    Page("Grammar", onBack) {
-        Text(home.sets?.sumOf { it.exercises.size }?.let { "$it contrast exercises" } ?: "Loading…")
-        Text("New grammar: ${preferences.newScope.introductionLabel}")
-        GrammarScopeChips(preferences.newScope) {
-            coroutineScope.launch { app.db.changeGrammarScope(app.settings, home.sourceId, it) }
-        }
-        Text(
-            "Started exercises keep their reviews at every level. Practice more uses this scope for unseen exercises, outside the daily introduction limit.",
-            style = MaterialTheme.typography.bodySmall,
-        )
-        if (!preferences.levelsReady && preferences.newScope != GrammarScope.All) {
-            Text(GRAMMAR_LEVEL_SYNC_NEEDED)
-        }
-        ModeRow("Choose or type the construction", home.mode, onStart = a.onGrammar)
-        OutlinedButton(onClick = a.onGrammarRoadmap, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.grammar_roadmap))
-        }
-        OutlinedButton(onClick = a.onGrammarTopics, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.grammar_choose_topic))
-        }
-        GrammarFocusControls(app, home)
-        Text("Browse: ${preferences.browseScope.browseLabel}")
-        GrammarScopeChips(preferences.browseScope) { app.settings.setGrammarBrowseScope(home.sourceId, it) }
-        if (home.sets.isNullOrEmpty()) {
-            Text("Grammar exercises are loaded from the selected content repository.")
-        } else if (!preferences.levelsReady && preferences.browseScope != GrammarScope.All) {
-            Text("Sync needed before browsing by level or Unclassified (settings).")
-        } else {
-            val matching = home.sets.map { set ->
-                set to set.exercises.count { preferences.browseScope.matches(it.jlpt, cumulative = false) }
-            }.filter { it.second > 0 }
-            Text("${matching.sumOf { it.second }} matching exercises in ${matching.size} sets")
-            matching.forEach { (set, count) ->
-                Text(set.title, style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
-                Text("$count of ${set.exercises.size} exercises match", style = MaterialTheme.typography.bodySmall)
-                androidx.compose.material3.TextButton(
-                    onClick = { onOpenDoc(set.article) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Read the article") }
-                TextButton(
-                    onClick = {
-                        a.onGrammarTarget(GrammarPracticeTarget(home.sourceId, app.settings.source.value.branch, GrammarTargetKind.Set, set.id))
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(stringResource(R.string.grammar_practice_set)) }
+fun GrammarPage(
+    app: KanjiApp,
+    onBack: () -> Unit,
+    onOpenDoc: (String, String) -> Unit,
+    onStart: (Boolean) -> Unit,
+    onTarget: (GrammarPracticeTarget) -> Unit,
+) {
+    val source by app.settings.source.collectAsState()
+    key(source.id, source.branch) {
+        val loaded by rememberGrammarMap(app, source)
+        val (actions, message) = rememberGrammarMapActions(app, source, { destination ->
+            destination.target()?.let(onTarget)
+        }, { onOpenDoc(source.id, it) })
+        Page("Grammar", onBack, ime = true, scrollable = loaded != GrammarMapState.Loading) {
+            when (val state = loaded) {
+                GrammarMapState.Loading -> Text(stringResource(R.string.loading))
+                is GrammarMapState.Unavailable -> Text(state.message, color = MaterialTheme.colorScheme.error)
+                is GrammarMapState.Ready -> {
+                    val study = state.snapshot.study
+                    val home = GrammarHome(source.id, study.preferences, study.sets, study.mode, study.focus, study.notice)
+                    GrammarStudyControls(app, home, onStart)
+                    Text(stringResource(R.string.grammar_browser_title), style = MaterialTheme.typography.titleLarge)
+                    GrammarCatalogNotice(state.snapshot.curriculum)
+                    message?.let { Text(it) }
+                    GrammarMapBrowser(
+                        state.snapshot, GrammarMapDestination(source.id, source.branch), actions,
+                        app.settings.grammarBrowserFor(source), { app.settings.setGrammarBrowser(source, it) },
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun GrammarStudyControls(app: KanjiApp, home: GrammarHome, onStart: (Boolean) -> Unit) {
+    val preferences = home.preferences
+    val coroutineScope = rememberCoroutineScope()
+    Text(home.sets?.sumOf { it.exercises.size }?.let { "$it contrast exercises" } ?: "Loading…")
+    Text("New grammar: ${preferences.newScope.introductionLabel}")
+    GrammarScopeChips(preferences.newScope) {
+        coroutineScope.launch { app.db.changeGrammarScope(app.settings, home.sourceId, it) }
+    }
+    Text(
+        "Started exercises keep their reviews at every level. Practice more uses this scope for unseen exercises, outside the daily introduction limit.",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    if (!preferences.levelsReady && preferences.newScope != GrammarScope.All) Text(GRAMMAR_LEVEL_SYNC_NEEDED)
+    ModeRow("Choose or type the construction", home.mode, onStart = onStart)
+    GrammarFocusControls(app, home)
 }
 
 @Composable

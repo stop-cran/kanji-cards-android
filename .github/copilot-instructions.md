@@ -42,10 +42,14 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   resize mode for edge-to-edge IME insets; default panning clips short exercises without creating a scroll range. Search pickers with
   bounded nested lists need it too: check that the final search result is selectable without dismissing the keyboard. Check API 29 and 35.
 - **System back:** `BackHandler` in `AppNav` pops the route stack; without it back closes the app.
-- **Screen state across navigation:** `AppNav` composes only the top route, wrapped in `SaveableStateProvider` keyed `<index>:<route>`; `pop()` calls `removeState` so popped routes don't leak. Without it `rememberSaveable` state (search text, scroll) is lost when a screen pushes another. Lists that must keep scroll use an explicit `rememberLazyListState()`.
+- **Screen state across navigation:** `AppNav` composes only the top route, wrapped in `SaveableStateProvider` keyed by stack position
+  and route (logical target for consolidated Grammar details); `pop()` removes the state. Without the holder, search/scroll is
+  lost when another screen is pushed. Lists that must keep scroll use an explicit `rememberLazyListState()`.
 - An asynchronous screen's short loading body can clamp a restored `ScrollState` to zero before real content arrives.
   Keep the same `Page` call but disable its scrolling while loading; test a measured loading frame on Back and process restoration,
-  not only an isolated diagram/list saver.
+  not only an isolated diagram/list saver. A conditional Ready subtree also unregisters its saveable values when it disappears:
+  give its non-consent browser/evidence state a holder that survives loading, and keep exception consent outside that saved subtree.
+  Exercise a rendered Start-loading frame before both stale-preview and fresh-session returns, with nonzero pan/list offsets.
 - **ViewModel scope:** `viewModel()` is scoped to the Activity, not to a route, so a quiz VM outlives leaving the screen and would resume
   mid-answer. The quiz route is `quiz:<timestamp>` and the VM is created with that key, giving each start a fresh session while still
   surviving rotation. Do the same for any new session-like screen.
@@ -72,6 +76,13 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   Compare complete accepted previews at Start, not only a repository version: changed questions, membership or restrictions expire consent.
   Targeted continuation and process recovery retain the logical source/branch/target but create a fresh route and unapproved preview.
   Validate cached exercises before building virtual compatibility groups, which assume valid construction/relationship references.
+- A stable details key is not a session identity. Replacing a targeted batch must cancel the old registered ViewModel, create a
+  fresh UUID, and key exception consent separately from preserved page/list/pan state. `rememberSaveable` inputs alone do not
+  validate restored consent across process recreation. Exercise both unchanged rotation and a fresh route with identical membership.
+  Preview refresh success and error paths must both check that the pending preview is still current before changing UI state.
+- When splitting a Compose screen into phase-specific children, the parent's phase discriminator must itself be observable.
+  A child observing `ui` does not recompose a parent reading a plain approval field. Test that the real host displays the first
+  question after Start, not only that the ViewModel reached a question; the native Grammar flow regression covers this boundary.
 - Grammar readiness must agree between live recording and replay of identical canonical history, including equal timestamps.
   Reconcile only provisional grants in that timestamp batch, never earlier milestones; test by deleting derived rows and rebuilding.
   Keep bounded backfill page reads/calculation/writes atomic against live answers; mapping checks alone cannot detect changed evidence.

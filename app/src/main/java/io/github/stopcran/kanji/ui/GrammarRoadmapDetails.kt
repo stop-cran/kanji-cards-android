@@ -12,6 +12,11 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.SaveableStateHolder
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -19,7 +24,7 @@ import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.content.GrammarCurriculumState
 import io.github.stopcran.kanji.core.content.GrammarLeafEdge
 import io.github.stopcran.kanji.core.grammar.GrammarMapGroup
-import io.github.stopcran.kanji.core.grammar.GrammarTargetKind
+import io.github.stopcran.kanji.core.grammar.GrammarMapProgress
 import io.github.stopcran.kanji.data.GrammarRoadmapSnapshot
 
 @Composable
@@ -28,7 +33,9 @@ internal fun GrammarMapGroupDetails(
     item: GrammarMapGroup,
     destination: GrammarMapDestination,
     actions: GrammarMapActions,
+    detailState: SaveableStateHolder,
     focusMessage: String? = null,
+    practice: (@Composable () -> Unit)? = null,
 ) {
     val group = item.group
     val curriculum = snapshot.curriculum as? GrammarCurriculumState.Ready
@@ -37,29 +44,53 @@ internal fun GrammarMapGroupDetails(
         TextButton(onClick = { actions.navigate(destination.chapter(chapterId)) }) {
             Text(curriculum.curriculum.chapters.single { it.id == chapterId }.label)
         }
-    } else {
-        Text(stringResource(when {
-            !group.authored -> R.string.grammar_map_compatibility
-            curriculum == null -> R.string.grammar_map_uncatalogued
-            else -> R.string.grammar_map_unmapped
-        }))
+    } else if (group.authored) {
+        Text(stringResource(if (curriculum == null) R.string.grammar_map_uncatalogued else R.string.grammar_map_unmapped))
     }
     Text(group.label, style = MaterialTheme.typography.titleLarge)
-    Text(
+    if (group.authored) Text(
         stringResource(when {
-            !group.authored -> R.string.grammar_map_compatibility
             item.ready -> R.string.grammar_map_established
             item.readinessProblem != null -> R.string.grammar_map_readiness_unavailable
             item.availability.started.isEmpty() -> R.string.grammar_map_unseen
             else -> R.string.grammar_map_learning
         }),
     )
+    practice?.invoke()
+    item.articles.forEach { (path, label) ->
+        TextButton(onClick = { actions.article(path) }) { Text(stringResource(R.string.grammar_map_read_article, label)) }
+    }
+    snapshot.study.sets.filter { set -> snapshot.groupsBySet[set.id].orEmpty().any { it.group.id == group.id } }.forEach { set ->
+        TextButton(onClick = { actions.navigate(destination.set(set.id)) }) {
+            Text(stringResource(R.string.grammar_browser_parent_set, set.title))
+        }
+    }
+    if (group.requires.isNotEmpty()) {
+        Text(stringResource(R.string.grammar_map_foundations), style = MaterialTheme.typography.titleMedium)
+        group.requires.forEach { id -> GrammarMapFoundationLink(snapshot, id, destination, actions) }
+    }
+    detailState.SaveableStateProvider(GrammarRoadmapRoutes.create(destination)) {
+        var evidenceVisible by rememberSaveable { mutableStateOf(false) }
+        TextButton(onClick = { evidenceVisible = !evidenceVisible }) { Text(stringResource(R.string.grammar_browser_focus_evidence)) }
+        if (evidenceVisible) GrammarMapGroupEvidence(snapshot, item, actions, focusMessage)
+    }
+    if (group.next.isNotEmpty()) {
+        Text(stringResource(R.string.grammar_map_recommendations), style = MaterialTheme.typography.titleMedium)
+        group.next.forEach { link ->
+            TextButton(onClick = { actions.navigate(destination.group(link.groupId)) }) {
+                Text(snapshot.groups.getValue(link.groupId).group.label)
+            }
+            Text(link.reason, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun GrammarMapGroupEvidence(snapshot: GrammarRoadmapSnapshot, item: GrammarMapGroup, actions: GrammarMapActions, focusMessage: String?) {
+    val group = item.group
     GrammarMapProgressText(item.progress)
     Text(stringResource(R.string.grammar_map_evidence_help), style = MaterialTheme.typography.bodySmall)
     GrammarMapNewAccess(snapshot, item)
-    OutlinedButton(onClick = { actions.practice(destination.target(GrammarTargetKind.Group, group.id)) }, modifier = Modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.grammar_practice_group))
-    }
     val candidate = snapshot.study.focus?.candidates?.singleOrNull { it.group.id == group.id }
     OutlinedButton(
         onClick = { actions.focus(group.id) }, enabled = candidate != null && candidate.blocked == null,
@@ -68,13 +99,6 @@ internal fun GrammarMapGroupDetails(
     focusMessage?.let { Text(it) }
     if (!snapshot.study.preferences.guided) Text(stringResource(R.string.grammar_map_enable_focus))
     candidate?.blocked?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-    item.articles.forEach { (path, label) ->
-        TextButton(onClick = { actions.article(path) }) { Text(stringResource(R.string.grammar_map_read_article, label)) }
-    }
-    if (group.requires.isNotEmpty()) {
-        Text(stringResource(R.string.grammar_map_foundations), style = MaterialTheme.typography.titleMedium)
-        group.requires.forEach { id -> GrammarMapFoundationLink(snapshot, id, destination, actions) }
-    }
     if (group.authored) {
         group.facets.forEach { facet ->
             val evidence = item.evidence.facets.getValue(facet.id)
@@ -86,13 +110,63 @@ internal fun GrammarMapGroupDetails(
         }
         item.evidence.diagnostics.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
     }
-    if (group.next.isNotEmpty()) {
-        Text(stringResource(R.string.grammar_map_recommendations), style = MaterialTheme.typography.titleMedium)
-        group.next.forEach { link ->
-            TextButton(onClick = { actions.navigate(destination.group(link.groupId)) }) {
-                Text(snapshot.groups.getValue(link.groupId).group.label)
+}
+
+@Composable
+internal fun GrammarMapCollectionDetails(
+    snapshot: GrammarRoadmapSnapshot,
+    destination: GrammarMapDestination,
+    actions: GrammarMapActions,
+    detailState: SaveableStateHolder,
+    practice: (@Composable () -> Unit)?,
+) {
+    val catalog = snapshot.curriculum as? GrammarCurriculumState.Ready
+    val chapter = catalog?.curriculum?.chapters?.singleOrNull { it.id == destination.chapter }
+    val set = snapshot.study.sets.singleOrNull { it.id == destination.setId }
+    if (chapter == null && set == null) {
+        Text(stringResource(R.string.grammar_map_removed))
+        return
+    }
+    val groups = chapter?.groups?.map(snapshot.groups::getValue) ?: snapshot.groupsBySet[requireNotNull(set).id].orEmpty()
+    Text(chapter?.label ?: requireNotNull(set).title, style = MaterialTheme.typography.titleLarge)
+    GrammarMapProgressText(GrammarMapProgress.of(groups), exerciseCounts = practice == null)
+    Text(stringResource(R.string.grammar_map_chapter_help), style = MaterialTheme.typography.bodySmall)
+    practice?.invoke()
+    if (set != null) {
+        TextButton(onClick = { actions.article(set.article) }) { Text(stringResource(R.string.grammar_map_read_article, set.title)) }
+    }
+    detailState.SaveableStateProvider(GrammarRoadmapRoutes.create(destination)) {
+        Text(stringResource(R.string.grammar_browser_contents), style = MaterialTheme.typography.titleMedium)
+        GrammarMapBrowser(snapshot, destination, actions)
+        var relatedVisible by rememberSaveable { mutableStateOf(false) }
+        TextButton(onClick = { relatedVisible = !relatedVisible }) { Text(stringResource(R.string.grammar_browser_related)) }
+        if (relatedVisible) GrammarMapRelated(snapshot, destination, groups, actions)
+    }
+}
+
+@Composable
+private fun GrammarMapRelated(
+    snapshot: GrammarRoadmapSnapshot,
+    destination: GrammarMapDestination,
+    groups: List<GrammarMapGroup>,
+    actions: GrammarMapActions,
+) {
+    if (destination.chapter != null) {
+        val ids = groups.flatMap { it.group.members }.map { it.exerciseId }.toSet()
+        val relatedSets = snapshot.study.sets.map { it to it.exercises.count { exercise -> exercise.id in ids } }.filter { it.second > 0 }
+        relatedSets.forEach { (related, count) ->
+            TextButton(onClick = { actions.navigate(destination.set(related.id)) }) {
+                Text(stringResource(R.string.grammar_browser_related_set, related.title, count, related.exercises.size))
             }
-            Text(link.reason, style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = { actions.article(related.article) }) {
+                Text(stringResource(R.string.grammar_map_read_article, related.title))
+            }
+        }
+    } else {
+        val ids = groups.map { it.group.id }.toSet()
+        val catalog = snapshot.curriculum as? GrammarCurriculumState.Ready
+        catalog?.curriculum?.chapters.orEmpty().filter { it.groups.any(ids::contains) }.forEach { related ->
+            TextButton(onClick = { actions.navigate(destination.chapter(related.id)) }) { Text(related.label) }
         }
     }
 }
@@ -157,12 +231,17 @@ internal fun GrammarMapExternalFoundations(
 }
 
 @Composable
-internal fun GrammarMapEdgeDetails(snapshot: GrammarRoadmapSnapshot, destination: GrammarMapDestination, actions: GrammarMapActions) {
+internal fun GrammarMapEdgeDetails(
+    snapshot: GrammarRoadmapSnapshot,
+    destination: GrammarMapDestination,
+    actions: GrammarMapActions,
+    groupIds: List<String>? = null,
+) {
     val catalog = snapshot.curriculum as? GrammarCurriculumState.Ready
     val ownership = catalog?.graph?.chapterByGroup.orEmpty()
-    val children = catalog?.curriculum?.chapters?.singleOrNull { it.id == destination.chapter }?.groups.orEmpty()
+    val children = groupIds ?: catalog?.curriculum?.chapters?.singleOrNull { it.id == destination.chapter }?.groups.orEmpty()
     val edges = snapshot.groups.values.flatMap { item -> item.group.requires.map { GrammarLeafEdge(it, item.group.id) } }.filter {
-        if (destination.chapter == null) ownership[it.foundation] != ownership[it.dependent] ||
+        if (groupIds == null && destination.chapter == null) ownership[it.foundation] != ownership[it.dependent] ||
             it.foundation !in ownership || it.dependent !in ownership
         else it.dependent in children && it.foundation in children
     }

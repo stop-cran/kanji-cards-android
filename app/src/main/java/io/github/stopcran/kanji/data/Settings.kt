@@ -1,10 +1,12 @@
 package io.github.stopcran.kanji.data
 
 import android.content.Context
+import android.util.Log
 import io.github.stopcran.kanji.Defaults
 import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.focus.FocusBatch
 import io.github.stopcran.kanji.core.grammar.GrammarScope
+import io.github.stopcran.kanji.core.grammar.GrammarTargetKind
 import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.unlock.UnlockRule
 import io.github.stopcran.kanji.core.words.WordStacks
@@ -22,6 +24,8 @@ data class GrammarPreferences(
     val groupsReady: Boolean get() = parserEpoch >= GRAMMAR_GROUP_EPOCH
 }
 
+data class GrammarBrowserPreferences(val kind: GrammarTargetKind = GrammarTargetKind.Chapter, val diagram: Boolean = true)
+
 class Settings(context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
@@ -33,6 +37,19 @@ class Settings(context: Context) {
     val grammarPreferences: StateFlow<Map<String, GrammarPreferences>> = _grammarPreferences
 
     fun grammarFor(sourceId: String): GrammarPreferences = _grammarPreferences.value[sourceId] ?: GrammarPreferences()
+
+    fun grammarBrowserFor(source: RepoSource): GrammarBrowserPreferences {
+        val key = "grammarBrowser:${source.id}|${source.branch}"
+        val saved = prefs.getString("$key:kind", null)
+        val kind = saved?.let { name -> GrammarTargetKind.entries.firstOrNull { it.name == name } }
+        if (saved != null && kind == null) Log.w("GrammarBrowser", "Unknown saved browser kind; using chapters.")
+        return GrammarBrowserPreferences(kind ?: GrammarTargetKind.Chapter, prefs.getBoolean("$key:diagram", true))
+    }
+
+    fun setGrammarBrowser(source: RepoSource, value: GrammarBrowserPreferences) {
+        val key = "grammarBrowser:${source.id}|${source.branch}"
+        prefs.edit().putString("$key:kind", value.kind.name).putBoolean("$key:diagram", value.diagram).apply()
+    }
 
     fun sceneParserEpoch(sourceId: String): Int = prefs.getInt("$SCENE_EPOCH$sourceId", 0)
 

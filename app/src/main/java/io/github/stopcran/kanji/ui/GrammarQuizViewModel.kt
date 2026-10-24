@@ -29,6 +29,8 @@ import io.github.stopcran.kanji.data.GrammarResponseEntity
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.GrammarFocusTicket
 import io.github.stopcran.kanji.data.GrammarStudy
+import io.github.stopcran.kanji.data.GrammarPracticeSnapshot
+import io.github.stopcran.kanji.data.GrammarRoadmapSnapshot
 import io.github.stopcran.kanji.data.grammarPractice
 import io.github.stopcran.kanji.data.grammarStudy
 import io.github.stopcran.kanji.data.recordGrammarAnswer
@@ -99,9 +101,11 @@ class GrammarQuizViewModel(
     private var focusTicket: GrammarFocusTicket? = null
     var focusNotice: String? by mutableStateOf(null)
         private set
-    var approvedPractice: GrammarPracticePreview? = null
+    var approvedPractice: GrammarPracticePreview? by mutableStateOf(null)
         private set
     var practiceOverride = false
+        private set
+    var practiceDetails: GrammarRoadmapSnapshot? by mutableStateOf(null)
         private set
 
     fun ensureStarted(extra: Boolean, interrupted: Boolean = false) {
@@ -110,10 +114,8 @@ class GrammarQuizViewModel(
         viewModelScope.launch {
             if (target == null) start(extra) else prepareTarget {
                 val snapshot = app.db.grammarPractice(app.settings, target, Instant.now())
-                ui = GrammarUi.Preview(
-                    snapshot.preview,
-                    if (interrupted) "The previous practice session was interrupted. Review a fresh batch; previous override consent has expired." else null,
-                )
+                showPreview(snapshot, if (interrupted)
+                    "This topic was reopened after the app was interrupted. Review a fresh batch; previous override consent has expired." else null)
             }
         }
     }
@@ -139,10 +141,10 @@ class GrammarQuizViewModel(
                 }
                 val (snapshot, queue) = prepared
                 when {
-                    queue == null -> ui = GrammarUi.Preview(
-                        snapshot.preview, "Content, scope or availability changed. Review this updated preview and approve any exceptions again.",
+                    queue == null -> showPreview(
+                        snapshot, "Content, scope or availability changed. Review this updated preview and approve any exceptions again.",
                     )
-                    queue.isEmpty() -> ui = GrammarUi.Preview(snapshot.preview, "No exercises are available with these choices. No session was started.")
+                    queue.isEmpty() -> showPreview(snapshot, "No exercises are available with these choices. No session was started.")
                     else -> {
                         sourceId = target.sourceId
                         approvedPractice = snapshot.preview
@@ -154,13 +156,36 @@ class GrammarQuizViewModel(
         }
     }
 
-    private suspend fun prepareTarget(block: suspend () -> Unit) {
+    suspend fun refreshTargeted() {
+        val origin = ui as? GrammarUi.Preview ?: return
+        val selected = target ?: return
+        prepareTarget(current = { ui === origin }) {
+            val snapshot = app.db.grammarPractice(app.settings, selected, Instant.now())
+            if (ui === origin) showPreview(snapshot, if (snapshot.preview == origin.preview) origin.message else
+                "Content, scope or availability changed. Review this updated preview and approve any exceptions again.")
+        }
+    }
+
+    private fun showPreview(snapshot: GrammarPracticeSnapshot, message: String? = null) {
+        practiceDetails = snapshot.roadmap
+        ui = GrammarUi.Preview(snapshot.preview, message)
+    }
+
+    override fun onSessionLeft() {
+        // Route-keyed ViewModels live until the Activity ends; do not retain a corpus snapshot for every visited topic.
+        ui = GrammarUi.Loading
+        practiceDetails = null
+    }
+
+    private suspend fun prepareTarget(current: () -> Boolean = { true }, block: suspend () -> Unit) {
         try {
             block()
         } catch (error: IllegalArgumentException) {
+            if (!current()) return
             Log.e("GrammarPractice", "Could not prepare targeted practice", error)
             ui = GrammarUi.Empty(error.message ?: "Targeted practice is unavailable. Return to Grammar and choose a topic again.")
         } catch (error: SQLiteException) {
+            if (!current()) return
             Log.e("GrammarPractice", "Could not read or start targeted practice", error)
             ui = GrammarUi.Empty("Could not access practice data. Return to Grammar and try again.")
         }

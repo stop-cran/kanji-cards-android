@@ -61,7 +61,10 @@ abstract class StudyViewModel(private val services: Services) : ViewModel() {
     fun leaveSession() {
         endSession("left")
         viewModelScope.cancel()
+        onSessionLeft()
     }
+
+    protected open fun onSessionLeft() = Unit
 
     private fun endSession(reason: String) {
         if (ended) return

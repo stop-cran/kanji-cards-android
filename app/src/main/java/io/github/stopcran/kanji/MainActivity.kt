@@ -29,7 +29,6 @@ import io.github.stopcran.kanji.ui.WordQuizScreen
 import io.github.stopcran.kanji.ui.WordCardsScreen
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.ui.KanaStudyScreen
-import io.github.stopcran.kanji.ui.GrammarPracticePicker
 import io.github.stopcran.kanji.ui.GrammarPracticeRoutes
 import io.github.stopcran.kanji.ui.GrammarPracticeUnavailable
 import androidx.compose.runtime.remember
@@ -51,12 +50,19 @@ private val processToken = System.nanoTime().toString()
 private val sessionPrefixes = listOf("quiz:", "wquiz:", "cquiz:", "grammarquiz:", "draw:", "kreading:", "kana-study:")
 
 internal fun restoreStudyRoutes(routes: List<String>, sameProcess: Boolean): List<String> =
-    if (sameProcess) routes else routes.mapNotNull { route ->
+    routes.mapNotNull { saved ->
+        val route = GrammarPracticeRoutes.adaptDiscovery(saved)
         when {
+            sameProcess -> route
             GrammarPracticeRoutes.isTargeted(route) -> GrammarPracticeRoutes.restart(route)
             sessionPrefixes.any { route.startsWith(it) } -> null
             else -> route
         }
+    }.fold(emptyList()) { result, route ->
+        val previous = result.lastOrNull()
+        val duplicate = (route == "grammar-home" || GrammarPracticeRoutes.isTargeted(route)) &&
+            previous != null && GrammarPracticeRoutes.savedStateIdentity(previous) == GrammarPracticeRoutes.savedStateIdentity(route)
+        if (duplicate) result.dropLast(1) + route else result + route
     }
 
 /**
@@ -78,7 +84,10 @@ private fun AppNav(app: KanjiApp) {
         listOf("home").toMutableStateList()
     }
     val holder = rememberSaveableStateHolder()
-    fun push(route: String) { stack.add(route) }
+    fun push(route: String) {
+        if (!GrammarPracticeRoutes.isTargeted(route) ||
+            GrammarPracticeRoutes.savedStateIdentity(stack.last()) != GrammarPracticeRoutes.savedStateIdentity(route)) stack.add(route)
+    }
     fun pop() {
         if (stack.size > 1) {
             app.services.studySessions.leave(stack.last())
@@ -86,33 +95,49 @@ private fun AppNav(app: KanjiApp) {
             stack.removeAt(stack.lastIndex)
         }
     }
+    fun replace(route: String) {
+        val old = stack.last()
+        app.services.studySessions.leave(old)
+        if (stateKey(stack.lastIndex, old) != stateKey(stack.lastIndex, route)) holder.removeState(stateKey(stack.lastIndex, old))
+        stack[stack.lastIndex] = route
+    }
+    fun browseGrammar() {
+        val index = stack.indexOfLast { it == "grammar-home" }
+        if (index < 0) replace("grammar-home") else while (stack.lastIndex > index) pop()
+    }
 
     BackHandler(enabled = stack.size > 1) { pop() }
 
     // Screens below the top leave composition; the holder keeps their rememberSaveable state (search text, selection, scroll) for Back.
     val top = stack.last()
-    holder.SaveableStateProvider(stateKey(stack.lastIndex, top)) { RouteContent(app, top, { stack.add(it) }, { pop() }) }
+    holder.SaveableStateProvider(stateKey(stack.lastIndex, top)) {
+        RouteContent(app, top, { push(it) }, { pop() }, { replace(it) }, { browseGrammar() })
+    }
 }
 
 /** Index in the key so the same document opened twice in one stack keeps separate scroll state. */
-private fun stateKey(index: Int, route: String) = "$index:$route"
+internal fun stateKey(index: Int, route: String) = "$index:${GrammarPracticeRoutes.savedStateIdentity(route)}"
 
 private fun sourceDocRoute(sourceId: String, path: String) = "source-doc:${Uri.encode(sourceId)}:${Uri.encode(path)}"
 
 @Composable
-private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, pop: () -> Unit) {
+private fun RouteContent(
+    app: KanjiApp,
+    route: String,
+    push: (String) -> Unit,
+    pop: () -> Unit,
+    replace: (String) -> Unit,
+    browseGrammar: () -> Unit,
+) {
     when (route) {
         "settings" -> SettingsScreen(app, onBack = pop, onAbout = { push("about") })
         "about" -> AboutScreen(onBack = pop)
         "cards" -> CardsScreen(app, onBack = pop, onOpen = { push("doc:kanji/$it.md") }, onOpenDoc = { push("doc:$it") })
         "word-cards" -> WordCardsScreen(app, onBack = pop, onOpen = { push("doc:words/$it.md") }, onOpenDoc = { push("doc:$it") })
         "listening-home" -> io.github.stopcran.kanji.ui.ListeningPage(app, pop, push)
-        GrammarPracticeRoutes.PICKER -> GrammarPracticePicker(app, pop) { push(GrammarPracticeRoutes.create(it)) }
-        GrammarPracticeRoutes.UNAVAILABLE -> GrammarPracticeUnavailable(pop) { pop(); push(GrammarPracticeRoutes.PICKER) }
+        GrammarPracticeRoutes.UNAVAILABLE -> GrammarPracticeUnavailable(pop, browseGrammar)
         else -> if (route.startsWith("listening:")) {
             io.github.stopcran.kanji.ui.ListeningScreen(route, pop) { source, path -> push(sourceDocRoute(source, path)) }
-        } else if (route.startsWith(io.github.stopcran.kanji.ui.GrammarRoadmapRoutes.PREFIX)) {
-            io.github.stopcran.kanji.ui.GrammarRoadmapScreen(app, route, pop, push)
         } else if (route.startsWith("quiz:")) {
             QuizScreen(
                 sessionKey = route,
@@ -143,16 +168,22 @@ private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, p
                 }
             }
             if (target == null && !GrammarPracticeRoutes.isOrdinary(route)) {
-                GrammarPracticeUnavailable(pop) { pop(); push(GrammarPracticeRoutes.PICKER) }
+                GrammarPracticeUnavailable(pop, browseGrammar)
             } else {
                 GrammarQuizScreen(
                     sessionKey = route,
                     onBack = pop,
                     onOpenDoc = { sourceId, path -> push(sourceDocRoute(sourceId, path)) },
                     onPracticeMore = {
-                        pop()
-                        push(if (target == null) "grammarquiz:${System.currentTimeMillis()}:extra" else GrammarPracticeRoutes.create(target))
+                        if (target == null) {
+                            pop()
+                            push("grammarquiz:${System.currentTimeMillis()}:extra")
+                        } else {
+                            replace(GrammarPracticeRoutes.create(target))
+                        }
                     },
+                    onOpenTopic = { push(GrammarPracticeRoutes.create(it)) },
+                    onBrowse = browseGrammar,
                     target = target,
                     interrupted = route.endsWith(":restart"),
                 )
@@ -201,19 +232,13 @@ private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, p
                     onGrammarPage = { push("grammar-home") },
                     onListeningPage = { push("listening-home") },
                     onOpenDoc = { push("doc:$it") },
+                    onGrammarDoc = { sourceId, path -> push(sourceDocRoute(sourceId, path)) },
                     onKanaPage = { push("kana-home") },
                     onKanaStudy = { script, mode, extra ->
                         push("kana-study:${script.id}:${mode.name}:${System.currentTimeMillis()}" + if (extra) ":extra" else "")
                     },
                     onCounters = { mode, extra -> push("cquiz:${System.currentTimeMillis()}:${mode.code}" + if (extra) ":extra" else "") },
                     onGrammar = { extra -> push("grammarquiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
-                    onGrammarTopics = { push(GrammarPracticeRoutes.PICKER) },
-                    onGrammarRoadmap = {
-                        val source = app.settings.source.value
-                        push(io.github.stopcran.kanji.ui.GrammarRoadmapRoutes.create(
-                            io.github.stopcran.kanji.ui.GrammarMapDestination(source.id, source.branch),
-                        ))
-                    },
                     onGrammarTarget = { push(GrammarPracticeRoutes.create(it)) },
                     onQuiz = { extra -> push("quiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
                     onDraw = { extra -> push("draw:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },

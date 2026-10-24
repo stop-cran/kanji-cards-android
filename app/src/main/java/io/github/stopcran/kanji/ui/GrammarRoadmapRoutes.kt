@@ -13,20 +13,39 @@ internal data class GrammarMapDestination(
     val branch: String,
     val chapter: String? = null,
     val group: String? = null,
+    val setId: String? = null,
 ) {
     init {
         require(RepoSource.parse("https://github.com/$sourceId", branch)?.id == sourceId) { "Invalid roadmap source." }
-        require(chapter == null || group == null) { "Ambiguous roadmap destination." }
-        listOfNotNull(chapter, group).forEach {
+        require(listOfNotNull(chapter, group, setId).size <= 1) { "Ambiguous Grammar destination." }
+        listOfNotNull(chapter, group, setId).forEach {
             require(it.isNotBlank() && it.length <= 256 && it.none(Char::isISOControl)) { "Invalid roadmap destination." }
         }
     }
 
-    fun overview() = copy(chapter = null, group = null)
-    fun chapter(id: String) = copy(chapter = id, group = null)
-    fun group(id: String) = copy(chapter = null, group = id)
+    fun overview() = copy(chapter = null, group = null, setId = null)
+    fun chapter(id: String) = copy(chapter = id, group = null, setId = null)
+    fun group(id: String) = copy(chapter = null, group = id, setId = null)
+    fun set(id: String) = copy(chapter = null, group = null, setId = id)
     fun target(kind: GrammarTargetKind, id: String) = GrammarPracticeTarget(sourceId, branch, kind, id)
+    fun target(): GrammarPracticeTarget? = when {
+        chapter != null -> target(GrammarTargetKind.Chapter, chapter)
+        group != null -> target(GrammarTargetKind.Group, group)
+        setId != null -> target(GrammarTargetKind.Set, setId)
+        else -> null
+    }
     fun matches(source: RepoSource) = source.id == sourceId && source.branch == branch
+
+    companion object {
+        fun from(target: GrammarPracticeTarget): GrammarMapDestination {
+            val root = GrammarMapDestination(target.sourceId, target.branch)
+            return when (target.kind) {
+                GrammarTargetKind.Chapter -> root.chapter(target.id)
+                GrammarTargetKind.Group -> root.group(target.id)
+                GrammarTargetKind.Set -> root.set(target.id)
+            }
+        }
+    }
 }
 
 internal object GrammarRoadmapRoutes {

@@ -1,14 +1,16 @@
 package io.github.stopcran.kanji.data
 
 import androidx.room.withTransaction
-import io.github.stopcran.kanji.core.content.GrammarCurriculumState
 import io.github.stopcran.kanji.core.grammar.GrammarPractice
 import io.github.stopcran.kanji.core.grammar.GrammarPracticePreview
 import io.github.stopcran.kanji.core.grammar.GrammarPracticeTarget
-import io.github.stopcran.kanji.core.grammar.GrammarTargetKind
 import java.time.Instant
 
-data class GrammarPracticeSnapshot(val study: GrammarStudy, val preview: GrammarPracticePreview)
+data class GrammarPracticeSnapshot(
+    val study: GrammarStudy,
+    val preview: GrammarPracticePreview,
+    val roadmap: GrammarRoadmapSnapshot,
+)
 
 suspend fun AppDatabase.grammarPractice(
     settings: Settings,
@@ -22,12 +24,13 @@ suspend fun AppDatabase.grammarPractice(
     // Validate before grammarStudy builds virtual groups from the cached relationships.
     GrammarPractice.validateSnapshot(grammarSets(target.sourceId))
     val study = grammarStudy(settings, target.sourceId, now, extra = true)
-    val curriculum = if (target.kind == GrammarTargetKind.Chapter) grammarCurriculum(settings, target.sourceId)
-        else GrammarCurriculumState.Absent
+    val curriculum = grammarCurriculum(settings, target.sourceId)
     val preview = GrammarPractice.preview(
         target, study.sets, curriculum, study.availability, meta.contentVersion, study.preferences.parserEpoch,
         study.preferences.newScope, settings.practiceMinimum(), study.readiness.problem, study.notice,
     )
+    val browseStudy = if (study.preferences.guided) grammarStudy(settings, target.sourceId, now) else study
+    val roadmap = grammarRoadmapSnapshot(target.sourceId, browseStudy, curriculum, now)
     require(target.matches(settings.source.value)) { "The selected source changed while preparing practice. Choose a topic again." }
-    GrammarPracticeSnapshot(study, preview)
+    GrammarPracticeSnapshot(study, preview, roadmap)
 }

@@ -79,19 +79,23 @@ internal fun GrammarMapCard(
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(node.label, style = MaterialTheme.typography.titleMedium, maxLines = if (compact) 3 else Int.MAX_VALUE, overflow = TextOverflow.Ellipsis)
+            if (node.contextOnly) Text(stringResource(R.string.grammar_browser_context), style = MaterialTheme.typography.labelSmall)
             GrammarMapProgressText(progress)
         }
     }
 }
 
 @Composable
-internal fun GrammarMapProgressText(progress: GrammarMapProgress) {
-    Text(
+internal fun GrammarMapProgressText(progress: GrammarMapProgress, exerciseCounts: Boolean = true) {
+    if (exerciseCounts) Text(
         if (progress.matching == null) stringResource(R.string.grammar_map_unknown_matching)
         else stringResource(R.string.grammar_map_matching, progress.matching, progress.total),
         style = MaterialTheme.typography.bodySmall,
     )
-    Text(stringResource(R.string.grammar_map_introduced, progress.introduced, progress.total, progress.due), style = MaterialTheme.typography.bodySmall)
+    if (exerciseCounts) Text(
+        stringResource(R.string.grammar_map_introduced, progress.introduced, progress.total, progress.due),
+        style = MaterialTheme.typography.bodySmall,
+    )
     Text(stringResource(R.string.grammar_map_available, progress.available, progress.groups), style = MaterialTheme.typography.bodySmall)
     if (progress.authored > 0) {
         Text(stringResource(R.string.grammar_map_readiness, progress.ready, progress.authored), style = MaterialTheme.typography.bodySmall)

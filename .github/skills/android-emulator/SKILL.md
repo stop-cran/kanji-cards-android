@@ -24,6 +24,13 @@ Android Studio is not needed: the SDK lives in `$env:LOCALAPPDATA\Android\Sdk` a
 - `.\gradlew.bat --console=plain -q :app:installDebug` (prints "Installed on 1 device."). Reinstall after matcher or font changes (see the gotchas in `copilot-instructions.md`).
 - Launch: `adb shell monkey -p io.github.stopcran.kanji 1` (without `-c`; with a category monkey fails to resolve the launcher intent). Package: `io.github.stopcran.kanji`.
 - The app syncs the content repo on launch, so give it a few seconds.
+- Preserve emulator learning data before interactive sessions. Stop the app before copying its database and any WAL/SHM
+  sidecars; a local SQLite reader can checkpoint a backup and remove those sidecars. Restore the coherent snapshot, not a
+  mixture with the device's newer WAL. Use `adb push` to a named temporary file followed by `run-as ... cp`, then remove the
+  temporary file and verify the destination hash and learning counts. Large stdin transfers through `adb shell`/`exec-in`
+  have truncated despite exit code 0 on Windows; never accept the command's success alone as a restored database.
+  Run `adb shell sync` before terminating the emulator, then verify the restored data after a cold boot. An immediate read-back
+  can come from the guest's filesystem cache and is not, by itself, proof that restoration survived shutdown.
 
 ## Look at the screen
 - Screenshot: `cmd /c "adb exec-out screencap -p > $env:TEMP\x.png"` (use `cmd /c`; PowerShell redirection corrupts the PNG), then view the file.

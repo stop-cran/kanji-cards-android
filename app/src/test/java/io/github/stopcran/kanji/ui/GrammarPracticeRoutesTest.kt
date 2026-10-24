@@ -4,6 +4,7 @@ import android.app.Application
 import io.github.stopcran.kanji.core.grammar.GrammarPracticeTarget
 import io.github.stopcran.kanji.core.grammar.GrammarTargetKind
 import io.github.stopcran.kanji.restoreStudyRoutes
+import io.github.stopcran.kanji.stateKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -21,7 +22,7 @@ class GrammarPracticeRoutesTest {
     fun rotationPreservesTheRouteWhileProcessDeathRequiresAFreshSameTargetPreview() {
         val target = GrammarPracticeTarget("owner/repo", "feature/grammar", GrammarTargetKind.Group, "legacy:set:contrast")
         val route = GrammarPracticeRoutes.create(target)
-        val stack = listOf("home", GrammarPracticeRoutes.PICKER, route, "source-doc:article")
+        val stack = listOf("home", "grammar-home", route, "source-doc:article")
         assertEquals(stack, restoreStudyRoutes(stack, sameProcess = true))
         val restored = restoreStudyRoutes(stack, sameProcess = false)
         assertEquals(stack.take(2), restored.take(2))
@@ -34,6 +35,34 @@ class GrammarPracticeRoutesTest {
         assertNotEquals(route, continuation)
         assertEquals(target, GrammarPracticeRoutes.target(continuation))
         assertFalse(continuation.endsWith(":restart"))
+        assertEquals(stateKey(2, route), stateKey(2, continuation))
+        assertEquals(stateKey(2, route), stateKey(2, restored[2]))
+        assertNotEquals(stateKey(2, route), stateKey(3, continuation))
+        assertNotEquals(stateKey(2, route), stateKey(2, GrammarPracticeRoutes.create(target.copy(branch = "main"))))
+        assertNotEquals(stateKey(2, route), stateKey(2, GrammarPracticeRoutes.create(target.copy(kind = GrammarTargetKind.Set))))
+    }
+
+    @Test
+    fun legacyCatalogsAndDuplicateDetailsRecoverWithoutLosingAnArticleOrItsOriginalTarget() {
+        val destination = GrammarMapDestination("owner/repo", "feature/grammar", chapter = "foundations")
+        val target = requireNotNull(destination.target())
+        val route = GrammarPracticeRoutes.create(target)
+        val saved = listOf("home", "grammar-home", GrammarPracticeRoutes.PICKER,
+            GrammarRoadmapRoutes.create(destination), route, "source-doc:original")
+        for (sameProcess in listOf(true, false)) {
+            val restored = restoreStudyRoutes(saved, sameProcess)
+            assertEquals(listOf("home", "grammar-home"), restored.take(2))
+            assertEquals(4, restored.size)
+            assertEquals(target, GrammarPracticeRoutes.target(restored[2]))
+            assertEquals("source-doc:original", restored.last())
+            assertEquals(!sameProcess, restored[2].endsWith(":restart"))
+        }
+        assertEquals(listOf("home", "grammar-home"), restoreStudyRoutes(
+            listOf("home", "grammar-home", GrammarRoadmapRoutes.create(destination.overview())), sameProcess = true,
+        ))
+        assertEquals(listOf("home", GrammarPracticeRoutes.UNAVAILABLE), restoreStudyRoutes(
+            listOf("home", "grammar-map:%bad"), sameProcess = true,
+        ))
     }
 
     @Test

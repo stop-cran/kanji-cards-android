@@ -146,6 +146,8 @@ class GrammarTargetedViewModelTest {
         val vm = targeted(target)
         val preview = vm.ui as GrammarUi.Preview
         assertEquals(4, preview.preview.initialCount(false))
+        assertEquals("beta", vm.practiceDetails!!.study.focus!!.current!!.group.id)
+        assertEquals(alpha.exercises.size, vm.practiceDetails!!.groups.getValue("alpha").progress.total)
         assertTrue(sessions().isEmpty())
         assertEquals(focusBefore, runBlocking { db.reviews().grammarFocus(sourceId) })
         vm.startTargeted(false, preview)
@@ -175,6 +177,7 @@ class GrammarTargetedViewModelTest {
         assertEquals(2, sessions().map { it.id }.toSet().size)
         assertTrue(again.currentExercise!!.id in asked)
         again.leaveSession()
+        assertNull(again.practiceDetails)
     }
 
     @Test
@@ -280,6 +283,36 @@ class GrammarTargetedViewModelTest {
         val ready = runBlocking { db.reviews().grammarReadiness(sourceId, GrammarReadiness.POLICY_VERSION) }
         assertEquals(setOf("a", "b"), ready.filter { it.groupId == "alpha" }.map { it.facetId }.toSet())
         assertNull(runBlocking { db.reviews().grammarFocus(sourceId) })
+        vm.leaveSession()
+    }
+
+    @Test
+    fun readingAndRefreshingDetailsStayReadOnlyAndAnActiveQuestionIgnoresLaterChanges() {
+        val target = installTopics(grammarFixture("alpha", examples = 2))
+        val vm = targeted(target)
+        val old = vm.ui as GrammarUi.Preview
+        val changed = grammarFixture("alpha", examples = 3)
+        runBlocking {
+            db.content().insertGrammar(listOf(GrammarEntity(sourceId, changed.id, Json.encodeToString(GrammarSet.serializer(), changed), 0)))
+            vm.refreshTargeted()
+        }
+        val fresh = vm.ui as GrammarUi.Preview
+        assertEquals(6, fresh.preview.members.size)
+        assertEquals(6, vm.practiceDetails!!.groups.getValue("alpha").progress.total)
+        assertTrue(fresh.message!!.contains("changed"))
+        vm.startTargeted(true, old)
+        assertEquals(fresh, vm.ui)
+        assertTrue(sessions().isEmpty())
+        assertTrue(states().isEmpty())
+        assertTrue(logs().isEmpty())
+        assertNull(runBlocking { db.reviews().grammarFocus(sourceId) })
+        vm.startTargeted(false, fresh)
+        awaitLoaded(vm)
+        val question = vm.ui
+        services.settings.setSource("https://github.com/other/repo", "main")
+        runBlocking { vm.refreshTargeted() }
+        assertEquals(question, vm.ui)
+        assertEquals(1, sessions().size)
         vm.leaveSession()
     }
 }

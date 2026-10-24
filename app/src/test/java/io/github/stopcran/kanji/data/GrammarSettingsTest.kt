@@ -2,6 +2,7 @@ package io.github.stopcran.kanji.data
 
 import android.app.Application
 import io.github.stopcran.kanji.core.grammar.GrammarScope
+import io.github.stopcran.kanji.core.grammar.GrammarTargetKind
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -12,6 +13,23 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], manifest = Config.NONE, application = Application::class)
 class GrammarSettingsTest {
+    @Test
+    fun browserRepresentationPersistsPerSourceAndBranchWithoutChangingStudyPreferences() {
+        val context = RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("settings", 0).edit().clear().commit()
+        val settings = Settings(context)
+        val source = settings.source.value
+        val branch = source.copy(branch = "feature/grammar")
+        settings.setGrammarBrowser(source, GrammarBrowserPreferences(GrammarTargetKind.Set, true))
+        settings.setGrammarBrowser(branch, GrammarBrowserPreferences(GrammarTargetKind.Group, false))
+        val reopened = Settings(context)
+        assertEquals(GrammarBrowserPreferences(GrammarTargetKind.Set, true), reopened.grammarBrowserFor(source))
+        assertEquals(GrammarBrowserPreferences(GrammarTargetKind.Group, false), reopened.grammarBrowserFor(branch))
+        reopened.setSource("https://github.com/example/fork", "main")
+        assertEquals(GrammarBrowserPreferences(), reopened.grammarBrowserFor(reopened.source.value))
+        assertEquals(GrammarPreferences(), reopened.grammarFor(source.id))
+    }
+
     @Test
     fun scopesAndSuccessfulEpochPersistIndependentlyAcrossSourceSwitches() {
         val context = RuntimeEnvironment.getApplication()

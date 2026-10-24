@@ -101,6 +101,14 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   Same-topic continuation creates a new route/preview/session without inherited approval. Process-death restoration likewise replaces
   targeted routes with fresh interrupted previews, including underneath an open article; it does not resume answers or restore consent.
   A changed source/branch, missing target or malformed route is explained, never silently replaced by general practice.
+  **Unified details (#62)** embed this preview in the topic page owned by the same `GrammarQuizViewModel`; successful Start goes
+  directly to its first question, with no second authorization handoff. A transactional practice snapshot also projects browse
+  progress and ordinary focus candidates; its actual queue still uses the extra-practice study without a focus ticket.
+  Observable preview refreshes apply only to the still-current pending preview, including their error paths, never an active quiz.
+  Returning from targeted practice replaces the current route with a fresh UUID and ends/cancels the old registered ViewModel.
+  Detail page state uses stack position plus logical source/branch/kind/ID, while consent and question state use the session UUID.
+  Thus article Back/rotation can retain an unchanged pending approval, but a new batch/process cannot inherit it. Route removal
+  releases the large detail projection even though the Activity retains its route-keyed ViewModel.
 - **Typed words** (`WordType`, `core/words/TypedAnswer.kt`): English prompt, free-text answer, no options. Gate is `WordDirection.gate` (EnToJp, twice answered).
   Exact written form or a same-title/same-type synonym = Good; kana reading of a kanji word = Hard (re-asked); else Again. IME conversion is accepted as typed;
   kana-to-kanji recall is left to other modes. No first-success cap. Its new items share the daily `newBudget`.
@@ -359,26 +367,42 @@ analyzer accepts the new member but does not interpret listening responses as gr
 ## 7. UI and platform constraints
 
 - Everything goes through `ui/Page` (edge-to-edge insets, scrolling). Back is a string-route stack in `MainActivity`.
-- **Grammar roadmap (#61):** the Grammar page keeps source-set browsing and adds exactly two diagram levels: authored chapters,
-  then their existing authored groups. Group details are not a third diagram hierarchy. Prerequisite depth determines horizontal
+- **Grammar browser (#62, building on #61):** one Browse section follows the ordinary study/scope/focus controls.
+  Chapters, topics and article sets are alternate discovery kinds, not a containment hierarchy. All have lists; chapters and
+  groups also have roadmaps. Article sets never acquire invented prerequisite arrows; their details show their actual groups'
+  internal roadmap, including compatibility groups. Chapter details contain only authored chapter members; related-set links
+  disclose the intersection versus the full set. Root kind/view preferences are source/selected-branch specific.
+  The shared search and exact-level browse scope affect discovery, never full-target practice membership or new-item scope.
+  Lists omit nonmatches; diagrams retain and label structural context. Missing chapter metadata explicitly falls back to the
+  topic list while valid group/set discovery and practice remain available. Unmapped/compatibility filters and find-next are
+  secondary browser controls, not duplicate full catalogs. Every item/foundation link reaches the common details/preview page.
+  Group details keep identity/status and practice prominent; detailed progress, recent evidence and the ordinary-focus action
+  share an expandable secondary section. Collection progress still summarizes its actual member groups.
+  Prerequisite depth determines horizontal
   layers; stable IDs and predecessor lanes break ties. Labels, browse filters, scores and due counts never determine topology.
   Chapter arrows retain only direct cross-chapter group pairs; the accessible details list names both ends. External and
   deliberately unmapped foundations remain navigable authored groups, not a fabricated chapter or compatibility group.
   Missing/invalid/pending catalogs leave group/list access available and explain the unavailable assignment.
   A finite, clipped viewport composes only intersecting cards and draws decorative arrows; it never measures a huge world-sized
   Compose layout. Horizontal/vertical panning is separate from the surrounding page scroll, and the viewport shrinks in landscape.
-  An accessible lazy list has untruncated labels. Search spans all groups/chapters; browse filters affect counts, never hidden gates.
+  An accessible lazy list has untruncated labels. Search applies to the selected kind and current chapter/set context.
   Controls start collapsed to leave room for the map; zero-match foundations stay visible, and unknown old-cache level counts say
   that a sync is needed rather than claiming zero matches.
   Counts have exercise/group denominators. Introductions, due exercises, non-expiring earned readiness and recent familiarity are
   separate; recommendation priority is never a knowledge score. Shared availability preserves started reviews and valid targeted
   subsets even when a whole-group ordinary focus cannot cover every facet. Partial chapters remain actionable. Group details
   separately explain scope, prerequisite, coherence, metadata, exhaustion and ordinary daily-allowance restrictions.
-  Source/selected-branch-bound routes preserve overview/chapter/group identity and route-local selection/search/list/pan/page state through
+  Source/selected-branch-bound routes preserve chapter/group/set identity and route-local selection/search/list/pan/page state through
   article/practice navigation and process recreation. Each reopen re-resolves current metadata, including re-chaptered groups;
   removed targets and changed sources are explicit states. Finding a topic and targeted practice do not change ordinary focus.
   Selection has a distinct border and accessibility state across diagram/list views, without changing readiness colors.
   Loading placeholders retain the same page scroll state without measuring it against their short temporary body.
+  A separate holder above the Ready/loading switch saves disappearing browser/evidence state. Practice consent remains outside
+  those saved subtrees: stale Start revalidation clears it without discarding query, representation, selection or viewport.
+  The browser root is `grammar-home`; targeted `grammarquiz:<UUID>:target:...` routes own details and activated sessions.
+  Legacy `grammar-topics` and roadmap overview routes adapt to the existing root; roadmap detail routes adapt to common
+  source-bound targets. Adjacent legacy duplicate roots/details collapse without dropping an article above interrupted practice.
+  System Back follows the actual path; active targeted-quiz Back first returns to that target's fresh detail preview.
   Only the separate "Make this my next focus" action writes focus, and it requires the existing opt-in and current eligibility.
   Development budgets: warm pure layout p95 below 100 ms for a 1,000-node/960-edge branched DAG; at most 12 composed cards in the
   default phone viewport; warm navigation/first render below 2 s and post-idle interaction below 1 s. API 35 Pixel 9 (1080x2424,

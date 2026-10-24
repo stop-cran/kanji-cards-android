@@ -36,4 +36,23 @@ internal object GrammarPracticeRoutes {
         Log.w("GrammarPractice", "Cannot restore practice target", error)
         UNAVAILABLE
     }
+
+    fun adaptDiscovery(route: String): String = try {
+        when {
+            route == PICKER -> "grammar-home"
+            route.startsWith(GrammarRoadmapRoutes.PREFIX) -> GrammarRoadmapRoutes.parse(route).target()?.let { create(it) } ?: "grammar-home"
+            else -> route
+        }
+    } catch (error: IllegalArgumentException) {
+        Log.w("GrammarPractice", "Cannot restore Grammar discovery", error)
+        UNAVAILABLE
+    }
+
+    /** Detail browsing state survives a new batch, but the quiz/consent identity remains the fresh route UUID. */
+    fun savedStateIdentity(route: String): String = try {
+        if (isTargeted(route)) "grammar-topic:" + Uri.encode(Json.encodeToString(GrammarPracticeTarget.serializer(), target(route))) else route
+    } catch (error: IllegalArgumentException) {
+        Log.w("GrammarPractice", "Invalid Grammar state identity", error)
+        route
+    }
 }

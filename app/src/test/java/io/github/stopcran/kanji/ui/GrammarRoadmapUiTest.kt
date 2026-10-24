@@ -12,6 +12,12 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.isToggleable
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -19,10 +25,13 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import io.github.stopcran.kanji.core.content.GrammarCurriculum
+import io.github.stopcran.kanji.core.content.GrammarCurriculumState
+import io.github.stopcran.kanji.core.content.GrammarSet
 import io.github.stopcran.kanji.core.content.GrammarLeafEdge
 import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.grammar.GrammarAvailability
@@ -32,6 +41,9 @@ import io.github.stopcran.kanji.core.grammar.GrammarMapGroup
 import io.github.stopcran.kanji.core.grammar.GrammarMapProgress
 import io.github.stopcran.kanji.core.grammar.GrammarRoadmap
 import io.github.stopcran.kanji.core.grammar.GrammarScope
+import io.github.stopcran.kanji.core.grammar.GrammarPractice
+import io.github.stopcran.kanji.core.grammar.GrammarTargetKind
+import io.github.stopcran.kanji.stateKey
 import io.github.stopcran.kanji.core.grammarFixture
 import io.github.stopcran.kanji.data.GrammarPreferences
 import io.github.stopcran.kanji.data.GrammarRoadmapSnapshot
@@ -101,20 +113,25 @@ class GrammarRoadmapUiTest {
     }
 
     @Test
-    fun unmappedFoundationHasAnAuthoredDetailsDestinationAndArticleAndPracticeRemainSeparate() {
+    fun unmappedFoundationHasCommonDetailsWithEmbeddedPracticeAndSeparateArticleAndFocusActions() {
         val snapshot = partialSnapshot()
         var navigated: GrammarMapDestination? = null
         var practiced: String? = null
         var article: String? = null
         var focus: String? = null
-        val actions = GrammarMapActions({ navigated = it }, { practiced = it.id }, { article = it }, { focus = it }, {})
+        val actions = GrammarMapActions({ navigated = it }, { article = it }, { focus = it }, {})
         val current = mutableStateOf("q")
         rule.setContent {
             Page("Grammar roadmap", onBack = {}) {
-                GrammarMapGroupDetails(snapshot, snapshot.groups.getValue(current.value), destination.group(current.value), actions)
+                GrammarMapGroupDetails(
+                    snapshot, snapshot.groups.getValue(current.value), destination.group(current.value), actions, rememberSaveableStateHolder(),
+                ) {
+                    GrammarPracticePreviewContent(preview(snapshot, current.value), current.value, embedded = true) { practiced = current.value }
+                }
             }
         }
-        rule.onNodeWithText("Practice this group").performScrollTo().performClick()
+        rule.onNode(isToggleable()).performScrollTo().performClick()
+        rule.onNodeWithText("Practice").performScrollTo().performClick()
         assertEquals("q", practiced)
         assertNull(focus)
         rule.onNodeWithText("Unmapped foundation").performScrollTo().assertIsDisplayed().performClick()
@@ -131,13 +148,15 @@ class GrammarRoadmapUiTest {
         val snapshot = partialSnapshot()
         val loaded = mutableStateOf<GrammarMapState>(GrammarMapState.Ready(snapshot))
         val route = mutableStateOf("map")
-        val actions = GrammarMapActions({}, {}, { route.value = "article" }, {}, {})
+        val actions = GrammarMapActions({}, { route.value = "article" }, {}, {})
         val restoration = StateRestorationTester(rule)
         restoration.setContent {
             val holder = rememberSaveableStateHolder()
             holder.SaveableStateProvider(route.value) {
                 if (route.value == "map") {
-                    GrammarRoadmapPage(loaded.value, destination.group("q"), actions, {})
+                    GrammarRoadmapPage(loaded.value, destination.group("q"), actions, {}) {
+                        GrammarPracticePreviewContent(preview(snapshot, "q"), "session", embedded = true) {}
+                    }
                 } else {
                     Page("Article", onBack = { loaded.value = GrammarMapState.Loading; route.value = "map" }) { }
                 }
@@ -160,7 +179,7 @@ class GrammarRoadmapUiTest {
     fun chapterSelectionSurvivesDetailsBackModeChangesAndProcessRestoration() {
         val snapshot = partialSnapshot()
         val route = mutableStateOf("chapter")
-        val actions = GrammarMapActions({ route.value = "group" }, {}, {}, {}, {})
+        val actions = GrammarMapActions({ route.value = "group" }, {}, {}, {})
         val restoration = StateRestorationTester(rule)
         restoration.setContent {
             val holder = rememberSaveableStateHolder()
@@ -188,7 +207,9 @@ class GrammarRoadmapUiTest {
         val target = GrammarMapDestination("owner/repo", "feature/roadmap", group = "legacy:example:contrast")
         assertEquals(target, GrammarRoadmapRoutes.parse(GrammarRoadmapRoutes.create(target)))
         val stack = listOf("home", GrammarRoadmapRoutes.create(target), "doc:articles/x.md")
-        assertEquals(stack, io.github.stopcran.kanji.restoreStudyRoutes(stack, sameProcess = false))
+        val restored = io.github.stopcran.kanji.restoreStudyRoutes(stack, sameProcess = false)
+        assertEquals(target.target(), GrammarPracticeRoutes.target(restored[1]))
+        assertEquals(stack.last(), restored.last())
         assertFalse(target.matches(requireNotNull(RepoSource.parse("https://github.com/owner/repo", "main"))))
         assertThrows(IllegalArgumentException::class.java) { GrammarRoadmapRoutes.parse("grammar-map:%bad") }
         val label = "A long topic label that should wrap in the accessible list without losing its explanation or actions"
@@ -205,8 +226,164 @@ class GrammarRoadmapUiTest {
         assertEquals(target, selected)
     }
 
-    private fun partialSnapshot(): GrammarRoadmapSnapshot {
-        val sets = listOf(grammarFixture("p"), grammarFixture("q", requires = listOf("p")))
+    @Test
+    fun rotationKeepsPendingConsentButFreshSessionsAndChangedPreviewsClearItWithoutLosingDetailState() {
+        val snapshot = partialSnapshot()
+        val state = mutableStateOf(preview(snapshot, "q"))
+        var route = GrammarPracticeRoutes.create(state.value.preview.target)
+        val restoration = StateRestorationTester(rule)
+        restoration.setContent {
+            val holder = rememberSaveableStateHolder()
+            holder.SaveableStateProvider(stateKey(2, route)) {
+                GrammarRoadmapPage(GrammarMapState.Ready(snapshot), destination.group("q"), GrammarMapActions({}, {}, {}, {}), {}) {
+                    GrammarPracticePreviewContent(state.value, route, embedded = true) {}
+                }
+            }
+        }
+        rule.onNode(isToggleable()).performScrollTo().assertIsOff().performClick()
+        restoration.emulateSavedInstanceStateRestore()
+        rule.onNode(isToggleable()).assertIsDisplayed().assertIsOn()
+        route = GrammarPracticeRoutes.create(state.value.preview.target)
+        restoration.emulateSavedInstanceStateRestore()
+        rule.onNode(isToggleable()).assertIsDisplayed().assertIsOff().performClick()
+        rule.runOnIdle { state.value = state.value.copy(preview = state.value.preview.copy(contentVersion = "new-version")) }
+        rule.onNode(isToggleable()).assertIsOff()
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h1200dp")
+    fun startLoadingPreservesCollectionContextButNotConsentForStalePreviewsAndFreshSessions() {
+        val snapshot = collectionSnapshot()
+        val target = destination.set(snapshot.study.sets.single().id)
+        val state = mutableStateOf(GrammarUi.Preview(GrammarPractice.preview(
+            requireNotNull(target.target()), snapshot.study.sets, snapshot.curriculum, snapshot.study.availability,
+            "accepted-version", 6, GrammarScope.All, 10,
+        )))
+        val loaded = mutableStateOf<GrammarMapState>(GrammarMapState.Ready(snapshot))
+        val phase = mutableStateOf("details")
+        val session = mutableStateOf("first")
+        val restoration = StateRestorationTester(rule)
+        restoration.setContent {
+            val holder = rememberSaveableStateHolder()
+            holder.SaveableStateProvider(phase.value) {
+                if (phase.value == "details") {
+                    GrammarRoadmapPage(loaded.value, target, GrammarMapActions({}, {}, {}, {}), {}) {
+                        GrammarPracticePreviewContent(state.value, session.value, embedded = true) { loaded.value = GrammarMapState.Loading }
+                    }
+                } else {
+                    Page("Question", onBack = {}) { }
+                }
+            }
+        }
+        rule.onNodeWithTag("grammar-diagram").performScrollTo().performSemanticsAction(SemanticsActions.ScrollBy) { it(100f, 450f) }
+        fun pan() = rule.onNodeWithTag("grammar-diagram").fetchSemanticsNode().config.let {
+            it[SemanticsProperties.HorizontalScrollAxisRange].value() to it[SemanticsProperties.VerticalScrollAxisRange].value()
+        }
+        val originalPan = pan()
+        assertTrue(originalPan.first > 0 && originalPan.second > 0)
+        rule.onNodeWithText("Accessible list").performScrollTo().performClick()
+        rule.onNode(hasSetTextAction()).performScrollTo().performTextReplacement("part")
+        rule.onNode(hasSetTextAction()).assertTextContains("part")
+        rule.onNodeWithTag("grammar-list").performScrollTo().performScrollToIndex(8)
+        rule.onNodeWithTag("grammar-node:part-08").performClick()
+        fun listPosition() = rule.onNodeWithTag("grammar-list").fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value()
+        val originalPosition = listPosition()
+        assertTrue(originalPosition > 0)
+        fun checkContext() {
+            rule.onNode(hasSetTextAction()).assertTextContains("part")
+            rule.onNodeWithText("Accessible list").assertIsSelected()
+            rule.onNodeWithTag("grammar-list").performScrollTo()
+            rule.onNodeWithTag("grammar-node:part-08").assertIsDisplayed().assertIsSelected()
+            assertEquals(originalPosition, listPosition())
+        }
+        rule.onNode(isToggleable()).performScrollTo().performClick()
+        rule.onNodeWithText("Practice").performScrollTo().performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Loading…").assertIsDisplayed()
+        rule.runOnIdle {
+            state.value = state.value.copy(preview = state.value.preview.copy(contentVersion = "updated-version"))
+            loaded.value = GrammarMapState.Ready(snapshot)
+        }
+        checkContext()
+        rule.onNode(isToggleable()).performScrollTo().assertIsOff().performClick()
+        rule.onNodeWithText("Practice").performScrollTo().performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Loading…").assertIsDisplayed()
+        rule.runOnIdle { phase.value = "question" }
+        rule.onNodeWithText("Question").assertIsDisplayed()
+        rule.runOnIdle { session.value = "fresh"; phase.value = "details" }
+        rule.waitForIdle()
+        restoration.emulateSavedInstanceStateRestore()
+        rule.runOnIdle { loaded.value = GrammarMapState.Ready(snapshot) }
+        checkContext()
+        rule.onNode(isToggleable()).performScrollTo().assertIsOff()
+        rule.onNodeWithText("Diagram").performScrollTo().performClick()
+        rule.onNodeWithTag("grammar-diagram").performScrollTo()
+        assertEquals(originalPan, pan())
+    }
+
+    private fun collectionSnapshot(): GrammarRoadmapSnapshot {
+        val sets = listOf(grammarFixture("p"), grammarFixture("q", requires = listOf("p"))) +
+            (0 until 12).map { grammarFixture("part-${it.toString().padStart(2, '0')}") }
+        val combined = sets.first().copy(
+            id = "combined", exercises = sets.flatMap { it.exercises }, introductionGroups = sets.flatMap { it.introductionGroups },
+        )
+        GrammarPractice.validateSnapshot(listOf(combined))
+        return partialSnapshot(listOf(combined))
+    }
+
+    private fun preview(snapshot: GrammarRoadmapSnapshot, id: String) = GrammarUi.Preview(GrammarPractice.preview(
+        requireNotNull(destination.group(id).target()), snapshot.study.sets, snapshot.curriculum, snapshot.study.availability,
+        "accepted-version", 6, GrammarScope.All, 10,
+    ))
+
+    @Test
+    fun articleSetContentsUseActualMembershipIncludingCompatibilityWithoutInventingSetArrows() {
+        val p = grammarFixture("p")
+        val q = grammarFixture("q", requires = listOf("p"))
+        val legacy = grammarFixture("legacy", authored = false)
+        val combined = p.copy(id = "combined", exercises = p.exercises + q.exercises + legacy.exercises,
+            introductionGroups = p.introductionGroups + q.introductionGroups)
+        GrammarPractice.validateSnapshot(listOf(combined))
+        val snapshot = partialSnapshot(listOf(combined))
+        val whole = grammarBrowserContent(snapshot, destination, GrammarTargetKind.Set)
+        assertEquals(combined.exercises.size, whole.nodes.single().progress.total)
+        assertTrue(whole.edges.isEmpty())
+        val contents = grammarBrowserContent(snapshot, destination.set("combined"), GrammarTargetKind.Group)
+        assertEquals(3, contents.nodes.size)
+        assertEquals(listOf(GrammarLeafEdge("p", "q")), contents.edges)
+        assertEquals(listOf("q"), grammarBrowserContent(snapshot, destination.chapter("later"), GrammarTargetKind.Group).nodes.map { it.id })
+        assertEquals(listOf("p"), grammarBrowserContent(snapshot, destination, GrammarTargetKind.Group, GrammarTopicFilter.Unmapped).nodes.map { it.id })
+        val compatibility = grammarBrowserContent(snapshot, destination, GrammarTargetKind.Group, GrammarTopicFilter.Compatibility).nodes.single()
+        assertEquals(legacy.exercises.size, compatibility.progress.total)
+    }
+
+    @Test
+    fun missingChaptersFallBackExplicitlyAndTheSameSearchWorksAcrossSetsAndTopicLists() {
+        val snapshot = partialSnapshot().copy(curriculum = GrammarCurriculumState.Absent)
+        rule.setContent {
+            Page("Grammar", onBack = {}, ime = true) {
+                GrammarMapBrowser(snapshot, destination, GrammarMapActions({}, {}, {}, {}))
+            }
+        }
+        rule.onNodeWithText("Chapter browsing is unavailable. Showing the topic list; article sets remain available.").assertIsDisplayed()
+        rule.onNodeWithTag("grammar-diagram").assertDoesNotExist()
+        rule.onNodeWithText("Article sets").performScrollTo().performClick()
+        rule.onNodeWithText("Article sets").assertIsSelected()
+        rule.onNode(hasSetTextAction()).performScrollTo().performTextReplacement("q")
+        rule.onNodeWithTag("grammar-list").performScrollTo()
+        rule.onNodeWithTag("grammar-node:q").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("grammar-node:p").assertDoesNotExist()
+        rule.onNodeWithText("Topics").performScrollTo().performClick()
+        rule.onNodeWithText("Accessible list").performScrollTo().performClick()
+        rule.onNodeWithTag("grammar-list").performScrollTo()
+        rule.onNodeWithTag("grammar-node:q").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("grammar-node:p").assertDoesNotExist()
+    }
+
+    private fun partialSnapshot(
+        sets: List<GrammarSet> = listOf(grammarFixture("p"), grammarFixture("q", requires = listOf("p"))),
+    ): GrammarRoadmapSnapshot {
         val now = Instant.parse("2026-10-24T12:00:00Z")
         val groups = GrammarFocus.groups(sets)
         val exercises = sets.flatMap { it.exercises }.associateBy { it.id }

@@ -69,7 +69,7 @@ class ComposeUiTest {
         )
         val state = androidx.compose.runtime.mutableStateOf(GrammarUi.Preview(preview))
         var approval: Boolean? = null
-        rule.setContent { Page("Practice", onBack = {}) { GrammarPracticePreviewContent(state.value) { approval = it } } }
+        rule.setContent { Page("Practice", onBack = {}) { GrammarPracticePreviewContent(state.value, "session") { approval = it } } }
         val consent = "Include the 4 restricted new exercises described above for this session only."
         rule.onNodeWithText("Start").performScrollTo().assertIsNotEnabled()
         rule.onNodeWithText(consent).performScrollTo().assertIsOff().performClick().assertIsOn()
