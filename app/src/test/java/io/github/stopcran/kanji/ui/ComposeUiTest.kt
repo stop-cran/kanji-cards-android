@@ -4,6 +4,9 @@ import android.app.Application
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -11,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import io.github.stopcran.kanji.core.srs.KanjiFont
 import io.github.stopcran.kanji.core.words.WordDirection
@@ -47,6 +51,36 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [28], application = Application::class)
 class ComposeUiTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test
+    fun targetedPreviewRequiresALabeledOptInAndDropsItForAChangedSnapshot() {
+        val sets = listOf(grammarFixture("foundation", examples = 2), grammarFixture("topic", examples = 2, requires = listOf("foundation")))
+        val now = Instant.parse("2026-10-24T12:00:00Z")
+        val preview = io.github.stopcran.kanji.core.grammar.GrammarPractice.preview(
+            io.github.stopcran.kanji.core.grammar.GrammarPracticeTarget(
+                "owner/repo", "main", io.github.stopcran.kanji.core.grammar.GrammarTargetKind.Group, "topic",
+            ),
+            sets, io.github.stopcran.kanji.core.content.GrammarCurriculumState.Absent,
+            io.github.stopcran.kanji.core.grammar.GrammarAvailability.evaluate(
+                GrammarFocus.groups(sets), sets.flatMap { it.exercises }.associateBy { it.id },
+                emptyMap(), GrammarScope.N5, true, emptySet(), 0, now,
+            ),
+            "v1", 6, GrammarScope.N5, 10,
+        )
+        val state = androidx.compose.runtime.mutableStateOf(GrammarUi.Preview(preview))
+        var approval: Boolean? = null
+        rule.setContent { Page("Practice", onBack = {}) { GrammarPracticePreviewContent(state.value) { approval = it } } }
+        val consent = "Include the 4 restricted new exercises described above for this session only."
+        rule.onNodeWithText("Start").performScrollTo().assertIsNotEnabled()
+        rule.onNodeWithText(consent).performScrollTo().assertIsOff().performClick().assertIsOn()
+        rule.onNodeWithText("Start with these exceptions").performScrollTo().assertIsEnabled().performClick()
+        rule.runOnIdle {
+            assertEquals(true, approval)
+            state.value = GrammarUi.Preview(preview.copy(contentVersion = "v2"), "Review changed material.")
+        }
+        rule.onNodeWithText(consent).performScrollTo().assertIsOff()
+        rule.onNodeWithText("Start").performScrollTo().assertIsNotEnabled()
+    }
 
     @Test
     fun grammarRecommendationReadoutExplainsItsAuthoredLinkAndSourceEvidenceNotTheNewGroupsHistory() {

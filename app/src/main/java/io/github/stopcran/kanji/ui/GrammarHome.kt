@@ -45,6 +45,10 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.time.Instant
+import androidx.compose.ui.res.stringResource
+import io.github.stopcran.kanji.R
+import io.github.stopcran.kanji.core.grammar.GrammarPracticeTarget
+import io.github.stopcran.kanji.core.grammar.GrammarTargetKind
 
 internal class GrammarHome(
     val sourceId: String,
@@ -106,6 +110,9 @@ fun GrammarPage(app: KanjiApp, onBack: () -> Unit, onOpenDoc: (String) -> Unit, 
             Text(GRAMMAR_LEVEL_SYNC_NEEDED)
         }
         ModeRow("Choose or type the construction", home.mode, onStart = a.onGrammar)
+        OutlinedButton(onClick = a.onGrammarTopics, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.grammar_choose_topic))
+        }
         GrammarFocusControls(app, home)
         Text("Browse: ${preferences.browseScope.browseLabel}")
         GrammarScopeChips(preferences.browseScope) { app.settings.setGrammarBrowseScope(home.sourceId, it) }
@@ -125,6 +132,12 @@ fun GrammarPage(app: KanjiApp, onBack: () -> Unit, onOpenDoc: (String) -> Unit, 
                     onClick = { onOpenDoc(set.article) },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Read the article") }
+                TextButton(
+                    onClick = {
+                        a.onGrammarTarget(GrammarPracticeTarget(home.sourceId, app.settings.source.value.branch, GrammarTargetKind.Set, set.id))
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(stringResource(R.string.grammar_practice_set)) }
             }
         }
     }

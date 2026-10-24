@@ -101,6 +101,13 @@ private suspend fun AppDatabase.storeCursor(sourceId: String, old: GrammarFocusE
     return revision
 }
 
+private fun grammarReadinessNotice(readiness: GrammarReadinessSnapshot, sets: List<GrammarSet>): String? = when {
+    readiness.problem != null -> readiness.problem
+    readiness.rebuilding && sets.any { it.introductionGroups.isNotEmpty() } ->
+        "Rebuilding prerequisite readiness from retained history. Existing readiness and started reviews remain available."
+    else -> null
+}
+
 /** A consistent read-only preview, or the same calculation with an explicit session reservation. */
 suspend fun AppDatabase.grammarStudy(
     settings: Settings,
@@ -123,12 +130,7 @@ suspend fun AppDatabase.grammarStudy(
         GrammarFocus.groups(sets), sets.flatMap { it.exercises }.associateBy { it.id }, states, preferences.newScope,
         preferences.levelsReady, readiness.readyGroups, budget, now, newMetadataProblem = metadataError,
     )
-    val readinessNotice = when {
-        readiness.problem != null -> readiness.problem
-        readiness.rebuilding && sets.any { it.introductionGroups.isNotEmpty() } ->
-            "Rebuilding prerequisite readiness from retained history. Existing readiness and started reviews remain available."
-        else -> null
-    }
+    val readinessNotice = grammarReadinessNotice(readiness, sets)
     val base = GrammarStudy(
         sets, states, preferences, pool.ids, pool.ids, budget, now,
         listOfNotNull(pool.newItemMessage, readinessNotice).takeIf { it.isNotEmpty() }?.joinToString("\n"),
@@ -193,6 +195,7 @@ suspend fun AppDatabase.changeGrammarFocus(settings: Settings, sourceId: String,
 }
 
 /** The event and its first-introduction quota/ordinal update commit together. */
+@Suppress("LongParameterList")
 suspend fun AppDatabase.recordGrammarAnswer(
     settings: Settings,
     state: ReviewStateEntity,

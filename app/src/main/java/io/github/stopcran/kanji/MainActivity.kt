@@ -29,6 +29,11 @@ import io.github.stopcran.kanji.ui.WordQuizScreen
 import io.github.stopcran.kanji.ui.WordCardsScreen
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.ui.KanaStudyScreen
+import io.github.stopcran.kanji.ui.GrammarPracticePicker
+import io.github.stopcran.kanji.ui.GrammarPracticeRoutes
+import io.github.stopcran.kanji.ui.GrammarPracticeUnavailable
+import androidx.compose.runtime.remember
+import android.util.Log
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,6 +50,15 @@ class MainActivity : ComponentActivity() {
 private val processToken = System.nanoTime().toString()
 private val sessionPrefixes = listOf("quiz:", "wquiz:", "cquiz:", "grammarquiz:", "draw:", "kreading:", "kana-study:")
 
+internal fun restoreStudyRoutes(routes: List<String>, sameProcess: Boolean): List<String> =
+    if (sameProcess) routes else routes.mapNotNull { route ->
+        when {
+            GrammarPracticeRoutes.isTargeted(route) -> GrammarPracticeRoutes.restart(route)
+            sessionPrefixes.any { route.startsWith(it) } -> null
+            else -> route
+        }
+    }
+
 /**
  * Back stack of route strings: "home", "kanji-home", "words-home", "settings", "cards", "word-cards", "quiz:..", "doc:<path>". Survives rotation via
  * rememberSaveable; after process death ephemeral session routes are dropped. Durable listening encounters are restored.
@@ -57,7 +71,7 @@ private fun AppNav(app: KanjiApp) {
             restore = { saved ->
                 val routes = saved.filterNot { it.startsWith("t:") }
                 val sameProcess = saved.firstOrNull() == "t:$processToken"
-                (if (sameProcess) routes else routes.filterNot { r -> sessionPrefixes.any { r.startsWith(it) } }).ifEmpty { listOf("home") }.toMutableStateList()
+                restoreStudyRoutes(routes, sameProcess).ifEmpty { listOf("home") }.toMutableStateList()
             },
         ),
     ) {
@@ -93,6 +107,8 @@ private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, p
         "cards" -> CardsScreen(app, onBack = pop, onOpen = { push("doc:kanji/$it.md") }, onOpenDoc = { push("doc:$it") })
         "word-cards" -> WordCardsScreen(app, onBack = pop, onOpen = { push("doc:words/$it.md") }, onOpenDoc = { push("doc:$it") })
         "listening-home" -> io.github.stopcran.kanji.ui.ListeningPage(app, pop, push)
+        GrammarPracticeRoutes.PICKER -> GrammarPracticePicker(app, pop) { push(GrammarPracticeRoutes.create(it)) }
+        GrammarPracticeRoutes.UNAVAILABLE -> GrammarPracticeUnavailable(pop) { pop(); push(GrammarPracticeRoutes.PICKER) }
         else -> if (route.startsWith("listening:")) {
             io.github.stopcran.kanji.ui.ListeningScreen(route, pop) { source, path -> push(sourceDocRoute(source, path)) }
         } else if (route.startsWith("quiz:")) {
@@ -116,12 +132,29 @@ private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, p
                 onPracticeMore = { pop(); push("cquiz:${System.currentTimeMillis()}:${route.split(":")[2]}:extra") },
             )
         } else if (route.startsWith("grammarquiz:")) {
-            GrammarQuizScreen(
-                sessionKey = route,
-                onBack = pop,
-                onOpenDoc = { sourceId, path -> push(sourceDocRoute(sourceId, path)) },
-                onPracticeMore = { pop(); push("grammarquiz:${System.currentTimeMillis()}:extra") },
-            )
+            val target = remember(route) {
+                if (!GrammarPracticeRoutes.isTargeted(route)) null else try {
+                    GrammarPracticeRoutes.target(route)
+                } catch (error: IllegalArgumentException) {
+                    Log.w("GrammarPractice", "Invalid targeted-practice route", error)
+                    null
+                }
+            }
+            if (target == null && !GrammarPracticeRoutes.isOrdinary(route)) {
+                GrammarPracticeUnavailable(pop) { pop(); push(GrammarPracticeRoutes.PICKER) }
+            } else {
+                GrammarQuizScreen(
+                    sessionKey = route,
+                    onBack = pop,
+                    onOpenDoc = { sourceId, path -> push(sourceDocRoute(sourceId, path)) },
+                    onPracticeMore = {
+                        pop()
+                        push(if (target == null) "grammarquiz:${System.currentTimeMillis()}:extra" else GrammarPracticeRoutes.create(target))
+                    },
+                    target = target,
+                    interrupted = route.endsWith(":restart"),
+                )
+            }
         } else if (route.startsWith("kreading:")) {
             KanjiReadingScreen(
                 sessionKey = route,
@@ -172,6 +205,8 @@ private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, p
                     },
                     onCounters = { mode, extra -> push("cquiz:${System.currentTimeMillis()}:${mode.code}" + if (extra) ":extra" else "") },
                     onGrammar = { extra -> push("grammarquiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
+                    onGrammarTopics = { push(GrammarPracticeRoutes.PICKER) },
+                    onGrammarTarget = { push(GrammarPracticeRoutes.create(it)) },
                     onQuiz = { extra -> push("quiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
                     onDraw = { extra -> push("draw:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
                     onReadings = { extra -> push("kreading:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },

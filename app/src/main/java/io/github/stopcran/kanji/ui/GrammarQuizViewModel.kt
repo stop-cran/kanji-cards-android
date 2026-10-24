@@ -1,6 +1,7 @@
 package io.github.stopcran.kanji.ui
 
 import android.util.Log
+import android.database.sqlite.SQLiteException
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -14,16 +15,21 @@ import io.github.stopcran.kanji.core.words.Advancement
 import io.github.stopcran.kanji.core.grammar.GRAMMAR_NOT_DUE
 import io.github.stopcran.kanji.core.grammar.GrammarChoices
 import io.github.stopcran.kanji.core.grammar.GrammarChoiceSnapshot
+import io.github.stopcran.kanji.core.grammar.GrammarPracticePreview
+import io.github.stopcran.kanji.core.grammar.GrammarPracticeTarget
 import io.github.stopcran.kanji.core.quiz.QuizSession
 import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.QueueBuilder
+import io.github.stopcran.kanji.core.srs.QueueItem
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.StudyMode
 import io.github.stopcran.kanji.data.GRAMMAR_STACK
 import io.github.stopcran.kanji.data.GrammarResponseEntity
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.GrammarFocusTicket
+import io.github.stopcran.kanji.data.GrammarStudy
+import io.github.stopcran.kanji.data.grammarPractice
 import io.github.stopcran.kanji.data.grammarStudy
 import io.github.stopcran.kanji.data.recordGrammarAnswer
 import io.github.stopcran.kanji.data.practiceMinimum
@@ -36,6 +42,7 @@ import kotlin.random.Random
 
 sealed interface GrammarUi {
     data object Loading : GrammarUi
+    data class Preview(val preview: GrammarPracticePreview, val message: String? = null) : GrammarUi
     data class Empty(val message: String) : GrammarUi
     data class Done(val answered: Int, val correct: Int) : GrammarUi
     data class Choose(val exercise: GrammarExercise, val choices: GrammarChoiceSnapshot, val remaining: Int) : GrammarUi {
@@ -61,7 +68,11 @@ sealed interface GrammarUi {
 }
 
 /** One SRS queue per authored exercise; the choose/type prompt is presentation detail, not another schedule. */
-class GrammarQuizViewModel(private val app: Services, private val choiceRandom: Random = Random.Default) : StudyViewModel(app) {
+class GrammarQuizViewModel(
+    private val app: Services,
+    private val choiceRandom: Random = Random.Default,
+    val target: GrammarPracticeTarget? = null,
+) : StudyViewModel(app) {
     private val fsrs = Fsrs()
     var ui: GrammarUi by mutableStateOf(GrammarUi.Loading)
         private set
@@ -88,11 +99,71 @@ class GrammarQuizViewModel(private val app: Services, private val choiceRandom: 
     private var focusTicket: GrammarFocusTicket? = null
     var focusNotice: String? by mutableStateOf(null)
         private set
+    var approvedPractice: GrammarPracticePreview? = null
+        private set
+    var practiceOverride = false
+        private set
 
-    fun ensureStarted(extra: Boolean) {
+    fun ensureStarted(extra: Boolean, interrupted: Boolean = false) {
         if (started) return
         started = true
-        viewModelScope.launch { start(extra) }
+        viewModelScope.launch {
+            if (target == null) start(extra) else prepareTarget {
+                val snapshot = app.db.grammarPractice(app.settings, target, Instant.now())
+                ui = GrammarUi.Preview(
+                    snapshot.preview,
+                    if (interrupted) "The previous practice session was interrupted. Review a fresh batch; previous override consent has expired." else null,
+                )
+            }
+        }
+    }
+
+    fun startTargeted(override: Boolean, origin: GrammarUi.Preview) {
+        if (ui !== origin || target == null) {
+            Log.w("GrammarPractice", "Ignored stale practice start")
+            return
+        }
+        ui = GrammarUi.Loading
+        viewModelScope.launch {
+            prepareTarget {
+                val now = Instant.now()
+                val prepared = app.db.withTransaction {
+                    val current = app.db.grammarPractice(app.settings, target, now)
+                    if (current.preview != origin.preview) return@withTransaction current to null
+                    val queue = QueueBuilder.extra(
+                        current.preview.ids(override), current.study.states, now, limit = current.preview.limit,
+                    )
+                    captureVocabulary(current.study, queue, target.sourceId, now)
+                    require(target.matches(app.settings.source.value)) { "The selected source changed before practice started. Choose a topic again." }
+                    current to queue
+                }
+                val (snapshot, queue) = prepared
+                when {
+                    queue == null -> ui = GrammarUi.Preview(
+                        snapshot.preview, "Content, scope or availability changed. Review this updated preview and approve any exceptions again.",
+                    )
+                    queue.isEmpty() -> ui = GrammarUi.Preview(snapshot.preview, "No exercises are available with these choices. No session was started.")
+                    else -> {
+                        sourceId = target.sourceId
+                        approvedPractice = snapshot.preview
+                        practiceOverride = override
+                        activate(snapshot.study, queue, extra = true)
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun prepareTarget(block: suspend () -> Unit) {
+        try {
+            block()
+        } catch (error: IllegalArgumentException) {
+            Log.e("GrammarPractice", "Could not prepare targeted practice", error)
+            ui = GrammarUi.Empty(error.message ?: "Targeted practice is unavailable. Return to Grammar and choose a topic again.")
+        } catch (error: SQLiteException) {
+            Log.e("GrammarPractice", "Could not read or start targeted practice", error)
+            ui = GrammarUi.Empty("Could not access practice data. Return to Grammar and try again.")
+        }
     }
 
     private suspend fun start(extra: Boolean) {
@@ -105,16 +176,24 @@ class GrammarQuizViewModel(private val app: Services, private val choiceRandom: 
             } else {
                 QueueBuilder.build(captured.ordinaryIds, captured.states, now, captured.budget)
             }
-            val queuedIds = selected.map { it.kanji }.toSet()
-            val ids = captured.sets.flatMap { it.exercises }.filter { it.id in queuedIds }.flatMap { it.vocabulary?.spans.orEmpty() }
-                .mapNotNull { it.word }.distinct()
-            vocabularyWords = ids.chunked(900).flatMap { app.db.content().referencedWords(sourceId, it) }.associateBy { it.word }
-            familiarWords = if (ids.isEmpty()) emptySet() else {
-                app.db.reviews().statesAcrossStacks(sourceId, StudyMode.WordJpEn.name)
-                    .filter { it.kanji in vocabularyWords && Advancement.isSolid(it.toSrs(), now) }.map { it.kanji }.toSet()
-            }
+            captureVocabulary(captured, selected, sourceId, now)
             captured to selected
         }
+        activate(study, queue, extra)
+    }
+
+    private suspend fun captureVocabulary(study: GrammarStudy, queue: List<QueueItem>, source: String, now: Instant) {
+        val queuedIds = queue.map { it.kanji }.toSet()
+        val ids = study.sets.flatMap { it.exercises }.filter { it.id in queuedIds }.flatMap { it.vocabulary?.spans.orEmpty() }
+            .mapNotNull { it.word }.distinct()
+        vocabularyWords = ids.chunked(900).flatMap { app.db.content().referencedWords(source, it) }.associateBy { it.word }
+        familiarWords = if (ids.isEmpty()) emptySet() else {
+            app.db.reviews().statesAcrossStacks(source, StudyMode.WordJpEn.name)
+                .filter { it.kanji in vocabularyWords && Advancement.isSolid(it.toSrs(), now) }.map { it.kanji }.toSet()
+        }
+    }
+
+    private suspend fun activate(study: GrammarStudy, queue: List<QueueItem>, extra: Boolean) {
         val sets = study.sets
         exercises = sets.flatMap { it.exercises }.associateBy { it.id }
         articlePaths = sets.flatMap { set -> set.exercises.map { it.id to set.article } }.toMap()

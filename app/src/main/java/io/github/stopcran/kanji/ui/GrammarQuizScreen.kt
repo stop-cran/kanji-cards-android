@@ -25,6 +25,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import io.github.stopcran.kanji.R
+import io.github.stopcran.kanji.core.grammar.GrammarPracticeTarget
 
 @Composable
 fun GrammarQuizScreen(
@@ -32,9 +35,11 @@ fun GrammarQuizScreen(
     onBack: () -> Unit,
     onOpenDoc: (String, String) -> Unit,
     onPracticeMore: () -> Unit,
-    vm: GrammarQuizViewModel = serviceViewModel(sessionKey) { GrammarQuizViewModel(it) },
+    target: GrammarPracticeTarget? = null,
+    interrupted: Boolean = false,
+    vm: GrammarQuizViewModel = serviceViewModel(sessionKey) { GrammarQuizViewModel(it, target = target) },
 ) {
-    LaunchedEffect(sessionKey) { vm.ensureStarted(sessionKey.endsWith(":extra")) }
+    LaunchedEffect(sessionKey) { vm.ensureStarted(sessionKey.endsWith(":extra"), interrupted) }
     val holder = rememberSaveableStateHolder()
     val article = vm.lookupArticle
     holder.SaveableStateProvider(if (article == null) "question" else "vocabulary:${article.word}") {
@@ -54,16 +59,21 @@ private fun GrammarSessionBody(
     onPracticeMore: () -> Unit,
 ) {
     GrammarVocabularyHelp(vm)
-    Page("Grammar", onBack, ime = true, scrollToTopOnBack = true) {
+    Page(if (vm.target == null) "Grammar" else stringResource(R.string.grammar_topic_practice), onBack, ime = true, scrollToTopOnBack = true) {
+        vm.approvedPractice?.let { Text(stringResource(R.string.grammar_practising_topic, it.label)) }
+        if (vm.practiceOverride) Text(stringResource(R.string.grammar_session_exception), style = MaterialTheme.typography.bodySmall)
         vm.focusNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         when (val state = vm.ui) {
             GrammarUi.Loading -> Text("Loading…", Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            is GrammarUi.Preview -> GrammarPracticePreviewContent(state) { vm.startTargeted(it, state) }
             is GrammarUi.Empty -> Text(state.message)
             is GrammarUi.Done -> {
                 Text("Session complete", style = MaterialTheme.typography.headlineSmall)
                 Text("${state.correct} of ${state.answered} answers correct")
                 Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Done") }
-                OutlinedButton(onClick = onPracticeMore, modifier = Modifier.fillMaxWidth()) { Text("Practice more") }
+                OutlinedButton(onClick = onPracticeMore, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(if (vm.target == null) R.string.practice_more else R.string.grammar_practice_topic_again))
+                }
             }
             is GrammarUi.Choose -> {
                 GrammarRemaining(state.remaining)

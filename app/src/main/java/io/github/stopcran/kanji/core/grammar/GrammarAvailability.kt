@@ -27,6 +27,7 @@ data class GrammarGroupAvailability(
 }
 
 object GrammarAvailability {
+    @Suppress("LongParameterList")
     fun evaluate(
         groups: List<IntroductionGroup>,
         exercises: Map<String, GrammarExercise>,

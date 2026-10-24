@@ -87,6 +87,20 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   keep new material in one eligible group and use supported familiarity plus authored recommendations when choosing the next group.
   The [introduction contract](GRAMMAR-INTRODUCTIONS.md) specifies the implemented scope, focus, evidence and exploration rules;
   none creates another schedule or restricts existing due reviews.
+- **Targeted Grammar practice (#60):** a source/selected-branch-bound group, set or chapter opens a read-only preview, not a session.
+  Resolve actual stable membership; default new candidates use shared targeted eligibility, not whole-group guided coherence.
+  Started reviews stay available. Disclose exact level/prerequisite exceptions before a session-local opt-in; missing/invalid
+  metadata and grading are not overridable. Start resolves a new transactional snapshot and compares complete questions,
+  membership and restrictions with the preview; a change requires a fresh preview and renewed approval.
+  Reuse extra-practice ordering and the existing bounded initial size, never padding from other topics. Retries may exceed that
+  initial count. Recorded answers retain ordinary FSRS, canonical/detail history, shared first-introduction accounting and
+  legitimate readiness attainment, but carry no focus ticket and spend no ordinary activation quota/ordinal.
+  Extra practice is explicitly outside the daily intake cap; choosing/overriding a topic grants no readiness.
+  Active questions, vocabulary assistance and source remain pinned across sync, source switching, article navigation and rotation.
+  The accepted cache is source-scoped; the captured selected branch is a change guard, not a claim that the cache has branch provenance.
+  Same-topic continuation creates a new route/preview/session without inherited approval. Process-death restoration likewise replaces
+  targeted routes with fresh interrupted previews, including underneath an open article; it does not resume answers or restore consent.
+  A changed source/branch, missing target or malformed route is explained, never silently replaced by general practice.
 - **Typed words** (`WordType`, `core/words/TypedAnswer.kt`): English prompt, free-text answer, no options. Gate is `WordDirection.gate` (EnToJp, twice answered).
   Exact written form or a same-title/same-type synonym = Good; kana reading of a kanji word = Hard (re-asked); else Again. IME conversion is accepted as typed;
   kana-to-kanji recall is left to other modes. No first-success cap. Its new items share the daily `newBudget`.

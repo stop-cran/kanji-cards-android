@@ -27,6 +27,9 @@ Android Studio is not needed: the SDK lives in `$env:LOCALAPPDATA\Android\Sdk` a
 - Screenshot: `cmd /c "adb exec-out screencap -p > $env:TEMP\x.png"` (use `cmd /c`; PowerShell redirection corrupts the PNG), then view the file.
 - **Coordinates:** the image viewer may downscale (e.g. 890 px wide for a 1080 px screen). `adb shell wm size` gives the real size (Pixel_9: 1080x2424). Scale every tap/swipe: `$s = 1080 / <image width>; adb shell input tap ([int]($x*$s)) ([int]($y*$s))`. Forgetting this makes taps miss silently.
 - Exact bounds instead of guessing: `adb shell uiautomator dump /sdcard/ui.xml; adb pull /sdcard/ui.xml $env:TEMP\ui.xml`, then read `bounds="[l,t][r,b]"` (real pixels, no scaling needed).
+- For IME-inset checks, confirm the screenshot shows a docked keyboard. Gboard's "Write in text fields" mode can instead show a
+  floating handwriting toolbar/keyboard with no ordinary bottom inset; temporarily disable it in Gboard settings if necessary,
+  then restore its original value. UI hierarchy dumps may still list app nodes covered by the keyboard, so inspect their actual visibility.
 
 ## Drive the UI
 - Tap: `adb shell input tap X Y`. Wait 2-3 s after navigation before the screenshot.

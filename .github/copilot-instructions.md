@@ -16,10 +16,10 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
 ## Build and test (Windows)
 
 - Needs `JAVA_HOME` = JDK 17 and `ANDROID_HOME` (see `docs/PLAN.md`). Android Studio's Gradle JVM must be JDK 17 (this Gradle version rejects newer JDKs).
-- `./gradlew assembleDebug testDebugUnitTest`. `ContentTest.parsesRealContentRepoWhenPresent` reads `../../learning-japanese` if that
+- `./gradlew assembleDebug testDebugUnitTest`. `RealContentTest.parsesRealContentRepoWhenPresent` reads `../../learning-japanese` if that
   clone sits next to this repo, and is skipped otherwise.
 - Emulator (Pixel 9, API 35), adb driving, screenshots and copying an APK to the phone: see the `android-emulator` skill in `.github/skills/`.
-- Gradle treats `ContentTest.parsesRealContentRepoWhenPresent` as up to date when only the sibling content clone changed; re-run it with
+- Gradle treats `RealContentTest.parsesRealContentRepoWhenPresent` as up to date when only the sibling content clone changed; re-run it with
   `./gradlew cleanTestDebugUnitTest testDebugUnitTest --tests '*ContentTest*'` after pulling or editing `../../learning-japanese`.
 - Check the exit status/test results before committing; a chained `test; commit; push` publishes a red build.
 
@@ -39,7 +39,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - **Edge-to-edge on API 35:** content draws under the status/navigation bars; a button there is visible but untouchable. Every screen goes
   through `ui/Page`, which applies `statusBarsPadding`/`navigationBarsPadding` and a scroll container. Don't build screens without it.
 - **Keyboard on older Android:** keep `MainActivity`'s `adjustResize` and use `Page(ime = true)` for text entry. Pre-Android 11 needs
-  resize mode for edge-to-edge IME insets; default panning clips short exercises without creating a scroll range. Check API 29 and 35.
+  resize mode for edge-to-edge IME insets; default panning clips short exercises without creating a scroll range. Search pickers with
+  bounded nested lists need it too: check that the final search result is selectable without dismissing the keyboard. Check API 29 and 35.
 - **System back:** `BackHandler` in `AppNav` pops the route stack; without it back closes the app.
 - **Screen state across navigation:** `AppNav` composes only the top route, wrapped in `SaveableStateProvider` keyed `<index>:<route>`; `pop()` calls `removeState` so popped routes don't leak. Without it `rememberSaveable` state (search text, scroll) is lost when a screen pushes another. Lists that must keep scroll use an explicit `rememberLazyListState()`.
 - **ViewModel scope:** `viewModel()` is scoped to the Activity, not to a route, so a quiz VM outlives leaving the screen and would resume
@@ -60,6 +61,10 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - Grammar roadmap catalog errors stay separate from `grammarProblem`: a navigation-only failure must not block valid lessons.
   An authored group without a chapter is not an unowned compatibility group. A valid leaf DAG can collapse into a chapter cycle;
   validate both graphs without deleting true prerequisites or inventing an "Ungrouped" prerequisite chapter.
+- Targeted Grammar practice must use `targetedNew`, not the whole-group guided lock or ungated ordinary `extraIds`.
+  Compare complete accepted previews at Start, not only a repository version: changed questions, membership or restrictions expire consent.
+  Targeted continuation and process recovery retain the logical source/branch/target but create a fresh route and unapproved preview.
+  Validate cached exercises before building virtual compatibility groups, which assume valid construction/relationship references.
 - Grammar readiness must agree between live recording and replay of identical canonical history, including equal timestamps.
   Reconcile only provisional grants in that timestamp batch, never earlier milestones; test by deleting derived rows and rebuilding.
   Keep bounded backfill page reads/calculation/writes atomic against live answers; mapping checks alone cannot detect changed evidence.

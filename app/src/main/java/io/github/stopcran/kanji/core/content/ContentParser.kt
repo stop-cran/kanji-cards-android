@@ -183,7 +183,7 @@ object ContentParser {
         return GrammarVocabulary.attach(set, raw)
     }
 
-    private fun validateGrammarSet(path: String, set: GrammarSet) {
+    internal fun validateGrammarSet(path: String, set: GrammarSet) {
         require(set.schemaVersion == 1) { "unsupported grammar schema ${set.schemaVersion}" }
         require(path == "grammar/${set.id}.json") { "grammar ID must match its file path" }
         require(set.id.matches(Regex("[a-z0-9-]+"))) { "invalid grammar set ID" }
@@ -242,6 +242,7 @@ object ContentParser {
         constructionIds: Set<String>,
         relationships: Map<String, GrammarRelationship>,
     ) {
+        require(exercise.jlpt == null || exercise.jlpt in 1..5) { "${exercise.id}: invalid grammar level" }
         require(exercise.target in constructionIds) { "${exercise.id}: unknown target construction" }
         val relation = relationships[exercise.relationship]
         require(relation != null && exercise.target in relation.constructions) { "${exercise.id}: target is not in its relationship" }
