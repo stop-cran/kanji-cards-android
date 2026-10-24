@@ -13,6 +13,8 @@ import io.github.stopcran.kanji.core.listening.*
 import io.github.stopcran.kanji.data.*
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.util.UUID
 
 /** Original synthetic UI fixtures, isolated from learner data and never a listening approval. */
@@ -85,6 +87,34 @@ internal class ListeningUiFixture : AutoCloseable {
     fun start(type: ListeningTaskType, described: Boolean = false): String = runBlocking {
         services.listeningTasks.start(source, records.single { it.task.taskType == type }.task.id,
             study = described, extra = !described, described = described)
+    }
+
+    fun authorPreview(record: ListeningTaskRecord, bytes: Map<String, ByteArray>, words: Map<String, String>,
+        player: ListeningPlayer): ListeningTaskViewModel = runBlocking {
+        require(!record.ready && record.task.approval == null && record.mediaHash != null)
+        require(bytes.keys.containsAll(record.assetHashes))
+        require(words.keys.containsAll(record.task.vocabulary.mapNotNull { it.word }))
+        val id = "listening-task:${UUID.randomUUID()}"
+        val now = System.currentTimeMillis()
+        db.withTransaction {
+            db.requireNoOtherListeningActivity(source)
+            db.listeningTasks().putAssets(record.assetHashes.map { hash ->
+                val data = bytes.getValue(hash)
+                require(ContentParser.rawSha256(data) == hash)
+                ListeningTaskAssetEntity(source, hash, data)
+            })
+            db.listeningTasks().putEncounter(ListeningTaskEncounterEntity(
+                id, source, record.task.id, record.task.exposureId, "author-preview", null, "private-unapproved",
+                record.json, record.contentHash, requireNotNull(record.mediaHash), record.task.policyVersion,
+                JsonObject(words.mapValues { JsonPrimitive(it.value) }).toString(),
+                Json.encodeToString(ListeningTaskAttempt.serializer(), ListeningTaskAttempt(phase = "study")),
+                "study", null, now, requireNotNull(record.estimatedMs), newReservation = false,
+            ))
+            db.listeningTasks().pin(record.assetHashes.map { ListeningAssetPinEntity(source, "encounter", id, it) })
+            db.reviews().insertSession(StudySessionEntity(id, source, LISTENING_STACK, LISTENING_MODE, true, now))
+        }
+        ListeningTaskViewModel(services, id, player,
+            ListeningTaskStudy(db, settings, allowUnapprovedStudyCapture = true))
     }
 
     override fun close() {

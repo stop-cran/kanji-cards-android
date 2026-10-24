@@ -11,6 +11,8 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+val listeningAuthorPreview = providers.gradleProperty("listeningAuthorPreview").isPresent
+
 android {
     namespace = "io.github.stopcran.kanji"
     compileSdk = 36
@@ -51,7 +53,18 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
+        if (listeningAuthorPreview) create("authorPreview") {
+            initWith(getByName("release"))
+            signingConfig = requireNotNull(signingConfigs.findByName("release")) {
+                "The isolated author preview requires the existing local release signing configuration"
+            }
+            applicationIdSuffix = ".authorpreview"
+            isMinifyEnabled = false
+            isShrinkResources = false
+            matchingFallbacks += "debug"
+        }
     }
+    if (listeningAuthorPreview) testBuildType = "authorPreview"
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -88,6 +101,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    if (listeningAuthorPreview) add("authorPreviewImplementation", libs.androidx.compose.ui.test.manifest)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     androidTestImplementation(platform(libs.androidx.compose.bom))

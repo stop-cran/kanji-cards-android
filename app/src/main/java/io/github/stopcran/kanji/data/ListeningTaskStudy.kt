@@ -21,6 +21,7 @@ class ListeningTaskStudy(
     private val db: AppDatabase, private val settings: Settings,
     private val clock: () -> Instant = Instant::now, private val zone: () -> ZoneId = ZoneId::systemDefault,
     private val supportedTypes: Set<ListeningTaskType> = ListeningTaskPolicy.supportedTypes,
+    private val allowUnapprovedStudyCapture: Boolean = false,
 ) {
     private val lock = Mutex()
     private val json = Json
@@ -33,9 +34,18 @@ class ListeningTaskStudy(
             "This captured listening policy is unsupported; update the app or explicitly discard the unfinished task"
         }
         return ListeningTaskContent.parse("listening-tasks/${row.taskId}.json", row.contentJson).also {
-            require(it.ready && it.contentHash == row.contentHash && it.mediaHash == row.mediaHash &&
+            require((it.ready || authorStudy(row, it)) && it.contentHash == row.contentHash && it.mediaHash == row.mediaHash &&
                 it.task.exposureId == row.exposureId && it.task.policyVersion == row.policyVersion) { "Captured task is invalid" }
         }
+    }
+
+    // Only private preseeded author studies opt in; catalog admission remains approval-gated.
+    private fun authorStudy(row: ListeningTaskEncounterEntity, record: ListeningTaskRecord): Boolean {
+        if (!allowUnapprovedStudyCapture) return false
+        val standalone = row.kind == "study" && row.assessmentId == null && !row.newReservation
+        val ungraded = row.reviewLogId == null && row.submittedAtMs == null && !row.introduced
+        val completeDraft = record.task.approval == null && record.mediaHash != null && row.responseJson == null
+        return standalone && ungraded && completeDraft
     }
 
     internal suspend fun overview(sourceId: String): ListeningQueue =

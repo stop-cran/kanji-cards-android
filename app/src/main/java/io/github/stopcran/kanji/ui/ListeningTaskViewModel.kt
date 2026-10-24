@@ -24,6 +24,7 @@ class ListeningTaskViewModel(
     private val services: Services,
     private val id: String,
     private val player: ListeningPlayer = AndroidListeningPlayer(services.context),
+    private val study: ListeningTaskStudy = services.listeningTasks,
 ) : ViewModel() {
     var encounter: ListeningTaskEncounterEntity? by mutableStateOf(null)
         private set
@@ -51,7 +52,6 @@ class ListeningTaskViewModel(
     private var playback: ListeningTaskPlayback? = null
     private var playToken = 0
     private var visibleExposureRequested = false
-    private val study get() = services.listeningTasks
 
     fun load() {
         if (loadJob?.isActive == true || ready) return

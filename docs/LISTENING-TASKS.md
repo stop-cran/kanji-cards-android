@@ -303,3 +303,57 @@ content, silently lower quality, raise hard limits or disguise a pilot as a full
 
 Fixtures/decode/ASR are not final listening approval. E's pool acceptance uses C/D and the blueprint,
 not F; F depends on E. No paid synthesis/image generation is authorized by this document.
+
+### Private native author preview
+
+`ListeningTaskAuthoringTest` exercises complete **unapproved** packages in the common C/D host
+and native player. It seeds only unreserved standalone study captures in an in-memory database
+with isolated preferences. It never invents approval, admits drafts to the ordinary catalog,
+grades answers, or writes learner SRS/introductions. Study deliberately reveals the transcripts
+and feedback; it is author inspection, not an unseen scored-performance simulation.
+
+Without arguments the test uses four synthetic structural fixtures. For a real pending recording,
+pass `authorTask=<task-id>` and supply the exact private renderer output. The loader requires
+complete unapproved media, bounded files, matching asset hashes, and captured bodies for every
+referenced word article. Missing/bad input is an error, never a synthetic-fixture fallback.
+
+For a side-by-side device installation, build the opt-in **non-debuggable, release-signed**
+author variant. It requires the existing local release signing configuration and uses
+`io.github.stopcran.kanji.authorpreview`, leaving the learner application's installation/data alone.
+The ordinary debug/release builds and their default instrumentation target are unchanged.
+
+```powershell
+.\gradlew.bat -PlisteningAuthorPreview :app:assembleAuthorPreview :app:assembleAuthorPreviewAndroidTest
+adb -s $serial install -r app\build\outputs\apk\authorPreview\app-authorPreview.apk
+adb -s $serial install -r app\build\outputs\apk\androidTest\authorPreview\app-authorPreview-androidTest.apk
+```
+
+Set `$serial` to the explicitly selected authorized device, `$run` to the private render directory,
+and `$taskId` to the pending package ID. USB debugging/ADB authorization is required. The test APK
+is an author tool, not an update to the learner APK. Prepare only the selected package/assets and,
+when referenced, copy the exact `words\<word-id>.md` bodies into the private bundle's `words` folder.
+Do not push credentials, PCM caches or spending records.
+
+```powershell
+$remote = "/sdcard/Android/data/io.github.stopcran.kanji.authorpreview/files/listening-author-preview"
+adb -s $serial shell mkdir -p "$remote"
+adb -s $serial push "$run\packages" "$remote/"
+adb -s $serial push "$run\task-audio" "$remote/"
+if (Test-Path "$run\task-images") { adb -s $serial push "$run\task-images" "$remote/" }
+if (Test-Path "$run\words") { adb -s $serial push "$run\words" "$remote/" }
+adb -s $serial shell am instrument -w -r `
+  -e class io.github.stopcran.kanji.ui.ListeningTaskAuthoringTest `
+  -e authorTask "$taskId" `
+  io.github.stopcran.kanji.authorpreview.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+Require `OK (1 test)`, not just a successful shell exit. The test captures light/dark screenshots,
+plays every stage in fixed order, compares actual native starts with the exact audio hashes,
+and confirms no canonical reviews. Its `E-author-<id>.json` and `E-author-<id>-light/dark.png`
+outputs are under the target app's external `files` directory. Copy that evidence to the private
+review run. It explicitly does **not** declare actual listening approval.
+
+An emulator run is not physical-phone acceptance. An operator must still listen to every actual
+stage, inspect the essential speaker/choice graphics and readable text on the physical phone,
+and record an honest exact-output declaration through the content renderer. Automated success,
+screenshots, synthetic cues, or merely installing these APKs cannot satisfy those human gates.

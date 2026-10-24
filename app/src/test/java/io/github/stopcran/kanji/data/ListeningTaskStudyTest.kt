@@ -89,6 +89,33 @@ class ListeningTaskStudyTest {
     }
     private suspend fun hearAll(id: String) { repeat(fixture.task.stages.size) { play(id) } }
 
+    @Test fun explicitAuthorStudyCanReadUnapprovedCaptureButCannotAdmitOrGradeDrafts() = runBlocking {
+        val ordinary = study
+        val id = study.start(source, fixture.task.id, study = true)
+        val unapproved = ListeningTaskContent.parse("listening-tasks/${fixture.task.id}.json",
+            Json.encodeToString(ListeningTaskPackage.serializer(), fixture.task.copy(approval = null)))
+        val captured = row(id).copy(contentJson = unapproved.json)
+        db.listeningTasks().putEncounter(captured)
+        rejected { ordinary.record(captured) }
+        study = ListeningTaskStudy(db, settings, { now }, { zone }, allowUnapprovedStudyCapture = true)
+        assertNull(study.record(captured).task.approval)
+        rejected { study.record(captured.copy(kind = "graded")) }
+        rejected { study.record(captured.copy(newReservation = true)) }
+        rejected { study.record(captured.copy(assessmentId = "assessment")) }
+        rejected { study.record(captured.copy(reviewLogId = 1, submittedAtMs = now.toEpochMilli())) }
+        rejected { study.record(captured.copy(introduced = true)) }
+        rejected { study.record(captured.copy(responseJson = "{}")) }
+        hearAll(id)
+        rejected { study.answer(id, fixture.task.answer) }
+        rejected { study.submit(id) }
+        study.close(id)
+        assertTrue(db.reviews().allLog().isEmpty())
+        assertEquals(1, db.newAllowance(settings, source, now, zone).remaining)
+        install(records = listOf(unapproved))
+        rejected { ordinary.start(source, fixture.task.id, study = true) }
+        rejected { study.start(source, fixture.task.id, study = true) }
+    }
+
     @Test fun familiarUnintroducedTaskReservesSharedAllowanceAndBlocksOtherListeningModes() = runBlocking {
         val unscored = study.start(source, fixture.task.id, study = true)
         assertNull(row(unscored).exposedAtMs)
