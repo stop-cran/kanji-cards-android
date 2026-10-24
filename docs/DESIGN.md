@@ -221,8 +221,8 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 
 ### N5 listening
 
-The proposed [Japanese task/assessment contract](LISTENING-TASKS.md) is the design gate for #66.
-It is not yet implemented or owner-accepted; the behavior below remains the legacy contract.
+The adopted [Japanese task/assessment contract](LISTENING-TASKS.md) settles the design gate for #66
+under delegated autonomous decision-making. It is not yet implemented; the behavior below remains the legacy contract.
 
 Listening schedules whole passages, not their three questions: `(sourceId, "listening", passageId, "Listening", "")`.
 The N5-only learning contract is [owned with the content](https://github.com/stop-cran/learning-japanese/blob/main/docs/listening-n5.md).

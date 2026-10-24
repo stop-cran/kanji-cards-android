@@ -1,9 +1,13 @@
 # Japanese listening tasks: contract 1
 
 Design deliverable for [A / #66](https://github.com/stop-cran/kanji-cards-android/issues/66).
-**Independently reviewed proposed contract, awaiting owner acceptance. Not implemented.**
+**Independently reviewed implementation contract, adopted under delegated autonomous decision-making. Not yet implemented.**
 Implementation order is B (shared infrastructure), C (focused tasks/common host), D (spoken choices),
 E (approved original content), F (assessment). The review of A's issue plan did not approve these decisions.
+The concrete design was subsequently reviewed and its reservation finding resolved. The conservative
+defaults below are adopted under delegated autonomous implementation authority, not recorded as
+separate personal confirmation. This does not grant paid-media approval
+or waive E/F's actual-listening and device gates.
 
 Rebased on app `740b7da` and content `73bde0f`, including the 36 existing English-question passages.
 Their schema, identities, aggregate grades, normal replay and history remain unchanged.
@@ -273,7 +277,7 @@ The pulled content tree measured 28,911,586 retained bytes, 38,987,881 inflated 
 22,665,639-byte local ZIP (5,409 entries). The existing conservative 24-MiB ZIP guard leaves only
 about 2.4 MiB, insufficient for the intended pool at the existing 32-kbps mono Opus target.
 
-Proposed bounded adjustment in B: **28 MiB conservative compressed publication cap**, retaining
+Adopted bounded adjustment in B: **28 MiB conservative compressed publication cap**, retaining
 the hard **30 MiB download / 50 MiB retained / 100 MiB inflated / 8,000-entry** app limits and
 40-MiB retained / 80-MiB inflated / 7,000-entry publication headroom. Budget **at most 6 MiB**
 for all new unique audio/image bytes across the 28 scored items, four examples and instructions.
