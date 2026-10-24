@@ -1,7 +1,6 @@
 package io.github.stopcran.kanji.data
 
 import androidx.room.withTransaction
-import io.github.stopcran.kanji.core.content.ContentParser
 import io.github.stopcran.kanji.core.listening.*
 import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.Fsrs
@@ -25,6 +24,7 @@ class ListeningTaskStudy(
 ) {
     private val lock = Mutex()
     private val json = Json
+    private val assets = ListeningTaskAssets(db)
 
     fun attempt(row: ListeningTaskEncounterEntity): ListeningTaskAttempt =
         json.decodeFromString(ListeningTaskAttempt.serializer(), row.stateJson)
@@ -71,7 +71,7 @@ class ListeningTaskStudy(
         require(captured.ready && captured.contentHash == row.contentHash && captured.task.exposureId == row.exposureId) { "Task changed; sync again" }
         require(study || captured.task.usage == TaskUsage.Scored) { "Worked examples are unscored" }
         require(!described || captured.task.visual != null) { "This task has no described picture presentation" }
-        checkAssets(sourceId, captured)
+        assets.check(sourceId, captured)
         val sync = requireNotNull(dao.sync(sourceId)) { "Task source revision is missing" }
         val words = db.content().referencedWords(sourceId, captured.task.vocabulary.mapNotNull { it.word })
         require(words.mapTo(hashSetOf()) { it.word }.containsAll(captured.task.vocabulary.mapNotNull { it.word })) { "A task word article is missing" }
@@ -100,27 +100,12 @@ class ListeningTaskStudy(
         require(study || row.id in if (extra) queue.extra else queue.due + queue.fresh) { "Task is not eligible for scored practice now" }
     }
 
-    private suspend fun checkAssets(source: String, record: ListeningTaskRecord) {
-        val media = requireNotNull(record.task.media)
-        media.audio.values.forEach { checkedAudio(source, it) }
-        media.image?.let { checkedImage(source, it) }
-    }
-
-    private suspend fun checkedImage(source: String, image: ListeningImage): ByteArray {
-        val bytes = requireNotNull(db.listeningTasks().asset(source, image.sha256)) { "Captured task picture is missing" }
-        val validEnvelope = bytes.size <= ContentParser.MAX_IMAGE_BYTES && ContentParser.hasWebpEnvelope(bytes)
-        require(validEnvelope && ContentParser.rawSha256(bytes) == image.sha256 && SceneImages.problem(bytes) == null) {
-            "Captured task picture is invalid"
-        }
-        return bytes
-    }
-
     suspend fun image(id: String): ByteArray? = lock.withLock {
         db.withTransaction {
             val dao = db.listeningTasks()
             val row = requireNotNull(dao.encounter(id)) { "Listening task no longer exists" }
             val picture = record(row).task.media?.image
-            val result: Result<ByteArray?> = try { Result.success(picture?.let { checkedImage(row.sourceId, it) }) }
+            val result: Result<ByteArray?> = try { Result.success(picture?.let { assets.image(row.sourceId, it) }) }
             catch (e: IllegalArgumentException) { Result.failure(e) }
             if (row.closedAtMs == null) {
                 val problem = result.exceptionOrNull()?.let { it.message ?: "Captured task picture is invalid" }
@@ -130,19 +115,12 @@ class ListeningTaskStudy(
         }.getOrThrow()
     }
 
-    private suspend fun checkedAudio(source: String, audio: TaskAudio): ByteArray {
-        val bytes = requireNotNull(db.listeningTasks().asset(source, audio.sha256)) { "Captured task audio is missing" }
-        require(ContentParser.rawSha256(bytes) == audio.sha256 &&
-            kotlin.math.abs(OpusAudio.durationMs(bytes, 250, 90_000) - audio.durationMs) <= 100) { "Captured task audio is invalid" }
-        return bytes
-    }
-
     suspend fun stageAudio(id: String, generation: Long): ByteArray = db.withTransaction {
         val row = requireNotNull(db.listeningTasks().encounter(id)) { "Listening task no longer exists" }
         val state = attempt(row)
         if (state.generation != generation || !state.pending || row.closedAtMs != null) throw CancellationException("Superseded task playback")
         val task = record(row).task
-        checkedAudio(row.sourceId, requireNotNull(task.media).audio.getValue(task.stages[state.stageIndex].id))
+        assets.audio(row.sourceId, requireNotNull(task.media).audio.getValue(task.stages[state.stageIndex].id))
     }
 
     suspend fun request(
@@ -203,12 +181,8 @@ class ListeningTaskStudy(
         expose(row).copy(stateJson = encode(next))
     }
 
-    private suspend fun expose(row: ListeningTaskEncounterEntity): ListeningTaskEncounterEntity {
-        val now = clock().toEpochMilli()
-        val first = if (row.exposedAtMs == null) !db.listening().hasExposure(row.sourceId, row.exposureId) else row.firstEncounter
-        db.recordListeningExposure(row.sourceId, row.exposureId, row.exposedAtMs ?: now, now)
-        return row.copy(exposedAtMs = row.exposedAtMs ?: now, firstEncounter = first)
-    }
+    private suspend fun expose(row: ListeningTaskEncounterEntity): ListeningTaskEncounterEntity =
+        db.exposeListeningTask(row, clock().toEpochMilli())
 
     suspend fun answer(id: String, option: String) = mutate(id) { row, state, task ->
         require(row.kind == "graded" && row.reviewLogId == null && state.phase == "answer" &&
@@ -242,6 +216,7 @@ class ListeningTaskStudy(
         val dao = db.listeningTasks()
         val row = requireNotNull(dao.encounter(id)) { "Listening task no longer exists" }
         if (row.closedAtMs != null) return@withTransaction
+        require(row.assessmentId == null) { "End or close the owning assessment instead" }
         require(discard || row.kind == "study" || row.reviewLogId != null) { "Explicitly discard unfinished scored work" }
         val now = clock().toEpochMilli()
         val reason = if (discard && row.reviewLogId == null) "discarded" else "completed"

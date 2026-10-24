@@ -4,8 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.media.AudioAttributes
-import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaDataSource
 import android.media.MediaPlayer
@@ -27,10 +25,9 @@ interface ListeningPlayer : AutoCloseable {
     fun pause()
 }
 
-class AndroidListeningPlayer(private val context: Context) : ListeningPlayer {
-    private val manager = requireNotNull(context.getSystemService(AudioManager::class.java))
-    private val attributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
-        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
+class AndroidListeningPlayer(
+    private val context: Context, private val focus: ListeningAudioFocus = ListeningAudioFocus(context),
+) : ListeningPlayer {
     private var media: MediaPlayer? = null
     private var prepared = false
     private var registered = false
@@ -39,10 +36,6 @@ class AndroidListeningPlayer(private val context: Context) : ListeningPlayer {
     override var playing = false
         private set
     override val positionMs: Long get() = if (prepared) requireNotNull(media).currentPosition.toLong() else 0
-    private val focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT).setAudioAttributes(attributes)
-        .setOnAudioFocusChangeListener({ change ->
-            if (change != AudioManager.AUDIOFOCUS_GAIN) interrupt()
-        }, Handler(Looper.getMainLooper())).build()
     private val noisy = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) interrupt()
@@ -61,7 +54,7 @@ class AndroidListeningPlayer(private val context: Context) : ListeningPlayer {
         close()
         val player = MediaPlayer()
         media = player
-        player.setAudioAttributes(attributes)
+        player.setAudioAttributes(focus.attributes)
         player.setDataSource(object : MediaDataSource() {
             override fun getSize() = bytes.size.toLong()
             override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
@@ -104,16 +97,14 @@ class AndroidListeningPlayer(private val context: Context) : ListeningPlayer {
         onInterrupted = interrupted
         starting = true
         try {
-            check(manager.requestAudioFocus(focus) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-                "Audio is busy in another app. Try again when you can listen."
-            }
+            focus.startStage(::interrupt)
             val player = requireNotNull(media)
             var seek: kotlinx.coroutines.CancellableContinuation<Unit>? = null
             player.setOnErrorListener { _, what, extra ->
                 if (media !== player) return@setOnErrorListener true
                 playing = false
                 prepared = false
-                manager.abandonAudioFocusRequest(focus)
+                focus.endStage()
                 val error = IOException("Audio playback failed ($what/$extra). Resume or sync again; no failure was graded.")
                 val waiting = seek
                 if (waiting?.isActive == true) waiting.resumeWithException(error) else failed(error)
@@ -122,7 +113,7 @@ class AndroidListeningPlayer(private val context: Context) : ListeningPlayer {
             player.setOnCompletionListener {
                 if (media !== player) return@setOnCompletionListener
                 playing = false
-                manager.abandonAudioFocusRequest(focus)
+                focus.endStage()
                 completed()
             }
             if (positionMs > 0) suspendCancellableCoroutine { continuation ->
@@ -143,7 +134,7 @@ class AndroidListeningPlayer(private val context: Context) : ListeningPlayer {
         starting = false
         if (playing) requireNotNull(media).pause()
         playing = false
-        manager.abandonAudioFocusRequest(focus)
+        focus.endStage()
     }
 
     override fun close() {
@@ -152,7 +143,7 @@ class AndroidListeningPlayer(private val context: Context) : ListeningPlayer {
         prepared = false
         media?.release()
         media = null
-        manager.abandonAudioFocusRequest(focus)
+        focus.endStage()
         if (registered) context.unregisterReceiver(noisy)
         registered = false
         onInterrupted = {}

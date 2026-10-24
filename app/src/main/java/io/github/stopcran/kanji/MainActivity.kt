@@ -136,7 +136,11 @@ private fun RouteContent(
         "word-cards" -> WordCardsScreen(app, onBack = pop, onOpen = { push("doc:words/$it.md") }, onOpenDoc = { push("doc:$it") })
         "listening-home" -> io.github.stopcran.kanji.ui.ListeningPage(app, pop, push)
         GrammarPracticeRoutes.UNAVAILABLE -> GrammarPracticeUnavailable(pop, browseGrammar)
-        else -> if (route.startsWith("listening-task:")) {
+        else -> if (route.startsWith("listening-assessment-preview:")) {
+            io.github.stopcran.kanji.ui.ListeningAssessmentPreviewScreen(route, pop, replace)
+        } else if (route.startsWith("listening-assessment:")) {
+            io.github.stopcran.kanji.ui.ListeningAssessmentScreen(route, pop) { source, path -> push(sourceDocRoute(source, path)) }
+        } else if (route.startsWith("listening-task:")) {
             io.github.stopcran.kanji.ui.ListeningTaskScreen(route, pop) { source, path -> push(sourceDocRoute(source, path)) }
         } else if (route.startsWith("listening:")) {
             io.github.stopcran.kanji.ui.ListeningScreen(route, pop) { source, path -> push(sourceDocRoute(source, path)) }

@@ -286,7 +286,7 @@ preserves the accepted task catalog, records a stale/error notice and remains re
 Room v16 preserves every legacy row and snapshot while adding independent task revision/parser metadata,
 permanent source-scoped exposure bindings, media ownership pins and task/assessment persistence.
 
-One transactional Listening admission guard spans legacy, guided/study and future diagnostic activity.
+One transactional Listening admission guard spans legacy, guided/study and diagnostic activity.
 Both catalogs share cooldowns, due-time estimates, daily introductions and cross-mode reservations.
 Familiar-but-unintroduced scored tasks still reserve a new unit. Legacy history seeds only recorded
 exposure; equivalent stories share familiarity without sharing genuinely different scored skills.
@@ -349,6 +349,35 @@ stage/number/media mappings through interruption, saved-state recovery, source c
 Distinct one/two/three-pulse native fixtures expose swapped media/order, but are deliberately not
 spoken Japanese. Real script-to-audio correspondence and exact heard numbering still require E's
 actual listener approval. Synthetic scene/short-tone fixtures are not production-media approval.
+
+#### Diagnostic section wrapper (F)
+
+Listening has a separate diagnostic entry, not a new scheduling mode. Contract-1 selection requires
+the approved 8/7/6/7 scored pool and four separate examples, then chooses 7/6/5/6 scored items without
+repeating story identities. Readiness, assets, words, visual access, 24-hour cooldowns, familiarity
+consent and the exact 26-34-minute projection are checked before capture and compared again at Start.
+An unavailable full section explains shortages; it never substitutes a shortened exam.
+
+`ListeningAssessmentStudy` atomically captures the accepted source, seed, form and all 28 task/word
+snapshots, with one assessment media-pin owner. Diagnostic encounters have no reservation, introduction,
+canonical review or SRS write. Responses and cursor transitions share a Room transaction; Skip freezes
+an unanswered response immediately but retains its answer-window deadline. Cancellation marks remaining
+items not assessed without inventing exposure. Results freeze once; the results page retains source
+ownership and pins until Done so captured feedback remains available. Unreadable future-policy captures
+may be explicitly discarded without interpreting or rewriting their unknown responses.
+
+F reuses C/D layout, numbered choices, pictures, transcripts and B's native staged coordinator. Its
+timeline owns the read/answer/example windows; scored instruction omissions do not fabricate completed
+stages or alter guided grading. Visible bounds start preview/example-feedback windows. Remaining time
+is checkpointed against elapsed realtime; restoration uses only that checkpoint and irrevocably becomes
+interrupted practice. Lifecycle, window/audio focus, noisy-device events and manual recovery stop the
+sequence without automatic restart. A shared audio-focus request stays held through silent windows,
+while ordinary guided/legacy playback still releases its per-stage focus.
+
+Results report raw correct/assessed, unanswered, not-assessed, 24 planned items and four examples, with
+type, familiarity, exposure, picture, help and interruption distinctions. No official JLPT scale,
+prediction or proficiency claim is made. Fixture-backed implementation does not approve E's recordings
+or satisfy the complete approved offline emulator/physical-device acceptance gates.
 
 ## 5. Words, levels and advancement
 

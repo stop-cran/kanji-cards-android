@@ -76,7 +76,9 @@ internal fun ListeningTaskEncounterView(vm: ListeningTaskViewModel, onBack: () -
                 else -> {
                     val feedback = row.kind == "study" || row.reviewLogId != null
                     val textHelp = "text-help" in state.assistance
-                    ListeningTaskLayout(vm, vm.picture.takeUnless { state.describedStudy }, task.visual?.role == "required", scroll) {
+                    ListeningTaskLayout(vm.picture.takeUnless { state.describedStudy }, scroll, pictureView = { modifier ->
+                        vm.picture?.let { ListeningTaskPicture(vm, it, task.visual?.role == "required", modifier) }
+                    }) {
                         Text(task.taskType.label, style = MaterialTheme.typography.titleMedium)
                         Text(task.taskType.objective)
                         Text("${if (row.kind == "study") "Unscored study" else "Guided practice"} - ${row.sourceId} (${row.branch})",
@@ -125,21 +127,21 @@ private fun ColumnScope.ListeningTaskUnavailable(vm: ListeningTaskViewModel, dis
 }
 
 @Composable
-private fun ColumnScope.ListeningTaskLayout(
-    vm: ListeningTaskViewModel, picture: ImageBitmap?, required: Boolean, scroll: ScrollState,
+internal fun ColumnScope.ListeningTaskLayout(
+    picture: ImageBitmap?, scroll: ScrollState, pictureView: @Composable (Modifier) -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
         val pictureHeight = (maxHeight * 0.4f).coerceAtMost(260.dp)
         if (picture != null && maxWidth > maxHeight && maxWidth >= 600.dp) {
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                ListeningTaskPicture(vm, picture, required, Modifier.weight(1f).fillMaxHeight())
+                pictureView(Modifier.weight(1f).fillMaxHeight())
                 Column(Modifier.weight(1f).verticalScroll(scroll),
                     verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
             }
         } else {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (picture != null) ListeningTaskPicture(vm, picture, required, Modifier.fillMaxWidth().height(pictureHeight))
+                if (picture != null) pictureView(Modifier.fillMaxWidth().height(pictureHeight))
                 Column(Modifier.weight(1f).verticalScroll(scroll),
                     verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
             }
@@ -181,17 +183,25 @@ private fun ListeningTaskChoices(vm: ListeningTaskViewModel, reveal: Boolean) {
     val state = requireNotNull(vm.attempt)
     val row = requireNotNull(vm.encounter)
     val answerable = state.phase == "answer" && row.kind == "graded" && row.reviewLogId == null && vm.error == null && !vm.busy
+    ListeningTaskChoices(task, state.answer, answerable, reveal, vm::answer, Modifier.listeningEvidence(vm))
+}
+
+@Composable
+internal fun ListeningTaskChoices(
+    task: ListeningTaskPackage, answer: String?, answerable: Boolean, reveal: Boolean,
+    onAnswer: (String) -> Unit, evidence: Modifier,
+) {
     Text("Choices", style = MaterialTheme.typography.titleMedium)
     if (task.choiceMode == TaskChoiceMode.Audio && !reveal) {
         Text("The three choices are spoken in number order. Choose a number after hearing all required stages.")
     }
     task.options.forEach { option ->
         val label = if (task.choiceMode == TaskChoiceMode.Text || reveal) "${option.number}. ${option.label}" else "${option.number}"
-        val evidence = if (task.choiceMode == TaskChoiceMode.Text || reveal) Modifier.listeningEvidence(vm) else Modifier
+        val visible = if (task.choiceMode == TaskChoiceMode.Text || reveal) evidence else Modifier
         if (answerable) {
-            FilterChip(selected = state.answer == option.id, onClick = { vm.answer(option.id) },
-                label = { Text(label) }, modifier = evidence.fillMaxWidth())
-        } else Text(label, modifier = evidence, style = MaterialTheme.typography.bodyLarge)
+            FilterChip(selected = answer == option.id, onClick = { onAnswer(option.id) },
+                label = { Text(label) }, modifier = visible.fillMaxWidth())
+        } else Text(label, modifier = visible, style = MaterialTheme.typography.bodyLarge)
     }
 
 }

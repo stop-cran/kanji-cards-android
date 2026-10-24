@@ -29,26 +29,36 @@ import kotlin.math.roundToInt
 
 @Composable
 internal fun ListeningTaskPicture(vm: ListeningTaskViewModel, bitmap: ImageBitmap, required: Boolean, modifier: Modifier) {
+    ListeningTaskPicture(bitmap, required, vm.task?.choiceMode, modifier, Modifier.listeningEvidence(vm)) {
+        val state = vm.attempt
+        if (vm.playing) Button(onClick = { vm.pause() }) { Text("Pause audio") }
+        else if (state?.phase == "listen" || state?.wholeReplayInProgress == true) {
+            Button(onClick = { vm.play() }, enabled = !vm.busy && vm.error == null) { Text("Continue audio") }
+        }
+    }
+}
+
+@Composable
+internal fun ListeningTaskPicture(
+    bitmap: ImageBitmap, required: Boolean, choiceMode: TaskChoiceMode?, modifier: Modifier, evidence: Modifier,
+    onEnlarge: () -> Unit = {}, enlargementLabel: String = "Enlarge picture", controls: @Composable () -> Unit = {},
+) {
     var enlarged by rememberSaveable { mutableStateOf(false) }
     val description = when {
         !required -> "Context picture. Described study is available in Listening."
-        vm.task?.choiceMode == TaskChoiceMode.Visual -> "Essential numbered picture. Described study is available in Listening."
+        choiceMode == TaskChoiceMode.Visual -> "Essential numbered picture. Described study is available in Listening."
         else -> "Essential scene picture. Described study is available in Listening."
     }
     Column(modifier) {
-        Image(bitmap, description, Modifier.weight(1f).fillMaxWidth().testTag("listening-task-picture").listeningEvidence(vm),
+        Image(bitmap, description, Modifier.weight(1f).fillMaxWidth().testTag("listening-task-picture").then(evidence),
             contentScale = ContentScale.Fit)
-        TextButton(onClick = { enlarged = true }) { Text("Enlarge picture") }
+        TextButton(onClick = { onEnlarge(); enlarged = true }) { Text(enlargementLabel) }
     }
     if (enlarged) Dialog(onDismissRequest = { enlarged = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize()) {
             Page("Task picture", { enlarged = false }, scrollable = false, maxWidth = 1100.dp) {
                 ZoomableTaskPicture(bitmap, description, Modifier.weight(1f)) {
-                    val state = vm.attempt
-                    if (vm.playing) Button(onClick = { vm.pause() }) { Text("Pause audio") }
-                    else if (state?.phase == "listen" || state?.wholeReplayInProgress == true) {
-                        Button(onClick = { vm.play() }, enabled = !vm.busy && vm.error == null) { Text("Continue audio") }
-                    }
+                    controls()
                     TextButton(onClick = { enlarged = false }) { Text("Return to task") }
                 }
             }

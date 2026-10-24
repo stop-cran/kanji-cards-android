@@ -89,6 +89,38 @@ internal class ListeningUiFixture : AutoCloseable {
             study = described, extra = !described, described = described)
     }
 
+    fun assessmentPool(): List<ListeningTaskRecord> = runBlocking {
+        val long = asset("assessment-tone.ogg")
+        val pool = ListeningAssessmentBlueprint.groups.flatMap { group ->
+            val original = records.single { it.task.taskType == group.type }
+            (0..group.pool).map { index ->
+                val id = "n5-task-assessment-${group.type.wire}-$index"
+                val draft = original.task.copy(id = id, exposureId = id, blueprint = ListeningAssessmentBlueprint.ID,
+                    usage = if (index == 0) TaskUsage.Example else TaskUsage.Scored, media = null, approval = null)
+                val hash = ListeningTaskContent.parse("listening-tasks/$id.json",
+                    Json.encodeToString(ListeningTaskPackage.serializer(), draft)).contentHash
+                val media = requireNotNull(original.task.media).copy(contentSha256 = hash,
+                    audio = draft.stages.associate { stage ->
+                        stage.id to if (stage.role == TaskStageRole.Choice) requireNotNull(original.task.media).audio.getValue(stage.id)
+                        else TaskAudio("task-audio/assessment-tone.ogg", ContentParser.rawSha256(long), 20_000,
+                            stage.turns.mapIndexed { turnIndex, turn ->
+                                ListeningTiming(turn, turnIndex * 20_000L / stage.turns.size, (turnIndex + 1) * 20_000L / stage.turns.size)
+                            })
+                    })
+                val task = draft.copy(media = media, approval = TaskApproval("approved", hash, ListeningTaskContent.mediaHash(media),
+                    "2026-10-24", "Repeated synthetic fixture scripts only; not independent stories or actual listening approval."))
+                ListeningTaskContent.parse("listening-tasks/$id.json", Json.encodeToString(ListeningTaskPackage.serializer(), task))
+            }
+        }
+        db.withTransaction {
+            val problems = db.importListeningTasks(ParsedContent(Manifest(1, "assessment-native-fixture", emptyMap()), emptyList(),
+                emptyList(), emptyList(), emptyMap(), emptyList(), listeningTasks = ListeningTaskCatalog(records = pool,
+                    assets = assets + (ContentParser.rawSha256(long) to long))), settings.source.value, "b".repeat(40))
+            require(problems.isEmpty()) { problems.joinToString() }
+        }
+        pool
+    }
+
     fun authorPreview(record: ListeningTaskRecord, bytes: Map<String, ByteArray>, words: Map<String, String>,
         player: ListeningPlayer): ListeningTaskViewModel = runBlocking {
         require(!record.ready && record.task.approval == null && record.mediaHash != null)

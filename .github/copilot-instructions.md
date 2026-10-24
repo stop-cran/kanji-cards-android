@@ -126,6 +126,16 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   Spoken-choice stage headings use captured `optionId` -> authored number, never the stage index or hidden response text.
   Keep three numbered controls auditory until help/feedback. First required choice playback is not targeted replay;
   distinct pulse fixtures test byte/order alignment only, not actual Japanese numbering or listener approval.
+  Diagnostic F owns its timeline, not guided grading: omitting a scored item's generic instruction must
+  never add fictional completed stages. Preserve responses and cursor atomically; Skip cannot shorten a
+  window. Keep section audio focus across silent windows and checkpoint remaining time before restoration
+  discards old monotonic deadlines. Feedback replay after process death also needs pending-start recovery.
+  Keep timed evidence ahead of auxiliary source/control text so ordinary preview frames do not stall offscreen.
+  Key timed evidence by capture and phase, not only its scroll state: unchanged picture geometry may not
+  trigger another placement callback. Bind visible callbacks to that rendered capture/generation/phase.
+  Picture exposure cannot start a worked explanation's clock. Finalized raw results must remain readable
+  when media recovery fails; only opening captured feedback needs its media.
+  Fixtures and simulated elapsed time never satisfy approved Japanese-media or physical-device acceptance.
 - **Quiz semantics:** options are meaning titles and unique by title (one correct answer). Wrong = Again (re-asked after 3 cards),
   right = Good, "I guessed" = Hard. Time-based Easy was dropped: with 4 options a fast answer is often luck.
 - **Daily new-card budget** counts kanji whose first review log entry is today (`newCardsIntroducedSince`), per mode.

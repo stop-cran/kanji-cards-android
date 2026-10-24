@@ -288,6 +288,21 @@ Renderer capability is separate from parser capability: B does not enable C/D's 
 | `listening_exposures.json` | Source/story identity with first and last recorded exposure timestamps, including known legacy exposure; no invented historical activity. |
 | `settings.json` | Stored preferences, including source configuration and cached sync metadata. |
 
+Diagnostic `listening_assessments.content` is an `AssessmentForm` (version 1): blueprint, seed,
+familiar/visual consent, projected milliseconds and ordered example/scored encounter references with
+task/type/content/media identities. Its state contains a versioned cursor, phase/stage, monotonic
+deadline, checkpointed remaining time and irreversible interruption/help flags. Persisted deadlines
+are not trusted across process restoration.
+
+An assessment child has `kind="assessment"` and a non-null `assessmentId`, but no canonical review,
+introduction or new-item reservation. Its immutable response records task/type/example/familiar/
+exposed/visual distinctions, answer ID, `correct`/`incorrect`/`unanswered`/`not-assessed`, assistance,
+interruption and finalization time. It has no SRS grade. The parent's version-1 response preserves
+these ordered diagnostic responses, planned/example counts and full-form/interruption status.
+Assessed includes deliberate/deadline unanswered responses but excludes not-assessed items and examples.
+Diagnostic study-session counters stay zero; use the diagnostic response, not canonical answer counts.
+The v6 member set is unchanged, and the Grammar analyzer continues to exclude all Listening evidence.
+
 For a recorded Grammar answer, state, canonical log and response detail are written in one transaction. Join `reviewLogId` to the unique
 log `id` for grade/time; source, stack and exercise identity must also match, with canonical mode `Grammar`. Choice `response` is an option
 ID, typing `response` is normalized text, and give-up records an empty string. Details record the exercise's target construction and

@@ -1,0 +1,115 @@
+package io.github.stopcran.kanji.ui
+
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import io.github.stopcran.kanji.Services
+import io.github.stopcran.kanji.data.ListeningAssessmentPreview
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import java.time.Instant
+import kotlin.random.Random
+
+internal class ListeningAssessmentPreviewModel(private val services: Services) : ViewModel() {
+    var preview: ListeningAssessmentPreview? by mutableStateOf(null)
+        private set
+    var error: String? by mutableStateOf(null)
+        private set
+    var busy by mutableStateOf(false)
+        private set
+    var familiar by mutableStateOf(false)
+        private set
+    var visual by mutableStateOf(true)
+        private set
+    private val seed = Random.nextLong()
+    private var loadJob: Job? = null
+    private var startJob: Job? = null
+    private var active = true
+
+    fun refresh(includeFamiliar: Boolean = familiar, visualAccess: Boolean = visual) {
+        if (busy) return
+        active = true
+        familiar = includeFamiliar
+        visual = visualAccess
+        preview = null
+        error = null
+        busy = true
+        loadJob = viewModelScope.launch {
+            try { listeningAction({ error = it }) { preview = services.listeningAssessments.preview(seed, familiar, visual) } }
+            finally { busy = false }
+        }
+    }
+
+    fun start(onStart: (String) -> Unit) {
+        val accepted = preview ?: return
+        if (busy || !accepted.selection.available) return
+        busy = true
+        startJob = viewModelScope.launch {
+            try {
+                listeningAction({ error = it; preview = null }) {
+                    val id = services.listeningAssessments.start(accepted)
+                    if (active) onStart(id)
+                }
+            } finally { busy = false }
+        }
+    }
+
+    fun leave() { active = false; loadJob?.cancel(); startJob?.cancel() }
+}
+
+@Composable
+fun ListeningAssessmentPreviewScreen(route: String, onBack: () -> Unit, onStart: (String) -> Unit) {
+    val vm = serviceViewModel(route) { ListeningAssessmentPreviewModel(it) }
+    ListeningAssessmentPreviewView(vm, onBack, onStart)
+}
+
+@Composable
+internal fun ListeningAssessmentPreviewView(vm: ListeningAssessmentPreviewModel, onBack: () -> Unit, onStart: (String) -> Unit) {
+    LaunchedEffect(vm) { vm.refresh() }
+    DisposableEffect(vm) { onDispose { vm.leave() } }
+    Page("Japanese diagnostic section", onBack) {
+        Text("24 scored items and 4 separate worked examples; 26-34 minutes.")
+        Text("Diagnostic only: no SRS changes, introductions or daily-allowance use. Actual exposure still creates a 24-hour cooldown.")
+        Text("Single playback; fixed read, listen and answer windows. Answers may change before the deadline. Skip locks an unanswered " +
+            "response but does not advance early. Scored feedback waits until the end.")
+        Text("Pause, leaving this screen, loss of focus, headphones, calls, recovery or help irreversibly changes the section to " +
+            "interrupted practice. It never restarts automatically.")
+        FilterChip(selected = vm.familiar, onClick = { vm.refresh(includeFamiliar = !vm.familiar) }, enabled = !vm.busy,
+            label = { Text("Include familiar material") })
+        FilterChip(selected = vm.visual, onClick = { vm.refresh(visualAccess = !vm.visual) }, enabled = !vm.busy,
+            label = { Text("I can use the required pictures") })
+        Text("Described study remains available in guided Listening; it is not an equivalent nonvisual assessment.")
+        if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+        vm.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        val preview = vm.preview
+        if (preview != null) {
+            Text("Captured source: ${preview.sourceId} (${preview.branch ?: "not synced"})", style = MaterialTheme.typography.bodySmall)
+            preview.notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            preview.selection.groups.forEach { status ->
+                HorizontalDivider()
+                Text(status.group.type.label, style = MaterialTheme.typography.titleMedium)
+                Text("${status.eligibleScored}/${status.group.scored} eligible scored items; ${status.eligibleExamples} eligible example(s).")
+                Text("Ready scored pool: ${status.readyScored}/${status.group.pool}. Unavailable: ${status.unavailable}; " +
+                    "cooldown: ${status.coolingDown}; familiar excluded: ${status.familiarExcluded}; inaccessible: ${status.inaccessible}.")
+                status.nextCooldownMs?.let { Text(listeningCooldownText(Instant.ofEpochMilli(it))) }
+            }
+            preview.selection.durationMs?.let { Text("Projected duration: ${it / 60_000}m ${it / 1_000 % 60}s") }
+            val familiarExamples = preview.selection.items.count {
+                it.lastExposureMs != null && it.record.task.usage == io.github.stopcran.kanji.core.listening.TaskUsage.Example
+            }
+            if (preview.selection.items.isNotEmpty()) Text("${preview.selection.familiarCount} of 24 selected scored items are familiar; " +
+                "$familiarExamples selected examples are familiar.")
+            preview.selection.problems.forEach { Text(it, color = MaterialTheme.colorScheme.error) }
+            if (preview.selection.available) {
+                Button(onClick = { vm.start(onStart) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) { Text("Capture this section") }
+                Text("Confirm the source and familiarity above. The next page has an explicit Begin button.")
+            } else Text("A full section is unavailable. No shorter exam or repeated story will be substituted.")
+        }
+        OutlinedButton(onClick = { vm.refresh() }, enabled = !vm.busy) { Text("Refresh availability") }
+        TextButton(onClick = onBack) { Text("Back to guided Listening") }
+        Text("No official JLPT scaled score, pass prediction or proficiency certification.")
+    }
+}

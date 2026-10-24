@@ -38,6 +38,7 @@ class Services(val db: AppDatabase, val settings: Settings, val context: Context
     val studySessions = StudySessionRegistry()
     val listening = io.github.stopcran.kanji.data.ListeningStudy(db, settings)
     val listeningTasks = io.github.stopcran.kanji.data.ListeningTaskStudy(db, settings)
+    val listeningAssessments = io.github.stopcran.kanji.data.ListeningAssessmentStudy(db, settings, listeningTasks)
 }
 
 class KanjiApp : Application() {

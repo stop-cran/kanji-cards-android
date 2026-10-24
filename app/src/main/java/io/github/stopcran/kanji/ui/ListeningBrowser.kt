@@ -61,7 +61,7 @@ internal fun ListeningBrowser(services: Services, onBack: () -> Unit, onEncounte
                 Button(onClick = { onEncounter(current.id) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Resume encounter") }
                 Text("Resume or explicitly discard this source's unfinished listening activity before starting another.")
             } else if (home.assessmentPending) {
-                Text("An unfinished assessment owns this source. Update the app to resume it.")
+                Text("An unfinished assessment owns this source. Resume it before starting another listening activity.")
             } else {
                 val ids = listeningFilteredIds(queue, filter)
                 val selected = data.copy(due = queue.due.filter { it in ids }, fresh = queue.fresh.filter { it in ids },
@@ -70,6 +70,9 @@ internal fun ListeningBrowser(services: Services, onBack: () -> Unit, onEncounte
                 if (selected.due.isEmpty() && selected.fresh.isEmpty() && selected.extra.isNotEmpty()) {
                     Text("Practice more is scored extra practice. It may exceed daily plans, but never the 24-hour cooldown.")
                 }
+                OutlinedButton(onClick = { onEncounter("listening-assessment-preview:${java.util.UUID.randomUUID()}") },
+                    enabled = !occupied && !busy, modifier = Modifier.fillMaxWidth()) { Text("Japanese diagnostic section") }
+                Text("A separate 24-item diagnostic with four examples; no SRS or daily-allowance changes.")
                 Text("Shared new-item allowance: ${queue.shared.remaining} of ${queue.shared.total} remaining today.")
                 Text("Listening time budget: ${queue.allowance.milliseconds / 1_000} estimated seconds remaining today.")
                 pacingExplanation(queue.shared)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }

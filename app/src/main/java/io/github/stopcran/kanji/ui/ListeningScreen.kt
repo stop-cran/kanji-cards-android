@@ -57,14 +57,15 @@ internal fun rememberListeningHome(services: Services): State<ListeningHomeState
                     services.db.listening().observePassages(source.id).map { Unit }, services.db.listening().observeOpen().map { Unit },
                     services.db.listeningTasks().observeTasks(source.id).map { Unit }, services.db.listeningTasks().observeOpen().map { Unit },
                     services.db.listeningTasks().observeSync(source.id).map { Unit },
-                    services.db.listeningTasks().observeActiveAssessment(source.id).map { Unit },
+                    services.db.listeningTasks().observeOpenAssessments().map { Unit },
                     services.db.reviews().observeStates(source.id, LISTENING_STACK, LISTENING_MODE).map { Unit },
                     flow { while (true) { emit(Unit); delay(30_000) } },
                 )) { Unit }.collectLatest {
                     value = services.db.withTransaction {
                         ListeningHomeState(services.listening.overview(source.id),
                             queue = services.listeningTasks.overview(source.id),
-                            resumes = services.db.listening().open() + services.db.listeningTasks().open(),
+                            resumes = services.db.listening().open() + services.db.listeningTasks().open() +
+                                services.db.listeningTasks().openAssessments(),
                             assessmentPending = services.db.listeningTasks().activeAssessment(source.id) != null,
                             taskNotice = services.db.listeningTasks().sync(source.id)?.problem)
                     }

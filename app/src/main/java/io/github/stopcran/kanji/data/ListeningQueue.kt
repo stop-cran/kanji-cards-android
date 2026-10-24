@@ -82,6 +82,12 @@ internal suspend fun AppDatabase.recordListeningExposure(source: String, exposur
         minOf(first, old?.firstAtMs ?: first), maxOf(last, old?.lastAtMs ?: last)))
 }
 
+internal suspend fun AppDatabase.exposeListeningTask(row: ListeningTaskEncounterEntity, now: Long): ListeningTaskEncounterEntity {
+    val first = if (row.exposedAtMs == null) !listening().hasExposure(row.sourceId, row.exposureId) else row.firstEncounter
+    recordListeningExposure(row.sourceId, row.exposureId, row.exposedAtMs ?: now, now)
+    return row.copy(exposedAtMs = row.exposedAtMs ?: now, firstEncounter = first)
+}
+
 internal suspend fun AppDatabase.requireNoOtherListeningActivity(source: String) {
     require(listening().active(source) == null && listeningTasks().active(source) == null &&
         listeningTasks().activeAssessment(source) == null) { "Resume or discard the unfinished listening activity first" }
