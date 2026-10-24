@@ -65,6 +65,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   Keep bounded backfill page reads/calculation/writes atomic against live answers; mapping checks alone cannot detect changed evidence.
   Reconcile a delayed timestamp from its original evidence window, not a moving "now minus 21 days" window that can erase valid proof.
   New prerequisite publications use `foundationRequirements`, not legacy `requires`: additive chapters alone do not negotiate old-client gate semantics.
+- The real content-import test must independently project additive `foundationRequirements` into expected cached groups and check
+  the declared curriculum/leaf-edge provenance. Plain `GrammarSet` deserialization intentionally ignores that transport field;
+  comparing it unchanged with imported groups worked only while the real corpus had no new gates.
 - **Room:** list columns are joined with `SEP` (`\u001F`); use `joinSep()`/`splitSep()`. `review_log.id` is auto-generated, so pass `0`.
   Review state is keyed by (`sourceId` = lower-case `owner/repo`, stack, item, mode). Never key it by title or position; titles are editable.
 - **Listening:** persist exposure separately from SRS and retain the captured package/assistance through process recreation.

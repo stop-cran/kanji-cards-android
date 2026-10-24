@@ -4,10 +4,16 @@ import io.github.stopcran.kanji.core.content.ContentException
 import io.github.stopcran.kanji.core.content.ContentParser
 import io.github.stopcran.kanji.core.content.CounterFile
 import io.github.stopcran.kanji.core.content.FrontMatter
+import io.github.stopcran.kanji.core.content.GrammarCurriculum
+import io.github.stopcran.kanji.core.content.GrammarCurriculumData
+import io.github.stopcran.kanji.core.content.GrammarCurriculumState
 import io.github.stopcran.kanji.core.content.GrammarSet
 import io.github.stopcran.kanji.core.content.Manifest
 import io.github.stopcran.kanji.core.content.SafeZip
 import io.github.stopcran.kanji.core.content.SceneCatalog
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -640,7 +646,13 @@ class ContentTest {
             assertEquals(path, expected.scenes.firstOrNull { it.quizEligible }?.image, imported.quizImage)
         }
         val expectedGrammar = declared.files.keys.filter { it.startsWith("grammar/") }.map { path ->
-            j.decodeFromString(serializer, files.getValue(path).decodeToString())
+            val text = files.getValue(path).decodeToString()
+            val raw = j.parseToJsonElement(text).jsonObject
+            val requirements = raw["foundationRequirements"]?.jsonObject?.get("requires")?.jsonObject.orEmpty()
+            val set = j.decodeFromString(serializer, text)
+            set.copy(introductionGroups = set.introductionGroups.map { group ->
+                group.copy(requires = requirements[group.id]?.jsonArray?.map { it.jsonPrimitive.content } ?: group.requires)
+            })
         }.sortedBy { it.id }
         assertTrue(expectedGrammar.isNotEmpty())
         assertEquals(expectedGrammar.size, expectedGrammar.map { it.id }.toSet().size)
@@ -649,5 +661,29 @@ class ContentTest {
         assertEquals(expectedGrammar, parsed.grammar.sortedBy { it.id })
         val grammarAgain = parsed.grammar.map { j.decodeFromString(serializer, j.encodeToString(serializer, it)) }
         assertEquals(parsed.grammar, grammarAgain)
+        if (declared.curriculum.jsonObject.isEmpty()) {
+            assertEquals(GrammarCurriculumState.Absent, parsed.curriculum)
+        } else {
+            val expected = j.decodeFromString(
+                GrammarCurriculumData.serializer(), files.getValue(GrammarCurriculum.PATH).decodeToString(),
+            )
+            val curriculum = parsed.curriculum as GrammarCurriculumState.Ready
+            assertEquals(expected, curriculum.curriculum)
+            val groups = expectedGrammar.flatMap { it.introductionGroups }
+            val owners = expected.chapters.flatMap { chapter -> chapter.groups.map { it to chapter.id } }.toMap()
+            val leaves = groups.flatMap { group -> group.requires.map { it to group.id } }.toSet()
+            assertEquals(owners, curriculum.graph.chapterByGroup)
+            assertEquals(groups.map { it.id }.toSet() - owners.keys, curriculum.graph.unmappedGroups)
+            assertEquals(leaves, curriculum.graph.leafEdges.map { it.foundation to it.dependent }.toSet())
+            val chapterEdges = leaves.mapNotNull { leaf ->
+                val foundation = owners[leaf.first]
+                val dependent = owners[leaf.second]
+                if (foundation == null || dependent == null || foundation == dependent) null
+                else (foundation to dependent) to leaf
+            }.groupBy({ it.first }, { it.second }).mapValues { it.value.toSet() }
+            assertEquals(chapterEdges, curriculum.graph.chapterEdges.associate { edge ->
+                (edge.foundation to edge.dependent) to edge.supportingEdges.map { it.foundation to it.dependent }.toSet()
+            })
+        }
     }
 }
