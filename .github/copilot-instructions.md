@@ -43,6 +43,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   bounded nested lists need it too: check that the final search result is selectable without dismissing the keyboard. Check API 29 and 35.
 - **System back:** `BackHandler` in `AppNav` pops the route stack; without it back closes the app.
 - **Screen state across navigation:** `AppNav` composes only the top route, wrapped in `SaveableStateProvider` keyed `<index>:<route>`; `pop()` calls `removeState` so popped routes don't leak. Without it `rememberSaveable` state (search text, scroll) is lost when a screen pushes another. Lists that must keep scroll use an explicit `rememberLazyListState()`.
+- An asynchronous screen's short loading body can clamp a restored `ScrollState` to zero before real content arrives.
+  Keep the same `Page` call but disable its scrolling while loading; test a measured loading frame on Back and process restoration,
+  not only an isolated diagram/list saver.
 - **ViewModel scope:** `viewModel()` is scoped to the Activity, not to a route, so a quiz VM outlives leaving the screen and would resume
   mid-answer. The quiz route is `quiz:<timestamp>` and the VM is created with that key, giving each start a fresh session while still
   surviving rotation. Do the same for any new session-like screen.
@@ -61,6 +64,10 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - Grammar roadmap catalog errors stay separate from `grammarProblem`: a navigation-only failure must not block valid lessons.
   An authored group without a chapter is not an unowned compatibility group. A valid leaf DAG can collapse into a chapter cycle;
   validate both graphs without deleting true prerequisites or inventing an "Ungrouped" prerequisite chapter.
+- Roadmap diagrams measure a finite viewport and cull cards, not a world-sized layout that can overflow Compose constraints on
+  large forks. Keep placement independent of progress/filter state, and preserve unknown level counts as unknown until sync.
+  Adjacent two-axis `scrollable` modifiers install their own accessibility actions: put the combined scroll semantics before
+  them, and exercise both `ScrollBy` and `ScrollByOffset` as well as touch drags and restoration. Touch-only checks missed this.
 - Targeted Grammar practice must use `targetedNew`, not the whole-group guided lock or ungated ordinary `extraIds`.
   Compare complete accepted previews at Start, not only a repository version: changed questions, membership or restrictions expire consent.
   Targeted continuation and process recovery retain the logical source/branch/target but create a fresh route and unapproved preview.

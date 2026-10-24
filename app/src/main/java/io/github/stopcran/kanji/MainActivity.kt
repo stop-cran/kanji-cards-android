@@ -111,6 +111,8 @@ private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, p
         GrammarPracticeRoutes.UNAVAILABLE -> GrammarPracticeUnavailable(pop) { pop(); push(GrammarPracticeRoutes.PICKER) }
         else -> if (route.startsWith("listening:")) {
             io.github.stopcran.kanji.ui.ListeningScreen(route, pop) { source, path -> push(sourceDocRoute(source, path)) }
+        } else if (route.startsWith(io.github.stopcran.kanji.ui.GrammarRoadmapRoutes.PREFIX)) {
+            io.github.stopcran.kanji.ui.GrammarRoadmapScreen(app, route, pop, push)
         } else if (route.startsWith("quiz:")) {
             QuizScreen(
                 sessionKey = route,
@@ -206,6 +208,12 @@ private fun RouteContent(app: KanjiApp, route: String, push: (String) -> Unit, p
                     onCounters = { mode, extra -> push("cquiz:${System.currentTimeMillis()}:${mode.code}" + if (extra) ":extra" else "") },
                     onGrammar = { extra -> push("grammarquiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
                     onGrammarTopics = { push(GrammarPracticeRoutes.PICKER) },
+                    onGrammarRoadmap = {
+                        val source = app.settings.source.value
+                        push(io.github.stopcran.kanji.ui.GrammarRoadmapRoutes.create(
+                            io.github.stopcran.kanji.ui.GrammarMapDestination(source.id, source.branch),
+                        ))
+                    },
                     onGrammarTarget = { push(GrammarPracticeRoutes.create(it)) },
                     onQuiz = { extra -> push("quiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
                     onDraw = { extra -> push("draw:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },

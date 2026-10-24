@@ -359,6 +359,30 @@ analyzer accepts the new member but does not interpret listening responses as gr
 ## 7. UI and platform constraints
 
 - Everything goes through `ui/Page` (edge-to-edge insets, scrolling). Back is a string-route stack in `MainActivity`.
+- **Grammar roadmap (#61):** the Grammar page keeps source-set browsing and adds exactly two diagram levels: authored chapters,
+  then their existing authored groups. Group details are not a third diagram hierarchy. Prerequisite depth determines horizontal
+  layers; stable IDs and predecessor lanes break ties. Labels, browse filters, scores and due counts never determine topology.
+  Chapter arrows retain only direct cross-chapter group pairs; the accessible details list names both ends. External and
+  deliberately unmapped foundations remain navigable authored groups, not a fabricated chapter or compatibility group.
+  Missing/invalid/pending catalogs leave group/list access available and explain the unavailable assignment.
+  A finite, clipped viewport composes only intersecting cards and draws decorative arrows; it never measures a huge world-sized
+  Compose layout. Horizontal/vertical panning is separate from the surrounding page scroll, and the viewport shrinks in landscape.
+  An accessible lazy list has untruncated labels. Search spans all groups/chapters; browse filters affect counts, never hidden gates.
+  Controls start collapsed to leave room for the map; zero-match foundations stay visible, and unknown old-cache level counts say
+  that a sync is needed rather than claiming zero matches.
+  Counts have exercise/group denominators. Introductions, due exercises, non-expiring earned readiness and recent familiarity are
+  separate; recommendation priority is never a knowledge score. Shared availability preserves started reviews and valid targeted
+  subsets even when a whole-group ordinary focus cannot cover every facet. Partial chapters remain actionable. Group details
+  separately explain scope, prerequisite, coherence, metadata, exhaustion and ordinary daily-allowance restrictions.
+  Source/selected-branch-bound routes preserve overview/chapter/group identity and route-local selection/search/list/pan/page state through
+  article/practice navigation and process recreation. Each reopen re-resolves current metadata, including re-chaptered groups;
+  removed targets and changed sources are explicit states. Finding a topic and targeted practice do not change ordinary focus.
+  Selection has a distinct border and accessibility state across diagram/list views, without changing readiness colors.
+  Loading placeholders retain the same page scroll state without measuring it against their short temporary body.
+  Only the separate "Make this my next focus" action writes focus, and it requires the existing opt-in and current eligibility.
+  Development budgets: warm pure layout p95 below 100 ms for a 1,000-node/960-edge branched DAG; at most 12 composed cards in the
+  default phone viewport; warm navigation/first render below 2 s and post-idle interaction below 1 s. API 35 Pixel 9 (1080x2424,
+  420 dpi) debug emulator and JVM/Robolectric measurements are recorded separately; neither is a physical-device frame-rate claim.
 - **Keyboard resizing:** `MainActivity` explicitly requests `adjustResize`; text-entry pages use `Page(ime = true)` so the keyboard
   reduces the scroll viewport while the heading stays visible. Pre-Android 11 needs this mode to deliver edge-to-edge IME insets:
   the default `adjustPan` can move a short, otherwise non-scrollable exercise above the screen without giving it a scroll range.

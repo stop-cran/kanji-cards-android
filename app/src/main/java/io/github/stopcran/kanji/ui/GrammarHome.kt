@@ -110,6 +110,9 @@ fun GrammarPage(app: KanjiApp, onBack: () -> Unit, onOpenDoc: (String) -> Unit, 
             Text(GRAMMAR_LEVEL_SYNC_NEEDED)
         }
         ModeRow("Choose or type the construction", home.mode, onStart = a.onGrammar)
+        OutlinedButton(onClick = a.onGrammarRoadmap, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.grammar_roadmap))
+        }
         OutlinedButton(onClick = a.onGrammarTopics, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.grammar_choose_topic))
         }
@@ -254,7 +257,7 @@ internal fun GrammarRecommendationReadout(candidate: FocusCandidate) {
 }
 
 @Composable
-private fun GrammarScopeChips(selected: GrammarScope, onSelect: (GrammarScope) -> Unit) {
+internal fun GrammarScopeChips(selected: GrammarScope, onSelect: (GrammarScope) -> Unit) {
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         GrammarScope.entries.forEach { scope ->
             FilterChip(selected = selected == scope, onClick = { onSelect(scope) }, label = { Text(scope.label) })

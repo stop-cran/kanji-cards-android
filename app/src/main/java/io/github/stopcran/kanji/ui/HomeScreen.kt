@@ -63,6 +63,7 @@ class HomeActions(
     val onCounters: (io.github.stopcran.kanji.core.counters.CounterMode, extra: Boolean) -> Unit,
     val onGrammar: (extra: Boolean) -> Unit,
     val onGrammarTopics: () -> Unit,
+    val onGrammarRoadmap: () -> Unit,
     val onGrammarTarget: (io.github.stopcran.kanji.core.grammar.GrammarPracticeTarget) -> Unit,
     val onQuiz: (extra: Boolean) -> Unit,
     val onDraw: (extra: Boolean) -> Unit,

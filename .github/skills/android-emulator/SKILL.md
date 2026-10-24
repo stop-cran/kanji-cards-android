@@ -11,10 +11,12 @@ Android Studio is not needed: the SDK lives in `$env:LOCALAPPDATA\Android\Sdk` a
 - AVDs: `& "$env:LOCALAPPDATA\Android\Sdk\emulator\emulator.exe" -list-avds` -> `Pixel_9` (phone, default), `Pixel_Tablet` (for tablet layout checks).
 - Boot (hidden window), then wait until ready:
   ```powershell
-  Start-Process "$env:LOCALAPPDATA\Android\Sdk\emulator\emulator.exe" -ArgumentList '-avd','Pixel_9','-no-snapshot-save' -WindowStyle Hidden
+  Start-Process "$env:LOCALAPPDATA\Android\Sdk\emulator\emulator.exe" -ArgumentList '-avd','Pixel_9','-no-snapshot-load','-no-snapshot-save' -WindowStyle Hidden
   adb wait-for-device; do { Start-Sleep 5 } until ((adb shell getprop sys.boot_completed) -match '1')
   ```
   `adb wait-for-device` alone returns before Android has booted; poll `sys.boot_completed`. Boot takes about 1 minute.
+- An old Quick Boot snapshot can restore older app data as well as stale activity state. `-no-snapshot-save` alone does not prevent
+  loading it. Cold-boot with both flags when preserving current data or recovering instrumentation lifecycle/reporting failures.
 - Stop with `adb emu kill` (never kill by process name).
 - `adb devices` printing an empty list means no emulator is running; `installDebug` then fails with a generic Gradle error - start the emulator first.
 
@@ -40,6 +42,26 @@ Android Studio is not needed: the SDK lives in `$env:LOCALAPPDATA\Android\Sdk` a
 
 ## Checks before pushing (what CI runs)
 `.\gradlew.bat --console=plain -q detekt :app:testDebugUnitTest :app:lintDebug` (unit tests take about 5 min; add `--tests "*Name"` for a targeted run). Prefer refactoring over the Detekt baseline.
+
+## Grammar roadmap stress check
+- Build `.\gradlew.bat :app:assembleDebug :app:assembleDebugAndroidTest`, then explicitly install both APKs on the chosen emulator
+  with `adb -s emulator-5554 install -r`. The test APK is `app\build\outputs\apk\androidTest\debug\app-debug-androidTest.apk`.
+- At default text size, run `adb -s emulator-5554 shell am instrument -w -r -e class io.github.stopcran.kanji.ui.GrammarRoadmapPerformanceTest io.github.stopcran.kanji.test/androidx.test.runner.AndroidJUnitRunner`.
+  Require `OK (1 test)`; `am instrument` can return a successful shell exit code despite a failed test.
+- This renders 1,000 synthetic nodes using the production diagram, measures warm layout, first render and two-axis interactions,
+  and bounds composed-card counts. It does not insert synthetic content or progress into the learner's database.
+  Read `cache/roadmap-synthetic-benchmark.json` and its `.png` through the target app's `run-as`; preserve binary output correctly.
+- After syncing real chapter content, add `-e roadmapCorpus real` to also time the production screen's overview/largest-chapter
+  navigation. It reads accepted content without replacing it; results are in `cache/roadmap-real-benchmark.json`.
+  Let cold-boot background work settle before measuring the warm-navigation budget. Observation waits allow diagnostic timing
+  collection; they do not replace the tighter measured acceptance assertions. Do not accept stale cache JSON after a failed run.
+- Keep real-corpus navigation, source/Back/process restoration, large-text, theme, TalkBack and gesture checks separate.
+  A semantic node can be partially clipped even though it exists: inspect screenshots and check the actual visible touch area.
+- `uiautomator dump` temporarily suppresses other accessibility services. For TalkBack checks, use direct screenshots and keep
+  the service bound. `GrammarRoadmapAccessibilityTest` uses `FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES` to exercise exported
+  Android scroll/focus/click actions with TalkBack enabled; it is not a spoken-output or physical gesture usability audit.
+  Traverse the exported virtual-node tree and refresh nodes after layout changes before trusting cached actions/bounds.
+  Enable TalkBack before running that class, then restore the original accessibility settings afterward.
 
 ## Release APK to a phone (MTP, no adb over USB)
 - Build: `.\gradlew.bat --console=plain -q :app:assembleRelease`; copy `app\build\outputs\apk\release\*.apk` under a name that includes the short SHA.

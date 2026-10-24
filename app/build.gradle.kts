@@ -23,6 +23,7 @@ android {
         applicationId = "io.github.stopcran.kanji"
         minSdk = 26
         targetSdk = 36
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = 1
         versionName = "0.1.0"
         val sha = runCatching {
@@ -89,4 +90,6 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
 }
