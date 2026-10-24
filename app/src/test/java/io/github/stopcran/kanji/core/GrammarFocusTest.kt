@@ -168,7 +168,8 @@ class GrammarFocusTest {
         val states = prerequisite.exercises.associate { it.id to SrsState(CardPhase.Review) }
         val current = input(listOf(prerequisite, dependent), states, events = events, scope = GrammarScope.N4)
         assertTrue(GrammarFocus.decide(current.copy(events = emptyList())).selected.isEmpty())
-        assertEquals("beta", GrammarFocus.decide(current).activation!!.groupId)
+        assertTrue(GrammarFocus.decide(current).selected.isEmpty())
+        assertEquals("beta", GrammarFocus.decide(current.copy(readyGroups = setOf("alpha"), events = emptyList())).activation!!.groupId)
         val legacy = prerequisite.copy(introductionGroups = emptyList())
         assertFalse(GrammarEvidence.evaluate(
             GrammarFocus.groups(listOf(legacy)).single(), legacy.exercises.associateBy { it.id }, states, events, now,

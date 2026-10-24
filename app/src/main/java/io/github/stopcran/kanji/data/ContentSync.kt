@@ -115,6 +115,9 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
     }
     suspend fun sync(source: RepoSource, force: Boolean = false): SyncResult = lock.withLock { withContext(Dispatchers.IO) {
         try {
+            if (db.content().meta(source.id) != null && db.reviews().grammarReadinessStatus(source.id)?.complete != true) {
+                db.rebuildGrammarReadiness(source.id)
+            }
             val maySkipImport = !force && !needsParserRefresh(source)
             val commitKey = "${source.id}@${source.branch}"
             val head = headCommit(source)
@@ -159,6 +162,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             settings.setSceneParserEpoch(source.id, SceneCatalog.PARSER_EPOCH)
             settings.setListeningParserEpoch(source.id, io.github.stopcran.kanji.core.listening.ListeningContent.PARSER_EPOCH)
             head?.let { settings.setSyncedCommit(commitKey, it) }
+            db.rebuildGrammarReadiness(source.id)
             SyncResult.Updated(rows.kanji.size, rows.words.size, parsed.problems)
         } catch (e: ContentException) {
             SyncResult.Failed(e.message ?: "Invalid content", retryable = false)

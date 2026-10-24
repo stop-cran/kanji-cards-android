@@ -145,7 +145,7 @@ Grammar errors and never populate `sync_meta.grammarProblem` or block otherwise 
 
 `vocabularyProblem` is an internal import/cache diagnostic, not an authored field; supplied values are stripped before import.
 Typed Room serialization retains hints and real diagnostics. Epoch **3** introduced vocabulary support; the current Grammar parser
-epoch is **5**, also recovering additional correct choices and optional chapter metadata discarded by older caches even at the same commit/manifest.
+epoch is **6**, also recovering additional correct choices, optional chapters and foundation requirements discarded by older caches even at the same commit/manifest.
 Vocabulary support itself needs no additional Room migration.
 The maintained content repository has a revision-bound authoring/coverage gate; the app does not require its inventory or mandatory
 annotations from legacy/fork content. See that repository's `docs/content-format.md` for editorial exclusions and provenance.
@@ -182,12 +182,22 @@ assignment may expose a collapsed cycle without making the underlying exercises 
 Catalog failure does not populate `grammarProblem`, reject otherwise valid exercises or alter current prerequisite scheduling.
 The read-only source-scoped provider reports pending refresh, absent, invalid (with reason), or ready. The existing set browser remains
 the available fallback; diagram navigation is not implemented in this foundation. Genuine missing/cyclic leaf prerequisites retain
-their existing rejecting behavior. This format is not negotiation of a new readiness policy: do not publish new blocking gates until
-the remaining #59 contract/compatibility work and explicit owner policy confirmation are complete.
+their existing rejecting behavior. This catalog is not prerequisite-policy negotiation. New prerequisite publications use
+the separate set-level `foundationRequirements` envelope so old readers do not acquire new rolling-window locks.
+
+### Optional foundation requirements
+
+A Grammar set may declare `"foundationRequirements": {"schemaVersion": 1, "requires": {"local-group": ["source-global-foundation"]}}`.
+The root has exactly these keys; version 1 is an unquoted integer. Each key must own a local authored group and each value
+is an array of group-ID strings. Omission is valid; null, malformed values, unknown fields and invalid references reject
+the Grammar file. A local group cannot combine a new declaration with nonempty legacy `requires`. Existing source-global
+leaf validation applies, including duplicates, missing targets and cycles. Typed caches retain the effective group edges.
+Parser epoch 6 recovers this metadata. Older readers ignore the additive set field, not the exercises; new readers gate
+prerequisite-aware intake on persistent attained readiness. See [GRAMMAR-INTRODUCTIONS](GRAMMAR-INTRODUCTIONS.md).
 
 ## Room content replacement
 
-The current Room version is **14**. The 7-to-8 migration creates `grammar_sets` (key: source + set ID) and `grammar_responses`
+The current Room version is **15**. The 7-to-8 migration creates `grammar_sets` (key: source + set ID) and `grammar_responses`
 (key: `reviewLogId`) and clears only sync metadata to force a content reimport. Existing content, review states and history are preserved;
 all older versions use the registered migration chain, with no destructive fallback.
 The additive 8-to-9 migration preserves that snapshot and all history, creates source-keyed `grammar_focus` (`revision`, cursor JSON),
@@ -197,6 +207,10 @@ The 13-to-14 migration adds nullable `sync_meta.grammarCurriculumJson` and `gram
 focus and learning history. The catalog or its diagnostic is replaced atomically with the same source's content. Failed downloads retain
 the old catalog; a successful snapshot with invalid catalog metadata records its error instead of silently using a stale chapter map.
 Neither column is learner progress; Android database backup includes them, and the progress ZIP schema is unchanged.
+The 14-to-15 migration adds `grammar_readiness` keyed by source/group/facet/policy-version, source-keyed
+`grammar_readiness_status`, and an index for chronological source/stack/mode history paging. It preserves content,
+focus and canonical learning history. Replacement invalidates only the derived rebuild status, not earned milestones.
+Startup and accepted-sync maintenance reconstruct missing milestones; Home reads are side-effect-free.
 
 Grammar uses `(sourceId, stack="grammar", item=exerciseId, mode="Grammar", reading="")` as its review-state identity. The generic Room
 `kanji` column holds the exercise ID. Choose and type are presentations, not separate modes or schedules. Editing a set's prose without
@@ -208,7 +222,8 @@ Source-scoped settings store independent introduction/browse scopes (both defaul
 Epoch 1 supports retained levels; epoch 2 additionally retains and validates groups. A pending epoch refreshes typed caches even when the
 head SHA/contentVersion is unchanged or the launch check is recent.
 Only successful atomic replacement advances the epoch; it does not bypass rejected-file/shrink protection or offline archive backoff.
-Epoch 0 permits only unguided All new intake; epoch 1 permits level-aware unguided intake; guided introductions require epoch 2.
+Epoch 0 permits only unguided All new intake; epoch 1 permits level-aware unguided intake; group metadata starts at epoch 2,
+while prerequisite-aware guided introductions now require epoch 6.
 Started reviews remain safe throughout, and the selected scope/pilot is never silently changed. Failed downloads retain the previous snapshot
 and diagnostics, rather than marking last-known-good content invalid.
 

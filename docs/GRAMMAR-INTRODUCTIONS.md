@@ -97,9 +97,31 @@ reviewed rather than inferred from frequency or JLPT. `next` is a directed recom
 cycles there are permitted. `requires` is an array of source-global group-ID **strings**, for example
 `["synthetic-basics"]` in a synthetic fixture that also defines that group. It has no per-element
 importance/reason fields; objects, numbers and other non-string elements are invalid.
-All named groups must have supported familiarity for guided
-ordinary introductions. Prerequisite cycles and missing required groups are errors, never bypassed.
-The pilot declares **no genuine prerequisites**; synthetic cases exercise their handling.
+All named groups must have attained readiness for guided ordinary introductions. Prerequisite cycles and missing required
+groups are errors, never bypassed. The original recommendation pilot declared no genuine prerequisites.
+New publications use the set-level `foundationRequirements` transport below rather than introducing legacy rolling-window gates.
+
+### Prerequisite policy transport
+
+Parser epoch 6 accepts an optional set-level field:
+
+```json
+"foundationRequirements": {
+  "schemaVersion": 1,
+  "requires": {"dependent-group": ["foundation-group"]}
+}
+```
+
+The keys name authored groups in this set; the string arrays reference source-global authored foundations.
+The envelope has exactly these two fields and a strict integer version 1. Omission is valid; null, unknown fields,
+invalid types, duplicate/self/missing/cyclic references are errors. A group must not combine a declaration here with
+nonempty legacy `requires`. The decoded cache retains effective leaf edges in the existing group model.
+
+Older readers ignore this additive set field, import the same exercises and do not acquire the new rolling-window
+locks. New readers use earned milestones for both new and retained legacy edges. Keep new gates out of strict nested
+group objects. Prerequisite-aware new intake waits for epoch 6; levels/groups retain their historical capability
+thresholds (1/2). A required refresh bypasses unchanged-head/version shortcuts. Unguided intake and started reviews
+retain their previous behavior while metadata is pending.
 
 Check local shape/IDs before cross-file resolution. Invalid new fields reject their grammar file through
 existing import diagnostics. Reject unknown fields inside the new group/facet/member/recommendation
@@ -132,11 +154,11 @@ focus choice, or fallback when no authored group can introduce new material.
 
 ## Familiarity and coverage
 
-**Roadmap series implementation boundary (#59):** the optional chapter/import/graph foundation is separate from this implemented
-21-day policy. Its schema and failure isolation are documented in [CONTENT-SCHEMA](CONTENT-SCHEMA.md#optional-grammar-chapters-navigation-foundation).
+**Roadmap contract (#59):** chapter/import/graph metadata is separate from evidence.
+Its schema and failure isolation are documented in [CONTENT-SCHEMA](CONTENT-SCHEMA.md#optional-grammar-chapters-navigation-foundation).
 Partial chapter mapping retains all real leaf prerequisites and does not give unowned compatibility groups authored credentials.
-The proposed persistent attained-readiness policy has not been approved or implemented; the plan requires explicit owner confirmation
-before that contract is frozen. No chapter publication or parser epoch can by itself change old clients' rolling-window gate behavior.
+Earned readiness now supplies prerequisite credentials; current 21-day familiarity still supplies freshness,
+recommendation support and focus-release heuristics. No chapter publication alone changes old clients' gating policy.
 
 Use only canonical recorded Grammar events joined one-to-one to their response details for the current
 source. An event must match an imported member's exercise ID, target and relationship. Old events have
@@ -166,6 +188,46 @@ Evidence is source-wide, including previously learned material outside the curre
 Minimum *introduction coverage* is separately two started example keys per facet. An incorrect introduction
 can satisfy exposure coverage but not familiarity. Selecting/opening a group without an answer satisfies
 neither. Evidence expiry or a later error can remove supported familiarity without changing any SRS state.
+
+### Persistent foundation readiness
+
+The first qualifying historical or live window earns a milestone keyed by `(sourceId, groupId, facetId, policyVersion=1)`.
+Its threshold is exactly the evidence rule above. Readiness survives later lapses and expiry; it means an established
+foundation, not permanent mastery. A group is ready only when every current required facet has a milestone.
+New required facets qualify independently. Labels, chapters, spelling alternatives and additional examples of the
+same stable facet do not revoke existing milestones; changed tested meanings require new identities.
+
+Room v15 retains milestones independently of content replacement. Live attainment commits in the same transaction
+as canonical answer/detail/state, before focus-ticket handling, including unguided and extra practice. Successful
+practice-only confirmations write no canonical event and cannot earn credit. There is no click/skip/SRS-interval shortcut.
+Live calculation retains the earliest qualifying timestamp in the replayed history. Grants in the current timestamp
+batch are provisional: another event at exactly that timestamp reconciles them to the same complete-batch result
+as historical replay. This never revokes genuinely earlier milestones or removed-group/facet history.
+Qualification uses the recording operation's clock, not an event's self-declared timestamp; future-dated answers
+cannot qualify themselves. A delayed answer reconciles its event timestamp and retains any genuinely later proof.
+The live scan starts 21 days before the earlier of the event timestamp and evaluation clock, not simply 21 days
+before evaluation: aging must not discard the original proof while reconciling a delayed answer. Both live and
+maintenance paths use the same streaming scanner and bounded canonical query pages, not an all-history list.
+
+Startup/source maintenance and accepted syncs rebuild unearned milestones from retained canonical/detail history.
+The scan uses indexed chronological keyset pages of 1000 unique canonical IDs, a rolling 21-day buffer per unearned
+facet, and timestamp batches: a reset excludes all positives at that timestamp, even across a page boundary.
+Canonical and detail primary keys prevent duplicate join rows; inconsistent mappings/grades are excluded or reset,
+never reconstructed. Each bounded page checks the current membership/meaning fingerprint and reads, calculates and
+saves atomically against live answers. A canonical-ID watermark detects appended same-source Grammar history between
+pages and restarts the unearned scan, including newly inserted events older than the page cursor. A changed mapping
+abandons the stale scan; the corresponding accepted-sync maintenance rebuilds the new one. Earned rows are idempotent,
+and startup rescans even after a complete marker so independently lost derived rows can be restored.
+Pending/rebuild diagnostics are exposed separately; existing milestones and started reviews stay usable.
+
+Home and roadmap previews do not run maintenance or write milestones. Android database backup includes the derived
+rows; the progress ZIP remains unchanged and retains the canonical/detail history from which they can be rebuilt.
+There is no new export format or private-data upload.
+
+`GrammarAvailability` separates metadata problems, coherent guided scope, missing foundations, in/out-of-scope unseen
+members, started/due reviews, active per-facet quota and daily allowance. Incoherent guided scope is not a universal
+topic lock: targeted mode can use individually eligible new members and all valid started reviews. Exhausted budget,
+quota or unseen inventory is not an unmet prerequisite. Chapters aggregate children; they never supply another gate.
 
 ## Focus lifecycle and selection
 

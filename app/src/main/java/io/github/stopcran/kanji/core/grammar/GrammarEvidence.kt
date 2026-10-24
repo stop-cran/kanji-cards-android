@@ -69,7 +69,7 @@ object GrammarEvidence {
         return GroupEvidence(facets, diagnostics.distinct())
     }
 
-    private fun validEvent(event: GrammarEvent, exercise: GrammarExercise, now: Instant, diagnostics: MutableList<String>): Boolean {
+    internal fun validEvent(event: GrammarEvent, exercise: GrammarExercise, now: Instant, diagnostics: MutableList<String>): Boolean {
         if (event.atMs > now.toEpochMilli()) {
             diagnostics += "Future-dated event ${event.id} excluded; check the device clock."
             return false

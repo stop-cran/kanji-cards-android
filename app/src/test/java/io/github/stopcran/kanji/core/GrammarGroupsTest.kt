@@ -24,6 +24,55 @@ class GrammarGroupsTest {
     }
 
     @Test
+    fun newFoundationTransportPreservesLegacyImportWithoutLegacyRollingLocks() {
+        val first = grammarFixture()
+        val second = grammarFixture("beta")
+        val raw = Json.encodeToJsonElement(GrammarSet.serializer(), second).jsonObject
+        val text = JsonObject(raw + ("foundationRequirements" to Json.parseToJsonElement(
+            """{"schemaVersion":1,"requires":{"beta":["alpha"]}}""",
+        ))).toString()
+        val parsed = snapshot(mapOf("alpha" to Json.encodeToString(GrammarSet.serializer(), first), "beta" to text))
+        assertTrue(parsed.grammarProblems.toString(), parsed.grammarProblems.isEmpty())
+        assertEquals(listOf("alpha"), parsed.grammar.single { it.id == "beta" }.introductionGroups.single().requires)
+        val oldReader = Json { ignoreUnknownKeys = true }.decodeFromString(GrammarSet.serializer(), text)
+        assertEquals(second, oldReader)
+        assertTrue(oldReader.introductionGroups.single().requires.isEmpty())
+    }
+
+    @Test
+    fun foundationPolicyRejectsMisspellingsVersionsTypesOwnershipAndInvalidLeafEdges() {
+        val first = grammarFixture()
+        val second = grammarFixture("beta")
+        val raw = Json.encodeToJsonElement(GrammarSet.serializer(), second).jsonObject
+        val invalid = listOf(
+            "null", "[]", """{"schemaVersion":"1","requires":{}}""",
+            """{"schemaVersion":1.0,"requires":{}}""", """{"schemaVersion":2,"requires":{}}""",
+            """{"schemaVersion":1,"require":{}}""", """{"schemaVersion":1,"requires":null}""",
+            """{"schemaVersion":1,"requires":{"alpha":[]}}""", """{"schemaVersion":1,"requires":{"beta":null}}""",
+            """{"schemaVersion":1,"requires":{"beta":[2]}}""", """{"schemaVersion":1,"requires":{"beta":["beta"]}}""",
+            """{"schemaVersion":1,"requires":{"beta":["absent"]}}""",
+            """{"schemaVersion":1,"requires":{"beta":["alpha","alpha"]}}""",
+        )
+        for (policy in invalid) {
+            val text = JsonObject(raw + ("foundationRequirements" to Json.parseToJsonElement(policy))).toString()
+            val parsed = snapshot(mapOf("alpha" to Json.encodeToString(GrammarSet.serializer(), first), "beta" to text))
+            assertEquals(policy, listOf("alpha"), parsed.grammar.map { it.id })
+            assertTrue(policy, parsed.grammarProblems.isNotEmpty())
+        }
+        val legacy = second.copy(introductionGroups = second.introductionGroups.map { it.copy(requires = listOf("alpha")) })
+        val both = JsonObject(Json.encodeToJsonElement(GrammarSet.serializer(), legacy).jsonObject +
+            ("foundationRequirements" to Json.parseToJsonElement("""{"schemaVersion":1,"requires":{"beta":["alpha"]}}""")))
+        assertTrue(snapshot(mapOf("beta" to both.toString())).grammar.isEmpty())
+        val cycle = JsonObject(raw + ("foundationRequirements" to Json.parseToJsonElement(
+            """{"schemaVersion":1,"requires":{"beta":["alpha"]}}""",
+        )))
+        assertTrue(snapshot(mapOf(
+            "alpha" to Json.encodeToString(GrammarSet.serializer(), grammarFixture(requires = listOf("beta"))),
+            "beta" to cycle.toString(),
+        )).grammar.isEmpty())
+    }
+
+    @Test
     fun groupObjectsAreStrictAndMalformedMetadataCannotBecomeLegacyContent() {
         val set = grammarFixture()
         val raw = Json.encodeToJsonElement(GrammarSet.serializer(), set).jsonObject

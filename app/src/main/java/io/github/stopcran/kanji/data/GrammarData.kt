@@ -3,6 +3,9 @@ package io.github.stopcran.kanji.data
 import io.github.stopcran.kanji.core.content.GrammarSet
 import io.github.stopcran.kanji.core.content.GrammarCurriculum
 import io.github.stopcran.kanji.core.content.GrammarCurriculumState
+import io.github.stopcran.kanji.core.content.GrammarRequirements
+import io.github.stopcran.kanji.core.grammar.GrammarAvailability
+import io.github.stopcran.kanji.core.grammar.GrammarGroupAvailability
 import androidx.room.withTransaction
 import io.github.stopcran.kanji.core.grammar.GrammarCursor
 import io.github.stopcran.kanji.core.grammar.GrammarEvidence
@@ -67,6 +70,8 @@ data class GrammarStudy(
     val notice: String?,
     val focus: GrammarFocusDecision? = null,
     val ticket: GrammarFocusTicket? = null,
+    val readiness: GrammarReadinessSnapshot = GrammarReadinessSnapshot(emptySet(), emptySet(), true, null),
+    val availability: Map<String, GrammarGroupAvailability> = emptyMap(),
 ) {
     val mode: ModeState get() {
         val queue = QueueBuilder.build(ordinaryIds, states, now, budget, noise = 0.0)
@@ -109,13 +114,28 @@ suspend fun AppDatabase.grammarStudy(
     val states = grammarStates(sourceId)
     val budget = newAllowance(settings, sourceId, now).remaining
     val pool = GrammarEligibility.pool(sets.flatMap { it.exercises }, states, preferences.newScope, preferences.levelsReady)
-    val base = GrammarStudy(sets, states, preferences, pool.ids, pool.ids, budget, now, pool.newItemMessage)
-    if (!preferences.guided || extra) return@withTransaction base
-    val started = pool.ids.filter { states[it]?.phase?.let { phase -> phase != io.github.stopcran.kanji.core.srs.CardPhase.New } == true }
+    val readiness = grammarReadiness(sourceId, sets)
     val metadataError = when {
-        !preferences.groupsReady -> "Sync needed for guided introductions (settings)."
+        preferences.parserEpoch < GrammarRequirements.PARSER_EPOCH -> "Sync needed for prerequisite-aware introductions (settings)."
         else -> content().meta(sourceId)?.grammarProblem?.let { "Guided introductions blocked by content errors: ${it.take(600)}" }
     }
+    val availability = GrammarAvailability.evaluate(
+        GrammarFocus.groups(sets), sets.flatMap { it.exercises }.associateBy { it.id }, states, preferences.newScope,
+        preferences.levelsReady, readiness.readyGroups, budget, now, newMetadataProblem = metadataError,
+    )
+    val readinessNotice = when {
+        readiness.problem != null -> readiness.problem
+        readiness.rebuilding && sets.any { it.introductionGroups.isNotEmpty() } ->
+            "Rebuilding prerequisite readiness from retained history. Existing readiness and started reviews remain available."
+        else -> null
+    }
+    val base = GrammarStudy(
+        sets, states, preferences, pool.ids, pool.ids, budget, now,
+        listOfNotNull(pool.newItemMessage, readinessNotice).takeIf { it.isNotEmpty() }?.joinToString("\n"),
+        readiness = readiness, availability = availability,
+    )
+    if (!preferences.guided || extra) return@withTransaction base
+    val started = pool.ids.filter { states[it]?.phase?.let { phase -> phase != io.github.stopcran.kanji.core.srs.CardPhase.New } == true }
     if (metadataError != null) return@withTransaction base.copy(ordinaryIds = started, notice = metadataError)
     val row = reviews().grammarFocus(sourceId)
     val loaded = readCursor(row)
@@ -132,14 +152,18 @@ suspend fun AppDatabase.grammarStudy(
     }
     base.copy(
         ordinaryIds = started + decision.selected.map { it.exerciseId },
-        notice = listOfNotNull(decision.resetReason, decision.reason).joinToString("\n"),
+        notice = listOfNotNull(readinessNotice, decision.resetReason, decision.reason).joinToString("\n"),
         focus = decision, ticket = ticket,
+        availability = GrammarAvailability.evaluate(
+            GrammarFocus.groups(sets), sets.flatMap { it.exercises }.associateBy { it.id }, states, preferences.newScope,
+            preferences.levelsReady, readiness.readyGroups, budget, now, decision.activation, metadataError,
+        ),
     )
 }
 
 private suspend fun AppDatabase.focusInput(sourceId: String, study: GrammarStudy, cursor: GrammarCursor) = GrammarFocusInput(
     sourceId, study.sets, study.states, reviews().grammarEvidence(sourceId, study.now.minus(GrammarEvidence.WINDOW).toEpochMilli()),
-    study.preferences.newScope, study.budget, study.now, cursor,
+    study.preferences.newScope, study.budget, study.now, cursor, study.readiness.readyGroups,
 )
 
 suspend fun AppDatabase.changeGrammarScope(settings: Settings, sourceId: String, scope: GrammarScope) = withTransaction {
@@ -175,9 +199,11 @@ suspend fun AppDatabase.recordGrammarAnswer(
     log: ReviewLogEntity,
     response: GrammarResponseEntity,
     ticket: GrammarFocusTicket?,
+    now: Instant = Instant.now(),
 ): String? = withTransaction {
     val first = !reviews().grammarStarted(state.sourceId, state.kanji)
     reviews().recordGrammar(state, log, response)
+    attainGrammarReadiness(state.sourceId, now, log.atMs)
     if (!first || ticket == null) return@withTransaction null
     val preferences = settings.grammarFor(state.sourceId)
     if (!preferences.guided || preferences.newScope != ticket.scope) return@withTransaction null

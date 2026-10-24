@@ -60,6 +60,11 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - Grammar roadmap catalog errors stay separate from `grammarProblem`: a navigation-only failure must not block valid lessons.
   An authored group without a chapter is not an unowned compatibility group. A valid leaf DAG can collapse into a chapter cycle;
   validate both graphs without deleting true prerequisites or inventing an "Ungrouped" prerequisite chapter.
+- Grammar readiness must agree between live recording and replay of identical canonical history, including equal timestamps.
+  Reconcile only provisional grants in that timestamp batch, never earlier milestones; test by deleting derived rows and rebuilding.
+  Keep bounded backfill page reads/calculation/writes atomic against live answers; mapping checks alone cannot detect changed evidence.
+  Reconcile a delayed timestamp from its original evidence window, not a moving "now minus 21 days" window that can erase valid proof.
+  New prerequisite publications use `foundationRequirements`, not legacy `requires`: additive chapters alone do not negotiate old-client gate semantics.
 - **Room:** list columns are joined with `SEP` (`\u001F`); use `joinSep()`/`splitSep()`. `review_log.id` is auto-generated, so pass `0`.
   Review state is keyed by (`sourceId` = lower-case `owner/repo`, stack, item, mode). Never key it by title or position; titles are editable.
 - **Listening:** persist exposure separately from SRS and retain the captured package/assistance through process recreation.

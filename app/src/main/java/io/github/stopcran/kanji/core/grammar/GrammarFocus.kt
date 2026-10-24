@@ -89,6 +89,8 @@ data class GrammarFocusInput(
     val budget: Int,
     val now: Instant,
     val cursor: GrammarCursor,
+    val readyGroups: Set<String> = emptySet(),
+    val newMetadataProblem: String? = null,
 )
 
 object GrammarFocus {
@@ -121,9 +123,13 @@ object GrammarFocus {
             group.next.map { FocusRecommendation(group, evidence.getValue(group.id), it) }
         }.groupBy { it.link.groupId }
         val eligible = GrammarEligibility.pool(exercises.values.toList(), input.states, input.scope, true).ids.toSet()
+        val availability = GrammarAvailability.evaluate(
+            groups, exercises, input.states, input.scope, true, input.readyGroups, input.budget, input.now,
+            input.cursor.active, input.newMetadataProblem,
+        )
         val candidates = groups.map { group ->
             FocusCandidate(
-                group, evidence.getValue(group.id), blocked(group, eligible, input.states, evidence),
+                group, evidence.getValue(group.id), availability.getValue(group.id).guidedBlock,
                 recommendations[group.id].orEmpty(),
             )
         }
@@ -145,24 +151,6 @@ object GrammarFocus {
         val group = candidate.group
         val activation = GrammarActivation(group.id, FocusOrigin.Automatic, input.cursor.automaticOrdinal)
         return GrammarFocusDecision(candidates, activation, select(input, group, activation), selectionReason(input, candidate), resetReason)
-    }
-
-    private fun blocked(
-        group: IntroductionGroup,
-        eligible: Set<String>,
-        states: Map<String, SrsState>,
-        evidence: Map<String, GroupEvidence>,
-    ): String? {
-        if (group.authored) {
-            val missing = group.facets.filter { facet ->
-                group.members.filter { it.facetId == facet.id && it.exerciseId in eligible }.map { it.exampleKey }.distinct().size < 2
-            }
-            if (missing.isNotEmpty()) return "Scope cannot cover two contexts for: ${missing.joinToString { it.label }}."
-            val prerequisites = group.requires.filter { evidence[it]?.familiar != true }
-            if (prerequisites.isNotEmpty()) return "Supported familiarity needed for: ${prerequisites.joinToString()}."
-        }
-        if (group.members.none { it.exerciseId in eligible && !isStarted(states[it.exerciseId]) }) return "No eligible unseen members remain."
-        return null
     }
 
     private fun continueFocus(

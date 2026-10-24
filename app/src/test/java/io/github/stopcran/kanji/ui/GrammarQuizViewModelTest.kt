@@ -21,7 +21,6 @@ import io.github.stopcran.kanji.core.grammar.GrammarScope
 import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.data.AppDatabase
 import io.github.stopcran.kanji.data.GRAMMAR_LEVEL_EPOCH
-import io.github.stopcran.kanji.data.GRAMMAR_GROUP_EPOCH
 import io.github.stopcran.kanji.data.GRAMMAR_STACK
 import io.github.stopcran.kanji.data.GrammarEntity
 import io.github.stopcran.kanji.data.GrammarResponseEntity
@@ -321,7 +320,7 @@ class GrammarQuizViewModelTest {
     @Test
     fun repeatedNextCallbackCannotRecordOrCommitAFocusTwice() {
         install(4)
-        services.settings.setGrammarParserEpoch(sourceId, GRAMMAR_GROUP_EPOCH)
+        services.settings.setGrammarParserEpoch(sourceId, ContentParser.GRAMMAR_PARSER_EPOCH)
         runBlocking { db.changeGrammarGuided(services.settings, sourceId, true) }
         val vm = launch()
         val question = vm.ui as GrammarUi.Choose
@@ -342,7 +341,7 @@ class GrammarQuizViewModelTest {
             set.copy(exercises = set.exercises.map { it.copy(jlpt = 3) })
         }
         val sets = listOf(foundation, grammarFixture("beta"), grammarFixture("alpha"))
-        services.settings.setGrammarParserEpoch(sourceId, GRAMMAR_GROUP_EPOCH)
+        services.settings.setGrammarParserEpoch(sourceId, ContentParser.GRAMMAR_PARSER_EPOCH)
         services.settings.setGrammarNewScope(sourceId, GrammarScope.N4)
         runBlocking {
             db.content().insertGrammar(sets.mapIndexed { index, set ->

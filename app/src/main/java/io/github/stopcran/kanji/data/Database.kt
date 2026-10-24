@@ -126,7 +126,10 @@ data class ReviewStateEntity(
 
 @Entity(
     tableName = "review_log",
-    indices = [Index(value = ["sourceId", "stack", "kanji", "mode"]), Index(value = ["atMs"]), Index(value = ["sessionId"])],
+    indices = [
+        Index(value = ["sourceId", "stack", "kanji", "mode"]), Index(value = ["atMs"]), Index(value = ["sessionId"]),
+        Index(value = ["sourceId", "stack", "mode", "atMs"]),
+    ],
 )
 data class ReviewLogEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -320,6 +323,9 @@ interface ContentDao {
     @Query("UPDATE grammar_focus SET revision = revision + 1 WHERE sourceId = :sourceId")
     suspend fun invalidateGrammarFocus(sourceId: String)
 
+    @Query("DELETE FROM grammar_readiness_status WHERE sourceId = :sourceId")
+    suspend fun invalidateGrammarReadiness(sourceId: String)
+
     /** Atomic swap: readers never see a half-imported snapshot, and a failure leaves the last-known-good content. */
     @Transaction
     suspend fun replaceContent(sourceId: String, rows: ContentRows, meta: SyncMetaEntity) {
@@ -342,6 +348,7 @@ interface ContentDao {
         insertListeningAudio(rows.audio)
         putMeta(meta)
         invalidateGrammarFocus(sourceId)
+        invalidateGrammarReadiness(sourceId)
     }
 }
 
@@ -379,6 +386,51 @@ interface ReviewDao {
             "WHERE l.sourceId = :sourceId AND l.stack = 'grammar' AND l.mode = 'Grammar' AND l.atMs >= :sinceMs ORDER BY l.atMs, l.id",
     )
     suspend fun grammarEvidence(sourceId: String, sinceMs: Long): List<io.github.stopcran.kanji.core.grammar.GrammarEvent>
+
+    @Query(
+        "SELECT l.id, l.kanji AS exerciseId, l.grade, l.atMs, d.constructionId, d.relationshipId, d.promptType, d.correct, " +
+            "CASE WHEN d.sourceId = l.sourceId AND d.stack = l.stack AND d.exerciseId = l.kanji AND l.reading = '' " +
+            "THEN 1 ELSE 0 END AS identityMatches FROM review_log l LEFT JOIN grammar_responses d ON d.reviewLogId = l.id " +
+            "WHERE l.sourceId = :sourceId AND l.stack = 'grammar' AND l.mode = 'Grammar' AND l.atMs <= :untilMs " +
+            "AND l.atMs >= :afterMs AND (l.atMs > :afterMs OR l.id > :afterId) ORDER BY l.atMs, l.id LIMIT :limit",
+    )
+    suspend fun grammarEvidencePage(
+        sourceId: String, afterMs: Long, afterId: Long, untilMs: Long, limit: Int,
+    ): List<io.github.stopcran.kanji.core.grammar.GrammarEvent>
+
+    @Query("SELECT COALESCE(MAX(id), 0) FROM review_log")
+    suspend fun latestReviewId(): Long
+
+    // Keep the inter-page change check on the canonical ID range, not a scan of the source's full history.
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM review_log NOT INDEXED WHERE id > :afterId " +
+            "AND sourceId = :sourceId AND stack = 'grammar' AND mode = 'Grammar')",
+    )
+    suspend fun hasGrammarHistoryAfter(sourceId: String, afterId: Long): Boolean
+
+    @Query("SELECT * FROM grammar_readiness WHERE sourceId = :sourceId AND policyVersion = :policyVersion")
+    suspend fun grammarReadiness(sourceId: String, policyVersion: Int): List<GrammarReadinessEntity>
+
+    @Query("SELECT * FROM grammar_readiness WHERE sourceId = :sourceId")
+    fun observeGrammarReadiness(sourceId: String): Flow<List<GrammarReadinessEntity>>
+
+    @Query("SELECT * FROM grammar_readiness_status WHERE sourceId = :sourceId")
+    suspend fun grammarReadinessStatus(sourceId: String): GrammarReadinessStatusEntity?
+
+    @Query("SELECT * FROM grammar_readiness_status WHERE sourceId = :sourceId")
+    fun observeGrammarReadinessStatus(sourceId: String): Flow<GrammarReadinessStatusEntity?>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertGrammarReadiness(values: List<GrammarReadinessEntity>)
+
+    @Query(
+        "DELETE FROM grammar_readiness WHERE sourceId = :sourceId AND groupId = :groupId AND facetId = :facetId " +
+            "AND policyVersion = :policyVersion AND attainedAtMs = :atMs",
+    )
+    suspend fun deleteGrammarReadinessAt(sourceId: String, groupId: String, facetId: String, policyVersion: Int, atMs: Long)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putGrammarReadinessStatus(value: GrammarReadinessStatusEntity)
 
     @Query("SELECT * FROM review_state WHERE sourceId = :sourceId AND stack = :stack AND mode = :mode")
     suspend fun states(sourceId: String, stack: String, mode: String): List<ReviewStateEntity>
@@ -465,11 +517,12 @@ interface ReviewDao {
     entities = [
         KanjiEntity::class, WordEntity::class, ArticleEntity::class, CounterEntity::class, ImageEntity::class,
         GrammarEntity::class, GrammarResponseEntity::class, GrammarFocusEntity::class,
+        GrammarReadinessEntity::class, GrammarReadinessStatusEntity::class,
         WordSceneEntity::class,
         ListeningEntity::class, ListeningAudioEntity::class, ListeningEncounterEntity::class,
         ReviewStateEntity::class, ReviewLogEntity::class, StudySessionEntity::class, SyncMetaEntity::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {

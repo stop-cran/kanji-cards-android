@@ -77,7 +77,9 @@ internal fun rememberGrammarHome(app: KanjiApp): State<GrammarHome> {
                 app.db.content().observeMeta(source.id),
                 app.db.reviews().observeStates(source.id, GRAMMAR_STACK, "Grammar"),
                 app.db.reviews().observeGrammarFocus(source.id),
-            ) { _, _, _ -> Unit }.collectLatest {
+                app.db.reviews().observeGrammarReadiness(source.id),
+                app.db.reviews().observeGrammarReadinessStatus(source.id),
+            ) { _, _, _, _, _ -> Unit }.collectLatest {
                 val study = app.db.grammarStudy(app.settings, source.id, Instant.now())
                 value = GrammarHome(source.id, study.preferences, study.sets, study.mode, study.focus, study.notice)
             }

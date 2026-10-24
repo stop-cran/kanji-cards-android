@@ -71,7 +71,7 @@ class DatabaseMigrationTest {
     private fun openDatabase() = Room.databaseBuilder(context, AppDatabase::class.java, name)
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
-            MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14,
+            MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15,
         )
         .allowMainThreadQueries()
         .build()
@@ -82,6 +82,29 @@ class DatabaseMigrationTest {
             block(db)
         } finally {
             db.close()
+        }
+    }
+
+    @Test
+    fun version14UpgradePreservesContentHistoryAndSupportsReopenedMilestones() = runBlocking {
+        val source = sources.first()
+        createSchema(14) { sqlite ->
+            sqlite.execSQL("INSERT INTO sync_meta VALUES (?, 'v14', 500, 0, NULL, NULL, NULL, NULL)", arrayOf(source))
+            sqlite.execSQL("INSERT INTO grammar_focus VALUES (?, 9, '{}')", arrayOf(source))
+            sqlite.execSQL("INSERT INTO review_log VALUES (7, ?, 'grammar', 'alpha-a-0', 'Grammar', 3, 500, '', NULL)", arrayOf(source))
+        }
+        withDatabase { db ->
+            assertEquals("v14", db.content().meta(source)!!.contentVersion)
+            assertEquals(9L, db.reviews().grammarFocus(source)!!.revision)
+            assertEquals(7L, db.reviews().allLog().single().id)
+            assertTrue(db.reviews().grammarReadiness(source, 1).isEmpty())
+            db.reviews().insertGrammarReadiness(listOf(GrammarReadinessEntity(source, "alpha", "a", 1, 500)))
+            db.reviews().putGrammarReadinessStatus(GrammarReadinessStatusEntity(source, "fixture", true))
+        }
+        withDatabase { db ->
+            assertEquals(500L, db.reviews().grammarReadiness(source, 1).single().attainedAtMs)
+            assertTrue(db.reviews().grammarReadinessStatus(source)!!.complete)
+            assertEquals(7L, db.reviews().allLog().single().id)
         }
     }
 
@@ -263,7 +286,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(14, db.openHelper.writableDatabase.version)
+                assertEquals(15, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(sources.first(), "all", "日", "KanjiOn", "Review", 12.5, 5.0, 999, 500, 3, 1, "にち"),
                     db.reviews().allStates().single(),
@@ -339,7 +362,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(14, db.openHelper.writableDatabase.version)
+                assertEquals(15, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(source, GRAMMAR_STACK, "alpha-a-0", "Grammar", "Review", 12.5, 5.0, 999, 500, 3, 1),
                     db.reviews().allStates().single(),

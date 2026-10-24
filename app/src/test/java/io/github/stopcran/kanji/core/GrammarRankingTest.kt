@@ -131,7 +131,7 @@ class GrammarRankingTest {
         )
         val decision = GrammarFocus.decide(withGate)
         assertEquals("alpha", decision.current!!.group.id)
-        assertTrue(decision.candidates.single { it.group.id == "beta" }.blocked!!.contains("Supported familiarity"))
+        assertTrue(decision.candidates.single { it.group.id == "beta" }.blocked!!.contains("Earned prerequisite readiness"))
     }
 
     @Test

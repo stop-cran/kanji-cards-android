@@ -18,6 +18,7 @@ import io.github.stopcran.kanji.core.grammar.GrammarScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.After
@@ -447,6 +448,41 @@ class ContentSyncTest {
         assertNull(cached.exercises.first().vocabulary)
         assertNotNull(cached.exercises.first().vocabularyProblem)
         assertEquals(before, db.reviews().allStates() to db.reviews().allLog())
+    }
+
+    @Test
+    fun foundationEpochRefreshesIgnoredGatesAtTheSameHeadAndVersionWithoutChangingHistory() = runBlocking {
+        val first = io.github.stopcran.kanji.core.grammarFixture().copy(article = "articles/pilot.md")
+        val second = io.github.stopcran.kanji.core.grammarFixture("beta").copy(article = "articles/pilot.md")
+        val raw = Json.encodeToJsonElement(GrammarSet.serializer(), second).jsonObject
+        val text = kotlinx.serialization.json.JsonObject(raw + ("foundationRequirements" to Json.parseToJsonElement(
+            """{"schemaVersion":1,"requires":{"beta":["alpha"]}}""",
+        ))).toString()
+        http.archiveBytes = archive(
+            "foundations", mapOf("日" to "sun"), grammar = first.id to Json.encodeToString(GrammarSet.serializer(), first),
+            additionalGrammar = mapOf(second.id to text),
+        )
+        assertTrue(sync.sync(source) is SyncResult.Updated)
+        db.content().insertGrammar(listOf(GrammarEntity(source.id, second.id, Json.encodeToString(GrammarSet.serializer(), second), 1)))
+        db.reviews().record(
+            ReviewStateEntity(source.id, GRAMMAR_STACK, "beta-a-0", "Grammar", "Review", 12.5, 5.0, 999, 500, 3, 1),
+            ReviewLogEntity(0, source.id, GRAMMAR_STACK, "beta-a-0", "Grammar", 3, 500),
+        )
+        val history = db.reviews().allStates() to db.reviews().allLog()
+        settings.setGrammarParserEpoch(source.id, io.github.stopcran.kanji.core.content.GrammarCurriculum.PARSER_EPOCH)
+        settings.setGrammarGuided(source.id, true)
+        val pending = db.grammarStudy(settings, source.id, java.time.Instant.now())
+        assertEquals(listOf("beta-a-0"), pending.ordinaryIds)
+        assertTrue(pending.notice!!.contains("Sync needed"))
+        settings.lastCheckMs = System.currentTimeMillis()
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
+        assertEquals(2, http.downloads)
+        assertEquals(listOf("alpha"), db.grammarSets(source.id).single { it.id == "beta" }.introductionGroups.single().requires)
+        assertEquals(history, db.reviews().allStates() to db.reviews().allLog())
+        assertEquals(ContentParser.GRAMMAR_PARSER_EPOCH, settings.grammarFor(source.id).parserEpoch)
+        val ready = db.grammarStudy(settings, source.id, java.time.Instant.now())
+        assertEquals(listOf("alpha"), ready.availability.getValue("beta").missingPrerequisites)
+        assertTrue("beta-a-0" in ready.ordinaryIds)
     }
 
     @Test

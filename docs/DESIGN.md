@@ -46,8 +46,8 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   archive cannot differ from the checked head. It is skipped when the head SHA equals the stored one, and the
   import is also skipped when `manifest.contentVersion` is unchanged, so **content changes must bump `contentVersion`** (`force` bypasses
   both). Pending Grammar or scene parser epochs also bypass these shortcuts and the launch-check throttle, but not bad-content/shrink protection.
-  Current Grammar parser epoch 5 is recorded per source only after atomic replacement, retaining JLPT, groups, vocabulary, authored
-  additional correct choices and optional chapter metadata. The readiness thresholds stay at 1 for levels and 2 for groups. Epoch-0 caches permit only unguided All new
+  Current Grammar parser epoch 6 is recorded per source only after atomic replacement, retaining JLPT, groups, vocabulary, authored
+  additional correct choices, optional chapters and foundation requirements. The capability thresholds stay at 1 for levels and 2 for groups. Epoch-0 caches permit only unguided All new
   intake; epoch 1 permits level-aware unguided intake; started reviews remain available throughout.
   If the head lookup fails and content exists, the branch archive is downloaded at most once per 6h per source/branch (persisted
   `fallback:` timestamp; throttled calls return a non-retryable failure so the worker does not loop); with no content it downloads at once.
@@ -57,15 +57,22 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   a *successful partial* import (some manifest files skipped for hash/parse errors) replaces it, so a skipped file disappears until fixed.
   Only files listed in the manifest are imported. For duplicate kanji titles the first in sorted path order is kept.
 - Only `replaceContent` may clear/insert content tables; the synced SHA is stored after it succeeds.
-- **Grammar chapter foundation (#59, partial):** optional `curriculum/grammar.json` is hash-bound in the separate
+- **Grammar curriculum contract (#59):** optional `curriculum/grammar.json` is hash-bound in the separate
   `manifest.curriculum` namespace. Older clients ignore it; it adds no fields to strict introduction-group objects.
   One mapped group has one chapter, while valid authored groups may remain deliberately unmapped. All real leaf prerequisites
   survive; chapter arrows contain only direct edges between different mapped chapters and retain their supporting group pairs.
   A leaf DAG can collapse into a chapter cycle, which invalidates only the roadmap, not the exercises or existing guided rules.
   Room v14 stores the catalog or its explicit diagnostic in the source's accepted `sync_meta` transaction. Epoch-5 refresh recovers
   previously ignored metadata at an unchanged revision. Pending refresh, absent catalog, invalid catalog and ready graph are distinct.
-  The existing set list remains usable. This checkpoint does not implement the roadmap UI, durable readiness or targeted practice;
-  current 21-day prerequisite behavior is unchanged. Non-expiring readiness still needs the separate owner confirmation required by #59.
+  The existing set list remains usable. New gates live in the versioned set-level `foundationRequirements` envelope:
+  old clients ignore it and retain exercise access instead of acquiring rolling-window locks; epoch 6 imports effective leaf edges.
+  Prerequisite-aware new intake waits for that capability. Unguided intake and started reviews remain unchanged.
+  Room v15 stores source/group/facet/policy-version attainment, using the existing two-context/typed/24h-in-21-days threshold.
+  Earned readiness survives age and later mistakes, avoiding cascades of re-locks; it is not a mastery claim.
+  Recent evidence still drives freshness/recommendation/focus heuristics, and FSRS still responds to every recorded answer.
+  Live milestones commit with answers, independent of focus tickets. Startup/sync maintenance backfills from indexed,
+  paged canonical/detail history, preserves earned rows, rejects stale mapping writes and recovers missing derived state.
+  Previews are read-only; chapter availability aggregates actual child eligibility and never requires whole upstream chapters.
 
 ## 3. Scheduling (FSRS-5)
 
