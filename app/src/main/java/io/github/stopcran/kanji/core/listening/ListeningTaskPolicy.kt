@@ -33,7 +33,10 @@ data class TaskPlayRequest(
 )
 
 object ListeningTaskPolicy {
-    val supportedTypes: Set<ListeningTaskType> = setOf(ListeningTaskType.TaskBased, ListeningTaskType.KeyPoint)
+    val supportedTypes: Set<ListeningTaskType> = setOf(
+        ListeningTaskType.TaskBased, ListeningTaskType.KeyPoint,
+        ListeningTaskType.VerbalExpression, ListeningTaskType.QuickResponse,
+    )
 
     fun request(
         task: ListeningTaskPackage, state: ListeningTaskAttempt, request: TaskPlayRequest,

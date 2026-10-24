@@ -223,7 +223,8 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 
 The adopted [Japanese task/assessment contract](LISTENING-TASKS.md) settles the design gate for #66
 under delegated autonomous decision-making. B supplies the shared data/media infrastructure described below;
-C adds the common guided host and focused formats; D's spoken choices and F's assessment orchestration remain separate installments.
+C adds the common guided host and focused formats; D extends it with spoken choices.
+F's assessment orchestration remains a separate installment.
 The following passage rules remain the legacy contract.
 
 Listening schedules whole passages, not their three questions: `(sourceId, "listening", passageId, "Listening", "")`.
@@ -289,7 +290,7 @@ One transactional Listening admission guard spans legacy, guided/study and futur
 Both catalogs share cooldowns, due-time estimates, daily introductions and cross-mode reservations.
 Familiar-but-unintroduced scored tasks still reserve a new unit. Legacy history seeds only recorded
 exposure; equivalent stories share familiarity without sharing genuinely different scored skills.
-Parser support does not enable a renderer: C enables only task-based and key-point presentations.
+Parser support does not enable a renderer automatically: C/D explicitly enable the four contract-1 presentations.
 
 `ListeningTaskStudy` captures source/branch/revision, package/policy, all assets and word bodies, and
 atomically records one immutable response/review/debit. `ListeningTaskPlayback` connects its durable
@@ -335,10 +336,19 @@ result; it never silently converts a graded capture or infers a disability from 
 Missing required evidence offers a fully scrollable retry/discard presentation, not a wrong-answer
 grade. Releasing a presentation clears its decoded picture; resuming rechecks the captured bytes.
 
-D extends these same host, feedback, picture and sequencing components with the two numbered
-spoken-choice formats, then enables their renderer capabilities. It must keep option text hidden until
-permitted help/feedback and preserve B's completion/assistance rules. Synthetic diagram/short-tone
-fixtures exercise the host and native UI only; they are not linguistic or production-media approval.
+D extends these same host, feedback, picture and sequencing components with illustrated verbal
+expression and quick response. Their sequence is instruction -> situation/utterance -> three fixed
+numbered spoken choices. Stage headings identify the captured option number, not a list index or
+answer-bearing label. Selection waits for all five stages, and each required first choice play is
+ordinary evidence rather than replay help. Number-only previews disclose no script, translation or
+rationale; these are available only through deliberate guided help or captured feedback.
+
+Expression uses a marked-speaker essential scene with neutral accessibility labels and the same
+described-unscored boundary; quick response has no picture. Both preserve their stable option IDs and
+stage/number/media mappings through interruption, saved-state recovery, source changes and replay.
+Distinct one/two/three-pulse native fixtures expose swapped media/order, but are deliberately not
+spoken Japanese. Real script-to-audio correspondence and exact heard numbering still require E's
+actual listener approval. Synthetic scene/short-tone fixtures are not production-media approval.
 
 ## 5. Words, levels and advancement
 

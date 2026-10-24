@@ -154,7 +154,7 @@ private fun ListeningTaskControls(vm: ListeningTaskViewModel) {
     val complete = task.stages.all { it.id in state.completedStages }
     val whole = complete && !state.wholeReplayInProgress && state.positionMs == 0L
     val enabled = !vm.busy && vm.error == null
-    Text("Stage ${state.stageIndex + 1}/${task.stages.size}: ${task.stages[state.stageIndex].role.label}")
+    Text("Stage ${state.stageIndex + 1}/${task.stages.size}: ${task.stages[state.stageIndex].label(task)}")
     Text("${state.completedStages.size}/${task.stages.size} required stages complete", style = MaterialTheme.typography.bodySmall)
     if (state.stageIndex == 0) {
         task.stages.first().turns.forEach { id -> Text(task.turns.single { it.id == id }.text) }
@@ -182,6 +182,9 @@ private fun ListeningTaskChoices(vm: ListeningTaskViewModel, reveal: Boolean) {
     val row = requireNotNull(vm.encounter)
     val answerable = state.phase == "answer" && row.kind == "graded" && row.reviewLogId == null && vm.error == null && !vm.busy
     Text("Choices", style = MaterialTheme.typography.titleMedium)
+    if (task.choiceMode == TaskChoiceMode.Audio && !reveal) {
+        Text("The three choices are spoken in number order. Choose a number after hearing all required stages.")
+    }
     task.options.forEach { option ->
         val label = if (task.choiceMode == TaskChoiceMode.Text || reveal) "${option.number}. ${option.label}" else "${option.number}"
         val evidence = if (task.choiceMode == TaskChoiceMode.Text || reveal) Modifier.listeningEvidence(vm) else Modifier

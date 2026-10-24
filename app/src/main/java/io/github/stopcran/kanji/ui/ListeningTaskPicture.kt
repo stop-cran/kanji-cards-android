@@ -23,14 +23,18 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import io.github.stopcran.kanji.core.listening.TaskChoiceMode
 import kotlin.math.min
 import kotlin.math.roundToInt
 
 @Composable
 internal fun ListeningTaskPicture(vm: ListeningTaskViewModel, bitmap: ImageBitmap, required: Boolean, modifier: Modifier) {
     var enlarged by rememberSaveable { mutableStateOf(false) }
-    val description = if (required) "Essential numbered picture. Described study is available in Listening."
-        else "Context picture. Described study is available in Listening."
+    val description = when {
+        !required -> "Context picture. Described study is available in Listening."
+        vm.task?.choiceMode == TaskChoiceMode.Visual -> "Essential numbered picture. Described study is available in Listening."
+        else -> "Essential scene picture. Described study is available in Listening."
+    }
     Column(modifier) {
         Image(bitmap, description, Modifier.weight(1f).fillMaxWidth().testTag("listening-task-picture").listeningEvidence(vm),
             contentScale = ContentScale.Fit)

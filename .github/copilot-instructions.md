@@ -123,6 +123,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   Described study is a captured, unscored choice, never an automatic accessibility conversion. Picture accessibility labels
   remain neutral; answer-bearing descriptions belong only to explicit help/feedback/study.
   Check enlarged dialogs with actual system font scaling too; a test-local density override does not scale their separate window.
+  Spoken-choice stage headings use captured `optionId` -> authored number, never the stage index or hidden response text.
+  Keep three numbered controls auditory until help/feedback. First required choice playback is not targeted replay;
+  distinct pulse fixtures test byte/order alignment only, not actual Japanese numbering or listener approval.
 - **Quiz semantics:** options are meaning titles and unique by title (one correct answer). Wrong = Again (re-asked after 3 cards),
   right = Good, "I guessed" = Hard. Time-based Easy was dropped: with 4 options a fast answer is often luck.
 - **Daily new-card budget** counts kanji whose first review log entry is today (`newCardsIntroducedSince`), per mode.

@@ -32,8 +32,13 @@ internal class ListeningUiFixture : AutoCloseable {
     val source = settings.source.value.id
     private val tone = asset("tone.ogg")
     val picture = asset("picture.webp")
+    private val scene = asset("expression-scene.webp")
+    private val choiceCues = (1..3).map { asset("choice-$it.ogg") }
+    val assets = (listOf(tone, picture, scene) + choiceCues).associateBy(ContentParser::rawSha256)
     val records = listOf(record("task.json", "n5-task-open-window", visual = true),
-        record("key-point.json", "n5-task-rainy-class", visual = false))
+        record("key-point.json", "n5-task-rainy-class"),
+        record("verbal-expression.json", "n5-task-borrow-pencil"),
+        record("quick-response.json", "n5-task-park-invitation"))
 
     init {
         runBlocking {
@@ -41,14 +46,14 @@ internal class ListeningUiFixture : AutoCloseable {
             db.withTransaction {
                 db.importListeningTasks(ParsedContent(Manifest(1, "native-ui-fixture", emptyMap()), emptyList(), emptyList(),
                     emptyList(), emptyMap(), emptyList(), listeningTasks = ListeningTaskCatalog(records = records,
-                        assets = listOf(tone, picture).associateBy(ContentParser::rawSha256))), settings.source.value, "a".repeat(40))
+                        assets = assets)), settings.source.value, "a".repeat(40))
             }
         }
     }
 
     private fun asset(name: String) = instrumentation.context.assets.open("listening-tasks/$name").use { it.readBytes() }
 
-    private fun record(file: String, id: String, visual: Boolean): ListeningTaskRecord {
+    private fun record(file: String, id: String, visual: Boolean = false): ListeningTaskRecord {
         val raw = asset(file).decodeToString()
         var task = ListeningTaskContent.parse("listening-tasks/$id.json", raw).task
         if (visual) task = task.copy(choiceMode = TaskChoiceMode.Visual,
@@ -63,11 +68,15 @@ internal class ListeningUiFixture : AutoCloseable {
             vocabulary = listOf(ListeningWord("窓", "まど", "window", "窓")))
         val contentHash = ListeningTaskContent.parse("listening-tasks/$id.json",
             Json.encodeToString(ListeningTaskPackage.serializer(), task)).contentHash
+        val image = if (visual) picture else task.visual?.let { scene }
         val media = TaskMedia(contentHash, task.stages.associate { stage ->
-            stage.id to TaskAudio("task-audio/ui.ogg", ContentParser.rawSha256(tone), 250,
-                stage.turns.mapIndexed { index, turn -> ListeningTiming(turn, index * 250L / stage.turns.size,
-                    (index + 1) * 250L / stage.turns.size) })
-        }, if (visual) ListeningImage("task-images/ui.webp", ContentParser.rawSha256(picture)) else null)
+            val number = stage.optionId?.let { option -> task.options.single { it.id == option }.number }
+            val bytes = number?.let { choiceCues[it - 1] } ?: tone
+            val duration = number?.let { it * 200L + 100 } ?: 250L
+            stage.id to TaskAudio("task-audio/ui-${number ?: 0}.ogg", ContentParser.rawSha256(bytes), duration,
+                stage.turns.mapIndexed { index, turn -> ListeningTiming(turn, index * duration / stage.turns.size,
+                    (index + 1) * duration / stage.turns.size) })
+        }, image?.let { ListeningImage("task-images/${if (visual) "ui" else "scene"}.webp", ContentParser.rawSha256(it)) })
         task = task.copy(media = media, approval = TaskApproval("approved", contentHash, ListeningTaskContent.mediaHash(media),
             "2026-10-24", "Synthetic UI fixture only; no Japanese listening or artwork approval."))
         return ListeningTaskContent.parse("listening-tasks/$id.json", Json.encodeToString(ListeningTaskPackage.serializer(), task))

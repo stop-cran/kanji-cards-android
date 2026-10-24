@@ -1,6 +1,8 @@
 package io.github.stopcran.kanji.ui
 
 import io.github.stopcran.kanji.core.listening.ListeningTaskType
+import io.github.stopcran.kanji.core.listening.ListeningTaskPackage
+import io.github.stopcran.kanji.core.listening.TaskStage
 import io.github.stopcran.kanji.core.listening.TaskStageRole
 
 internal val ListeningTaskType.label: String get() = when (this) {
@@ -26,3 +28,6 @@ internal val TaskStageRole.label: String get() = when (this) {
     TaskStageRole.Utterance -> "Utterance"
     TaskStageRole.Choice -> "Spoken choice"
 }
+
+internal fun TaskStage.label(task: ListeningTaskPackage): String =
+    optionId?.let { id -> "Spoken choice ${task.options.single { it.id == id }.number}" } ?: role.label

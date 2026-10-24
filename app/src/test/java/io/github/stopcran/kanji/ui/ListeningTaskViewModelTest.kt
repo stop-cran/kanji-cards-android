@@ -46,6 +46,7 @@ class ListeningTaskViewModelTest {
     private val store = ViewModelStore()
     private val source get() = services.settings.source.value.id
     private val picture get() = requireNotNull(javaClass.getResourceAsStream("/listening-guided-picture.webp")).use { it.readBytes() }
+    private val scene get() = requireNotNull(javaClass.getResourceAsStream("/listening-expression-scene.webp")).use { it.readBytes() }
 
     @Before fun setup() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
@@ -67,10 +68,11 @@ class ListeningTaskViewModelTest {
             draft = draft.copy(vocabulary = listOf(ListeningWord("窓", "まど", "window", "窓")))
             db.content().insertWords(listOf(WordEntity(source, "窓", "まど", "Window", null, "窓", "", "# Captured window article")))
         }
-        val record = approvedTask(draft, image = if (visual) picture else null)
+        val image = if (visual) picture else draft.visual?.let { scene }
+        val record = approvedTask(draft, image = image)
         val assets = buildMap {
             put(ContentParser.rawSha256(taskTone()), taskTone())
-            if (visual) put(ContentParser.rawSha256(picture), picture)
+            if (image != null) put(ContentParser.rawSha256(image), image)
         }
         db.withTransaction {
             db.importListeningTasks(ParsedContent(Manifest(1, "guided-fixture", emptyMap()), emptyList(), emptyList(),
@@ -94,27 +96,29 @@ class ListeningTaskViewModelTest {
         player.complete()
     }
 
-    @Test fun bothFocusedProtocolsRunAllStagesAndOneNormalReplayBeforeExactlyOneGood() = runBlocking {
-        for (name in listOf("open-window", "rainy-class")) {
+    @Test fun allFourProtocolsRunAllStagesAndOneNormalReplayBeforeExactlyOneGood() = runBlocking {
+        for (name in listOf("open-window", "rainy-class", "borrow-pencil", "park-invitation")) {
             val record = install(name)
             val id = services.listeningTasks.start(source, record.task.id, extra = true)
             val player = GuidedPlayer()
             val vm = model(id, player)
             assertEquals(record.task.taskType, vm.task?.taskType)
             assertNull(row(id).exposedAtMs)
-            vm.evidenceVisible()
-            waitUntil { row(id).exposedAtMs != null }
-            assertNotNull(row(id).exposedAtMs)
+            if (record.task.choiceMode != TaskChoiceMode.Audio || record.task.visual != null) {
+                vm.evidenceVisible()
+                waitUntil { row(id).exposedAtMs != null }
+            }
             vm.play()
             vm.play()
-            for (index in 1..4) {
+            val count = record.task.stages.size
+            for (index in 1..count) {
                 assertTrue(db.reviews().allLog().none { it.sessionId == id })
                 complete(vm, player, index)
             }
             waitUntil { !vm.busy }
             assertEquals("answer", vm.attempt?.phase)
             vm.play(wholeReplay = true)
-            for (index in 5..7) complete(vm, player, index)
+            for (index in (count + 1) until count * 2) complete(vm, player, index)
             waitUntil { !vm.busy }
             vm.answer(record.task.answer)
             waitUntil { !vm.busy }
@@ -217,6 +221,54 @@ class ListeningTaskViewModelTest {
         waitUntil { !restored.busy }
         assertTrue(db.reviews().allLog().isEmpty())
         assertNotNull(row(id).exposedAtMs)
+    }
+
+    @Test fun spokenChoiceResumeRetainsOrderAndTargetedReplayOnlyChangesTheNewResponse() = runBlocking {
+        val record = install("borrow-pencil")
+        val originalSource = source
+        val id = services.listeningTasks.start(source, record.task.id, extra = true)
+        val first = GuidedPlayer()
+        val original = model(id, first)
+        original.play()
+        for (index in 1..3) complete(original, first, index)
+        waitUntil { first.starts == 4 && original.attempt?.started == true }
+        first.position = 5_000
+        original.pause(release = true)
+        waitUntil { !original.busy }
+        services.settings.setSource("https://github.com/different/source", "other")
+        install("park-invitation")
+        val second = GuidedPlayer()
+        val restored = model(id, second)
+        assertEquals(originalSource, restored.encounter?.sourceId)
+        assertEquals(record.task.options, restored.task?.options)
+        assertEquals("request", restored.task?.stages?.get(3)?.optionId)
+        assertEquals(5_000L, restored.attempt?.positionMs)
+        restored.play()
+        waitUntil { second.starts == 1 && restored.attempt?.started == true }
+        first.complete()
+        assertEquals(3, services.listeningTasks.attempt(row(id)).completedStages.size)
+        assertEquals(5_000L, second.positionMs)
+        second.complete()
+        complete(restored, second, 2)
+        waitUntil { !restored.busy }
+        assertTrue(requireNotNull(restored.attempt).assistance.isEmpty())
+        restored.play(stage = 3)
+        complete(restored, second, 3)
+        waitUntil { !restored.busy }
+        restored.answer("request")
+        waitUntil { !restored.busy }
+        restored.submit()
+        waitUntil { !restored.busy }
+        assertEquals(Grade.Hard.value, restored.response?.grade)
+        assertEquals(setOf("targeted-replay"), restored.response?.assistance)
+        val frozen = row(id).responseJson
+        restored.play(stage = 4)
+        complete(restored, second, 4)
+        waitUntil { !restored.busy }
+        assertEquals(frozen, row(id).responseJson)
+        assertEquals(1, db.reviews().allLog().count { it.sessionId == id })
+        restored.close(false) {}
+        waitUntil { !restored.busy }
     }
 
     private class GuidedPlayer : ListeningPlayer {

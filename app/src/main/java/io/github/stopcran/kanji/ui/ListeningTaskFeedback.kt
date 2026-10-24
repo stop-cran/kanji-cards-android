@@ -47,7 +47,7 @@ internal fun ListeningTaskTranscript(vm: ListeningTaskViewModel) {
     val task = requireNotNull(vm.task)
     Text("Transcript and translation", style = MaterialTheme.typography.titleLarge)
     task.stages.forEachIndexed { index, stage ->
-        Text(stage.role.label, style = MaterialTheme.typography.titleMedium)
+        Text(stage.label(task), style = MaterialTheme.typography.titleMedium)
         stage.turns.forEach { id ->
             val turn = task.turns.single { it.id == id }
             Text("${turn.speaker}: ${turn.text}", Modifier.listeningEvidence(vm))
