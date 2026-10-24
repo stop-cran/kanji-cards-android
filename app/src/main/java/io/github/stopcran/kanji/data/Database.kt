@@ -520,15 +520,19 @@ interface ReviewDao {
         GrammarReadinessEntity::class, GrammarReadinessStatusEntity::class,
         WordSceneEntity::class,
         ListeningEntity::class, ListeningAudioEntity::class, ListeningEncounterEntity::class,
+        ListeningTaskEntity::class, ListeningTaskAssetEntity::class, ListeningAssetPinEntity::class,
+        ListeningTaskIdentityEntity::class, ListeningExposureEntity::class, ListeningTaskSyncEntity::class,
+        ListeningTaskEncounterEntity::class, ListeningAssessmentEntity::class,
         ReviewStateEntity::class, ReviewLogEntity::class, StudySessionEntity::class, SyncMetaEntity::class,
     ],
-    version = 15,
+    version = 16,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun content(): ContentDao
     abstract fun reviews(): ReviewDao
     abstract fun listening(): ListeningDao
+    abstract fun listeningTasks(): ListeningTaskDao
 }
 
 val MIGRATION_13_14 = object : androidx.room.migration.Migration(13, 14) {

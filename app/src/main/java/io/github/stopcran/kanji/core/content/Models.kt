@@ -19,6 +19,9 @@ data class Manifest(
     val audio: Map<String, String> = emptyMap(),
     /** Raw shape keeps malformed optional navigation metadata from rejecting otherwise valid content. */
     val curriculum: JsonElement = JsonObject(emptyMap()),
+    val listeningTasks: JsonElement = JsonObject(emptyMap()),
+    val listeningTaskAudio: JsonElement = JsonObject(emptyMap()),
+    val listeningTaskImages: JsonElement = JsonObject(emptyMap()),
 )
 
 data class KanjiCard(
@@ -201,4 +204,6 @@ data class ParsedContent(
     val audio: Map<String, ByteArray> = emptyMap(),
     val listeningProblems: List<String> = emptyList(),
     val curriculum: GrammarCurriculumState = GrammarCurriculumState.Absent,
+    val listeningTasks: io.github.stopcran.kanji.core.listening.ListeningTaskCatalog =
+        io.github.stopcran.kanji.core.listening.ListeningTaskCatalog(),
 )

@@ -4,10 +4,8 @@ import androidx.room.withTransaction
 import io.github.stopcran.kanji.core.content.ContentParser
 import io.github.stopcran.kanji.core.listening.*
 import io.github.stopcran.kanji.core.srs.CardPhase
-import io.github.stopcran.kanji.core.srs.DayLevel
 import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.NewAllowance
-import io.github.stopcran.kanji.core.srs.QueueBuilder
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.StudyMode
 import kotlinx.coroutines.Dispatchers
@@ -18,7 +16,6 @@ import kotlinx.serialization.json.Json
 import java.time.Instant
 import java.time.ZoneId
 import java.util.UUID
-import kotlin.random.Random
 
 data class ListeningOverview(
     val sourceId: String,
@@ -65,45 +62,15 @@ class ListeningStudy(
     suspend fun overview(sourceId: String): ListeningOverview = db.withTransaction { overviewInside(sourceId, clock()) }
 
     private suspend fun overviewInside(sourceId: String, now: Instant): ListeningOverview {
-        val dao = db.listening()
-        val rows = dao.passages(sourceId)
-        val states = db.reviews().states(sourceId, LISTENING_STACK, LISTENING_MODE).filter { it.reading.isEmpty() }
-            .associate { it.kanji to it.toSrs() }
-        val exposure = dao.exposures(sourceId).associate { it.passageId to it.lastPracticeAtMs }
-        val blocked = mutableMapOf<String, String>()
-        val cooldowns = mutableMapOf<String, Instant>()
-        rows.forEach { row ->
-            val last = exposure[row.id]
-            when {
-                !row.ready -> blocked[row.id] = row.reason ?: "Listening content is not ready"
-                last != null && now.toEpochMilli() < last + ListeningPolicy.COOLDOWN_MS ->
-                    cooldowns[row.id] = Instant.ofEpochMilli(last + ListeningPolicy.COOLDOWN_MS)
-            }
-        }
-        val known = rows.mapTo(hashSetOf()) { it.id }
-        states.filter { (id, state) -> id !in known && !state.due.isAfter(now) }.forEach { (id, _) ->
-            blocked[id] = "Previously started passage is unavailable in this content snapshot"
-        }
-        val ready = rows.filter { it.ready && it.id !in cooldowns }
-        val due = QueueBuilder.build(ready.map { it.id }, states, now, newCardsRemainingToday = 0).map { it.kanji }
-        val byId = rows.associateBy { it.id }
-        val dueTime = due.sumOf { ListeningPolicy.estimatedMs(requireNotNull(byId.getValue(it).durationMs)) }
-        val today = now.atZone(zone()).toLocalDate()
-        val introduced = dao.introductions(sourceId, today.atStartOfDay(zone()).toInstant().toEpochMilli())
-        val shared = db.newAllowance(settings, sourceId, now, zone())
-        val day = DayLevel.parseWeek(settings.weekPlan.value)[today.dayOfWeek.value - 1]
-        val allowance = ListeningPolicy.allowance(shared.remaining, day, introduced.count, introduced.estimatedMs, dueTime)
-        var remaining = allowance.milliseconds
-        val unseen = ready.filter { states[it.id]?.phase.let { phase -> phase == null || phase == CardPhase.New } }
-        val minimumNewMs = unseen.minOfOrNull { ListeningPolicy.estimatedMs(requireNotNull(it.durationMs)) }
-        val fresh = unseen.shuffled(Random("$sourceId|$today".hashCode())).filter { row ->
-            val estimate = ListeningPolicy.estimatedMs(requireNotNull(row.durationMs))
-            (estimate <= remaining).also { if (it) remaining -= estimate }
-        }.take(allowance.count).map { it.id }
+        val queue = db.listeningQueue(settings, sourceId, now, zone())
+        val legacyIds = queue.passages.mapTo(hashSetOf()) { it.id }
+        val taskIds = queue.tasks.mapTo(hashSetOf()) { it.id }
         return ListeningOverview(
-            sourceId, rows, due, fresh, blocked, cooldowns, dao.active(sourceId), allowance, shared, minimumNewMs,
+            sourceId, queue.passages, queue.due.filter { it in legacyIds }, queue.fresh.filter { it in legacyIds },
+            queue.blocked.filterKeys { it !in taskIds }, queue.cooldowns.filterKeys { it in legacyIds },
+            db.listening().active(sourceId), queue.allowance, queue.shared, queue.minimumNewMs,
             db.content().meta(sourceId)?.listeningProblem,
-            QueueBuilder.extra(ready.map { it.id }, states, now, limit = Int.MAX_VALUE, noise = 0.0).map { it.kanji },
+            queue.extra.filter { it in legacyIds },
         )
     }
 
@@ -121,6 +88,7 @@ class ListeningStudy(
             require(active.passageId == passageId && (active.kind == "study") == study) { "Resume or discard the unfinished listening encounter first" }
             return active.id
         }
+        db.requireNoOtherListeningActivity(sourceId)
         val now = clock()
         val home = overviewInside(sourceId, now)
         val row = requireNotNull(home.passages.find { it.id == passageId }) { "Listening passage is no longer available" }
@@ -284,12 +252,14 @@ class ListeningStudy(
             val state = attempt(row)
             val studied = row.kind == "study" && row.exposedAtMs != null
             val reason = if (discard && row.reviewLogId == null) "discarded" else "completed"
-            db.listening().putEncounter(row.copy(
+            val closed = row.copy(
                 closedAtMs = now, closeReason = reason,
                 newReservation = false, imageBytes = null,
                 lastExposureAtMs = if (studied) now else row.lastExposureAtMs,
                 lastStudyAtMs = if (studied || row.reviewLogId != null) now else row.lastStudyAtMs,
-            ))
+            )
+            db.listening().putEncounter(closed)
+            recordExposure(closed)
             db.reviews().endSession(row.id, now, reason,
                 if (row.reviewLogId == null) 0 else 1, if ((state.grade ?: 0) > 1) 1 else 0)
             db.listening().pruneAudio(row.sourceId)
@@ -305,8 +275,15 @@ class ListeningStudy(
             val row = requireNotNull(db.listening().encounter(id)) { "Listening encounter no longer exists" }
             require(row.closedAtMs == null || (allowSubmitted && row.reviewLogId != null)) { "Listening encounter is already closed" }
             val updated = block(row, attempt(row), record(row).passage, clock().toEpochMilli())
+            recordExposure(updated)
             db.listening().putEncounter(updated)
             updated
+        }
+    }
+
+    private suspend fun recordExposure(row: ListeningEncounterEntity) {
+        row.exposedAtMs?.let { first ->
+            db.recordListeningExposure(row.sourceId, row.passageId, first, maxOf(row.lastExposureAtMs ?: first, row.lastStudyAtMs ?: first))
         }
     }
 

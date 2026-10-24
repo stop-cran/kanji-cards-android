@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "policyVersion": 1,
+  "jlpt": 5,
+  "id": "n5-task-borrow-pencil",
+  "exposureId": "n5-story-borrow-pencil",
+  "taskType": "verbal-expression",
+  "kind": "monologue",
+  "usage": "scored",
+  "title": "At a desk",
+  "topic": "Choosing an expression for a depicted speaker",
+  "levelRationale": "Select a simple polite request appropriate to the given person and intention; structural draft with no generated picture or audio.",
+  "speakers": [
+    {"id": "n", "role": "narrator", "voice": "ja-JP-NanamiNeural", "ratePercent": -10},
+    {"id": "a", "role": "character", "voice": "ja-JP-KeitaNeural", "ratePercent": -10}
+  ],
+  "turns": [
+    {"id": "instruction", "speaker": "n", "text": "絵と音声で、話す人を確かめてください。答えを一つ選んでください。", "translation": "Use the picture and audio to identify the speaker. Choose one answer."},
+    {"id": "situation", "speaker": "n", "text": "となりの人のえんぴつを借りたいです。何と言いますか。", "translation": "You want to borrow the other person's pencil. What do you say?"},
+    {"id": "choice-one", "speaker": "a", "text": "1。えんぴつをどうぞ。", "translation": "One. Here is a pencil."},
+    {"id": "choice-two", "speaker": "a", "text": "2。えんぴつを貸してください。", "translation": "Two. Please lend me a pencil."},
+    {"id": "choice-three", "speaker": "a", "text": "3。えんぴつはありません。", "translation": "Three. There is no pencil."}
+  ],
+  "stages": [
+    {"id": "instruction", "role": "instruction", "turns": ["instruction"]},
+    {"id": "situation", "role": "situation", "turns": ["situation"]},
+    {"id": "choice-one", "role": "choice", "turns": ["choice-one"], "optionId": "offer"},
+    {"id": "choice-two", "role": "choice", "turns": ["choice-two"], "optionId": "request"},
+    {"id": "choice-three", "role": "choice", "turns": ["choice-three"], "optionId": "absence"}
+  ],
+  "choiceMode": "audio",
+  "options": [
+    {"id": "offer", "number": 1, "label": "えんぴつをどうぞ。", "translation": "Here is a pencil.", "rationale": "This offers a pencil rather than requesting one."},
+    {"id": "request", "number": 2, "label": "えんぴつを貸してください。", "translation": "Please lend me a pencil.", "rationale": "This asks the other person to lend a pencil."},
+    {"id": "absence", "number": 3, "label": "えんぴつはありません。", "translation": "There is no pencil.", "rationale": "This states absence instead of making the requested polite request."}
+  ],
+  "answer": "request",
+  "evidence": ["situation"],
+  "explanation": "The indicated person wants to borrow something; 貸してください asks the other person to lend it.",
+  "visual": {
+    "role": "required",
+    "description": "Two people sit next to one another at a desk. An arrow identifies the speaking person; the other person's pencil lies beside that person's notebook. No speech bubbles or selected response."
+  }
+}

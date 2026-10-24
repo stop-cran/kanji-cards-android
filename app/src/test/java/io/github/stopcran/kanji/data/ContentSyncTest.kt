@@ -81,13 +81,23 @@ private fun archiveFiles(version: String, files: Map<String, ByteArray>): ByteAr
     val images = files.filterKeys { it.startsWith("images/") }
     val scenes = files.filterKeys { it.startsWith("scenes/") }
     val curriculum = files.filterKeys { it.startsWith("curriculum/") }
-    val text = files - images.keys - scenes.keys - curriculum.keys
+    val tasks = files.filterKeys { it.startsWith("listening-tasks/") }
+    val taskAudio = files.filterKeys { it.startsWith("task-audio/") }
+    val taskImages = files.filterKeys { it.startsWith("task-images/") }
+    val listening = files.filterKeys { it.startsWith("listening/") }
+    val audio = files.filterKeys { it.startsWith("audio/") }
+    val text = files - images.keys - scenes.keys - curriculum.keys - tasks.keys - taskAudio.keys - taskImages.keys - listening.keys - audio.keys
     val manifest = Json.encodeToString(
         Manifest.serializer(),
         Manifest(
             1, version, text.mapValues { ContentParser.sha256(it.value) },
             images.mapValues { ContentParser.rawSha256(it.value) }, scenes.mapValues { ContentParser.sha256(it.value) },
             curriculum = JsonObject(curriculum.mapValues { JsonPrimitive(ContentParser.sha256(it.value)) }),
+            listeningTasks = JsonObject(tasks.mapValues { JsonPrimitive(ContentParser.sha256(it.value)) }),
+            listeningTaskAudio = JsonObject(taskAudio.mapValues { JsonPrimitive(ContentParser.rawSha256(it.value)) }),
+            listeningTaskImages = JsonObject(taskImages.mapValues { JsonPrimitive(ContentParser.rawSha256(it.value)) }),
+            listening = listening.mapValues { ContentParser.sha256(it.value) },
+            audio = audio.mapValues { ContentParser.rawSha256(it.value) },
         ),
     ).toByteArray()
     val out = ByteArrayOutputStream()
@@ -139,6 +149,45 @@ class ContentSyncTest {
     private lateinit var db: AppDatabase
     private lateinit var settings: Settings
     private lateinit var sync: ContentSync
+
+    @Test
+    fun taskRejectionRetainsCatalogButUpdatesOtherContentAndRetriesUnchangedHead() = runBlocking {
+        val task = io.github.stopcran.kanji.core.approvedTask()
+        val path = "listening-tasks/${task.task.id}.json"
+        val taskFiles = mapOf(path to task.json.toByteArray(), "task-audio/test-tone.ogg" to io.github.stopcran.kanji.core.taskTone())
+        http.archiveBytes = archiveFiles("task-v1", taskFiles + ("kanji/日.md" to kanjiMd("日", "sun").toByteArray()))
+        val first = sync.sync(source)
+        assertTrue(first.toString(), first is SyncResult.Updated)
+        assertEquals(SHA_A, db.listeningTasks().sync(source.id)?.acceptedRevision)
+        http.headSha = SHA_B
+        http.archiveBytes = archiveFiles("task-v2", taskFiles + (path to "{".toByteArray()) +
+            ("kanji/日.md" to kanjiMd("日", "day").toByteArray()))
+        val rejected = sync.sync(source)
+        assertTrue(rejected is SyncResult.Updated && rejected.problems.any { it.contains("keeping the last accepted") })
+        assertEquals("day", db.content().kanji(source.id).single().title)
+        assertEquals(task.json, db.listeningTasks().tasks(source.id).single().json)
+        assertEquals(SHA_A, db.listeningTasks().sync(source.id)?.acceptedRevision)
+        assertEquals(SHA_B, db.listeningTasks().sync(source.id)?.attemptedRevision)
+        val downloads = http.downloads
+        http.archiveBytes = archiveFiles("task-v2", taskFiles + ("kanji/日.md" to kanjiMd("日", "day").toByteArray()))
+        assertTrue(sync.sync(source) is SyncResult.Updated)
+        assertEquals(downloads + 1, http.downloads)
+        assertEquals(SHA_B, db.listeningTasks().sync(source.id)?.acceptedRevision)
+        assertNull(db.listeningTasks().sync(source.id)?.problem)
+        assertTrue(sync.sync(source) is SyncResult.UpToDate)
+    }
+
+    @Test
+    fun independentTaskParserEpochReimportsAnUnchangedHead() = runBlocking {
+        assertTrue(sync.sync(source) is SyncResult.Updated)
+        val previous = requireNotNull(db.listeningTasks().sync(source.id))
+        db.listeningTasks().putSync(previous.copy(parserEpoch = 0))
+        val downloads = http.downloads
+        assertTrue(sync.sync(source) is SyncResult.Updated)
+        assertEquals(downloads + 1, http.downloads)
+        assertEquals(io.github.stopcran.kanji.core.listening.ListeningTaskContent.PARSER_EPOCH,
+            db.listeningTasks().sync(source.id)?.parserEpoch)
+    }
 
     @Before
     fun setUp() {

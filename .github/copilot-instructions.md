@@ -103,7 +103,17 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   Export-version changes must update `tools/analyze_grammar_progress.py`, not just Kotlin export tests.
   The legacy importer validates every `audio` entry, even unreferenced ones; short new-task clips in that map can
   abort the entire sync when listening is cached. Keep new documents and media in separate namespaces; see the
-  adopted `docs/LISTENING-TASKS.md` contract before implementing #67. An unknown task is not corrupt legacy content.
+  adopted `docs/LISTENING-TASKS.md` contract. An unknown task is not corrupt legacy content.
+  B's task import has its own Room-stored accepted revision/parser epoch, independent of failed attempts and ordinary sync.
+  Do not enable a task renderer merely because its package parses. Shared Listening admission/allowance runs transactionally
+  across catalogs; a familiar but never-introduced skill still reserves against other modes. Preserve every owner media pin.
+  Native start acknowledgement must survive coroutine cancellation; clearing a failed stage requires that stage's completion,
+  not any successful clip. A partly heard whole replay becomes assistance if abandoned or submitted before completion.
+  Consume replay allowance/requested audio assistance only at actual start, not preparation. Persist picture failures before
+  rethrowing; only revalidating that captured picture clears its block, independently of audio-stage recovery.
+  Cancelling an unstarted seek must retain restart provenance when its position was reset; ordinary resume must not erase that help.
+  API-35 codec instrumentation must foreground an activity: a background-only runner cannot acquire target-35 audio focus.
+  On this Windows host, SwiftShader crashed the emulator between native cases; host graphics with Vulkan disabled passed.
 - **Quiz semantics:** options are meaning titles and unique by title (one correct answer). Wrong = Again (re-asked after 3 cards),
   right = Good, "I guessed" = Hard. Time-based Easy was dropped: with 4 options a fast answer is often luck.
 - **Daily new-card budget** counts kanji whose first review log entry is today (`newCardsIntroducedSince`), per mode.

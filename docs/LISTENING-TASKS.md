@@ -1,7 +1,9 @@
 # Japanese listening tasks: contract 1
 
 Design deliverable for [A / #66](https://github.com/stop-cran/kanji-cards-android/issues/66).
-**Independently reviewed implementation contract, adopted under delegated autonomous decision-making. Not yet implemented.**
+**Independently reviewed implementation contract, adopted under delegated autonomous decision-making.**
+Installment B supplies the shared importer, persistence, accounting and staged-player foundation;
+new guided renderers, approved runtime content and the assessment wrapper remain C-F deliverables.
 Implementation order is B (shared infrastructure), C (focused tasks/common host), D (spoken choices),
 E (approved original content), F (assessment). The review of A's issue plan did not approve these decisions.
 The concrete design was subsequently reviewed and its reservation finding resolved. The conservative
@@ -282,8 +284,8 @@ the hard **30 MiB download / 50 MiB retained / 100 MiB inflated / 8,000-entry** 
 40-MiB retained / 80-MiB inflated / 7,000-entry publication headroom. Budget **at most 6 MiB**
 for all new unique audio/image bytes across the 28 scored items, four examples and instructions.
 Keep the single existing archive distribution; no new host, media branch or secret service.
-Measure the complete candidate tree, not just the new directory. The budget checker must count
-`curriculum` and all new wanted folders consistently with SafeZip; current tooling omits curriculum.
+Measure the complete candidate tree, not just the new directory. The budget checker counts
+`curriculum` and all new wanted folders consistently with SafeZip; B corrects the earlier curriculum omission.
 If final approved output does not fit, stop/review scope or delivery design; do not delete existing
 content, silently lower quality, raise hard limits or disguise a pilot as a full section.
 

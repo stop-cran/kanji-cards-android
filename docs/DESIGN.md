@@ -222,7 +222,8 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 ### N5 listening
 
 The adopted [Japanese task/assessment contract](LISTENING-TASKS.md) settles the design gate for #66
-under delegated autonomous decision-making. It is not yet implemented; the behavior below remains the legacy contract.
+under delegated autonomous decision-making. B supplies the shared data/media infrastructure described below;
+C/D's guided renderers and F's assessment orchestration remain separate installments. The following passage rules remain the legacy contract.
 
 Listening schedules whole passages, not their three questions: `(sourceId, "listening", passageId, "Listening", "")`.
 The N5-only learning contract is [owned with the content](https://github.com/stop-cran/learning-japanese/blob/main/docs/listening-n5.md).
@@ -273,6 +274,35 @@ only after rechecking the current approved package and cached audio; it cannot a
 Source changes do not retarget an encounter. In-use audio remains pinned through content replacement; unused old audio is pruned.
 Export v5 adds source-bound encounters, exposure, captured content and immutable responses without binary media. The grammar
 analyzer accepts the new member but does not interpret listening responses as grammar evidence.
+
+#### Japanese-task infrastructure (B)
+
+`ListeningTaskContent` strictly validates schema/policy 1, all four fixed-order task families, complete
+stage media and canonical content/whole-media approvals. Separate manifest namespaces and Opus bounds
+keep short clips out of the legacy decoder. Unsupported versions have unavailable entries; corruption
+preserves the accepted task catalog, records a stale/error notice and remains retryable at the same HEAD.
+Room v16 preserves every legacy row and snapshot while adding independent task revision/parser metadata,
+permanent source-scoped exposure bindings, media ownership pins and task/assessment persistence.
+
+One transactional Listening admission guard spans legacy, guided/study and future diagnostic activity.
+Both catalogs share cooldowns, due-time estimates, daily introductions and cross-mode reservations.
+Familiar-but-unintroduced scored tasks still reserve a new unit. Legacy history seeds only recorded
+exposure; equivalent stories share familiarity without sharing genuinely different scored skills.
+Parser support does not enable a renderer: B's production new-task capability set is intentionally empty.
+
+`ListeningTaskStudy` captures source/branch/revision, package/policy, all assets and word bodies, and
+atomically records one immutable response/review/debit. `ListeningTaskPlayback` connects its durable
+generation/stage operations to the existing native player. Preparing, seeking and stale callbacks
+cannot earn completion. Pausing cancels pending preparation/seek as well as active playback; the
+actual-start acknowledgement survives cancellation. Exact-position pauses add no assistance, uncertain
+recovery does, and abandoning a partly heard otherwise-normal whole replay is partial-replay help.
+A successful different stage cannot clear an unresolved failed stage. Explicit discard of an unsupported
+unfinished policy preserves its uninterpreted state and exposure while releasing ownership.
+
+Catalog, encounter and assessment pins are separate owners; replacing content cannot evict any open
+capture's media. Closing releases encounter pins without changing its immutable response. Export v6
+keeps the original seven members and adds task encounters, diagnostic assessments and shared exposures
+without binaries. The grammar analyzer shape-checks these arrays but does not count them as Grammar.
 
 ## 5. Words, levels and advancement
 

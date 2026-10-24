@@ -74,10 +74,12 @@ class AndroidListeningPlayer(private val context: Context) : ListeningPlayer {
         })
         suspendCancellableCoroutine { continuation ->
             player.setOnPreparedListener {
+                if (media !== player) return@setOnPreparedListener
                 prepared = true
                 if (continuation.isActive) continuation.resume(Unit)
             }
             player.setOnErrorListener { _, what, extra ->
+                if (media !== player) return@setOnErrorListener true
                 prepared = false
                 if (continuation.isActive) continuation.resumeWithException(IOException("Audio could not be prepared ($what/$extra)"))
                 true
@@ -108,6 +110,7 @@ class AndroidListeningPlayer(private val context: Context) : ListeningPlayer {
             val player = requireNotNull(media)
             var seek: kotlinx.coroutines.CancellableContinuation<Unit>? = null
             player.setOnErrorListener { _, what, extra ->
+                if (media !== player) return@setOnErrorListener true
                 playing = false
                 prepared = false
                 manager.abandonAudioFocusRequest(focus)
@@ -117,6 +120,7 @@ class AndroidListeningPlayer(private val context: Context) : ListeningPlayer {
                 true
             }
             player.setOnCompletionListener {
+                if (media !== player) return@setOnCompletionListener
                 playing = false
                 manager.abandonAudioFocusRequest(focus)
                 completed()

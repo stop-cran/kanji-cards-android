@@ -34,5 +34,6 @@ suspend fun AppDatabase.newAllowance(settings: Settings, sourceId: String, now: 
         due = r.dueCount(sourceId, now.toEpochMilli(), excludedMode = io.github.stopcran.kanji.core.listening.LISTENING_MODE),
         capacity = Pacing.capacity(perDay),
     )
-    return allowance.copy(remaining = (allowance.remaining - listening().reservedNew(sourceId)).coerceAtLeast(0))
+    return allowance.copy(remaining = (allowance.remaining - listening().reservedNew(sourceId) -
+        listeningTasks().reservedNew(sourceId)).coerceAtLeast(0))
 }

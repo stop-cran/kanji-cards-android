@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "policyVersion": 1,
+  "jlpt": 5,
+  "id": "n5-task-open-window",
+  "exposureId": "n5-story-before-class",
+  "taskType": "task-based",
+  "kind": "dialogue",
+  "usage": "scored",
+  "title": "Before class",
+  "topic": "Preparing a classroom",
+  "levelRationale": "A short everyday request with an explicitly ordered first action; structural draft only.",
+  "speakers": [
+    {"id": "n", "role": "narrator", "voice": "ja-JP-NanamiNeural", "ratePercent": -10},
+    {"id": "a", "role": "character", "voice": "ja-JP-KeitaNeural", "ratePercent": -10},
+    {"id": "b", "role": "character", "voice": "ja-JP-NanamiNeural", "ratePercent": -10}
+  ],
+  "turns": [
+    {"id": "instruction", "speaker": "n", "text": "質問と会話を聞いて、答えを一つ選んでください。", "translation": "Listen to the question and conversation, then choose one answer."},
+    {"id": "focus", "speaker": "n", "text": "女の人は、まず何をしますか。", "translation": "What will the woman do first?"},
+    {"id": "request", "speaker": "a", "text": "窓を開けてから、机をふいてください。", "translation": "Please open the window and then wipe the desks."},
+    {"id": "reply", "speaker": "b", "text": "はい、わかりました。", "translation": "Yes, understood."}
+  ],
+  "stages": [
+    {"id": "instruction", "role": "instruction", "turns": ["instruction"]},
+    {"id": "focus", "role": "focus", "turns": ["focus"]},
+    {"id": "passage", "role": "passage", "turns": ["request", "reply"]},
+    {"id": "repeat", "role": "focus-repeat", "turns": ["focus"]}
+  ],
+  "choiceMode": "text",
+  "options": [
+    {"id": "window", "number": 1, "label": "窓を開けます。", "translation": "Open the window.", "rationale": "Opening the window precedes wiping the desks."},
+    {"id": "desks", "number": 2, "label": "机をふきます。", "translation": "Wipe the desks.", "rationale": "This is the later action, not the first."},
+    {"id": "door", "number": 3, "label": "ドアを閉めます。", "translation": "Close the door.", "rationale": "Closing the door was not requested."},
+    {"id": "books", "number": 4, "label": "本を読みます。", "translation": "Read a book.", "rationale": "Reading was not requested."}
+  ],
+  "answer": "window",
+  "evidence": ["request"],
+  "explanation": "The request gives the sequence with 開けてから: opening the window comes first."
+}

@@ -57,10 +57,14 @@ object ContentParser {
         }
         val curriculum = GrammarCurriculum.read(manifest, files, vocabularySets)
         if (curriculum is GrammarCurriculumState.Invalid) problems += curriculum.reason
+        val tasks = io.github.stopcran.kanji.core.listening.ListeningTaskContent.read(
+            manifest, files, words.mapTo(hashSetOf()) { it.word },
+            manifest.listening.keys.mapTo(hashSetOf()) { it.removePrefix("listening/").removeSuffix(".json") }, imageValidator,
+        )
         return ParsedContent(
             manifest, unique, words, text.articles, text.strokes, problems,
             resolveCounters(text.counters, problems), images, vocabularySets, grammarProblems,
-            listening.records, listening.audio, listening.problems, curriculum,
+            listening.records, listening.audio, listening.problems, curriculum, tasks,
         )
     }
 

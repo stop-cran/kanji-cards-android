@@ -56,6 +56,10 @@ interface ListeningDao {
     @Query("SELECT * FROM listening_passages WHERE sourceId = :sourceId ORDER BY position")
     suspend fun passages(sourceId: String): List<ListeningEntity>
 
+    @Query("SELECT id FROM listening_passages WHERE sourceId = :sourceId " +
+        "UNION SELECT passageId AS id FROM listening_encounters WHERE sourceId = :sourceId")
+    suspend fun knownPassageIds(sourceId: String): List<String>
+
     @Query("SELECT * FROM listening_passages WHERE sourceId = :sourceId ORDER BY position")
     fun observePassages(sourceId: String): Flow<List<ListeningEntity>>
 
@@ -95,12 +99,14 @@ interface ListeningDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putEncounter(encounter: ListeningEncounterEntity)
 
-    @Query("SELECT EXISTS(SELECT 1 FROM listening_encounters WHERE sourceId = :sourceId AND passageId = :passageId AND exposedAtMs IS NOT NULL)")
+    @Query("SELECT EXISTS(SELECT 1 FROM listening_encounters WHERE sourceId = :sourceId AND passageId = :passageId AND exposedAtMs IS NOT NULL) " +
+        "OR EXISTS(SELECT 1 FROM listening_exposures WHERE sourceId = :sourceId AND exposureId = :passageId)")
     suspend fun hasExposure(sourceId: String, passageId: String): Boolean
 
-    @Query("SELECT passageId, MAX(CASE WHEN kind = 'study' OR closeReason = 'discarded' " +
-        "THEN lastExposureAtMs ELSE lastStudyAtMs END) AS lastPracticeAtMs " +
-        "FROM listening_encounters WHERE sourceId = :sourceId GROUP BY passageId")
+    @Query("SELECT passageId, MAX(lastPracticeAtMs) AS lastPracticeAtMs FROM (" +
+        "SELECT passageId, CASE WHEN kind = 'study' OR closeReason = 'discarded' THEN lastExposureAtMs ELSE lastStudyAtMs END AS lastPracticeAtMs " +
+        "FROM listening_encounters WHERE sourceId = :sourceId UNION ALL " +
+        "SELECT exposureId AS passageId, lastAtMs AS lastPracticeAtMs FROM listening_exposures WHERE sourceId = :sourceId) GROUP BY passageId")
     suspend fun exposures(sourceId: String): List<ListeningExposure>
 
     @Query("SELECT COUNT(*) FROM listening_encounters WHERE sourceId = :sourceId AND newReservation = 1 " +

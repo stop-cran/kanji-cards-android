@@ -233,8 +233,11 @@ object ListeningContent {
 
     fun contentHash(raw: JsonObject): String {
         val payload = JsonObject(raw.filterKeys { it != "audio" && it != "audioReview" })
-        return ContentParser.rawSha256(canonical(payload).toString().toByteArray(Charsets.UTF_8))
+        return canonicalHash(payload)
     }
+
+    internal fun canonicalHash(value: JsonElement): String =
+        ContentParser.rawSha256(canonical(value).toString().toByteArray(Charsets.UTF_8))
 
     private fun canonical(value: JsonElement, depth: Int = 0): JsonElement {
         require(depth <= 32) { "Listening JSON nesting is too deep" }

@@ -138,6 +138,26 @@ class GrammarAnalysisTest(unittest.TestCase):
         with self.assertRaises(ExportError):
             self.read(bundle)
 
+    def test_v6_requires_all_task_arrays_without_disclosing_or_counting_listening(self):
+        bundle = session_fixture()
+        expected = self.read(bundle)
+        expected["export_format_version"] = 6
+        bundle["export_manifest.json"]["formatVersion"] = 6
+        names = ("listening_encounters.json", "listening_task_encounters.json",
+                 "listening_assessments.json", "listening_exposures.json")
+        for name in names:
+            bundle[name] = [{"response": "PRIVATE_LISTENING_TASK"}]
+        self.assertEqual(expected, self.read(bundle))
+        self.assertNotIn("PRIVATE_LISTENING_TASK", json.dumps(self.read(bundle)))
+        for name in names:
+            original = bundle.pop(name)
+            with self.assertRaises(ExportError):
+                self.read(bundle)
+            bundle[name] = {}
+            with self.assertRaises(ExportError):
+                self.read(bundle)
+            bundle[name] = original
+
     def test_v4_choice_snapshots_do_not_duplicate_events_or_disclose_option_text(self):
         bundle = session_fixture()
         expected = self.read(bundle)

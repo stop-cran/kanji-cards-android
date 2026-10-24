@@ -15,6 +15,7 @@ LEGACY_ENTRIES = {"review_state.json", "review_log.json", "settings.json"}
 V2_ENTRIES = LEGACY_ENTRIES | {"export_manifest.json", "grammar_responses.json"}
 V3_ENTRIES = V2_ENTRIES | {"study_sessions.json"}
 V5_ENTRIES = V3_ENTRIES | {"listening_encounters.json"}
+V6_ENTRIES = V5_ENTRIES | {"listening_task_encounters.json", "listening_assessments.json", "listening_exposures.json"}
 LIMITATIONS = [
     "These are recorded reviews, not all screen answers: successful practice confirmations are not logged.",
     "First-observed means first in this export for (source, stack, exercise), not first-ever learning.",
@@ -52,8 +53,8 @@ def _load(path):
         names = {entry.filename for entry in entries}
         if len(names) != len(entries):
             raise ExportError("Duplicate ZIP entry")
-        if names not in (LEGACY_ENTRIES, V2_ENTRIES, V3_ENTRIES, V5_ENTRIES):
-            raise ExportError("Expected a complete legacy or v2-v5 export")
+        if names not in (LEGACY_ENTRIES, V2_ENTRIES, V3_ENTRIES, V5_ENTRIES, V6_ENTRIES):
+            raise ExportError("Expected a complete legacy or v2-v6 export")
         if sum(entry.file_size for entry in entries) > MAX_TOTAL_BYTES:
             raise ExportError("Export exceeds the 32 MiB total JSON limit")
         result = {}
@@ -261,12 +262,15 @@ def analyze(path):
         manifest = bundle["export_manifest.json"]
         if not isinstance(manifest, dict):
             raise ExportError("Unsupported export manifest")
-        version = _integer(manifest, "formatVersion", 2, 5)
-        expected = V5_ENTRIES if version == 5 else V2_ENTRIES if version == 2 else V3_ENTRIES
+        version = _integer(manifest, "formatVersion", 2, 6)
+        expected = V6_ENTRIES if version == 6 else V5_ENTRIES if version == 5 else V2_ENTRIES if version == 2 else V3_ENTRIES
         if set(bundle) != expected:
             raise ExportError("Export members do not match the declared format version")
     if version >= 5:
         _rows(bundle, "listening_encounters.json")
+    if version >= 6:
+        for name in V6_ENTRIES - V5_ENTRIES:
+            _rows(bundle, name)
     _rows(bundle, "review_state.json")
     settings = bundle["settings.json"]
     if not isinstance(settings, dict):

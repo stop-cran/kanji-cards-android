@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "policyVersion": 1,
+  "jlpt": 5,
+  "id": "n5-task-park-invitation",
+  "exposureId": "n5-story-park-invitation",
+  "taskType": "quick-response",
+  "kind": "dialogue",
+  "usage": "scored",
+  "title": "A short conversation",
+  "topic": "Responding to an invitation",
+  "levelRationale": "Choose a conversationally fitting response to an everyday invitation; structural draft only.",
+  "speakers": [
+    {"id": "n", "role": "narrator", "voice": "ja-JP-NanamiNeural", "ratePercent": -10},
+    {"id": "a", "role": "character", "voice": "ja-JP-KeitaNeural", "ratePercent": -10},
+    {"id": "b", "role": "character", "voice": "ja-JP-NanamiNeural", "ratePercent": -10}
+  ],
+  "turns": [
+    {"id": "instruction", "speaker": "n", "text": "最初のことばを聞いて、返事を一つ選んでください。", "translation": "Listen to the opening utterance and choose one response."},
+    {"id": "utterance", "speaker": "a", "text": "あした、いっしょに公園へ行きませんか。", "translation": "Would you like to go to the park together tomorrow?"},
+    {"id": "choice-one", "speaker": "b", "text": "1。いいですね。行きましょう。", "translation": "One. That sounds nice. Let's go."},
+    {"id": "choice-two", "speaker": "b", "text": "2。公園から来ました。", "translation": "Two. I came from the park."},
+    {"id": "choice-three", "speaker": "b", "text": "3。毎日、帰ります。", "translation": "Three. I return home every day."}
+  ],
+  "stages": [
+    {"id": "instruction", "role": "instruction", "turns": ["instruction"]},
+    {"id": "utterance", "role": "utterance", "turns": ["utterance"]},
+    {"id": "choice-one", "role": "choice", "turns": ["choice-one"], "optionId": "accept"},
+    {"id": "choice-two", "role": "choice", "turns": ["choice-two"], "optionId": "past"},
+    {"id": "choice-three", "role": "choice", "turns": ["choice-three"], "optionId": "habit"}
+  ],
+  "choiceMode": "audio",
+  "options": [
+    {"id": "accept", "number": 1, "label": "いいですね。行きましょう。", "translation": "That sounds nice. Let's go.", "rationale": "This accepts the invitation."},
+    {"id": "past", "number": 2, "label": "公園から来ました。", "translation": "I came from the park.", "rationale": "This gives a past location, not a fitting response to tomorrow's invitation."},
+    {"id": "habit", "number": 3, "label": "毎日、帰ります。", "translation": "I return home every day.", "rationale": "This states a general habit without responding to the invitation."}
+  ],
+  "answer": "accept",
+  "evidence": ["utterance"],
+  "explanation": "The opening utterance is an invitation; the fitting reply accepts it rather than giving an unrelated fact."
+}

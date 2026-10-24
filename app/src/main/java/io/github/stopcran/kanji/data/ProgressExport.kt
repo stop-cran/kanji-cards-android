@@ -19,7 +19,8 @@ object ProgressExport {
     suspend fun write(db: AppDatabase, settings: Settings, out: OutputStream): Int {
         val snapshot = db.withTransaction {
             Snapshot(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses(),
-                db.reviews().allSessions(), db.listening().allEncounters())
+                db.reviews().allSessions(), db.listening().allEncounters(),
+                db.listeningTasks().allEncounters(), db.listeningTasks().allAssessments(), db.listeningTasks().allExposures())
         }
         ZipOutputStream(out).use { zip ->
             zip.entry("review_state.json", JsonArray(snapshot.states.map(::stateJson)))
@@ -27,7 +28,13 @@ object ProgressExport {
             zip.entry("grammar_responses.json", JsonArray(snapshot.grammarResponses.map(::grammarResponseJson)))
             zip.entry("study_sessions.json", JsonArray(snapshot.sessions.map(::sessionJson)))
             zip.entry("listening_encounters.json", JsonArray(snapshot.listening.map(::listeningJson)))
-            zip.entry("export_manifest.json", JsonObject(mapOf("formatVersion" to JsonPrimitive(5))))
+            zip.entry("listening_task_encounters.json", JsonArray(snapshot.tasks.map(::taskJson)))
+            zip.entry("listening_assessments.json", JsonArray(snapshot.assessments.map(::assessmentJson)))
+            zip.entry("listening_exposures.json", JsonArray(snapshot.exposures.map {
+                JsonObject(mapOf("sourceId" to primitive(it.sourceId), "exposureId" to primitive(it.exposureId),
+                    "firstAtMs" to primitive(it.firstAtMs), "lastAtMs" to primitive(it.lastAtMs)))
+            }))
+            zip.entry("export_manifest.json", JsonObject(mapOf("formatVersion" to JsonPrimitive(6))))
             zip.entry("settings.json", JsonObject(settings.snapshot().mapValues { primitive(it.value) }))
         }
         return snapshot.log.size
@@ -39,6 +46,9 @@ object ProgressExport {
         val grammarResponses: List<GrammarResponseEntity>,
         val sessions: List<StudySessionEntity>,
         val listening: List<ListeningEncounterEntity>,
+        val tasks: List<ListeningTaskEncounterEntity>,
+        val assessments: List<ListeningAssessmentEntity>,
+        val exposures: List<ListeningExposureEntity>,
     )
 
     private fun ZipOutputStream.entry(name: String, element: JsonElement) {
@@ -91,6 +101,28 @@ object ProgressExport {
             "choiceSnapshot" to (r.choiceSnapshot?.let(json::parseToJsonElement) ?: JsonNull),
         ),
     )
+
+    private fun taskJson(e: ListeningTaskEncounterEntity) = JsonObject(mapOf(
+        "id" to primitive(e.id), "sourceId" to primitive(e.sourceId), "taskId" to primitive(e.taskId),
+        "exposureId" to primitive(e.exposureId), "branch" to primitive(e.branch), "revision" to primitive(e.revision),
+        "contentVersion" to primitive(e.contentVersion), "content" to json.parseToJsonElement(e.contentJson),
+        "contentHash" to primitive(e.contentHash), "mediaHash" to primitive(e.mediaHash), "policyVersion" to primitive(e.policyVersion),
+        "vocabularyBodies" to json.parseToJsonElement(e.vocabularyJson), "state" to json.parseToJsonElement(e.stateJson),
+        "response" to (e.responseJson?.let(json::parseToJsonElement) ?: JsonNull), "kind" to primitive(e.kind),
+        "assessmentId" to primitive(e.assessmentId), "createdAtMs" to primitive(e.createdAtMs), "estimatedMs" to primitive(e.estimatedMs),
+        "newReservation" to primitive(e.newReservation), "exposedAtMs" to primitive(e.exposedAtMs),
+        "firstEncounter" to primitive(e.firstEncounter), "reviewLogId" to primitive(e.reviewLogId),
+        "submittedAtMs" to primitive(e.submittedAtMs), "introduced" to primitive(e.introduced),
+        "closedAtMs" to primitive(e.closedAtMs), "closeReason" to primitive(e.closeReason),
+    ))
+
+    private fun assessmentJson(e: ListeningAssessmentEntity) = JsonObject(mapOf(
+        "id" to primitive(e.id), "sourceId" to primitive(e.sourceId), "branch" to primitive(e.branch),
+        "revision" to primitive(e.revision), "contentVersion" to primitive(e.contentVersion), "blueprint" to primitive(e.blueprint),
+        "policyVersion" to primitive(e.policyVersion), "content" to json.parseToJsonElement(e.contentJson),
+        "state" to json.parseToJsonElement(e.stateJson), "createdAtMs" to primitive(e.createdAtMs),
+        "closedAtMs" to primitive(e.closedAtMs), "response" to (e.responseJson?.let(json::parseToJsonElement) ?: JsonNull),
+    ))
 
     private fun listeningJson(e: ListeningEncounterEntity) = JsonObject(
         mapOf(

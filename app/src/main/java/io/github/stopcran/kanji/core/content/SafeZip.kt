@@ -17,7 +17,8 @@ object SafeZip {
         val maxInflatedBytes: Long = 100L * 1024 * 1024,
     )
 
-    private val allowedFolders = setOf("kanji", "words", "articles", "strokes", "counters", "grammar", "scenes", "listening", "curriculum")
+    private val allowedFolders = setOf("kanji", "words", "articles", "strokes", "counters", "grammar", "scenes", "listening",
+        "curriculum", "listening-tasks")
 
     /** Returns repo-relative path -> bytes for manifest.json and the content folders; the archive's top-level folder is stripped. */
     fun read(input: InputStream, limits: Limits = Limits()): Map<String, ByteArray> {
@@ -37,8 +38,8 @@ object SafeZip {
                 val relative = name.substringAfter('/', missingDelimiterValue = "")
                 val wanted = relative.isNotEmpty() && isWanted(relative)
                 val limit = when {
-                    relative.startsWith("images/") -> limits.maxImageBytes
-                    relative.startsWith("audio/") -> limits.maxAudioBytes
+                    relative.startsWith("images/") || relative.startsWith("task-images/") -> limits.maxImageBytes
+                    relative.startsWith("audio/") || relative.startsWith("task-audio/") -> limits.maxAudioBytes
                     else -> limits.maxFileBytes
                 }
                 val bytes = readLimited(zip, if (wanted) limit else Long.MAX_VALUE, keep = wanted) {
@@ -58,8 +59,8 @@ object SafeZip {
         if (relative == "manifest.json") return true
         val parts = relative.split('/')
         if (parts.size != 2 || parts[1].isEmpty()) return false
-        return parts[0] in allowedFolders || (parts[0] == "images" && parts[1].endsWith(".webp")) ||
-            (parts[0] == "audio" && parts[1].endsWith(".ogg"))
+        return parts[0] in allowedFolders || (parts[0] in setOf("images", "task-images") && parts[1].endsWith(".webp")) ||
+            (parts[0] in setOf("audio", "task-audio") && parts[1].endsWith(".ogg"))
     }
 
     /** Drains the current entry; the bytes are kept only when [keep], and [onBytes] sees every inflated chunk. */

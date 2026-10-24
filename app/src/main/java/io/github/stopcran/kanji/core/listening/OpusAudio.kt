@@ -11,7 +11,8 @@ object OpusAudio {
         crc
     }
 
-    fun durationMs(data: ByteArray): Long {
+    fun durationMs(data: ByteArray, minimumMs: Long = 15_000, maximumMs: Long = 60_000): Long {
+        require(minimumMs >= 250 && maximumMs in minimumMs..90_000) { "Invalid Opus duration envelope" }
         require(data.size in 1..MAX_BYTES) { "Audio exceeds the 512 KiB envelope" }
         var offset = 0
         var sequence = 0L
@@ -49,9 +50,9 @@ object OpusAudio {
         }
         require(ended && pending.size() == 0 && packets.size == 2 && audioPackets > 0) { "Incomplete Ogg stream" }
         val preSkip = preSkip(packets)
-        require(lastGranule <= 3_000_000) { "Opus granule position exceeds the media envelope" }
+        require(lastGranule <= maximumMs * 48 + preSkip) { "Opus granule position exceeds the media envelope" }
         val duration = (lastGranule - preSkip) * 1000 / 48000
-        require(duration in 15_000..60_000) { "Audio must be 15-60 seconds" }
+        require(duration in minimumMs..maximumMs) { "Audio must be $minimumMs-$maximumMs milliseconds" }
         return duration
     }
 

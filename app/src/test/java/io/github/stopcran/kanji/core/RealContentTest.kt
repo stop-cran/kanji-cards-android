@@ -8,7 +8,10 @@ import io.github.stopcran.kanji.core.content.GrammarCurriculumState
 import io.github.stopcran.kanji.core.content.GrammarSet
 import io.github.stopcran.kanji.core.content.Manifest
 import io.github.stopcran.kanji.core.content.SceneCatalog
+import io.github.stopcran.kanji.core.content.SafeZip
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -17,8 +20,62 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.File
+import java.io.ByteArrayOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 class RealContentTest {
+    @Test
+    fun completeMixedArchiveKeepsShortTaskAudioOutOfTheLegacyReaderWhenRepoPresent() {
+        val root = File("../../learning-japanese")
+        assumeTrue(File(root, "manifest.json").exists())
+        val git = ProcessBuilder("git", "-C", root.absolutePath, "ls-files", "-z").start()
+        val tracked = git.inputStream.readBytes().decodeToString().split('\u0000').filter { it.isNotEmpty() }
+        assertEquals(0, git.waitFor())
+        val files = tracked.associateWith { File(root, it).readBytes() }.toMutableMap()
+        listOf("tools/validate_listening_tasks.py", "tools/test_listening_tasks.py").forEach { path ->
+            if (File(root, path).exists()) files[path] = File(root, path).readBytes()
+        }
+        val tone = requireNotNull(javaClass.getResourceAsStream("/listening-short-tone.ogg")).use { it.readBytes() }
+        val task = approvedTask(taskFixture().task.copy(id = "test-only-content-import", exposureId = "test-only-content-import"), tone, 250)
+        val path = "listening-tasks/${task.task.id}.json"
+        files[path] = task.json.toByteArray()
+        files["task-audio/test-tone.ogg"] = tone
+        val json = Json { ignoreUnknownKeys = true }
+        val declared = json.decodeFromString(Manifest.serializer(), files.getValue("manifest.json").decodeToString())
+        val mixed = declared.copy(contentVersion = "test-only-mixed-archive",
+            listeningTasks = JsonObject(declared.listeningTasks.jsonObject + (path to JsonPrimitive(ContentParser.sha256(files.getValue(path))))),
+            listeningTaskAudio = JsonObject(declared.listeningTaskAudio.jsonObject +
+                ("task-audio/test-tone.ogg" to JsonPrimitive(ContentParser.rawSha256(tone)))))
+        files["manifest.json"] = json.encodeToString(Manifest.serializer(), mixed).toByteArray()
+        val archive = ByteArrayOutputStream()
+        ZipOutputStream(archive).use { zip ->
+            files.forEach { (name, bytes) ->
+                zip.putNextEntry(ZipEntry("repo-main/$name"))
+                zip.write(bytes)
+                zip.closeEntry()
+            }
+        }
+        assertTrue("Full fixture archive must retain publication headroom", archive.size() < 28 * 1024 * 1024)
+        val retained = SafeZip.read(archive.toByteArray().inputStream())
+        val current = ContentParser.parse(retained)
+        assertTrue(current.problems.toString(), current.problems.isEmpty())
+        assertTrue(current.listeningTasks.problems.toString(), current.listeningTasks.problems.isEmpty())
+        assertTrue(current.listeningTasks.records.single { it.task.id == task.task.id }.ready)
+        // Feed the unchanged legacy parser only the maps/files that pre-task clients retained.
+        val legacyManifest = mixed.copy(listeningTasks = JsonObject(emptyMap()), listeningTaskAudio = JsonObject(emptyMap()),
+            listeningTaskImages = JsonObject(emptyMap()))
+        val legacyFiles = retained.filterKeys { it.substringBefore('/') !in setOf("listening-tasks", "task-audio", "task-images") } +
+            ("manifest.json" to json.encodeToString(Manifest.serializer(), legacyManifest).toByteArray())
+        val legacy = ContentParser.parse(legacyFiles)
+        assertTrue(legacy.problems.toString(), legacy.problems.isEmpty())
+        assertEquals(declared.listening.size, legacy.listening.size)
+        assertEquals(legacy.listening, current.listening)
+        assertEquals(legacy.kanji, current.kanji)
+        assertEquals(legacy.words, current.words)
+        assertTrue(legacy.listeningTasks.records.isEmpty())
+    }
+
     @Test
     fun parsesRealContentRepoWhenPresent() {
         val root = File("../../learning-japanese")

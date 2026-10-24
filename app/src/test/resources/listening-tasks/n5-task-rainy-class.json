@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "policyVersion": 1,
+  "jlpt": 5,
+  "id": "n5-task-rainy-class",
+  "exposureId": "n5-story-rainy-class",
+  "taskType": "key-point",
+  "kind": "dialogue",
+  "usage": "scored",
+  "title": "A class announcement",
+  "topic": "A changed start time",
+  "levelRationale": "Listen for a specified start time in a short exchange, distinguishing the usual time from tomorrow's time; structural draft only.",
+  "speakers": [
+    {"id": "n", "role": "narrator", "voice": "ja-JP-NanamiNeural", "ratePercent": -10},
+    {"id": "a", "role": "character", "voice": "ja-JP-KeitaNeural", "ratePercent": -10},
+    {"id": "b", "role": "character", "voice": "ja-JP-NanamiNeural", "ratePercent": -10}
+  ],
+  "turns": [
+    {"id": "instruction", "speaker": "n", "text": "質問と会話を聞いて、答えを一つ選んでください。", "translation": "Listen to the question and conversation, then choose one answer."},
+    {"id": "focus", "speaker": "n", "text": "あしたの授業は何時からですか。", "translation": "What time does tomorrow's class start?"},
+    {"id": "ask", "speaker": "b", "text": "あしたも、授業は九時からですか。", "translation": "Does class start at nine tomorrow too?"},
+    {"id": "answer-time", "speaker": "a", "text": "いいえ、あしたは雨ですから、十時からです。", "translation": "No, because it will rain tomorrow, it starts at ten."}
+  ],
+  "stages": [
+    {"id": "instruction", "role": "instruction", "turns": ["instruction"]},
+    {"id": "focus", "role": "focus", "turns": ["focus"]},
+    {"id": "passage", "role": "passage", "turns": ["ask", "answer-time"]},
+    {"id": "repeat", "role": "focus-repeat", "turns": ["focus"]}
+  ],
+  "choiceMode": "text",
+  "options": [
+    {"id": "eight", "number": 1, "label": "八時", "translation": "Eight o'clock.", "rationale": "Eight is not the stated time."},
+    {"id": "nine", "number": 2, "label": "九時", "translation": "Nine o'clock.", "rationale": "The question suggests the usual time, but the reply rejects it for tomorrow."},
+    {"id": "ten", "number": 3, "label": "十時", "translation": "Ten o'clock.", "rationale": "The reply explicitly gives ten as tomorrow's start time."},
+    {"id": "eleven", "number": 4, "label": "十一時", "translation": "Eleven o'clock.", "rationale": "Eleven is not the stated time."}
+  ],
+  "answer": "ten",
+  "evidence": ["answer-time"],
+  "explanation": "Attend to tomorrow's start time, not the usual time offered in the question."
+}

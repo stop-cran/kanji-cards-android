@@ -82,10 +82,14 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
         return result
     }
 
-    private fun needsParserRefresh(source: RepoSource): Boolean =
+    private suspend fun needsParserRefresh(source: RepoSource): Boolean =
         settings.grammarFor(source.id).parserEpoch < ContentParser.GRAMMAR_PARSER_EPOCH ||
             settings.sceneParserEpoch(source.id) < SceneCatalog.PARSER_EPOCH ||
-            settings.listeningParserEpoch(source.id) < io.github.stopcran.kanji.core.listening.ListeningContent.PARSER_EPOCH
+            settings.listeningParserEpoch(source.id) < io.github.stopcran.kanji.core.listening.ListeningContent.PARSER_EPOCH ||
+            db.listeningTasks().sync(source.id).let {
+                it == null || it.parserEpoch < io.github.stopcran.kanji.core.listening.ListeningTaskContent.PARSER_EPOCH ||
+                    it.problem != null || it.acceptedBranch != source.branch
+            }
 
     /** Head commit of the branch via the GitHub API (one tiny request); null when unavailable, e.g. offline or rate limited. */
     private fun headCommit(source: RepoSource): String? {
@@ -135,12 +139,9 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             val files = download(url) { SafeZip.read(it) }
             val parsed = ContentParser.parse(files, SceneImages::problem)
             val dao = db.content()
-            if (parsed.listeningProblems.isNotEmpty() && db.listening().passages(source.id).isNotEmpty()) {
-                return@withContext SyncResult.Failed(
-                    "Listening content rejected (${parsed.listeningProblems.first()}); keeping previous playable content", retryable = false,
-                )
-            }
-            if (maySkipImport && dao.meta(source.id)?.contentVersion == parsed.manifest.contentVersion) {
+            legacyListeningProblem(parsed, source.id)?.let { return@withContext SyncResult.Failed(it, retryable = false) }
+            if (maySkipImport && parsed.listeningTasks.problems.isEmpty() &&
+                dao.meta(source.id)?.contentVersion == parsed.manifest.contentVersion) {
                 head?.let { settings.setSyncedCommit(commitKey, it) }
                 return@withContext SyncResult.UpToDate
             }
@@ -154,16 +155,18 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             }
             val rows = parsed.toRows(source.id)
             val meta = parsed.toSyncMeta(source.id)
-            db.withTransaction {
-                dao.replaceContent(source.id, rows, meta)
+            val taskProblems = db.withTransaction {
+                val taskProblems = db.importListeningTasks(parsed, source, head)
+                dao.replaceContent(source.id, rows, meta.copy(problems = meta.problems + taskProblems.size))
                 db.listening().pruneAudio(source.id)
+                taskProblems
             }
             settings.setGrammarParserEpoch(source.id, ContentParser.GRAMMAR_PARSER_EPOCH)
             settings.setSceneParserEpoch(source.id, SceneCatalog.PARSER_EPOCH)
             settings.setListeningParserEpoch(source.id, io.github.stopcran.kanji.core.listening.ListeningContent.PARSER_EPOCH)
             head?.let { settings.setSyncedCommit(commitKey, it) }
             db.rebuildGrammarReadiness(source.id)
-            SyncResult.Updated(rows.kanji.size, rows.words.size, parsed.problems)
+            SyncResult.Updated(rows.kanji.size, rows.words.size, parsed.problems + taskProblems)
         } catch (e: ContentException) {
             SyncResult.Failed(e.message ?: "Invalid content", retryable = false)
         } catch (e: java.io.IOException) {
@@ -174,6 +177,17 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             SyncResult.Failed(e.message ?: e.javaClass.simpleName, retryable = false)
         }
     } }
+
+    private suspend fun legacyListeningProblem(parsed: io.github.stopcran.kanji.core.content.ParsedContent, source: String): String? {
+        val taskIds = db.listeningTasks().identities(source).mapTo(hashSetOf()) { it.taskId }
+        return when {
+            parsed.listening.any { it.passage.id in taskIds } ->
+                "A legacy passage reused an existing Japanese listening task's scored ID; keeping previous content"
+            parsed.listeningProblems.isNotEmpty() && db.listening().passages(source).isNotEmpty() ->
+                "Listening content rejected (${parsed.listeningProblems.first()}); keeping previous playable content"
+            else -> null
+        }
+    }
 
     /** True when a previous snapshot exists and the new one has fewer kanji, words or counters (rejected files must not shrink the corpus). */
     private suspend fun shrinks(parsed: io.github.stopcran.kanji.core.content.ParsedContent, sourceId: String): Boolean {
