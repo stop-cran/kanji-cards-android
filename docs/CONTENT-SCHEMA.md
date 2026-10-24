@@ -255,6 +255,9 @@ and presentation independently of later content changes.
 
 ## Progress export v5
 
+The proposed new-task namespaces and export v6 are specified in [contract 1](LISTENING-TASKS.md).
+They are not yet supported; the current format below remains v5.
+
 **Settings → Export progress** writes seven UTF-8 JSON members. Database rows are read in one transaction:
 
 | ZIP member | Meaning |

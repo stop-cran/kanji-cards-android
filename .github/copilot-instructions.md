@@ -101,6 +101,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   full playback and current approval/hash verification; invalid cache discovered during start must be blocked outside its rolled-back transaction.
   Key the listening page by phase so answer feedback starts at the result rather than retaining the questions' scroll offset.
   Export-version changes must update `tools/analyze_grammar_progress.py`, not just Kotlin export tests.
+  The legacy importer validates every `audio` entry, even unreferenced ones; short new-task clips in that map can
+  abort the entire sync when listening is cached. Keep new documents and media in separate namespaces; see the
+  proposed `docs/LISTENING-TASKS.md` contract before implementing #67. An unknown task is not corrupt legacy content.
 - **Quiz semantics:** options are meaning titles and unique by title (one correct answer). Wrong = Again (re-asked after 3 cards),
   right = Good, "I guessed" = Hard. Time-based Easy was dropped: with 4 options a fast answer is often luck.
 - **Daily new-card budget** counts kanji whose first review log entry is today (`newCardsIntroducedSince`), per mode.
