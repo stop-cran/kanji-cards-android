@@ -12,6 +12,14 @@ defaults below are adopted under delegated autonomous implementation authority, 
 separate personal confirmation. This does not grant paid-media approval
 or waive E/F's actual-listening and device gates.
 
+**Owner-testing publication, 2026-10-25:** The owner subsequently explicitly authorized
+the 32 selected E packages for personal testing before remaining physical-phone/full-section
+acceptance. The [content policy](https://github.com/stop-cran/learning-japanese/blob/main/docs/listening-tasks.md#owner-authorized-testing-publication)
+records this bounded exception and exact-output provenance. Schema-1 approval remains runtime
+permission; the approval note identifies testing scope, not completed device certification.
+No app parser, learning policy, unsupported-item handling or integrity limit is relaxed.
+General-release E/F acceptance remains separately tracked.
+
 Rebased on app `740b7da` and content `73bde0f`, including the 36 existing English-question passages.
 Their schema, identities, aggregate grades, normal replay and history remain unchanged.
 The [content-side schema](https://github.com/stop-cran/learning-japanese/blob/main/docs/listening-tasks.md)

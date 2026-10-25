@@ -61,6 +61,14 @@ class RealContentTest {
         val current = ContentParser.parse(retained)
         assertTrue(current.problems.toString(), current.problems.isEmpty())
         assertTrue(current.listeningTasks.problems.toString(), current.listeningTasks.problems.isEmpty())
+        assertTrue(current.listeningTasks.unsupported.toString(), current.listeningTasks.unsupported.isEmpty())
+        assertEquals(mixed.listeningTasks.jsonObject.keys,
+            current.listeningTasks.records.map { "listening-tasks/${it.task.id}.json" }.toSet())
+        val authorizedPaths = mixed.listeningTasks.jsonObject.keys.filter { name ->
+            "approval" in json.parseToJsonElement(files.getValue(name).decodeToString()).jsonObject
+        }.toSet()
+        assertEquals(authorizedPaths,
+            current.listeningTasks.records.filter { it.ready }.map { "listening-tasks/${it.task.id}.json" }.toSet())
         assertTrue(current.listeningTasks.records.single { it.task.id == task.task.id }.ready)
         // Feed the unchanged legacy parser only the maps/files that pre-task clients retained.
         val legacyManifest = mixed.copy(listeningTasks = JsonObject(emptyMap()), listeningTaskAudio = JsonObject(emptyMap()),

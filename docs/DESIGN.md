@@ -286,6 +286,13 @@ preserves the accepted task catalog, records a stale/error notice and remains re
 Room v16 preserves every legacy row and snapshot while adding independent task revision/parser metadata,
 permanent source-scoped exposure bindings, media ownership pins and task/assessment persistence.
 
+The owner explicitly authorized the first 32-package pool for personal testing on 2026-10-25
+before outstanding device/full-section acceptance. Content publication uses the existing exact-output
+approval envelope with an explicit testing note; this is runtime permission, not a false claim that
+physical testing passed. It requires only content sync on a compatible app, not a new APK.
+General-release acceptance and finer per-item corruption isolation remain separate from this trial;
+unknown versions/types already remain unavailable individually without dropping supported peers.
+
 One transactional Listening admission guard spans legacy, guided/study and diagnostic activity.
 Both catalogs share cooldowns, due-time estimates, daily introductions and cross-mode reservations.
 Familiar-but-unintroduced scored tasks still reserve a new unit. Legacy history seeds only recorded
