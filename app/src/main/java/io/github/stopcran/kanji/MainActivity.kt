@@ -1,5 +1,7 @@
 package io.github.stopcran.kanji
 
+import io.github.stopcran.kanji.core.counters.CounterRoutes
+
 import android.os.Bundle
 import android.net.Uri
 import androidx.activity.ComponentActivity
@@ -163,8 +165,8 @@ private fun RouteContent(
                 sessionKey = route,
                 onBack = pop,
                 onPracticeMore = {
-                    val group = io.github.stopcran.kanji.core.counters.CounterGroup.fromRoute(route)
-                    pop(); push("cquiz:${System.currentTimeMillis()}:${route.split(":")[2]}:${group.code}:extra")
+                    val next = CounterRoutes.extra(route)
+                    pop(); push(next)
                 },
                 onOpenDoc = { source, path -> push(sourceDocRoute(source, path)) },
             )
@@ -247,8 +249,8 @@ private fun RouteContent(
                     onKanaStudy = { script, mode, extra ->
                         push("kana-study:${script.id}:${mode.name}:${System.currentTimeMillis()}" + if (extra) ":extra" else "")
                     },
-                    onCounters = { mode, extra, group ->
-                        push("cquiz:${System.currentTimeMillis()}:${mode.code}:${group.code}" + if (extra) ":extra" else "")
+                    onCounters = { mode, extra, group, scope ->
+                        push(CounterRoutes.create(mode, group, scope, extra))
                     },
                     onGrammar = { extra -> push("grammarquiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
                     onGrammarTarget = { push(GrammarPracticeRoutes.create(it)) },

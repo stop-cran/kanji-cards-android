@@ -17,7 +17,7 @@ enum class CounterGroup(val code: String, val label: String) {
 }
 
 object CounterExpressions {
-    const val PARSER_EPOCH = 1
+    const val PARSER_EPOCH = 2
     private val kana = Regex("[ぁ-ゟァ-ヿー]+")
     private val id = Regex("[a-z]+-[a-z]+-\\d+")
 

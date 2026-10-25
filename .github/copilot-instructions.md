@@ -69,6 +69,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   Whole-expression modes use narrow authored-answer matching, never legacy numeral arithmetic (十十 must not become 二十).
   Keep v2 files separate from v1, advance the source-scoped counter parser epoch for newly retained metadata,
   and distinguish the shared allowance from summed per-mode new opportunities.
+  Intersect counter level and group against the source once; sequential source-restoring filters can silently undo
+  the first restriction. Retain foreign reverse-choice references without adding them to scoped queues.
 - Grammar additional correct choices are authored, not derived from typed spellings. Use the captured presentation for grading,
   both correct highlights, rationales and response export; bind callbacks to its instance because different exercises can reuse IDs.
   Advance `ContentParser.GRAMMAR_PARSER_EPOCH` for newly retained Grammar metadata, not the historical level/group readiness thresholds.

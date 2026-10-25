@@ -366,6 +366,11 @@ object ContentParser {
         val fields = json.parseToJsonElement(text).jsonObject
         val version = fields["schemaVersion"] as? JsonPrimitive
         require(version != null && !version.isString && version.content in listOf("1", "2")) { "unsupported counter schema version" }
+        if ("level" in fields) {
+            require((fields["level"] as? JsonPrimitive)?.let { !it.isString && it.content in listOf("1", "2", "3", "4", "5") } == true) {
+                "counter level must be an integer 1-5"
+            }
+        }
         if (version.content == "2") validateCounterExpressionFields(fields)
         val decoder = if (version.content == "2") Json else json
         val f = decoder.decodeFromString(CounterFile.serializer(), text)
@@ -406,9 +411,6 @@ object ContentParser {
             "schemaVersion", "id", "counter", "reading", "title", "level", "group", "article", "expressions",
         ))) { "incomplete expression file" }
         requireCounterStrings(fields, listOf("id", "counter", "reading", "title", "group", "article"))
-        require((fields["level"] as? JsonPrimitive)?.let { !it.isString && it.content in listOf("1", "2", "3", "4", "5") } == true) {
-            "counter level must be an integer 1-5"
-        }
         fields["sources"]?.jsonArray?.forEach { requireCounterString(it) }
         fields.getValue("expressions").jsonArray.forEach { raw -> validateCounterExpressionRecord(raw.jsonObject) }
         fields["vocabulary"]?.jsonObject?.values?.forEach { word ->

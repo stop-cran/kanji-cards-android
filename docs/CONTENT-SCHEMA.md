@@ -9,7 +9,9 @@ defines required fields, bounded authored alternatives, grouping and article tar
 V2 decoding rejects unknown fields; malformed/unsupported files produce diagnostics without invalidating valid siblings.
 IDs cannot collide across forward, reverse and expression records. Optional v1 `readingAnswers` refer only
 to that card's canonical phrase; omission means its canonical reading alone, not its alternate-counter `kana` list.
-Parser epoch 1 is source-scoped and forces an unchanged-content reimport after app upgrade.
+Present `level` values must be unquoted integers 1-5; omitted v1 levels retain the legacy default of 5.
+V2 requires `level`. N5 / N4 + N5 / All levels is a source-persisted practice filter, not a separate deck.
+Parser epoch 2 is source-scoped and forces an unchanged-content reimport after app upgrade.
 The new `CounterExpression` and `CounterReading` schedules use existing storage without resetting old modes.
 
 What the app enforces when importing (`core/content/ContentParser.kt`, `FrontMatter.kt`, `SafeZip.kt`):

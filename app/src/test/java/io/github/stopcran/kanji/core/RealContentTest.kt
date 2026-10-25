@@ -135,24 +135,26 @@ class RealContentTest {
     }
 
     private fun assertCounters(counters: List<CounterFile>) {
-        assertEquals(22, counters.size)
-        assertEquals(124, counters.sumOf { it.cards.size })
-        assertEquals(20, counters.sumOf { it.reverse.size })
-        assertEquals(123, counters.sumOf { it.expressions.size })
+        val n5 = counters.filter { it.level == 5 }
+        assertEquals(22, n5.size)
+        assertEquals(124, n5.sumOf { it.cards.size })
+        assertEquals(20, n5.sumOf { it.reverse.size })
+        assertEquals(123, n5.sumOf { it.expressions.size })
         val j = Json { ignoreUnknownKeys = true }
         val again = counters.map { j.decodeFromString(CounterFile.serializer(), j.encodeToString(CounterFile.serializer(), it)) }
         assertEquals(counters, again)
-        val index = io.github.stopcran.kanji.core.counters.CounterIndex(again)
+        val all = io.github.stopcran.kanji.core.counters.CounterIndex(again)
+        val index = all.inScope(scope = io.github.stopcran.kanji.core.counters.CounterScope.N5)
         assertEquals(124, index.ids(io.github.stopcran.kanji.core.counters.CounterMode.Choose).size)
         assertEquals(123, index.ids(io.github.stopcran.kanji.core.counters.CounterMode.Expression).size)
         val readable = index.ids(io.github.stopcran.kanji.core.counters.CounterMode.Reading)
         assertEquals(246, readable.size)
         assertTrue("Already-kana prompts must not become reading copy questions", "tsu-question-1" !in readable)
-        readable.forEach { id ->
-            val expression = index.expression(id)
+        all.ids(io.github.stopcran.kanji.core.counters.CounterMode.Reading).forEach { id ->
+            val expression = all.expression(id)
             assertTrue(id, io.github.stopcran.kanji.core.counters.CounterExpressions.grade(expression.reading, expression, true).ok)
         }
-        val time = index.inGroup(io.github.stopcran.kanji.core.counters.CounterGroup.Time)
+        val time = all.inScope(io.github.stopcran.kanji.core.counters.CounterGroup.Time, io.github.stopcran.kanji.core.counters.CounterScope.N5)
         assertEquals(105, time.expressions.size)
         assertTrue(time.cards.isEmpty())
     }

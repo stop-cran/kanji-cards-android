@@ -7,6 +7,8 @@ import io.github.stopcran.kanji.core.content.CounterHard
 import io.github.stopcran.kanji.core.content.CounterReverse
 import io.github.stopcran.kanji.core.content.CounterExpression
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.SrsState
 import org.junit.Assert.assertEquals
@@ -218,7 +220,7 @@ class CountersTest {
     @Test
     fun groupQueuesUseIndependentModesWithoutLegacyGatesAndKeepExtraWithinGroup() {
         val mixed = CounterIndex(listOf(hon, expressions(group = "time")))
-        val time = mixed.inGroup(CounterGroup.Time)
+        val time = mixed.inScope(CounterGroup.Time)
         assertTrue(time.ids(CounterMode.Choose).isEmpty())
         assertEquals(listOf(age.id), time.ids(CounterMode.Expression))
         assertEquals(listOf(age.id), time.ids(CounterMode.Reading))
@@ -229,14 +231,14 @@ class CountersTest {
             assertEquals(listOf(age.id), CounterQueues.build(time,
                 CounterQueueRequest(mode, none, none, Instant.EPOCH, 0, extraLimit = 10)).map { it.kanji })
         }
-        assertTrue(mixed.inGroup(CounterGroup.Everyday).ids(CounterMode.Expression).isEmpty())
+        assertTrue(mixed.inScope(CounterGroup.Everyday).ids(CounterMode.Expression).isEmpty())
         assertEquals(CounterGroup.Time, CounterGroup.fromRoute("cquiz:1:rd:time:extra"))
         assertEquals(CounterGroup.All, CounterGroup.fromRoute("cquiz:1:ty:extra"))
     }
 
     @Test
     fun filteredReverseQuestionsKeepCrossGroupOptionReferencesWithoutQueueingThem() {
-        val time = CounterIndex(listOf(hon.copy(group = "time"), hiki)).inGroup(CounterGroup.Time)
+        val time = CounterIndex(listOf(hon.copy(group = "time"), hiki)).inScope(CounterGroup.Time)
         assertEquals(hon.cards.map { it.id }, time.ids(CounterMode.Choose))
         assertFalse(cat.id in time.ids(CounterMode.Reading))
         assertEquals(cat, time.referenceCard(cat.id))
@@ -244,7 +246,76 @@ class CountersTest {
         val choose = hon.cards.associate { it.id to solid() }
         assertEquals(listOf("hon-noun-1"), CounterQueues.eligible(CounterMode.Noun, time, emptyMap(), choose))
         time.reverse.values.flatMap { it.options }.forEach { time.nounLabel(time.referenceCard(it)) }
-        assertEquals(index.cards.keys, time.inGroup(CounterGroup.All).cards.keys)
+        assertEquals(index.cards.keys, time.inScope(CounterGroup.All).cards.keys)
+    }
+
+    @Test
+    fun levelsIntersectGroupsForEveryModeIncludingAlreadyDueAndExtraItems() {
+        val files = listOf(
+            hon.copy(group = "time"), hiki.copy(level = 4),
+            expressions(group = "time").copy(level = 4),
+            expressions(age.copy(id = "price-expression-1")).copy(id = "price", level = 3),
+        )
+        val all = CounterIndex(files)
+        for (scope in CounterScope.entries) for (group in CounterGroup.entries) {
+            val selected = all.inScope(group, scope)
+            val expected = files.filter {
+                it.level >= when (scope) { CounterScope.N5 -> 5; CounterScope.N4 -> 4; CounterScope.All -> 1 } &&
+                    (group == CounterGroup.All || it.group == group.code)
+            }
+            assertEquals(expected.map { it.id }, selected.files.map { it.id })
+            assertScopedQueues(all, selected, expected)
+        }
+        val beginnerTime = all.inScope(CounterGroup.Time, CounterScope.N5)
+        assertEquals(cat, beginnerTime.referenceCard(cat.id))
+        assertFalse(cat.id in beginnerTime.ids(CounterMode.Choose))
+        assertTrue(all.inScope(CounterGroup.Everyday, CounterScope.N5).files.isEmpty())
+        assertEquals(files, beginnerTime.inScope().files)
+    }
+
+    private fun assertScopedQueues(all: CounterIndex, selected: CounterIndex, expected: List<CounterFile>) {
+        val choose = all.cards.keys.associateWith { solid() }
+        for (mode in CounterMode.entries) {
+            val ids = CounterIndex(expected).ids(mode)
+            assertEquals(ids, selected.ids(mode))
+            val states = all.ids(mode).associateWith { solid() }
+            for (extra in listOf(null, 10)) {
+                val queue = CounterQueues.build(selected, CounterQueueRequest(mode, states, choose, Instant.EPOCH, 0, extra))
+                assertEquals(ids.toSet(), queue.map { it.kanji }.toSet())
+                assertTrue(queue.none { it.isNew })
+            }
+        }
+    }
+
+    @Test
+    fun continuationCapturesScopeAndLegacyRoutesRemainAllLevels() {
+        for (scope in CounterScope.entries) for (group in CounterGroup.entries) for (mode in CounterMode.entries) {
+            val route = CounterRoutes.create(mode, group, scope, stamp = 123)
+            val extra = CounterRoutes.extra(route)
+            assertEquals(mode, CounterMode.fromCode(extra.split(':')[2]))
+            assertEquals(group, CounterGroup.fromRoute(extra))
+            assertEquals(scope, CounterScope.fromRoute(extra))
+            assertTrue(extra.endsWith(":extra"))
+        }
+        for (old in listOf("cquiz:1:ty", "cquiz:1:ty:extra", "cquiz:1:ty:time", "cquiz:1:ty:time:extra")) {
+            assertEquals(CounterScope.All, CounterScope.fromRoute(old))
+            assertEquals(CounterScope.All, CounterScope.fromRoute(CounterRoutes.extra(old)))
+            assertEquals(CounterGroup.fromRoute(old), CounterGroup.fromRoute(CounterRoutes.extra(old)))
+        }
+    }
+
+    @Test
+    fun legacyMissingLevelRemainsN5ButMalformedPresentLevelsAreRejectedIndividually() {
+        val fields = Json.parseToJsonElement(json("hon", card("hon-a-1"))).jsonObject
+        assertEquals(5, ContentParser.parseCounter("counters/hon.json", fields.toString()).level)
+        val valid = JsonObject(fields + ("level" to Json.parseToJsonElement("4"))).toString()
+        assertEquals(4, ContentParser.parseCounter("counters/hon.json", valid).level)
+        for (raw in listOf("\"4\"", "true", "null", "0", "6", "4.0", "[]", "{}")) {
+            val invalid = JsonObject(fields + ("level" to Json.parseToJsonElement(raw))).toString()
+            val result = parse("counters/hon.json" to invalid, "counters/other.json" to json("other", card("other-a-1")))
+            assertEquals(raw, listOf("other"), result.counters.map { it.id })
+            assertTrue(result.problems.toString(), result.problems.any { "counter level" in it })
+        }
     }
 
     @Test

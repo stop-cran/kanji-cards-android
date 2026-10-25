@@ -20,6 +20,8 @@ import io.github.stopcran.kanji.core.content.CounterFile
 import io.github.stopcran.kanji.core.content.SafeZip
 import io.github.stopcran.kanji.core.counters.CounterGroup
 import io.github.stopcran.kanji.core.counters.CounterMode
+import io.github.stopcran.kanji.core.counters.CounterRoutes
+import io.github.stopcran.kanji.core.counters.CounterScope
 import io.github.stopcran.kanji.data.AppDatabase
 import io.github.stopcran.kanji.data.CounterEntity
 import io.github.stopcran.kanji.data.Settings
@@ -47,7 +49,7 @@ class CounterFlowTest {
         assumeTrue("Provide the real content archive for native acceptance", archive.isFile)
         val parsed = archive.inputStream().use { ContentParser.parse(SafeZip.read(it)) }
         assertTrue(parsed.problems.toString(), parsed.problems.isEmpty())
-        assertEquals(123, parsed.counters.sumOf { it.expressions.size })
+        assertEquals(123, parsed.counters.filter { it.level == 5 }.sumOf { it.expressions.size })
         val preferenceName = "counter-flow-${UUID.randomUUID()}"
         val isolated = object : ContextWrapper(context) {
             override fun getSharedPreferences(name: String, mode: Int) = context.getSharedPreferences(preferenceName, mode)
@@ -56,7 +58,7 @@ class CounterFlowTest {
         val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
         val services = Services(db, settings, context)
         val vm = mutableStateOf(CounterQuizViewModel(services))
-        val route = mutableStateOf("cquiz:${UUID.randomUUID()}:${mode.code}:time")
+        val route = mutableStateOf(CounterRoutes.create(mode, CounterGroup.Time, CounterScope.N5))
         val document = mutableStateOf<String?>(null)
         val source = settings.source.value.id
         try {
@@ -77,7 +79,7 @@ class CounterFlowTest {
                         } else {
                             CounterQuizScreen(route.value, {}, {
                                 vm.value.leaveSession()
-                                route.value = "cquiz:${UUID.randomUUID()}:${mode.code}:${CounterGroup.fromRoute(route.value).code}:extra"
+                                route.value = CounterRoutes.extra(route.value)
                                 vm.value = CounterQuizViewModel(services)
                             }, { owner, path -> assertEquals(source, owner); document.value = path }, vm.value)
                         }
@@ -99,6 +101,7 @@ class CounterFlowTest {
             while (vm.value.ui is CounterUi.ExpressionQuestion && answered++ < 12) {
                 val question = vm.value.ui as CounterUi.ExpressionQuestion
                 assertEquals(setOf("time"), vm.value.index.files.map { it.group }.toSet())
+                assertEquals(setOf(5), vm.value.index.files.map { it.level }.toSet())
                 rule.onNode(hasSetTextAction()).performScrollTo()
                     .performTextReplacement(if (question.reading) question.item.reading else question.item.written)
                 rule.onNodeWithText("Check").performScrollTo().performClick()
@@ -118,6 +121,7 @@ class CounterFlowTest {
             rule.onNodeWithText("Practice more").performScrollTo().performClick()
             rule.waitUntil(10_000) { vm.value.ui is CounterUi.ExpressionQuestion }
             assertEquals(CounterGroup.Time, CounterGroup.fromRoute(route.value))
+            assertEquals(CounterScope.N5, CounterScope.fromRoute(route.value))
             assertTrue(route.value.endsWith(":extra"))
             assertEquals(setOf("time"), vm.value.index.files.map { it.group }.toSet())
             runBlocking {

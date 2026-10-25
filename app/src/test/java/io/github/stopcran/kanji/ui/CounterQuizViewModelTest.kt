@@ -8,6 +8,7 @@ import io.github.stopcran.kanji.core.content.CounterExpression
 import io.github.stopcran.kanji.core.content.CounterFile
 import io.github.stopcran.kanji.core.counters.CounterGroup
 import io.github.stopcran.kanji.core.counters.CounterMode
+import io.github.stopcran.kanji.core.counters.CounterScope
 import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.data.AppDatabase
 import io.github.stopcran.kanji.data.COUNTER_STACK
@@ -72,11 +73,16 @@ class CounterQuizViewModelTest {
     private fun start(mode: CounterMode, extra: Boolean = false): CounterQuizViewModel {
         val vm = CounterQuizViewModel(services)
         vm.ensureStarted(mode, extra, CounterGroup.Time)
-        val deadline = System.currentTimeMillis() + 10_000
-        while (vm.ui is CounterUi.Loading && System.currentTimeMillis() < deadline) Thread.sleep(10)
+        await(vm)
         assertTrue((vm.ui as CounterUi.ExpressionQuestion).item.id.startsWith("day-duration-"))
         assertEquals(setOf("time"), vm.index.files.map { it.group }.toSet())
         return vm
+    }
+
+    private fun await(vm: CounterQuizViewModel) {
+        val deadline = System.currentTimeMillis() + 10_000
+        while (vm.ui is CounterUi.Loading && System.currentTimeMillis() < deadline) Thread.sleep(10)
+        assertFalse(vm.ui is CounterUi.Loading)
     }
 
     private fun next(vm: CounterQuizViewModel) {
@@ -133,11 +139,41 @@ class CounterQuizViewModelTest {
 
     @Test
     fun homeAndQueuesShareFilteredAvailabilityWithoutAddingModeAllowances() = runBlocking {
-        val index = db.counterIndex(source).inGroup(CounterGroup.Time)
+        val index = db.counterIndex(source).inScope(CounterGroup.Time)
         val modes = db.counterModeStates(source, index, 1, Instant.now())
         assertEquals(setOf(CounterMode.Expression, CounterMode.Reading), modes.keys)
         assertTrue(modes.values.all { it == ModeState.Start(0, 1) })
         assertEquals("0 due; 1 new-item allowance", CounterHome(1, modes, 1).summary())
         assertTrue(db.counterModeStates(source, index, 0, Instant.now()).values.all { it == ModeState.PracticeMore })
+    }
+
+    @Test
+    fun changingThePreferenceDoesNotBroadenTheCapturedSessionOrResetEarlierEvidence() = runBlocking {
+        val advanced = CounterFile(2, "years", "年", "ねん", "Years", level = 4, group = "time",
+            article = "articles/counts.md", expressions = listOf(item.copy(id = "year-calendar-1")))
+        db.content().insertCounters(listOf(CounterEntity(source, advanced.id,
+            Json.encodeToString(CounterFile.serializer(), advanced), 2)))
+        val beginner = CounterQuizViewModel(services)
+        beginner.ensureStarted(CounterMode.Expression, false, CounterGroup.Time, CounterScope.N5)
+        await(beginner)
+        services.settings.setCounterScope(source, CounterScope.N4)
+        assertEquals(listOf(item.id), beginner.index.ids(CounterMode.Expression))
+        beginner.onDraft(item.written)
+        beginner.submit()
+        next(beginner)
+        assertTrue(beginner.ui is CounterUi.Done)
+        val before = db.reviews().allStates()
+        val n4 = CounterQuizViewModel(services)
+        n4.ensureStarted(CounterMode.Expression, false, CounterGroup.Time, services.settings.counterScopeFor(source))
+        await(n4)
+        assertEquals("year-calendar-1", (n4.ui as CounterUi.ExpressionQuestion).item.id)
+        n4.onDraft(item.written)
+        n4.submit()
+        next(n4)
+        assertTrue(db.reviews().allStates().containsAll(before))
+        assertEquals(setOf(item.id, "year-calendar-1"), db.reviews().allStates().map { it.kanji }.toSet())
+        assertEquals(2, db.reviews().itemsIntroducedSince(source, 0))
+        val n5 = db.counterIndex(source).inScope(CounterGroup.Time, CounterScope.N5)
+        assertEquals(ModeState.PracticeMore, db.counterModeStates(source, n5, 0, Instant.now())[CounterMode.Expression])
     }
 }

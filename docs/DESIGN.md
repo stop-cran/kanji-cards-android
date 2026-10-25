@@ -35,6 +35,13 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - `counters/<id>.json` keeps legacy v1 suffix/reverse cards alongside separate v2 whole-expression files.
   **Numbers & counters** owns units and full readings; Grammar owns sentence constructions.
   All / Everyday counts / Time & dates is a saved filter, not a new stack or progress identity.
+  A source-persisted N5 (default), N4 + N5, or All levels choice intersects that group filter in one operation.
+  Home summaries, all mode queues and reminder counts share the selected level, including already-started items;
+  filtering never deletes progress, changes gates or divides the allowance. Reverse choices retain full-source reference
+  data without admitting foreign items to the selected queue. Levels are provisional learning targets, not an official syllabus.
+  New `cquiz:<timestamp>:<mode>:<group>:<scope>[:extra]` routes capture the choice for the entire session and continuation;
+  old routes retain All levels. Article Back and rotation preserve the captured route; process death still abandons
+  ordinary sessions under the existing navigation policy, while the source's saved level remains.
   Choose/Type/Noun keep their original gates and grading. Direct Write/Read modes use distinct
   `CounterExpression` / `CounterReading` keys in the existing `counters` stack and ordinary shared allowances.
   Home shows due reviews separately from the shared allowance, never sums alternative modes' new opportunities.
@@ -42,8 +49,9 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   reading additionally folds kana script and grades a correct complete reading Good. Preserve small kana and vowels.
   Legacy `readingAnswers` describe only the canonical phrase, never every alternative counter in `kana`.
   Already-kana phrases are excluded from reading queues. Separate v2 files let old clients retain v1 content.
-  Source-scoped counter parser epoch 1 reimports unchanged HEAD/contentVersion after upgrade and advances
+  Source-scoped counter parser epoch 2 reimports unchanged HEAD/contentVersion after upgrade and advances
   only after successful replacement. Article links and active quiz content stay source-pinned.
+  Present levels must be unquoted integers 1-5 in both schemas; omitted legacy v1 levels still default to 5.
 - `grammar/<id>.json` schema v1 holds constructions/answer classes, relationships and contextual exercises, linked to an article.
   The bounded formal-noun pilot has 401 reviewed exercises in 32 sets, including five mixed sets (content commit `c2a9844`).
   This is scoped coverage, not a claim to cover every use or all Japanese grammar. Accepted alternatives share one exercise identity;

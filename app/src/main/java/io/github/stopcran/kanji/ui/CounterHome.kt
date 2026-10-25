@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.core.counters.CounterMode
 import io.github.stopcran.kanji.core.counters.CounterGroup
+import io.github.stopcran.kanji.core.counters.CounterScope
 import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.data.counterIndex
 import io.github.stopcran.kanji.data.counterModeStates
@@ -49,11 +50,13 @@ class CounterHome(
 @Composable
 fun rememberCounterHome(app: KanjiApp, group: CounterGroup = CounterGroup.All): CounterHome {
     val source = app.settings.source.collectAsState().value
+    val scope = app.settings.counterScopes.collectAsState().value[source.id] ?: CounterScope.N5
     val daily = app.settings.dailyNewCards.collectAsState().value
     val week = app.settings.weekPlan.collectAsState().value
-    val state: State<CounterHome> = produceState(CounterHome(null, emptyMap()), source.id, group, daily to week) {
+    val state: State<CounterHome> = produceState(CounterHome(null, emptyMap()), source.id, group to scope, daily to week) {
+        value = CounterHome(null, emptyMap())
         app.db.content().observeMeta(source.id).collectLatest {
-            val index = app.db.counterIndex(source.id).inGroup(group)
+            val index = app.db.counterIndex(source.id).inScope(group, scope)
             val now = Instant.now()
             val budget = app.db.newAllowance(app.settings, source.id, now).remaining
             value = CounterHome(
@@ -68,20 +71,28 @@ fun rememberCounterHome(app: KanjiApp, group: CounterGroup = CounterGroup.All): 
 @Composable
 fun CountersPage(app: KanjiApp, onBack: () -> Unit, a: HomeActions) {
     val source = app.settings.source.collectAsState().value
+    val scope = app.settings.counterScopes.collectAsState().value[source.id] ?: CounterScope.N5
     var selected by rememberSaveable(source.id, source.branch) { mutableStateOf(CounterGroup.All.code) }
     val group = CounterGroup.fromCode(selected)
     val home = rememberCounterHome(app, group)
     Page("Numbers & counters", onBack) {
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            CounterScope.entries.forEach { item ->
+                FilterChip(selected = scope == item, onClick = { app.settings.setCounterScope(source.id, item) },
+                    label = { Text(item.label) })
+            }
+        }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CounterGroup.entries.forEach { item ->
                 FilterChip(selected = group == item, onClick = { selected = item.code }, label = { Text(item.label) })
             }
         }
-        Text(if (home.cards == null) "Loading…" else "${home.cards} prompts in this group")
+        Text(if (home.cards == null) "Loading…" else "${home.cards} prompts in this selection")
+        Text("Levels are learning targets, not an official JLPT syllabus. Filters keep the same review history.")
         Text("Shared allowance: ${home.allowance} new items remaining today. Mode opportunities below are not added together.")
         Text("Choose a counter, write a complete expression, or recall its complete kana reading. Each skill has its own review history.")
         home.modes.forEach { (mode, state) ->
-            ModeRow(mode.label, state, onStart = { a.onCounters(mode, it, group) })
+            ModeRow(mode.label, state, onStart = { a.onCounters(mode, it, group, scope) })
         }
         home.articles.forEach { (path, label) ->
             TextButton(onClick = { a.onOpenDoc(path) }) { Text(label) }

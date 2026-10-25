@@ -41,10 +41,12 @@ class CounterIndex(val files: List<CounterFile>, private val sourceFiles: List<C
     private val referenceCards = sourceFiles.flatMap { it.cards }.associateBy { it.id }
     private val reverseFiles = files.flatMap { f -> f.reverse.map { it.id to f } }.toMap()
 
-    fun inGroup(group: CounterGroup) =
-        CounterIndex(sourceFiles.filter { group == CounterGroup.All || it.group == group.code }, sourceFiles)
+    fun inScope(group: CounterGroup = CounterGroup.All, scope: CounterScope = CounterScope.All) =
+        CounterIndex(sourceFiles.filter {
+            scope.includes(it.level) && (group == CounterGroup.All || it.group == group.code)
+        }, sourceFiles)
 
-    /** A scoped reverse question can still refer to a distractor in another group. */
+    /** References do not become queue members when they lie outside the selected group or level. */
     fun referenceCard(id: String): CounterCard = referenceCards.getValue(id)
 
     fun article(id: String): String? = (expressionFiles[id] ?: fileOf[id])?.article

@@ -33,8 +33,9 @@ import io.github.stopcran.kanji.core.content.CounterCard
 import io.github.stopcran.kanji.core.counters.CounterMode
 import io.github.stopcran.kanji.core.counters.CounterVerdict
 import io.github.stopcran.kanji.core.counters.CounterGroup
+import io.github.stopcran.kanji.core.counters.CounterScope
 
-/** Session key: "cquiz:<timestamp>:<mode>:<group>[:extra]"; old routes use All. */
+/** Session key: "cquiz:<timestamp>:<mode>:<group>:<scope>[:extra]"; old routes use All levels. */
 @Composable
 fun CounterQuizScreen(
     sessionKey: String,
@@ -44,7 +45,9 @@ fun CounterQuizScreen(
     vm: CounterQuizViewModel = serviceViewModel(sessionKey) { CounterQuizViewModel(it) },
 ) {
     val mode = CounterMode.fromCode(sessionKey.split(':').getOrNull(2))
-    LaunchedEffect(sessionKey) { vm.ensureStarted(mode, sessionKey.endsWith(":extra"), CounterGroup.fromRoute(sessionKey)) }
+    LaunchedEffect(sessionKey) {
+        vm.ensureStarted(mode, sessionKey.endsWith(":extra"), CounterGroup.fromRoute(sessionKey), CounterScope.fromRoute(sessionKey))
+    }
     Page("Numbers: ${mode.label}", onBack,
         ime = mode in listOf(CounterMode.Type, CounterMode.Expression, CounterMode.Reading), scrollToTopOnBack = true) {
         when (val s = vm.ui) {

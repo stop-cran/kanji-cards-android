@@ -269,7 +269,7 @@ class CounterSyncTest {
         assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
         val epoch = io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH
         assertEquals(epoch, settings.counterParserEpoch(source.id))
-        settings.setCounterParserEpoch(source.id, 0)
+        settings.setCounterParserEpoch(source.id, epoch - 1)
         settings.setCounterParserEpoch("other/repo", 0)
         val downloads = http.downloads
         assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)

@@ -61,7 +61,10 @@ class HomeActions(
     val onGrammarDoc: (String, String) -> Unit,
     val onKanaPage: () -> Unit,
     val onKanaStudy: (KanaScript, KanaMode, extra: Boolean) -> Unit,
-    val onCounters: (io.github.stopcran.kanji.core.counters.CounterMode, extra: Boolean, io.github.stopcran.kanji.core.counters.CounterGroup) -> Unit,
+    val onCounters: (
+        io.github.stopcran.kanji.core.counters.CounterMode, extra: Boolean,
+        io.github.stopcran.kanji.core.counters.CounterGroup, io.github.stopcran.kanji.core.counters.CounterScope,
+    ) -> Unit,
     val onGrammar: (extra: Boolean) -> Unit,
     val onGrammarTarget: (io.github.stopcran.kanji.core.grammar.GrammarPracticeTarget) -> Unit,
     val onQuiz: (extra: Boolean) -> Unit,

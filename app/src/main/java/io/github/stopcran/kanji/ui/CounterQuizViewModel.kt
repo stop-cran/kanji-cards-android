@@ -10,6 +10,7 @@ import io.github.stopcran.kanji.core.content.CounterFile
 import io.github.stopcran.kanji.core.content.CounterExpression
 import io.github.stopcran.kanji.core.counters.CounterExpressions
 import io.github.stopcran.kanji.core.counters.CounterGroup
+import io.github.stopcran.kanji.core.counters.CounterScope
 import io.github.stopcran.kanji.core.counters.CounterGrader
 import io.github.stopcran.kanji.core.counters.CounterIndex
 import io.github.stopcran.kanji.core.counters.CounterMode
@@ -83,18 +84,20 @@ class CounterQuizViewModel(private val app: Services) : StudyViewModel(app) {
     private var session = QuizSession<String>(emptyList(), { it })
     private var started = false
 
-    fun ensureStarted(mode: CounterMode, extra: Boolean, group: CounterGroup = CounterGroup.All) {
+    fun ensureStarted(
+        mode: CounterMode, extra: Boolean, group: CounterGroup = CounterGroup.All, scope: CounterScope = CounterScope.All,
+    ) {
         if (started) return
         started = true
         this.mode = mode
-        viewModelScope.launch { start(extra, group) }
+        viewModelScope.launch { start(extra, group, scope) }
     }
 
-    private suspend fun start(extra: Boolean, group: CounterGroup) {
+    private suspend fun start(extra: Boolean, group: CounterGroup, scope: CounterScope) {
         sourceId = app.settings.source.value.id
-        index = app.db.counterIndex(sourceId).inGroup(group)
+        index = app.db.counterIndex(sourceId).inScope(group, scope)
         if (index.ids(mode).isEmpty()) {
-            ui = CounterUi.Empty("No counter cards yet. Sync the content first (⚙ settings).")
+            ui = CounterUi.Empty("No cards in this selection. Choose another level or group, or sync the content (⚙ settings).")
             return
         }
         states += app.db.counterStates(sourceId, mode)

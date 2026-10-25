@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import io.github.stopcran.kanji.Defaults
 import io.github.stopcran.kanji.core.content.RepoSource
+import io.github.stopcran.kanji.core.counters.CounterScope
 import io.github.stopcran.kanji.core.focus.FocusBatch
 import io.github.stopcran.kanji.core.grammar.GrammarScope
 import io.github.stopcran.kanji.core.grammar.GrammarTargetKind
@@ -37,6 +38,23 @@ class Settings(context: Context) {
     val grammarPreferences: StateFlow<Map<String, GrammarPreferences>> = _grammarPreferences
 
     fun grammarFor(sourceId: String): GrammarPreferences = _grammarPreferences.value[sourceId] ?: GrammarPreferences()
+
+    private val _counterScopes = MutableStateFlow(loadCounterScopes())
+    val counterScopes: StateFlow<Map<String, CounterScope>> = _counterScopes
+
+    fun counterScopeFor(sourceId: String): CounterScope = _counterScopes.value[sourceId] ?: CounterScope.N5
+
+    fun setCounterScope(sourceId: String, scope: CounterScope) {
+        prefs.edit().putString("$COUNTER_SCOPE$sourceId", scope.code).apply()
+        _counterScopes.update { it + (sourceId to scope) }
+    }
+
+    private fun loadCounterScopes(): Map<String, CounterScope> =
+        prefs.all.filterKeys { it.startsWith(COUNTER_SCOPE) }.mapKeys { it.key.removePrefix(COUNTER_SCOPE) }.mapValues { entry ->
+            CounterScope.entries.firstOrNull { it.code == entry.value } ?: CounterScope.N5.also {
+                Log.w("CounterScope", "Unknown saved counter scope; using N5.")
+            }
+        }
 
     fun grammarBrowserFor(source: RepoSource): GrammarBrowserPreferences {
         val key = "grammarBrowser:${source.id}|${source.branch}"
@@ -323,6 +341,7 @@ class Settings(context: Context) {
         const val KEY_REMIND_LAST = "lastReminderMs"
         const val KEY_LAST_CHECK = "lastCheckMs"
         const val GRAMMAR_NEW = "grammarNew:"
+        private const val COUNTER_SCOPE = "counterScope:"
         const val GRAMMAR_BROWSE = "grammarBrowse:"
         const val GRAMMAR_EPOCH = "grammarParserEpoch:"
         const val GRAMMAR_GUIDED = "grammarGuided:"
