@@ -32,6 +32,18 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   An explicit community vocabulary level takes precedence over kanji difficulty; only omission enables the legacy fallback (see §5).
   Word tags remain free-form: no JLPT tags are required or generated, and level metadata does not affect quiz tag scoring.
 - `articles/*.md` free-form; `strokes/<char>.json` KanjiVG-derived geometry in a 109-unit box with optional `orderVariants`.
+- `counters/<id>.json` keeps legacy v1 suffix/reverse cards alongside separate v2 whole-expression files.
+  **Numbers & counters** owns units and full readings; Grammar owns sentence constructions.
+  All / Everyday counts / Time & dates is a saved filter, not a new stack or progress identity.
+  Choose/Type/Noun keep their original gates and grading. Direct Write/Read modes use distinct
+  `CounterExpression` / `CounterReading` keys in the existing `counters` stack and ordinary shared allowances.
+  Home shows due reviews separately from the shared allowance, never sums alternative modes' new opportunities.
+  New writing uses exact authored NFKC/whitespace-normalized forms, not legacy numeral arithmetic;
+  reading additionally folds kana script and grades a correct complete reading Good. Preserve small kana and vowels.
+  Legacy `readingAnswers` describe only the canonical phrase, never every alternative counter in `kana`.
+  Already-kana phrases are excluded from reading queues. Separate v2 files let old clients retain v1 content.
+  Source-scoped counter parser epoch 1 reimports unchanged HEAD/contentVersion after upgrade and advances
+  only after successful replacement. Article links and active quiz content stay source-pinned.
 - `grammar/<id>.json` schema v1 holds constructions/answer classes, relationships and contextual exercises, linked to an article.
   The bounded formal-noun pilot has 401 reviewed exercises in 32 sets, including five mixed sets (content commit `c2a9844`).
   This is scoped coverage, not a claim to cover every use or all Japanese grammar. Accepted alternatives share one exercise identity;
@@ -45,7 +57,7 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - Sync checks the branch head via `api.github.com`, then downloads the zip pinned to that commit SHA (`RepoSource.commitZipUrl`), so the
   archive cannot differ from the checked head. It is skipped when the head SHA equals the stored one, and the
   import is also skipped when `manifest.contentVersion` is unchanged, so **content changes must bump `contentVersion`** (`force` bypasses
-  both). Pending Grammar or scene parser epochs also bypass these shortcuts and the launch-check throttle, but not bad-content/shrink protection.
+  both). Pending Grammar, counter or scene parser epochs also bypass these shortcuts and the launch-check throttle, but not bad-content/shrink protection.
   Current Grammar parser epoch 6 is recorded per source only after atomic replacement, retaining JLPT, groups, vocabulary, authored
   additional correct choices, optional chapters and foundation requirements. The capability thresholds stay at 1 for levels and 2 for groups. Epoch-0 caches permit only unguided All new
   intake; epoch 1 permits level-aware unguided intake; started reviews remain available throughout.

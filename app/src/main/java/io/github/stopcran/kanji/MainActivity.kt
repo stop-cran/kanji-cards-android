@@ -162,7 +162,11 @@ private fun RouteContent(
             CounterQuizScreen(
                 sessionKey = route,
                 onBack = pop,
-                onPracticeMore = { pop(); push("cquiz:${System.currentTimeMillis()}:${route.split(":")[2]}:extra") },
+                onPracticeMore = {
+                    val group = io.github.stopcran.kanji.core.counters.CounterGroup.fromRoute(route)
+                    pop(); push("cquiz:${System.currentTimeMillis()}:${route.split(":")[2]}:${group.code}:extra")
+                },
+                onOpenDoc = { source, path -> push(sourceDocRoute(source, path)) },
             )
         } else if (route.startsWith("grammarquiz:")) {
             val target = remember(route) {
@@ -243,7 +247,9 @@ private fun RouteContent(
                     onKanaStudy = { script, mode, extra ->
                         push("kana-study:${script.id}:${mode.name}:${System.currentTimeMillis()}" + if (extra) ":extra" else "")
                     },
-                    onCounters = { mode, extra -> push("cquiz:${System.currentTimeMillis()}:${mode.code}" + if (extra) ":extra" else "") },
+                    onCounters = { mode, extra, group ->
+                        push("cquiz:${System.currentTimeMillis()}:${mode.code}:${group.code}" + if (extra) ":extra" else "")
+                    },
                     onGrammar = { extra -> push("grammarquiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
                     onGrammarTarget = { push(GrammarPracticeRoutes.create(it)) },
                     onQuiz = { extra -> push("quiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },

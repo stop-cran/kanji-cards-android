@@ -7,6 +7,9 @@ import androidx.lifecycle.viewModelScope
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.content.CounterCard
 import io.github.stopcran.kanji.core.content.CounterFile
+import io.github.stopcran.kanji.core.content.CounterExpression
+import io.github.stopcran.kanji.core.counters.CounterExpressions
+import io.github.stopcran.kanji.core.counters.CounterGroup
 import io.github.stopcran.kanji.core.counters.CounterGrader
 import io.github.stopcran.kanji.core.counters.CounterIndex
 import io.github.stopcran.kanji.core.counters.CounterMode
@@ -47,6 +50,11 @@ sealed interface CounterUi {
         val card: CounterCard, val file: CounterFile, val typed: String, val result: CounterResult, val gaveUp: Boolean, val remaining: Int,
     ) : CounterUi
 
+    data class ExpressionQuestion(val item: CounterExpression, val reading: Boolean, val remaining: Int) : CounterUi
+    data class ExpressionAnswer(
+        val item: CounterExpression, val reading: Boolean, val typed: String, val correct: Boolean, val gaveUp: Boolean,
+    ) : CounterUi
+
     data class NounQuestion(val reverseId: String, val file: CounterFile, val options: List<NounOption>, val remaining: Int) : CounterUi
     data class NounAnswer(
         val reverseId: String, val file: CounterFile, val answer: CounterCard, val options: List<NounOption>, val picked: String, val remaining: Int,
@@ -69,22 +77,23 @@ class CounterQuizViewModel(private val app: Services) : StudyViewModel(app) {
     lateinit var index: CounterIndex
         private set
     private var mode = CounterMode.Choose
-    private var sourceId = ""
+    var sourceId = ""
+        private set
     private val states = mutableMapOf<String, SrsState>()
     private var session = QuizSession<String>(emptyList(), { it })
     private var started = false
 
-    fun ensureStarted(mode: CounterMode, extra: Boolean) {
+    fun ensureStarted(mode: CounterMode, extra: Boolean, group: CounterGroup = CounterGroup.All) {
         if (started) return
         started = true
         this.mode = mode
-        viewModelScope.launch { start(extra) }
+        viewModelScope.launch { start(extra, group) }
     }
 
-    private suspend fun start(extra: Boolean) {
+    private suspend fun start(extra: Boolean, group: CounterGroup) {
         sourceId = app.settings.source.value.id
-        index = app.db.counterIndex(sourceId)
-        if (index.cards.isEmpty()) {
+        index = app.db.counterIndex(sourceId).inGroup(group)
+        if (index.ids(mode).isEmpty()) {
             ui = CounterUi.Empty("No counter cards yet. Sync the content first (⚙ settings).")
             return
         }
@@ -113,16 +122,19 @@ class CounterQuizViewModel(private val app: Services) : StudyViewModel(app) {
                 CounterUi.Choose(card, file, CounterOptions.choose(card, file.counter), remaining)
             }
             CounterMode.Type -> CounterUi.TypeQuestion(index.cards.getValue(id), index.fileOf.getValue(id), remaining)
+            CounterMode.Expression, CounterMode.Reading ->
+                CounterUi.ExpressionQuestion(index.expression(id), mode == CounterMode.Reading, remaining)
             CounterMode.Noun -> {
                 val reverse = index.reverse.getValue(id)
-                val options = CounterOptions.nouns(reverse).map { NounOption(it, index.nounLabel(index.cards.getValue(it))) }
+                val options = CounterOptions.nouns(reverse).map { NounOption(it, index.nounLabel(index.referenceCard(it))) }
                 CounterUi.NounQuestion(id, index.reverseFile(id)!!, options, remaining)
             }
         }
     }
 
     private fun emptyMessage() = when (mode) {
-        CounterMode.Choose -> "Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings."
+        CounterMode.Choose, CounterMode.Expression, CounterMode.Reading ->
+            "Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings."
         CounterMode.Type -> "Nothing is due. Typing opens for sentences you have answered in “Choose the counter” on two different days."
         CounterMode.Noun -> "Nothing is due. This opens for a counter once three of its sentences are solid in “Choose the counter”."
     }
@@ -131,7 +143,7 @@ class CounterQuizViewModel(private val app: Services) : StudyViewModel(app) {
         when (val q = ui) {
             is CounterUi.Choose -> ui = CounterUi.ChooseAnswer(q.card, q.file, q.options, value, q.remaining)
             is CounterUi.NounQuestion -> {
-                val answer = index.cards.getValue(index.reverse.getValue(q.reverseId).answer)
+                val answer = index.referenceCard(index.reverse.getValue(q.reverseId).answer)
                 ui = CounterUi.NounAnswer(q.reverseId, q.file, answer, q.options, value, q.remaining)
             }
             else -> Unit
@@ -140,10 +152,19 @@ class CounterQuizViewModel(private val app: Services) : StudyViewModel(app) {
 
     fun onDraft(text: String) {
         if (ui is CounterUi.TypeQuestion) draft = text
+        if (ui is CounterUi.ExpressionQuestion) draft = text.take(80)
     }
 
     /** Checks the typed text, or marks the question as not known when [giveUp]. */
     fun submit(giveUp: Boolean = false) {
+        val expression = ui as? CounterUi.ExpressionQuestion
+        if (expression != null) {
+            if (!giveUp && draft.isBlank()) return
+            val answer = if (giveUp) "" else draft
+            val correct = !giveUp && CounterExpressions.grade(answer, expression.item, expression.reading).ok
+            ui = CounterUi.ExpressionAnswer(expression.item, expression.reading, answer, correct, giveUp)
+            return
+        }
         val q = ui as? CounterUi.TypeQuestion ?: return
         val typed = if (giveUp) "" else draft
         if (!giveUp && typed.isBlank()) return
@@ -163,6 +184,7 @@ class CounterQuizViewModel(private val app: Services) : StudyViewModel(app) {
                 val verdict = a.result.verdict
                 finish(a.card.id, a.result.ok, guessed = verdict == CounterVerdict.Yellow, countsAsCorrect = verdict == CounterVerdict.Good)
             }
+            is CounterUi.ExpressionAnswer -> finish(a.item.id, a.correct, guessed = false)
             else -> return
         }
         showNext()
@@ -175,7 +197,8 @@ class CounterQuizViewModel(private val app: Services) : StudyViewModel(app) {
 
     private fun record(id: String, grade: Grade) {
         val now = Instant.now()
-        val cap = if (mode == CounterMode.Type) null else Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS
+        val cap = if (mode in listOf(CounterMode.Type, CounterMode.Expression, CounterMode.Reading)) null
+            else Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS
         val updated = fsrs.review(
             states[id] ?: SrsState(), grade, now,
             firstSuccessCapDays = cap, fuzzSeed = Fsrs.seed(id, mode.mode.name, states[id]?.reps ?: 0),

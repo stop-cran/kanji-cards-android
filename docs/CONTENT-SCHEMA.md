@@ -3,6 +3,15 @@
 The authoritative content format lives with the content: [docs/content-format.md](https://github.com/stop-cran/learning-japanese/blob/main/docs/content-format.md)
 in the default repo `stop-cran/learning-japanese`.
 
+Numbers & counters uses `manifest.files` for both legacy v1 suffix/reverse cards and separate v2
+whole-expression files. The [counter contract](https://github.com/stop-cran/learning-japanese/blob/main/docs/counter-n5.md#version-2-transport-and-future-authoring)
+defines required fields, bounded authored alternatives, grouping and article targets.
+V2 decoding rejects unknown fields; malformed/unsupported files produce diagnostics without invalidating valid siblings.
+IDs cannot collide across forward, reverse and expression records. Optional v1 `readingAnswers` refer only
+to that card's canonical phrase; omission means its canonical reading alone, not its alternate-counter `kana` list.
+Parser epoch 1 is source-scoped and forces an unchanged-content reimport after app upgrade.
+The new `CounterExpression` and `CounterReading` schedules use existing storage without resetting old modes.
+
 What the app enforces when importing (`core/content/ContentParser.kt`, `FrontMatter.kt`, `SafeZip.kt`):
 
 - The repo archive (`codeload.github.com/<owner>/<repo>/zip/refs/heads/<branch>`) must contain `manifest.json` with `schemaVersion` 1.

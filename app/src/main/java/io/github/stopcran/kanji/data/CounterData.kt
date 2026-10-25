@@ -29,7 +29,7 @@ suspend fun AppDatabase.counterStates(sourceId: String, mode: CounterMode): Map<
 /** Home rows of the Counters page, computed from the same queue builder the quiz uses. */
 suspend fun AppDatabase.counterModeStates(sourceId: String, index: CounterIndex, newBudget: Int, now: Instant): Map<CounterMode, ModeState> {
     val choose = counterStates(sourceId, CounterMode.Choose)
-    return CounterMode.entries.associateWith { mode ->
+    return CounterMode.entries.filter { index.ids(it).isNotEmpty() }.associateWith { mode ->
         val own = if (mode == CounterMode.Choose) choose else counterStates(sourceId, mode)
         val queue = CounterQueues.build(index, CounterQueueRequest(mode, own, choose, now, newBudget))
         val extra = CounterQueues.build(index, CounterQueueRequest(mode, own, choose, now, newBudget, extraLimit = 1))
@@ -42,7 +42,8 @@ suspend fun AppDatabase.counterModeStates(sourceId: String, index: CounterIndex,
             lockedReason = when (mode) {
                 CounterMode.Type -> "Opens for sentences you have answered in “Choose the counter” on two different days."
                 CounterMode.Noun -> "Opens for a counter once three of its sentences are solid in “Choose the counter”."
-                CounterMode.Choose -> "Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings."
+                CounterMode.Choose, CounterMode.Expression, CounterMode.Reading ->
+                    "Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings."
             },
         )
     }

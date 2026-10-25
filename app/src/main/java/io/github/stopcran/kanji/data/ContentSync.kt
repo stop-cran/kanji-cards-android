@@ -84,6 +84,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
 
     private suspend fun needsParserRefresh(source: RepoSource): Boolean =
         settings.grammarFor(source.id).parserEpoch < ContentParser.GRAMMAR_PARSER_EPOCH ||
+            settings.counterParserEpoch(source.id) < io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH ||
             settings.sceneParserEpoch(source.id) < SceneCatalog.PARSER_EPOCH ||
             settings.listeningParserEpoch(source.id) < io.github.stopcran.kanji.core.listening.ListeningContent.PARSER_EPOCH ||
             db.listeningTasks().sync(source.id).let {
@@ -162,6 +163,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
                 taskProblems
             }
             settings.setGrammarParserEpoch(source.id, ContentParser.GRAMMAR_PARSER_EPOCH)
+            settings.setCounterParserEpoch(source.id, io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH)
             settings.setSceneParserEpoch(source.id, SceneCatalog.PARSER_EPOCH)
             settings.setListeningParserEpoch(source.id, io.github.stopcran.kanji.core.listening.ListeningContent.PARSER_EPOCH)
             head?.let { settings.setSyncedCommit(commitKey, it) }

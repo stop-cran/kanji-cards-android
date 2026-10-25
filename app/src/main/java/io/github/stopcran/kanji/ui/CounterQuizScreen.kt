@@ -11,6 +11,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -31,18 +32,21 @@ import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.content.CounterCard
 import io.github.stopcran.kanji.core.counters.CounterMode
 import io.github.stopcran.kanji.core.counters.CounterVerdict
+import io.github.stopcran.kanji.core.counters.CounterGroup
 
-/** Session key: "cquiz:<timestamp>:<ch|ty|nn>[:extra]". */
+/** Session key: "cquiz:<timestamp>:<mode>:<group>[:extra]"; old routes use All. */
 @Composable
 fun CounterQuizScreen(
     sessionKey: String,
     onBack: () -> Unit,
     onPracticeMore: () -> Unit,
+    onOpenDoc: (String, String) -> Unit,
     vm: CounterQuizViewModel = serviceViewModel(sessionKey) { CounterQuizViewModel(it) },
 ) {
     val mode = CounterMode.fromCode(sessionKey.split(':').getOrNull(2))
-    LaunchedEffect(sessionKey) { vm.ensureStarted(mode, sessionKey.endsWith(":extra")) }
-    Page("Counters: ${mode.label}", onBack, ime = mode == CounterMode.Type, scrollToTopOnBack = true) {
+    LaunchedEffect(sessionKey) { vm.ensureStarted(mode, sessionKey.endsWith(":extra"), CounterGroup.fromRoute(sessionKey)) }
+    Page("Numbers: ${mode.label}", onBack,
+        ime = mode in listOf(CounterMode.Type, CounterMode.Expression, CounterMode.Reading), scrollToTopOnBack = true) {
         when (val s = vm.ui) {
             CounterUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             is CounterUi.Empty -> Text(s.message)
@@ -73,6 +77,26 @@ fun CounterQuizScreen(
                 NextRow(s.correct, canGuess = true, vm)
             }
             is CounterUi.TypeQuestion -> TypeQuestion(s, vm)
+            is CounterUi.ExpressionQuestion -> {
+                Remaining(s.remaining)
+                Text(s.item.cue, style = MaterialTheme.typography.titleMedium)
+                if (s.reading) Text(s.item.written, fontSize = 32.sp)
+                Text(if (s.reading) "Type the complete reading in kana." else "Type the complete Japanese written expression, not just its counter.")
+                CounterInput(vm)
+            }
+            is CounterUi.ExpressionAnswer -> {
+                Result(s.correct, s.gaveUp)
+                Text(s.item.cue)
+                Text("${s.item.written} (${s.item.reading})", fontSize = 28.sp)
+                if (!s.gaveUp) Text("You typed ${s.typed}")
+                val answers = if (s.reading) s.item.readingAnswers else s.item.writtenAnswers
+                Text("Accepted: ${answers.joinToString(" / ")}")
+                Text(s.item.explanation)
+                vm.index.article(s.item.id)?.let { path ->
+                    TextButton(onClick = { onOpenDoc(vm.sourceId, path) }) { Text("Read the explanation") }
+                }
+                NextRow(s.correct, canGuess = false, vm)
+            }
             is CounterUi.TypeAnswer -> {
                 val verdict = s.result.verdict
                 Text(
@@ -167,11 +191,16 @@ private fun NextRow(ok: Boolean, canGuess: Boolean, vm: CounterQuizViewModel) {
 
 @Composable
 private fun TypeQuestion(s: CounterUi.TypeQuestion, vm: CounterQuizViewModel) {
-    val focus = remember { FocusRequester() }
-    LaunchedEffect(s) { runCatching { focus.requestFocus() } }
     Remaining(s.remaining)
     Sentence(vm, s.card, filled = false)
     Text("Type the number and counter, e.g. 三本, or just the counter", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    CounterInput(vm)
+}
+
+@Composable
+private fun CounterInput(vm: CounterQuizViewModel) {
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(vm.ui) { focus.requestFocus() }
     OutlinedTextField(
         value = vm.draft,
         onValueChange = vm::onDraft,

@@ -2,6 +2,7 @@ package io.github.stopcran.kanji.core.counters
 
 import io.github.stopcran.kanji.core.content.CounterCard
 import io.github.stopcran.kanji.core.content.CounterFile
+import io.github.stopcran.kanji.core.content.CounterExpression
 import io.github.stopcran.kanji.core.content.CounterReverse
 import io.github.stopcran.kanji.core.content.CounterWord
 import io.github.stopcran.kanji.core.reading.ReadingKey
@@ -15,11 +16,13 @@ import java.text.Normalizer
 import java.time.Instant
 import kotlin.random.Random
 
-/** The three counter quiz modes: the sentence with a missing counter (choose / type) and the counter's nouns. */
+/** Legacy suffix/noun practice and independent whole-expression writing/reading skills. */
 enum class CounterMode(val code: String, val mode: StudyMode, val label: String) {
     Choose("ch", StudyMode.CounterChoose, "Choose the counter"),
     Type("ty", StudyMode.CounterType, "Type the counter"),
-    Noun("nn", StudyMode.CounterNoun, "Which thing does it count?");
+    Noun("nn", StudyMode.CounterNoun, "Which thing does it count?"),
+    Expression("ex", StudyMode.CounterExpression, "Write the expression"),
+    Reading("rd", StudyMode.CounterReading, "Read the expression");
 
     companion object {
         fun fromCode(code: String?) = entries.firstOrNull { it.code == code } ?: Choose
@@ -27,21 +30,42 @@ enum class CounterMode(val code: String, val mode: StudyMode, val label: String)
 }
 
 /** All loaded counter files, indexed for the quiz. Card IDs are the SRS keys (one stack, no collisions across files). */
-class CounterIndex(val files: List<CounterFile>) {
+class CounterIndex(val files: List<CounterFile>, private val sourceFiles: List<CounterFile> = files) {
     val cards: Map<String, CounterCard> = files.flatMap { it.cards }.associateBy { it.id }
     val fileOf: Map<String, CounterFile> = files.flatMap { f -> f.cards.map { it.id to f } }.toMap()
     val reverse: Map<String, CounterReverse> = files.flatMap { it.reverse }.associateBy { it.id }
-    val counterReading: Map<String, String> = files.associate { it.counter to it.reading }
-    val vocabulary: Map<String, CounterWord> = files.fold(emptyMap()) { acc, f -> acc + f.vocabulary }
+    val counterReading: Map<String, String> = sourceFiles.associate { it.counter to it.reading }
+    val vocabulary: Map<String, CounterWord> = sourceFiles.fold(emptyMap()) { acc, f -> acc + f.vocabulary }
+    val expressions: Map<String, CounterExpression> = files.flatMap { it.expressions }.associateBy { it.id }
+    private val expressionFiles = files.flatMap { f -> f.expressions.map { it.id to f } }.toMap()
+    private val referenceCards = sourceFiles.flatMap { it.cards }.associateBy { it.id }
+    private val reverseFiles = files.flatMap { f -> f.reverse.map { it.id to f } }.toMap()
+
+    fun inGroup(group: CounterGroup) =
+        CounterIndex(sourceFiles.filter { group == CounterGroup.All || it.group == group.code }, sourceFiles)
+
+    /** A scoped reverse question can still refer to a distractor in another group. */
+    fun referenceCard(id: String): CounterCard = referenceCards.getValue(id)
+
+    fun article(id: String): String? = (expressionFiles[id] ?: fileOf[id])?.article
+
+    fun expression(id: String): CounterExpression = expressions[id] ?: cards.getValue(id).let { c ->
+        CounterExpression(
+            c.id, c.en, c.phrase, listOf(c.phrase), c.reading,
+            c.readingAnswers.ifEmpty { listOf(c.reading) }, c.note ?: fileOf.getValue(id).title,
+        )
+    }
 
     /** Ids asked in [mode]: forward cards for choose and type, reverse questions for noun. */
     fun ids(mode: CounterMode): List<String> = when (mode) {
         CounterMode.Noun -> files.flatMap { f -> f.reverse.map { it.id } }
+        CounterMode.Expression -> expressions.keys.toList()
+        CounterMode.Reading -> (cards.keys + expressions.keys).filter { CounterExpressions.canRead(expression(it).written) }
         else -> files.flatMap { f -> f.cards.map { it.id } }
     }
 
-    /** Counter asked by a reverse question: the counter of the card holding the answer. */
-    fun reverseFile(id: String): CounterFile? = reverse[id]?.let { fileOf[it.answer] }
+    /** Counter asked by a reverse question: the file that owns that question. */
+    fun reverseFile(id: String): CounterFile? = reverseFiles[id]
 
     /** Vocabulary of the words that occur in the card's sentence or noun, for reading and gloss hints. */
     fun glossary(card: CounterCard): List<Pair<String, CounterWord>> =
@@ -164,6 +188,7 @@ object CounterQueues {
         val ids = index.ids(mode)
         return when (mode) {
             CounterMode.Choose -> ids
+            CounterMode.Expression, CounterMode.Reading -> ids
             CounterMode.Type -> ids.filter { CounterGate.typeOpen(choose[it], own[it]) }
             CounterMode.Noun -> ids.filter { id -> index.reverseFile(id)?.let { CounterGate.nounOpen(it, choose, own[id]) } == true }
         }

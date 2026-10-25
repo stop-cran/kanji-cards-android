@@ -189,6 +189,40 @@ class ContentSyncTest {
             db.listeningTasks().sync(source.id)?.parserEpoch)
     }
 
+    @Test
+    fun counterEpochRefreshesRecentLaunchSameHeadAndSameVersionWithoutResettingOtherSources() = runBlocking {
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
+        val epoch = io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH
+        assertEquals(epoch, settings.counterParserEpoch(source.id))
+        settings.setCounterParserEpoch(source.id, 0)
+        settings.setCounterParserEpoch("other/repo", 0)
+        val downloads = http.downloads
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
+        assertEquals(downloads + 1, http.downloads)
+        assertEquals(epoch, settings.counterParserEpoch(source.id))
+        assertEquals(0, settings.counterParserEpoch("other/repo"))
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.UpToDate)
+        assertEquals(downloads + 1, http.downloads)
+        settings.setCounterParserEpoch(source.id, 0)
+        http.headSha = SHA_B
+        assertTrue(sync.sync(source) is SyncResult.Updated)
+        assertEquals(downloads + 2, http.downloads)
+    }
+
+    @Test
+    fun failedCounterUpgradeLeavesEpochPendingAndRetriesSameHead() = runBlocking {
+        assertTrue(sync.sync(source) is SyncResult.Updated)
+        settings.setCounterParserEpoch(source.id, 0)
+        http.archiveBytes = archive("v1", mapOf("日" to "sun"), corrupt = setOf("日"))
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Failed)
+        assertEquals(0, settings.counterParserEpoch(source.id))
+        assertEquals("sun", db.content().kanji(source.id).single().title)
+        http.archiveBytes = archive("v1", mapOf("日" to "sun"))
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
+        assertEquals(io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH,
+            settings.counterParserEpoch(source.id))
+    }
+
     @Before
     fun setUp() {
         val context = RuntimeEnvironment.getApplication()

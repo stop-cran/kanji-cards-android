@@ -99,6 +99,9 @@ data class CounterFile(
     val cards: List<CounterCard> = emptyList(),
     val reverse: List<CounterReverse> = emptyList(),
     val vocabulary: Map<String, CounterWord> = emptyMap(),
+    val group: String = "everyday",
+    val article: String? = null,
+    val expressions: List<CounterExpression> = emptyList(),
 )
 
 @Serializable
@@ -116,6 +119,18 @@ data class CounterCard(
     val hard: List<CounterHard> = emptyList(),
     val distractors: List<String>,
     val note: String? = null,
+    val readingAnswers: List<String> = emptyList(),
+)
+
+@Serializable
+data class CounterExpression(
+    val id: String,
+    val cue: String,
+    val written: String,
+    val writtenAnswers: List<String>,
+    val reading: String,
+    val readingAnswers: List<String>,
+    val explanation: String,
 )
 
 @Serializable

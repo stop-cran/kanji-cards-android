@@ -5,6 +5,8 @@ import io.github.stopcran.kanji.core.content.CounterCard
 import io.github.stopcran.kanji.core.content.CounterFile
 import io.github.stopcran.kanji.core.content.CounterHard
 import io.github.stopcran.kanji.core.content.CounterReverse
+import io.github.stopcran.kanji.core.content.CounterExpression
+import kotlinx.serialization.json.Json
 import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.SrsState
 import org.junit.Assert.assertEquals
@@ -119,7 +121,7 @@ class CountersTest {
     fun counterStatesNeverCollideWithOtherIds() {
         val ids = CounterMode.entries.flatMap { index.ids(it) }
         assertTrue(ids.all { Regex("[a-z]+-[a-z]+-\\d+").matches(it) })
-        assertTrue(CounterMode.entries.map { it.mode.name }.toSet().size == 3)
+        assertEquals(5, CounterMode.entries.map { it.mode.name }.toSet().size)
     }
 
     private fun json(id: String, cards: String, reverse: String = "") =
@@ -164,5 +166,118 @@ class CountersTest {
         val p = parse("counters/hon.json" to json("hon", card("hon-a-1") + "," + card("hon-b-1") + "," + card("hon-c-1"), reverse))
         assertTrue(p.counters.single().reverse.isEmpty())
         assertTrue(p.problems.any { it.contains("missing cards") })
+    }
+
+    private val age = CounterExpression("age-expression-1", "20 years old.", "二十歳",
+        listOf("二十歳", "20歳", "二十才", "20才"), "はたち", listOf("はたち", "にじゅっさい", "にじっさい"), "Age, not a duration.")
+    private fun expressions(item: CounterExpression = age, group: String = "everyday") =
+        CounterFile(2, "age", "歳", "さい", "Age", group = group, article = "articles/counts.md", expressions = listOf(item))
+    private fun encode(file: CounterFile) = Json { encodeDefaults = true }.encodeToString(CounterFile.serializer(), file)
+
+    @Test
+    fun completeWrittenAnswersRejectSuffixesWrongNumbersAndMalformedNumerals() {
+        for (answer in listOf("二十歳", "20才", " ２０ 歳 ")) {
+            assertEquals(answer, CounterVerdict.Good, CounterExpressions.grade(answer, age, false).verdict)
+        }
+        for (answer in listOf("歳", "さい", "はたち", "十十歳", "二十年", "21歳", "")) {
+            assertEquals(answer, CounterVerdict.Wrong, CounterExpressions.grade(answer, age, false).verdict)
+        }
+    }
+
+    @Test
+    fun readingAcceptsKanaVariantsButPreservesSmallKanaAndLongVowels() {
+        for (answer in listOf("はたち", "ハタチ", "にじっさい", "ニジュッサイ")) {
+            assertEquals(answer, CounterVerdict.Good, CounterExpressions.grade(answer, age, true).verdict)
+        }
+        for (answer in listOf("二十歳", "さい", "にじゆっさい", "にじゅさい", "はたちー")) {
+            assertEquals(answer, CounterVerdict.Wrong, CounterExpressions.grade(answer, age, true).verdict)
+        }
+        val clock = age.copy(written = "四時半", writtenAnswers = listOf("四時半", "四時三十分"),
+            reading = "よじはん", readingAnswers = listOf("よじはん"))
+        assertTrue(CounterExpressions.grade("四時三十分", clock, false).ok)
+        assertFalse(CounterExpressions.grade("よじさんじゅっぷん", clock, true).ok)
+        val date = age.copy(written = "一日", reading = "ついたち", readingAnswers = listOf("ついたち"))
+        val duration = date.copy(reading = "いちにち", readingAnswers = listOf("いちにち"))
+        assertFalse(CounterExpressions.grade("いちにち", date, true).ok)
+        assertTrue(CounterExpressions.grade("いちにち", duration, true).ok)
+    }
+
+    @Test
+    fun readingProjectionUsesOnlyDisplayedExpressionReadingsAndOmitsCopyQuestions() {
+        val objectCard = pen.copy(phrase = "八個", reading = "はっこ", kana = listOf("はっこ", "はちこ", "やっつ"),
+            readingAnswers = listOf("はっこ", "はちこ"))
+        val kanaCard = pen.copy(id = "tsu-question-1", phrase = "いくつ", reading = "いくつ")
+        val projected = CounterIndex(listOf(hon.copy(cards = listOf(objectCard, kanaCard))))
+        assertEquals(listOf(objectCard.id), projected.ids(CounterMode.Reading))
+        assertTrue(CounterExpressions.grade("はちこ", projected.expression(objectCard.id), true).ok)
+        assertFalse(CounterExpressions.grade("やっつ", projected.expression(objectCard.id), true).ok)
+        assertEquals(listOf("さんぼん"), index.expression(pen.id).readingAnswers)
+    }
+
+    @Test
+    fun groupQueuesUseIndependentModesWithoutLegacyGatesAndKeepExtraWithinGroup() {
+        val mixed = CounterIndex(listOf(hon, expressions(group = "time")))
+        val time = mixed.inGroup(CounterGroup.Time)
+        assertTrue(time.ids(CounterMode.Choose).isEmpty())
+        assertEquals(listOf(age.id), time.ids(CounterMode.Expression))
+        assertEquals(listOf(age.id), time.ids(CounterMode.Reading))
+        val none = emptyMap<String, SrsState>()
+        for (mode in listOf(CounterMode.Expression, CounterMode.Reading)) {
+            assertEquals(listOf(age.id), CounterQueues.eligible(mode, time, none, none))
+            assertTrue(CounterQueues.build(time, CounterQueueRequest(mode, none, none, Instant.EPOCH, 0)).isEmpty())
+            assertEquals(listOf(age.id), CounterQueues.build(time,
+                CounterQueueRequest(mode, none, none, Instant.EPOCH, 0, extraLimit = 10)).map { it.kanji })
+        }
+        assertTrue(mixed.inGroup(CounterGroup.Everyday).ids(CounterMode.Expression).isEmpty())
+        assertEquals(CounterGroup.Time, CounterGroup.fromRoute("cquiz:1:rd:time:extra"))
+        assertEquals(CounterGroup.All, CounterGroup.fromRoute("cquiz:1:ty:extra"))
+    }
+
+    @Test
+    fun filteredReverseQuestionsKeepCrossGroupOptionReferencesWithoutQueueingThem() {
+        val time = CounterIndex(listOf(hon.copy(group = "time"), hiki)).inGroup(CounterGroup.Time)
+        assertEquals(hon.cards.map { it.id }, time.ids(CounterMode.Choose))
+        assertFalse(cat.id in time.ids(CounterMode.Reading))
+        assertEquals(cat, time.referenceCard(cat.id))
+        assertEquals("hon", time.reverseFile("hon-noun-1")?.id)
+        val choose = hon.cards.associate { it.id to solid() }
+        assertEquals(listOf("hon-noun-1"), CounterQueues.eligible(CounterMode.Noun, time, emptyMap(), choose))
+        time.reverse.values.flatMap { it.options }.forEach { time.nounLabel(time.referenceCard(it)) }
+        assertEquals(index.cards.keys, time.inGroup(CounterGroup.All).cards.keys)
+    }
+
+    @Test
+    fun mixedVersionsKeepValidSiblingsAndRejectMalformedUnknownAndCollidingExpressions() {
+        val legacy = "counters/hon.json" to json("hon", card("hon-a-1"))
+        val article = "articles/counts.md" to "# Counting\n"
+        val mixed = parse(legacy, article, "counters/age.json" to encode(expressions()),
+            "counters/future.json" to """{"schemaVersion":9,"id":"future"}""")
+        assertEquals(setOf("age", "hon"), mixed.counters.map { it.id }.toSet())
+        assertTrue(mixed.problems.isNotEmpty())
+        val bad = listOf(
+            encode(expressions(age.copy(writtenAnswers = listOf("歳")))),
+            encode(expressions(age.copy(readingAnswers = listOf("はたち", "ハタチ")))),
+            encode(expressions()).replace("\"Age\"", "\"Age\",\"unknown\":true"),
+            encode(expressions()).replace("\"group\":\"everyday\",", ""),
+            encode(expressions()).replace("\"schemaVersion\":2", "\"schemaVersion\":\"2\"")
+                .replace("\"group\":\"everyday\",", "").replace("\"Age\"", "\"Age\",\"unknown\":true"),
+            encode(expressions()).replace("\"level\":5", "\"level\":\"5\""),
+            encode(expressions()).replace("\"20 years old.\"", "20"),
+            encode(expressions()).replace("\"writtenAnswers\":[\"二十歳\"", "\"writtenAnswers\":[20"),
+        )
+        bad.forEach { text ->
+            val parsed = parse(legacy, article, "counters/age.json" to text)
+            assertEquals(text, listOf("hon"), parsed.counters.map { it.id })
+            assertTrue(parsed.problems.toString(), parsed.problems.isNotEmpty())
+        }
+        val missingArticle = parse(legacy, "counters/age.json" to encode(expressions()))
+        assertEquals(listOf("hon"), missingArticle.counters.map { it.id })
+        assertTrue(missingArticle.problems.any { "article" in it })
+        val invalidEarlierFile = parse(legacy,
+            "counters/age.json" to encode(expressions(age.copy(id = "hon-a-1"))))
+        assertEquals(listOf("hon"), invalidEarlierFile.counters.map { it.id })
+        val collision = parse(article, legacy, "counters/zzz.json" to encode(expressions(age.copy(id = "hon-a-1")).copy(id = "zzz")))
+        assertEquals(listOf("hon"), collision.counters.map { it.id })
+        assertTrue(collision.problems.any { "duplicate card ID" in it })
     }
 }

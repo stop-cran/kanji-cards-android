@@ -55,6 +55,13 @@ class Settings(context: Context) {
 
     fun listeningParserEpoch(sourceId: String): Int = prefs.getInt("listeningParserEpoch:$sourceId", 0)
 
+    fun counterParserEpoch(sourceId: String): Int = prefs.getInt("counterParserEpoch:$sourceId", 0)
+
+    fun setCounterParserEpoch(sourceId: String, epoch: Int) {
+        require(epoch >= 0) { "Counter parser epoch must not be negative." }
+        prefs.edit().putInt("counterParserEpoch:$sourceId", epoch).apply()
+    }
+
     fun setListeningParserEpoch(sourceId: String, epoch: Int) {
         require(epoch >= 0) { "Listening parser epoch must not be negative." }
         prefs.edit().putInt("listeningParserEpoch:$sourceId", epoch).apply()

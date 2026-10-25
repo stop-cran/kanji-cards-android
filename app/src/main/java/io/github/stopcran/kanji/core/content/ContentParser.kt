@@ -2,6 +2,7 @@ package io.github.stopcran.kanji.core.content
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import java.security.MessageDigest
@@ -61,9 +62,14 @@ object ContentParser {
             manifest, files, words.mapTo(hashSetOf()) { it.word },
             manifest.listening.keys.mapTo(hashSetOf()) { it.removePrefix("listening/").removeSuffix(".json") }, imageValidator,
         )
+        val counterFiles = text.counters.filter { f ->
+            (f.article == null || f.article in articleIds).also {
+                if (!it) problems += "counters/${f.id}.json: linked article '${f.article}' is missing"
+            }
+        }
         return ParsedContent(
             manifest, unique, words, text.articles, text.strokes, problems,
-            resolveCounters(text.counters, problems), images, vocabularySets, grammarProblems,
+            resolveCounters(counterFiles, problems), images, vocabularySets, grammarProblems,
             listening.records, listening.audio, listening.problems, curriculum, tasks,
         )
     }
@@ -335,7 +341,7 @@ object ContentParser {
     private fun resolveCounters(files: List<CounterFile>, problems: MutableList<String>): List<CounterFile> {
         val seen = HashSet<String>()
         val kept = files.sortedBy { it.id }.filter { f ->
-            val ids = f.cards.map { it.id } + f.reverse.map { it.id }
+            val ids = f.cards.map { it.id } + f.reverse.map { it.id } + f.expressions.map { it.id }
             val clash = ids.firstOrNull { it in seen }
             if (clash != null) problems += "counters/${f.id}.json: duplicate card ID '$clash'"
             else seen += ids
@@ -353,24 +359,68 @@ object ContentParser {
     }
 
     fun parseCounter(path: String, text: String): CounterFile {
-        val f = json.decodeFromString(CounterFile.serializer(), text)
-        require(f.schemaVersion == 1) { "unsupported counters schema ${f.schemaVersion}" }
+        val fields = json.parseToJsonElement(text).jsonObject
+        val version = fields["schemaVersion"] as? JsonPrimitive
+        require(version != null && !version.isString && version.content in listOf("1", "2")) { "unsupported counter schema version" }
+        if (version.content == "2") {
+            require(fields.keys.containsAll(setOf(
+                "schemaVersion", "id", "counter", "reading", "title", "level", "group", "article", "expressions",
+            ))) { "incomplete expression file" }
+            requireCounterStrings(fields, listOf("id", "counter", "reading", "title", "group", "article"))
+            require((fields["level"] as? JsonPrimitive)?.let { !it.isString && it.content in listOf("1", "2", "3", "4", "5") } == true) {
+                "counter level must be an integer 1-5"
+            }
+            fields["sources"]?.jsonArray?.forEach { requireCounterString(it) }
+            fields["expressions"]!!.jsonArray.forEach { raw ->
+                val item = raw.jsonObject
+                requireCounterStrings(item, listOf("id", "cue", "written", "reading", "explanation"))
+                listOf("writtenAnswers", "readingAnswers").forEach { key ->
+                    requireNotNull(item[key]) { "missing $key" }.jsonArray.forEach { requireCounterString(it) }
+                }
+            }
+            fields["vocabulary"]?.jsonObject?.values?.forEach { word ->
+                word.jsonObject.values.forEach { requireCounterString(it) }
+            }
+        }
+        val decoder = if (version.content == "2") Json else json
+        val f = decoder.decodeFromString(CounterFile.serializer(), text)
+        require(f.schemaVersion in 1..2) { "unsupported counters schema ${f.schemaVersion}" }
         require(f.id == path.substringAfterLast('/').removeSuffix(".json")) { "'id' must match the file name" }
+        require(f.group in listOf("everyday", "time")) { "unknown counter group '${f.group}'" }
+        require(f.article == null || f.article.matches(Regex("articles/[a-z0-9-]+\\.md"))) { "invalid counter article path" }
+        if (f.schemaVersion == 2) {
+            io.github.stopcran.kanji.core.counters.CounterExpressions.validate(f)
+            return f
+        }
+
+        require(f.expressions.isEmpty()) { "whole expressions require counters schema 2" }
         require(f.counter.isNotBlank() && f.cards.isNotEmpty()) { "missing counter or cards" }
         for (c in f.cards) {
+            if (c.readingAnswers.isNotEmpty()) {
+                io.github.stopcran.kanji.core.counters.CounterExpressions.validateReadings(c.id, c.reading, c.readingAnswers)
+            }
             require(c.id.isNotBlank() && c.text.split("{}").size == 2) { "card '${c.id}' needs exactly one {} blank" }
             require(c.good.isNotEmpty() && c.reading.isNotBlank() && c.noun.isNotBlank()) { "card '${c.id}' is incomplete" }
             require(c.distractors.size == MAX_QUIZ_DISTRACTORS && c.distractors.toSet().size == MAX_QUIZ_DISTRACTORS && f.counter !in c.distractors) {
                 "card '${c.id}' needs $MAX_QUIZ_DISTRACTORS distinct distractors other than the counter"
             }
         }
-        require(f.cards.map { it.id }.toSet().size == f.cards.size) { "duplicate card IDs" }
+        val ids = f.cards.map { it.id } + f.reverse.map { it.id }
+        require(ids.toSet().size == ids.size) { "duplicate card IDs" }
         for (r in f.reverse) {
             require(r.options.size == 4 && r.options.toSet().size == 4 && r.answer in r.options) {
                 "reverse '${r.id}' needs 4 distinct options including the answer"
             }
         }
         return f
+    }
+
+    private fun requireCounterStrings(fields: JsonObject, keys: List<String>) {
+        keys.forEach { requireCounterString(fields[it]) }
+    }
+
+    private fun requireCounterString(value: kotlinx.serialization.json.JsonElement?) {
+        require(value is JsonPrimitive && value.isString) { "counter text must be a JSON string" }
     }
 
     fun parseKanji(path: String, text: String): KanjiCard {
