@@ -81,7 +81,7 @@ internal fun ListeningTaskEncounterView(vm: ListeningTaskViewModel, onBack: () -
                     }) {
                         Text(task.taskType.label, style = MaterialTheme.typography.titleMedium)
                         Text(task.taskType.objective)
-                        Text("${if (row.kind == "study") "Unscored study" else "Guided practice"} - ${row.sourceId} (${row.branch})",
+                        Text("N${task.jlpt} - ${if (row.kind == "study") "Unscored study" else "Guided practice"} - ${row.sourceId} (${row.branch})",
                             style = MaterialTheme.typography.bodySmall)
                         if (state.describedStudy) {
                             Text("Described study is unscored; it is not an equivalent scored nonvisual presentation.")

@@ -70,6 +70,28 @@ class ListeningTaskContentTest {
         }
     }
 
+    @Test fun schemaTwoSupportsOnlyN4AndNeverInheritsN5MediaApproval() {
+        listOf("open-window", "rainy-class", "borrow-pencil", "park-invitation").forEach { name ->
+            val n5 = taskFixture(name).task
+            val n4 = n5.copy(schemaVersion = 2, jlpt = 4, blueprint = "n4-section-v1")
+            assertFalse(parse(encode(n4), n4.id).ready)
+            assertNotEquals(parse(encode(n5), n5.id).contentHash, parse(encode(n4), n4.id).contentHash)
+            listOf(n4.copy(schemaVersion = 1), n4.copy(jlpt = 5), n4.copy(jlpt = 3),
+                n4.copy(blueprint = ListeningTaskContent.BLUEPRINT)).forEach { invalid ->
+                assertThrows(IllegalArgumentException::class.java) { parse(encode(invalid), invalid.id) }
+            }
+        }
+        val approved = approvedTask().task
+        assertThrows(IllegalArgumentException::class.java) {
+            parse(encode(approved.copy(schemaVersion = 2, jlpt = 4)), approved.id)
+        }
+        assertTrue(approvedTask(approved.copy(schemaVersion = 2, jlpt = 4)).ready)
+        val raw = Json.parseToJsonElement(encode(approved.copy(schemaVersion = 2, jlpt = 4))).jsonObject
+        listOf(JsonPrimitive("4"), JsonPrimitive(true), JsonPrimitive(4.0), JsonNull).forEach { value ->
+            assertThrows(IllegalArgumentException::class.java) { parse(JsonObject(raw + ("jlpt" to value)).toString(), approved.id) }
+        }
+    }
+
     @Test fun fixedSpokenNumberingStageOrderAndStoryEvidenceAreValidated() {
         val task = taskFixture("park-invitation").task
         listOf(
@@ -112,7 +134,7 @@ class ListeningTaskContentTest {
         val audio = taskTone()
         val path = "listening-tasks/${record.task.id}.json"
         val unsupportedPath = "listening-tasks/future.json"
-        val unsupported = """{"schemaVersion":2}""".toByteArray()
+        val unsupported = """{"schemaVersion":3}""".toByteArray()
         val manifest = Manifest(1, "fixture", emptyMap(),
             listeningTasks = hashes(mapOf(path to ContentParser.sha256(text), unsupportedPath to ContentParser.sha256(unsupported))),
             listeningTaskAudio = hashes(mapOf("task-audio/test-tone.ogg" to ContentParser.rawSha256(audio),

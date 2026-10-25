@@ -16,6 +16,8 @@ import java.time.Instant
 import java.time.ZoneId
 import java.util.UUID
 
+data class ListeningTaskStart(val study: Boolean = false, val extra: Boolean = false, val described: Boolean = false)
+
 class ListeningTaskStudy(
     private val db: AppDatabase, private val settings: Settings,
     private val clock: () -> Instant = Instant::now, private val zone: () -> ZoneId = ZoneId::systemDefault,
@@ -48,12 +50,18 @@ class ListeningTaskStudy(
         return standalone && ungraded && completeDraft
     }
 
-    internal suspend fun overview(sourceId: String): ListeningQueue =
-        db.withTransaction { db.listeningQueue(settings, sourceId, clock(), zone(), supportedTypes) }
+    internal suspend fun overview(sourceId: String, format: String = "all"): ListeningQueue =
+        db.withTransaction { db.listeningQueue(settings, sourceId, clock().atZone(zone()), supportedTypes,
+            ListeningSelection(settings.listeningScopeFor(sourceId), format)) }
 
     suspend fun start(
         sourceId: String, taskId: String, study: Boolean = false, extra: Boolean = false, described: Boolean = false,
+    ): String = start(sourceId, taskId, ListeningSelection(settings.listeningScopeFor(sourceId)), ListeningTaskStart(study, extra, described))
+
+    suspend fun start(
+        sourceId: String, taskId: String, selection: ListeningSelection, request: ListeningTaskStart = ListeningTaskStart(),
     ): String = db.withTransaction {
+        val (study, extra, described) = request
         require(settings.source.value.id == sourceId) { "Selected content source changed; reopen Listening" }
         checkMode(study, extra, described)
         val dao = db.listeningTasks()
@@ -63,9 +71,10 @@ class ListeningTaskStudy(
             return@withTransaction it.id
         }
         db.requireNoOtherListeningActivity(sourceId)
+        require(selection.scope == settings.listeningScopeFor(sourceId)) { "Selected listening level changed; reopen Listening" }
         val now = clock()
-        val queue = db.listeningQueue(settings, sourceId, now, zone(), supportedTypes)
-        val row = requireNotNull(queue.tasks.find { it.id == taskId }) { "Task is no longer available" }
+        val queue = db.listeningQueue(settings, sourceId, now.atZone(zone()), supportedTypes, selection)
+        val row = requireNotNull(queue.tasks.find { it.id == taskId }) { "Task is unavailable in the selected listening level/format" }
         checkEligibility(queue, row, study, extra)
         val captured = ListeningTaskContent.parse("listening-tasks/$taskId.json", requireNotNull(row.json))
         require(captured.ready && captured.contentHash == row.contentHash && captured.task.exposureId == row.exposureId) { "Task changed; sync again" }

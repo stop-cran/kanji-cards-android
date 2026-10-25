@@ -1,7 +1,8 @@
 # N4 listening extension
 
 Adopted design from [content A / #48](https://github.com/stop-cran/learning-japanese/issues/48)
-and its independently reconciled A-G work items. **Software and media implementation are pending.**
+and its independently reconciled A-G work items. **B implements package/scoped-practice/capacity
+support; C's diagnostic profile and the real media pool remain pending.**
 The [N4 authoring profile](https://github.com/stop-cran/learning-japanese/blob/main/docs/listening-n4.md)
 and [source ledger](https://github.com/stop-cran/learning-japanese/blob/main/docs/listening-n4-sources.json)
 own language/coverage evidence. This extension preserves [contract 1](LISTENING-TASKS.md)
@@ -13,7 +14,7 @@ for N5 and changes only the explicitly identified N4/runtime-capacity behavior b
 schema-1/policy-1/N5 Japanese tasks and new schema-2/policy-1/N4 tasks. The latter use the
 same four stage/choice shapes and separate task/media namespaces. Legacy English-question
 packages remain N5-only. Strict unsupported-version detection precedes media decoding.
-Advance the accepted source-scoped task parser epoch, not historical learning policy;
+Accepted source-scoped task parser epoch **2** advances support, not historical learning policy;
 failed refresh retains the accepted catalog, captured encounters, identities and media pins.
 
 Source-saved practice scope is N5 by default, with an explicit N4 + N5 choice. Compute
@@ -24,8 +25,11 @@ visible even when corresponding due items are outside the scope. Level scope gov
 browsing, Study, new/due/extra queues, home summaries and reminders; format is a browser filter.
 Captured activities outside a new scope remain explicitly resumable. No new stack, SRS
 identity, allowance, auto-enrollment or mastery gate is introduced.
+Unsupported placeholders have no trusted level and remain visible under All formats as
+unavailable notices, never eligible candidates. Level metadata is read from accepted task JSON.
+The selected level persists per source, while the format is saved browser state.
 
-App download/retained caps become 48/64 MiB; content publication guards become 42 MiB
+App download/retained caps are 48/64 MiB; content publication guards are 42 MiB
 compressed, 56 MiB retained and 20 MiB combined task audio/images. Inflation remains
 100 MiB app/80 MiB publishing, entries 8,000/7,000, audio files 512 KiB and images 150 KiB.
 Path, codec, hash, exact-approval and expansion checks remain strict. The last measured

@@ -8,6 +8,7 @@ import io.github.stopcran.kanji.core.counters.CounterScope
 import io.github.stopcran.kanji.core.focus.FocusBatch
 import io.github.stopcran.kanji.core.grammar.GrammarScope
 import io.github.stopcran.kanji.core.grammar.GrammarTargetKind
+import io.github.stopcran.kanji.core.listening.ListeningScope
 import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.unlock.UnlockRule
 import io.github.stopcran.kanji.core.words.WordStacks
@@ -53,6 +54,23 @@ class Settings(context: Context) {
         prefs.all.filterKeys { it.startsWith(COUNTER_SCOPE) }.mapKeys { it.key.removePrefix(COUNTER_SCOPE) }.mapValues { entry ->
             CounterScope.entries.firstOrNull { it.code == entry.value } ?: CounterScope.N5.also {
                 Log.w("CounterScope", "Unknown saved counter scope; using N5.")
+            }
+        }
+
+    private val _listeningScopes = MutableStateFlow(loadListeningScopes())
+    val listeningScopes: StateFlow<Map<String, ListeningScope>> = _listeningScopes
+
+    fun listeningScopeFor(sourceId: String): ListeningScope = _listeningScopes.value[sourceId] ?: ListeningScope.N5
+
+    fun setListeningScope(sourceId: String, scope: ListeningScope) {
+        prefs.edit().putString("$LISTENING_SCOPE$sourceId", scope.code).apply()
+        _listeningScopes.update { it + (sourceId to scope) }
+    }
+
+    private fun loadListeningScopes(): Map<String, ListeningScope> =
+        prefs.all.filterKeys { it.startsWith(LISTENING_SCOPE) }.mapKeys { it.key.removePrefix(LISTENING_SCOPE) }.mapValues { entry ->
+            ListeningScope.entries.firstOrNull { it.code == entry.value } ?: ListeningScope.N5.also {
+                Log.w("ListeningScope", "Unknown saved listening scope; using N5.")
             }
         }
 
@@ -342,6 +360,7 @@ class Settings(context: Context) {
         const val KEY_LAST_CHECK = "lastCheckMs"
         const val GRAMMAR_NEW = "grammarNew:"
         private const val COUNTER_SCOPE = "counterScope:"
+        private const val LISTENING_SCOPE = "listeningScope:"
         const val GRAMMAR_BROWSE = "grammarBrowse:"
         const val GRAMMAR_EPOCH = "grammarParserEpoch:"
         const val GRAMMAR_GUIDED = "grammarGuided:"

@@ -89,6 +89,27 @@ internal class ListeningUiFixture : AutoCloseable {
             study = described, extra = !described, described = described)
     }
 
+    fun addN4Fixtures(): List<ListeningTaskRecord> = runBlocking {
+        val n4 = records.map { original ->
+            val id = original.task.id.replaceFirst("n5-", "n4-")
+            val draft = original.task.copy(id = id, exposureId = id, schemaVersion = 2, jlpt = 4,
+                title = "N4 fixture - ${original.task.taskType.wire}", media = null, approval = null)
+            val hash = ListeningTaskContent.parse("listening-tasks/$id.json",
+                Json.encodeToString(ListeningTaskPackage.serializer(), draft)).contentHash
+            val media = requireNotNull(original.task.media).copy(contentSha256 = hash)
+            val task = draft.copy(media = media, approval = TaskApproval("approved", hash, ListeningTaskContent.mediaHash(media),
+                "2026-10-25", "Synthetic level/filter UI fixture only; not N4 learning content or listening approval."))
+            ListeningTaskContent.parse("listening-tasks/$id.json", Json.encodeToString(ListeningTaskPackage.serializer(), task))
+        }
+        db.withTransaction {
+            val result = db.importListeningTasks(ParsedContent(Manifest(1, "mixed-level-ui-fixture", emptyMap()), emptyList(),
+                emptyList(), emptyList(), emptyMap(), emptyList(),
+                listeningTasks = ListeningTaskCatalog(records = records + n4, assets = assets)), settings.source.value, "c".repeat(40))
+            require(result.problems.isEmpty()) { result.problems.joinToString() }
+        }
+        n4
+    }
+
     fun assessmentPool(): List<ListeningTaskRecord> = runBlocking {
         val long = asset("assessment-tone.ogg")
         val pool = ListeningAssessmentBlueprint.groups.flatMap { group ->

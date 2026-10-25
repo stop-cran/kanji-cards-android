@@ -11,6 +11,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Assert.fail
 import org.junit.Test
 import java.io.ByteArrayInputStream
@@ -581,6 +582,15 @@ class ContentTest {
             }
         }
         return out.toByteArray()
+    }
+
+    @Test fun defaultRetainedLimitAccepts64MiBAndRejectsOneMoreByte() {
+        val chunk = "x".repeat(2 * 1024 * 1024)
+        val entries = (0..31).map { "repo/articles/size-$it.md" to chunk }
+        val atLimit = zip(*entries.toTypedArray())
+        assertEquals(64 * 1024 * 1024, SafeZip.read(ByteArrayInputStream(atLimit)).values.sumOf { it.size })
+        val tooLarge = zip(*(entries + ("repo/articles/extra.md" to "x")).toTypedArray())
+        assertThrows(ContentException::class.java) { SafeZip.read(ByteArrayInputStream(tooLarge)) }
     }
 
     @Test

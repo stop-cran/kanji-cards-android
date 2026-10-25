@@ -229,20 +229,20 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
         http.open(url, emptyMap(), 15_000, 30_000).use { r ->
             if (r.code == 404) throw ContentException("Repository or branch not found (or private)")
             if (r.code !in 200..299) throw java.io.IOException("HTTP ${r.code}")
-            block(CappedInputStream(r.body, MAX_DOWNLOAD_BYTES))
+            block(CappedInputStream(r.body))
         }
-    private class CappedInputStream(private val inner: java.io.InputStream, private val max: Long) : java.io.FilterInputStream(inner) {
+    internal class CappedInputStream(private val inner: java.io.InputStream) : java.io.FilterInputStream(inner) {
         private var total = 0L
 
         override fun read(): Int = inner.read().also { if (it >= 0) count(1) }
         override fun read(b: ByteArray, off: Int, len: Int): Int = inner.read(b, off, len).also { if (it > 0) count(it) }
         private fun count(n: Int) {
             total += n
-            if (total > max) throw ContentException("Archive is too large")
+            if (total > MAX_DOWNLOAD_BYTES) throw ContentException("Archive is too large")
         }
     }
     private companion object {
-        const val MAX_DOWNLOAD_BYTES = 30L * 1024 * 1024
+        const val MAX_DOWNLOAD_BYTES = 48L * 1024 * 1024
         const val LAUNCH_INTERVAL_MS = 6L * 60 * 60 * 1000
     }
 }

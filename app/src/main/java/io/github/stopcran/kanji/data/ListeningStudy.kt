@@ -59,10 +59,12 @@ class ListeningStudy(
             }
         }
 
-    suspend fun overview(sourceId: String): ListeningOverview = db.withTransaction { overviewInside(sourceId, clock()) }
+    suspend fun overview(sourceId: String, format: String = "all"): ListeningOverview = db.withTransaction {
+        overviewInside(sourceId, clock(), ListeningSelection(settings.listeningScopeFor(sourceId), format))
+    }
 
-    private suspend fun overviewInside(sourceId: String, now: Instant): ListeningOverview {
-        val queue = db.listeningQueue(settings, sourceId, now, zone())
+    private suspend fun overviewInside(sourceId: String, now: Instant, selection: ListeningSelection): ListeningOverview {
+        val queue = db.listeningQueue(settings, sourceId, now.atZone(zone()), selection = selection)
         val legacyIds = queue.passages.mapTo(hashSetOf()) { it.id }
         val taskIds = queue.tasks.mapTo(hashSetOf()) { it.id }
         return ListeningOverview(
@@ -74,14 +76,19 @@ class ListeningStudy(
         )
     }
 
-    suspend fun start(sourceId: String, passageId: String, study: Boolean = false, extra: Boolean = false): String = lock.withLock {
+    suspend fun start(
+        sourceId: String, passageId: String, study: Boolean = false, extra: Boolean = false,
+        selection: ListeningSelection = ListeningSelection(settings.listeningScopeFor(sourceId)),
+    ): String = lock.withLock {
         require(!study || !extra) { "Extra listening practice is scored, not unscored study" }
         try {
-            db.withTransaction { createEncounter(sourceId, passageId, study, extra) }
+            db.withTransaction { createEncounter(sourceId, passageId, study, extra, selection) }
         } catch (e: InvalidListeningAudio) { blockInvalidAudio(e) }
     }
 
-    private suspend fun createEncounter(sourceId: String, passageId: String, study: Boolean, extra: Boolean): String {
+    private suspend fun createEncounter(
+        sourceId: String, passageId: String, study: Boolean, extra: Boolean, selection: ListeningSelection,
+    ): String {
         require(settings.source.value.id == sourceId) { "The selected content source changed; reopen Listening" }
         val dao = db.listening()
         dao.active(sourceId)?.let { active ->
@@ -89,9 +96,10 @@ class ListeningStudy(
             return active.id
         }
         db.requireNoOtherListeningActivity(sourceId)
+        require(selection.scope == settings.listeningScopeFor(sourceId)) { "Selected listening level changed; reopen Listening" }
         val now = clock()
-        val home = overviewInside(sourceId, now)
-        val row = requireNotNull(home.passages.find { it.id == passageId }) { "Listening passage is no longer available" }
+        val home = overviewInside(sourceId, now, selection)
+        val row = requireNotNull(home.passages.find { it.id == passageId }) { "Passage is unavailable in the selected listening level/format" }
         require(row.ready) { row.reason ?: "Listening audio has not been approved" }
         val eligible = if (extra) home.extra else home.due + home.fresh
         require(study || passageId in eligible) { "This passage is not eligible for a new scored attempt now" }

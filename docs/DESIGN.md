@@ -253,9 +253,23 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 
 ### N5 listening
 
-The adopted [N4 extension](LISTENING-N4.md) separately records the planned schema-2
-packages, level scopes, finite capacity and diagnostic profile. Its software/media work
-is pending; the existing N5 behavior below is unchanged.
+The [N4 extension](LISTENING-N4.md) adds schema-2/policy-1/N4 tasks alongside unchanged
+schema-1/policy-1/N5 tasks. Task parser epoch 2 reimports unchanged revisions after upgrade;
+failure preserves accepted history, captures and media pins. No N5 content is relabeled.
+Its diagnostic profile and actual N4 recordings remain separate pending installments.
+
+Listening practice defaults to a source-saved N5 scope, with explicit cumulative N4 + N5.
+The browser intersects level and format before bounded fresh allocation, not after selecting
+hidden items. Due/extra/Study, home summaries, reminders and start admission use that scope.
+Allowances, reservations and actionable due backlog remain source-wide; the browser explains
+hidden-backlog effects. A changed scope cannot admit a stale start, erase progress, multiply
+budgets or retarget/hide an existing capture. Unknown-level unsupported placeholders remain
+unavailable notices under All formats. All four guided hosts label their captured task level.
+
+The bounded archive download/retained caps are now 48/64 MiB. Inflation (100 MiB), entry
+count (8,000) and per-file limits are unchanged. Older 30-MiB clients cannot fetch an oversized
+future archive; they retain offline content and report failure. Deliver the upgraded APK
+before such publication. N4 fixture/native checks do not approve Japanese recordings.
 
 The adopted [Japanese task/assessment contract](LISTENING-TASKS.md) settles the design gate for #66
 under delegated autonomous decision-making. B supplies the shared data/media infrastructure described below;

@@ -13,6 +13,9 @@ import io.github.stopcran.kanji.core.content.ContentParser
 import io.github.stopcran.kanji.core.content.ParsedContent
 import io.github.stopcran.kanji.core.listening.*
 import io.github.stopcran.kanji.core.srs.Grade
+import io.github.stopcran.kanji.core.srs.CardPhase
+import io.github.stopcran.kanji.core.srs.SrsState
+import io.github.stopcran.kanji.core.srs.StudyMode
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
@@ -88,6 +91,93 @@ class ListeningTaskStudyTest {
         study.completed(id, token)
     }
     private suspend fun hearAll(id: String) { repeat(fixture.task.stages.size) { play(id) } }
+
+    @Test fun hiddenLevelAndFormatCandidatesCannotConsumeVisibleFreshSlots() = runBlocking {
+        val n4 = (0..9).map { index -> approvedTask(fixture.task.copy(
+            id = "n4-hidden-$index", exposureId = "n4-hidden-$index", schemaVersion = 2, jlpt = 4)) }
+        val quick = (0..9).map { index -> approvedTask(taskFixture("park-invitation").task.copy(
+            id = "n5-other-format-$index", exposureId = "n5-other-format-$index")) }
+        install(n4 + quick + fixture)
+        assertEquals(ListeningScope.N5, settings.listeningScopeFor(source))
+        assertTrue(study.overview(source).tasks.none { it.id.startsWith("n4-") })
+        assertNotEquals(fixture.task.id, study.overview(source).fresh.single())
+        settings.setListeningScope(source, ListeningScope.N4)
+        assertNotEquals(fixture.task.id, study.overview(source).fresh.single())
+        settings.setListeningScope(source, ListeningScope.N5)
+        val scoped = study.overview(source, ListeningTaskType.TaskBased.wire)
+        assertEquals(listOf(fixture.task.id), scoped.fresh)
+        assertEquals(listOf(fixture.task.id), scoped.tasks.map { it.id })
+        assertTrue(scoped.passages.isEmpty())
+        val id = study.start(source, fixture.task.id, selection = scoped.selection)
+        settings.setListeningScope(source, ListeningScope.N4)
+        assertEquals(0, study.overview(source).shared.remaining)
+        study.close(id, discard = true)
+        assertEquals(1, study.overview(source).shared.remaining)
+        val recreated = Settings(context)
+        assertEquals(ListeningScope.N4, recreated.listeningScopeFor(source))
+        recreated.setSource("https://github.com/other/source", "main")
+        assertEquals(ListeningScope.N5, recreated.listeningScopeFor("other/source"))
+        assertEquals(ListeningScope.N4, recreated.listeningScopeFor(source))
+    }
+
+    @Test fun hiddenActionableBacklogStillReducesAllowanceButQueuesAndStudyStayScoped() = runBlocking {
+        val n4 = (0..1).map { index -> approvedTask(fixture.task.copy(
+            id = "n4-due-$index", exposureId = "n4-due-$index", schemaVersion = 2, jlpt = 4)) }
+        install(n4 + fixture)
+        n4.forEach { record ->
+            db.reviews().putState(SrsState(phase = CardPhase.Review, due = now.minusSeconds(1))
+                .toEntity(source, LISTENING_STACK, record.task.id, StudyMode.Listening))
+        }
+        val selected = study.overview(source, ListeningTaskType.TaskBased.wire)
+        assertEquals(2, selected.hiddenDueCount)
+        assertTrue(selected.due.isEmpty())
+        assertTrue(selected.allowance.milliseconds < ListeningPolicy.FULL_DAY_MS)
+        assertTrue(selected.extra.none { it.startsWith("n4-") })
+        rejected { study.start(source, n4.first().task.id, study = true) }
+        rejected { study.start(source, n4.first().task.id, extra = true) }
+        rejected { study.start(source, fixture.task.id, request = ListeningTaskStart(study = true),
+            selection = ListeningSelection(ListeningScope.N5, ListeningTaskType.QuickResponse.wire)) }
+        rejected { ListeningStudy(db, settings, { now }, { zone }).start(source, "example", study = true,
+            selection = ListeningSelection(ListeningScope.N5, ListeningTaskType.TaskBased.wire)) }
+        settings.setListeningScope(source, ListeningScope.N4)
+        val expanded = study.overview(source, ListeningTaskType.TaskBased.wire)
+        assertEquals(selected.allowance, expanded.allowance)
+        assertEquals(n4.map { it.task.id }.toSet(), expanded.due.toSet())
+        assertEquals(0, expanded.hiddenDueCount)
+        val id = study.start(source, n4.first().task.id, expanded.selection, ListeningTaskStart(study = true))
+        study.revealEvidence(id, textHelp = true)
+        study.close(id)
+        assertTrue(n4.first().task.id !in study.overview(source).due)
+        assertTrue(n4.first().task.id !in study.overview(source).extra)
+        assertTrue(n4.first().task.id in study.overview(source).cooldowns)
+        assertEquals(2, db.reviews().states(source, LISTENING_STACK, LISTENING_MODE).size)
+    }
+
+    @Test fun staleLevelAdmissionFailsButCapturedN4ResumesAfterScopeAndCatalogChange() = runBlocking {
+        val n4 = approvedTask(fixture.task.copy(id = "n4-captured", exposureId = "n4-captured", schemaVersion = 2, jlpt = 4))
+        install(listOf(n4, fixture))
+        settings.setListeningScope(source, ListeningScope.N4)
+        val before = study.overview(source).selection
+        settings.setListeningScope(source, ListeningScope.N5)
+        rejected { study.start(source, n4.task.id, before, ListeningTaskStart(study = true)) }
+        settings.setListeningScope(source, ListeningScope.N4)
+        val id = study.start(source, n4.task.id, before, ListeningTaskStart(study = true))
+        val captured = row(id)
+        settings.setListeningScope(source, ListeningScope.N5)
+        install(listOf(fixture))
+        study = newStudy()
+        assertEquals(id, study.start(source, n4.task.id, before, ListeningTaskStart(study = true)))
+        assertEquals(captured.contentJson, row(id).contentJson)
+        assertEquals(4, study.record(row(id)).task.jlpt)
+        assertEquals(id, db.listeningTasks().open().single().id)
+        hearAll(id)
+        rejected { study.submit(id) }
+        assertNotNull(db.listeningTasks().asset(source, n4.assetHashes.single()))
+        assertNotNull(row(id).exposedAtMs)
+        assertTrue(db.reviews().allLog().isEmpty())
+        assertEquals(1, db.newAllowance(settings, source, now, zone).remaining)
+        study.close(id)
+    }
 
     @Test fun explicitAuthorStudyCanReadUnapprovedCaptureButCannotAdmitOrGradeDrafts() = runBlocking {
         val ordinary = study

@@ -15,6 +15,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.room.withTransaction
 import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.MainActivity
 import io.github.stopcran.kanji.core.srs.QueueBuilder
@@ -73,6 +74,10 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
             }
             val grammar = app.db.grammarStudy(app.settings, source.id, Instant.ofEpochMilli(now))
             due += QueueBuilder.build(grammar.ordinaryIds, grammar.states, grammar.now, grammar.budget).size
+            val listening = app.db.withTransaction {
+                app.db.listeningQueue(app.settings, source.id, Instant.ofEpochMilli(now).atZone(zone))
+            }
+            due += listening.due.size + listening.fresh.size
             val decision = ReminderPolicy.decide(
                 now, LocalDate.now().atStartOfDay(zone).toInstant().toEpochMilli(), app.db.reviews().lastReviewMs(),
                 app.settings.lastReminderMs, app.settings.remindersIgnored, due,

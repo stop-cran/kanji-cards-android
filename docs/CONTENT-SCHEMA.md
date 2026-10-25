@@ -19,8 +19,9 @@ What the app enforces when importing (`core/content/ContentParser.kt`, `FrontMat
 - The repo archive (`codeload.github.com/<owner>/<repo>/zip/refs/heads/<branch>`) must contain `manifest.json` with `schemaVersion` 1.
 - Only `manifest.json` and files directly in `kanji/`, `words/`, `articles/`, `strokes/`, `counters/`, `grammar/`, `scenes/`, `listening/`, `curriculum/`, `listening-tasks/` are read,
   plus `images/*.webp` and `task-images/*.webp` (at most 150 KiB each), and `audio/*.ogg` and `task-audio/*.ogg` (at most 512 KiB each).
-  Zip-slip paths, more than 8,000 entries, wanted text files over 2 MiB or wanted data over 50 MiB are rejected.
-  The separate 100 MiB inflated limit includes skipped entries too.
+  Zip-slip paths, more than 8,000 entries, wanted text files over 2 MiB or wanted data over 64 MiB are rejected.
+  Downloaded bytes are capped at 48 MiB; the separate 100 MiB inflated limit includes skipped entries too.
+  Older apps retain their last accepted content if an expanded archive exceeds their former 30-MiB download cap.
 - Images are listed in the manifest's separate `images` map with SHA-256 over the raw bytes (no LF normalisation). A word's `image` and
   `image_scene` keys are read together; an image that is missing, oversize, not WebP, hash-mismatched or shared by two words is reported as a
   problem and only that word's picture is dropped.
@@ -271,10 +272,13 @@ Absent audio/review is an explicit pending draft, not grading-ready content. A b
 listening snapshot even with force; valid pending drafts may replace old content. Active encounters pin their original audio
 and presentation independently of later content changes.
 
-## Japanese listening task schema 1
+## Japanese listening task schemas 1 and 2
 
 The [contract-1 infrastructure](LISTENING-TASKS.md) uses separate `listeningTasks`, `listeningTaskAudio`,
-and `listeningTaskImages` manifest maps. Supported packages reject unknown fields, coerced primitive
+and `listeningTaskImages` manifest maps. Schema 1/policy 1 is N5-only; [schema 2/policy 1](LISTENING-N4.md)
+is N4-only, with the same four task shapes and grading. An optional blueprint must match the package
+level (`n5-section-v1` or `n4-section-v1`); parsing it does not enable that diagnostic profile.
+Supported packages reject unknown fields, coerced primitive
 types, incomplete media and stale complete-output approvals. Optional fields are omitted, not null.
 Unknown schema/policy/type entries are unavailable and do not decode unreferenced future media.
 The manifest's new maps retain their raw shape until task validation, so a malformed task map cannot
@@ -287,7 +291,9 @@ permanent scored-ID/exposure bindings, recorded exposures, captured encounters a
 from failed attempts. Corrupt supported imports retain the complete accepted task catalog and assets,
 with an error and an unchanged-HEAD retry. An explicitly unsupported replacement disables that
 known task's current availability even if another package fails; it never changes an open capture.
-Renderer capability is separate from parser capability: B does not enable C/D's unfinished screens.
+Task parser epoch 2 refreshes an unchanged source revision/version after upgrade and advances only
+after acceptance. No Room migration or N5 identity/approval rewrite is needed. All four guided
+formats support either accepted level; N4 diagnostic orchestration remains installment C.
 
 ## Progress export v6
 

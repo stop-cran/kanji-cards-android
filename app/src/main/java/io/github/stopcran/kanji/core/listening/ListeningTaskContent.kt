@@ -13,7 +13,7 @@ import kotlinx.serialization.json.jsonObject
 import java.time.LocalDate
 
 object ListeningTaskContent {
-    const val PARSER_EPOCH = 1
+    const val PARSER_EPOCH = 2
     const val POLICY_VERSION = 1
     const val BLUEPRINT = "n5-section-v1"
     private val json = Json
@@ -62,7 +62,7 @@ object ListeningTaskContent {
             return requireNotNull(value.intOrNull)
         }
         val schema = version("schemaVersion")
-        if (schema != 1) return "This listening task requires a newer app"
+        if (schema !in 1..2) return "This listening task requires a newer app"
         val policy = version("policyVersion")
         if (policy != POLICY_VERSION) return "This listening task requires a newer app"
         val type = raw["taskType"] as? JsonPrimitive
@@ -75,8 +75,11 @@ object ListeningTaskContent {
     private fun validate(p: ListeningTaskPackage) {
         validId(p.id)
         validId(p.exposureId)
-        require(p.jlpt == 5 && p.kind in setOf("dialogue", "monologue")) { "Only N5 dialogue/monologue tasks are supported" }
-        require(p.blueprint == null || p.blueprint == BLUEPRINT) { "Unsupported assessment blueprint" }
+        require(p.schemaVersion == 1 && p.jlpt == 5 || p.schemaVersion == 2 && p.jlpt == 4) {
+            "Listening tasks require schema 1/N5 or schema 2/N4"
+        }
+        require(p.kind in setOf("dialogue", "monologue")) { "Only dialogue/monologue tasks are supported" }
+        require(p.blueprint == null || p.blueprint == "n${p.jlpt}-section-v1") { "Unsupported assessment blueprint" }
         listOf(p.title, p.topic, p.levelRationale, p.explanation).forEach { plain(it) }
         validateTurns(p)
         validateStages(p)

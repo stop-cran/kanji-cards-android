@@ -118,6 +118,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   B's task import has its own Room-stored accepted revision/parser epoch, independent of failed attempts and ordinary sync.
   Do not enable a task renderer merely because its package parses. Shared Listening admission/allowance runs transactionally
   across catalogs; a familiar but never-introduced skill still reserves against other modes. Preserve every owner media pin.
+  N4 tasks require schema 2, not relabeled schema 1. Apply source-saved level and browser-format eligibility before
+  bounded fresh selection; filtering an already truncated global list starves visible candidates. Keep actionable
+  backlog/reservations source-wide, revalidate start scope and never retarget or hide an existing capture.
   Native start acknowledgement must survive coroutine cancellation; clearing a failed stage requires that stage's completion,
   not any successful clip. A partly heard whole replay becomes assistance if abandoned or submitted before completion.
   Consume replay allowance/requested audio assistance only at actual start, not preparation. Persist picture failures before

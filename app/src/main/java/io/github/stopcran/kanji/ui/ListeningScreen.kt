@@ -46,11 +46,12 @@ internal fun rememberListeningHome(app: KanjiApp): State<ListeningHomeState> {
 }
 
 @Composable
-internal fun rememberListeningHome(services: Services): State<ListeningHomeState> {
+internal fun rememberListeningHome(services: Services, format: String = "all"): State<ListeningHomeState> {
     val source by services.settings.source.collectAsState()
     val budget by services.settings.dailyNewCards.collectAsState()
     val week by services.settings.weekPlan.collectAsState()
-    return key(source.id, budget, week) {
+    val scopes by services.settings.listeningScopes.collectAsState()
+    return key(source.id, budget, week, scopes[source.id], format) {
         produceState(ListeningHomeState()) {
             listeningAction({ value = ListeningHomeState(error = it) }) {
                 combine(listOf(
@@ -62,8 +63,8 @@ internal fun rememberListeningHome(services: Services): State<ListeningHomeState
                     flow { while (true) { emit(Unit); delay(30_000) } },
                 )) { Unit }.collectLatest {
                     value = services.db.withTransaction {
-                        ListeningHomeState(services.listening.overview(source.id),
-                            queue = services.listeningTasks.overview(source.id),
+                        ListeningHomeState(services.listening.overview(source.id, format),
+                            queue = services.listeningTasks.overview(source.id, format),
                             resumes = services.db.listening().open() + services.db.listeningTasks().open() +
                                 services.db.listeningTasks().openAssessments(),
                             assessmentPending = services.db.listeningTasks().activeAssessment(source.id) != null,

@@ -12,7 +12,7 @@ object SafeZip {
         /** Scene images are small by contract (<= 100 KiB in the content validator); a larger one is hostile or broken. */
         val maxImageBytes: Long = 150L * 1024,
         val maxAudioBytes: Long = 512L * 1024,
-        val maxTotalBytes: Long = 50L * 1024 * 1024,
+        val maxTotalBytes: Long = 64L * 1024 * 1024,
         /** Everything inflated from the archive, including entries we skip; bounds CPU spent on a hostile zip. */
         val maxInflatedBytes: Long = 100L * 1024 * 1024,
     )

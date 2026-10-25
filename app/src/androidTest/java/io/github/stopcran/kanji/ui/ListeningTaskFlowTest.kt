@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
@@ -24,6 +25,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.stopcran.kanji.core.listening.ListeningTaskType
+import io.github.stopcran.kanji.core.listening.ListeningScope
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.data.ListeningPlayer
 import io.github.stopcran.kanji.data.ListeningTaskAssetEntity
@@ -44,6 +46,66 @@ class ListeningTaskFlowTest {
         rule.activityRule.scenario.onActivity { it.requestedOrientation = request }
         rule.waitUntil(10_000) { rule.activity.resources.configuration.orientation == expected }
         rule.activityRule.scenario.onActivity { it.enableEdgeToEdge() }
+    }
+
+    @Test fun n4ScopeAndFormatStayUsableInNarrowLargeThemesAndOpenOnlyUnscoredFixtureStudy() {
+        ListeningUiFixture().use { fixture ->
+            val n4 = fixture.addN4Fixtures().single { it.task.taskType == ListeningTaskType.QuickResponse }
+            val dark = mutableStateOf(false)
+            val show = mutableStateOf(false)
+            var vm: ListeningTaskViewModel? = null
+            val restoration = StateRestorationTester(rule)
+            restoration.setContent {
+                val config = Configuration(LocalConfiguration.current).apply {
+                    uiMode = if (dark.value) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
+                }
+                CompositionLocalProvider(LocalConfiguration provides config,
+                    LocalDensity provides Density(LocalDensity.current.density, 2f)) {
+                    KanjiTheme { Box(Modifier.width(320.dp)) {
+                        if (show.value) ListeningTaskEncounterView(requireNotNull(vm), {}) { _, _ -> }
+                        else ListeningBrowser(fixture.services, {}) { id ->
+                            vm = ListeningTaskViewModel(fixture.services, id)
+                            show.value = true
+                        }
+                    } }
+                }
+            }
+            try {
+                rule.waitUntil(10_000) { rule.onAllNodesWithText("Study without scoring").fetchSemanticsNodes().size == 4 }
+                rule.onNodeWithText("N5").assertIsSelected()
+                rule.onNodeWithText(n4.task.title).assertDoesNotExist()
+                rule.onNodeWithText("N4 + N5").performScrollTo().performClick()
+                val quick = hasText("Quick response") and hasClickAction()
+                rule.onNode(quick).performScrollTo().performClick()
+                rule.waitUntil(10_000) { rule.onAllNodesWithText("Study without scoring").fetchSemanticsNodes().size == 2 }
+                rule.onNodeWithText("N4 + N5").performScrollTo().assertIsSelected().assertIsDisplayed()
+                screenshot("N4-B-scope-narrow-large-light.png")
+                rule.runOnIdle { dark.value = true }
+                rule.waitForIdle()
+                rule.onNodeWithText("N4 + N5").assertIsDisplayed()
+                screenshot("N4-B-scope-narrow-large-dark.png")
+                restoration.emulateSavedInstanceStateRestore()
+                rule.onNodeWithText("N4 + N5").assertIsSelected()
+                rule.onNode(quick).assertIsSelected()
+                rule.waitUntil(10_000) { rule.onAllNodesWithText(n4.task.title).fetchSemanticsNodes().isNotEmpty() }
+                rule.onNodeWithText(n4.task.title).performScrollTo().assertIsDisplayed()
+                screenshot("N4-B-scoped-entry-narrow-large-dark.png")
+                rule.onAllNodesWithText("Study without scoring").onLast().performScrollTo().performClick()
+                rule.waitUntil(10_000) { vm?.ready == true && vm?.busy == false }
+                val current = requireNotNull(vm)
+                assertEquals(4, current.task?.jlpt)
+                assertEquals("study", current.encounter?.kind)
+                assertFalse(requireNotNull(current.encounter).newReservation)
+                rule.runOnIdle { fixture.services.settings.setListeningScope(fixture.source, ListeningScope.N5) }
+                rule.onNodeWithText("N4 - Unscored study", substring = true).performScrollTo().assertIsDisplayed()
+                rule.onNodeWithText("Check answer").assertDoesNotExist()
+                rule.onNodeWithText("Play remaining stages").performScrollTo().performClick()
+                rule.waitUntil(15_000) { current.attempt?.completedStages?.size == n4.task.stages.size && !current.busy }
+                assertTrue(runBlocking { fixture.db.reviews().allLog().isEmpty() })
+                assertEquals(4, current.task?.jlpt)
+                screenshot("N4-B-unscored-capture-outside-scope.png")
+            } finally { vm?.let(::finish) }
+        }
     }
 
     @Test fun taskBasedVisualHostPlaysChecksAndReturnsThroughCapturedArticle() {

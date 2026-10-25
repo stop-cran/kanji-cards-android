@@ -3,6 +3,7 @@ package io.github.stopcran.kanji.data
 import android.app.Application
 import androidx.room.Room
 import io.github.stopcran.kanji.core.content.ContentParser
+import io.github.stopcran.kanji.core.content.ContentException
 import io.github.stopcran.kanji.core.content.ContentType
 import io.github.stopcran.kanji.core.content.GrammarVocabulary
 import io.github.stopcran.kanji.core.content.GrammarVocabularyData
@@ -16,6 +17,10 @@ import io.github.stopcran.kanji.core.content.SceneCatalog
 import io.github.stopcran.kanji.core.content.WordScene
 import io.github.stopcran.kanji.core.content.WordSceneFile
 import io.github.stopcran.kanji.core.grammar.GrammarScope
+import io.github.stopcran.kanji.core.listening.ListeningScope
+import io.github.stopcran.kanji.core.listening.ListeningTaskContent
+import io.github.stopcran.kanji.core.approvedTask
+import io.github.stopcran.kanji.core.taskTone
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -27,6 +32,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,6 +47,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import java.util.zip.CRC32
 
 private const val SHA_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 private const val SHA_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -144,6 +151,123 @@ private class FakeHttp : ContentHttp {
 @Config(sdk = [28], manifest = Config.NONE, application = Application::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @SQLiteMode(SQLiteMode.Mode.NATIVE)
+class ListeningN4SyncTest {
+    private val source = RepoSource("Owner", "Repo", "main")
+    private val http = FakeHttp()
+    private lateinit var db: AppDatabase
+    private lateinit var settings: Settings
+    private lateinit var sync: ContentSync
+
+    @Before fun setup() {
+        val context = RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("settings", 0).edit().clear().commit()
+        db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
+        settings = Settings(context)
+        sync = ContentSync(db, settings, http)
+        http.archiveBytes = archive("v1", mapOf("日" to "sun"))
+    }
+
+    @After fun cleanup() { db.close() }
+
+    @Test fun actualDownloadCapAccepts48MiBAndRejectsTheNextByte() {
+        val buffer = ByteArray(8192)
+        for (extra in listOf(0, 1)) {
+            ContentSync.CappedInputStream(ByteArrayInputStream(ByteArray(48 * 1024 * 1024 + extra))).use { input ->
+                var read = 0
+                while (read < 48 * 1024 * 1024) {
+                    val count = input.read(buffer)
+                    assertTrue("Download ended before its configured boundary", count > 0)
+                    read += count
+                }
+                assertEquals(48 * 1024 * 1024, read)
+                if (extra == 0) assertEquals(-1, input.read())
+                else assertThrows(ContentException::class.java) { input.read() }
+            }
+        }
+    }
+
+    @Test fun enlargedDownloadAndRetentionGuardsKeepTheLastAcceptedSnapshot() = runBlocking {
+        assertTrue(sync.sync(source) is SyncResult.Updated)
+        val accepted = requireNotNull(db.content().meta(source.id))
+        val acceptedTasks = requireNotNull(db.listeningTasks().sync(source.id))
+        for (compressed in listOf(true, false)) {
+            val out = ByteArrayOutputStream()
+            ZipOutputStream(out).use { zip ->
+                val bytes = ByteArray(if (compressed) 49 * 1024 * 1024 else 2 * 1024 * 1024)
+                repeat(if (compressed) 1 else 33) { index ->
+                    val entry = ZipEntry("repo/${if (compressed) "docs" else "articles"}/padding-$index.md")
+                    if (compressed) {
+                        entry.method = ZipEntry.STORED
+                        entry.size = bytes.size.toLong()
+                        entry.compressedSize = entry.size
+                        entry.crc = CRC32().apply { update(bytes) }.value
+                    }
+                    zip.putNextEntry(entry)
+                    zip.write(bytes)
+                    zip.closeEntry()
+                }
+            }
+            http.headSha = SHA_B
+            http.archiveBytes = out.toByteArray()
+            val result = sync.sync(source)
+            assertTrue(result.toString(), result is SyncResult.Failed && result.message.contains("too large"))
+            assertEquals("sun", db.content().kanji(source.id).single().title)
+            assertEquals(accepted, db.content().meta(source.id))
+            assertEquals(acceptedTasks, db.listeningTasks().sync(source.id))
+        }
+    }
+
+    @Test fun n4EpochRefreshRetriesFailureAndPreservesCapturedN5OnTheSameRevision() = runBlocking {
+        settings.setSource("https://github.com/${source.id}", source.branch)
+        val n5 = approvedTask()
+        val n4 = approvedTask(n5.task.copy(id = "n4-fixture", exposureId = "n4-fixture", schemaVersion = 2, jlpt = 4))
+        val files = mapOf(
+            "kanji/日.md" to kanjiMd("日", "sun").toByteArray(),
+            "listening-tasks/${n5.task.id}.json" to n5.json.toByteArray(),
+            "listening-tasks/${n4.task.id}.json" to n4.json.toByteArray(),
+            "listening-tasks/future.json" to """{"schemaVersion":3,"media":{"future":"unreadable"}}""".toByteArray(),
+            "task-audio/test-tone.ogg" to taskTone(),
+        )
+        http.archiveBytes = archiveFiles("same-task-version", files)
+        val initial = sync.sync(source)
+        assertTrue(initial.toString(), initial is SyncResult.Updated)
+        val study = ListeningTaskStudy(db, settings)
+        val id = study.start(source.id, n5.task.id, study = true)
+        study.revealEvidence(id, textHelp = true)
+        val captured = requireNotNull(db.listeningTasks().encounter(id))
+        val accepted = requireNotNull(db.listeningTasks().sync(source.id))
+        val oldN4 = db.listeningTasks().tasks(source.id).single { it.id == n4.task.id }
+        db.listeningTasks().putTasks(listOf(oldN4.copy(json = null, contentHash = null, exposureId = null,
+            taskType = null, ready = false, reason = "Requires newer app")))
+        db.listeningTasks().putSync(accepted.copy(parserEpoch = 1))
+        val downloads = http.downloads
+        http.archiveBytes = archiveFiles("same-task-version", files + ("task-audio/test-tone.ogg" to byteArrayOf(0)))
+        val failure = sync.sync(source)
+        assertTrue(failure is SyncResult.Updated && failure.problems.isNotEmpty())
+        assertEquals(1, db.listeningTasks().sync(source.id)?.parserEpoch)
+        assertEquals(accepted.acceptedRevision, db.listeningTasks().sync(source.id)?.acceptedRevision)
+        assertEquals(captured, db.listeningTasks().encounter(id))
+        assertNotNull(db.listeningTasks().asset(source.id, n5.assetHashes.single()))
+        http.archiveBytes = archiveFiles("same-task-version", files)
+        val recovered = sync.sync(source)
+        assertTrue(recovered.toString(), recovered is SyncResult.Updated)
+        assertEquals(downloads + 2, http.downloads)
+        assertEquals(ListeningTaskContent.PARSER_EPOCH, db.listeningTasks().sync(source.id)?.parserEpoch)
+        assertEquals(2, db.listeningTasks().tasks(source.id).count { it.ready })
+        assertEquals(1, db.listeningTasks().tasks(source.id).count { it.json == null })
+        assertEquals(captured, db.listeningTasks().encounter(id))
+        assertEquals(1, study.overview(source.id).tasks.count { it.ready })
+        settings.setListeningScope(source.id, ListeningScope.N4)
+        assertEquals(2, study.overview(source.id).tasks.count { it.ready })
+        assertTrue(sync.sync(source) is SyncResult.UpToDate)
+        assertTrue(db.reviews().allLog().isEmpty())
+    }
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28], manifest = Config.NONE, application = Application::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@SQLiteMode(SQLiteMode.Mode.NATIVE)
 class SyncReportingTest {
     private val source = RepoSource("Owner", "Repo", "main")
     private val http = FakeHttp()
@@ -184,7 +308,7 @@ class SyncReportingTest {
             "grammar/${grammar.id}.json" to Json.encodeToString(GrammarSet.serializer(), grammar).toByteArray(),
             "listening/${legacy.id}.json" to
                 Json.encodeToString(io.github.stopcran.kanji.core.listening.ListeningPassage.serializer(), legacy).toByteArray(),
-            "listening-tasks/future.json" to """{"schemaVersion":2}""".toByteArray(),
+            "listening-tasks/future.json" to """{"schemaVersion":3}""".toByteArray(),
         )) as SyncResult.Updated
         assertEquals(6, result.grammar)
         assertEquals(5, result.listening)

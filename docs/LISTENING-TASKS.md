@@ -2,7 +2,8 @@
 
 The adopted [N4 extension](LISTENING-N4.md) separately specifies schema-2 support,
 level scopes, bounded capacity and an N4 diagnostic profile. Its implementation/media
-work is pending; the N5 behavior and acceptance boundaries below remain unchanged.
+profile/media work is pending; B's schema/scoped-practice/capacity support is implemented.
+The N5 learning behavior and acceptance boundaries below remain unchanged.
 
 Design deliverable for [A / #66](https://github.com/stop-cran/kanji-cards-android/issues/66).
 **Independently reviewed implementation contract, adopted under delegated autonomous decision-making.**
@@ -287,6 +288,11 @@ new members without treating them as Grammar evidence. V1-v5 readers/history rem
 missing required v6 members are corruption, not an older-format fallback.
 
 ### Media feasibility after content #37
+
+This is the historical contract-1 budget. [N4 B](LISTENING-N4.md#b-package-support-scope-and-capacity)
+now supersedes its archive capacities with 48/64-MiB app download/retained caps and
+42/56/20-MiB publishing compressed/retained/task-media guards; other bounds remain unchanged.
+That reviewed capacity change is not additional N5 or N4 spending/publication authorization.
 
 The pulled content tree measured 28,911,586 retained bytes, 38,987,881 inflated bytes and a
 22,665,639-byte local ZIP (5,409 entries). The existing conservative 24-MiB ZIP guard leaves only
