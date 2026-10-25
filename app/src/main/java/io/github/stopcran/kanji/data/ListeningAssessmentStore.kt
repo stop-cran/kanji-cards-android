@@ -14,10 +14,12 @@ data class ListeningAssessmentSnapshot(
 internal class ListeningAssessmentStore(private val db: AppDatabase, private val tasks: ListeningTaskStudy) {
     suspend fun read(id: String): ListeningAssessmentSnapshot {
         val row = requireNotNull(db.listeningTasks().assessment(id)) { "Assessment no longer exists" }
-        require(row.policyVersion == ListeningTaskContent.POLICY_VERSION && row.blueprint == ListeningAssessmentBlueprint.ID) {
+        require(row.policyVersion == ListeningTaskContent.POLICY_VERSION) {
             "This captured assessment policy is unsupported; update the app or explicitly discard it"
         }
+        val profile = ListeningAssessmentProfile.fromId(row.blueprint)
         val form = Json.decodeFromString<AssessmentForm>(row.contentJson)
+        require(form.blueprint == row.blueprint && form.jlpt == profile.jlpt) { "Captured assessment profile changed" }
         validate(form)
         val state = Json.decodeFromString<AssessmentState>(row.stateJson)
         require(state.index in form.items.indices && state.generation >= 0 && state.version >= 0) { "Captured assessment cursor is invalid" }
@@ -31,7 +33,8 @@ internal class ListeningAssessmentStore(private val db: AppDatabase, private val
         val result = row.responseJson?.let { Json.decodeFromString<AssessmentResult>(it) }
         require((state.phase == AssessmentPhase.Results) == (result != null)) { "Captured assessment completion state is invalid" }
         result?.let {
-            require(it.version == 1 && it.planned == 24 && it.examples == 4) { "Unsupported captured diagnostic result" }
+            require(it.version == 1 && it.blueprint == form.blueprint && it.jlpt == form.jlpt &&
+                it.planned == profile.scoredCount && it.examples == profile.groups.size) { "Unsupported captured diagnostic result" }
             require(it.responses.map { response -> response.encounterId } == form.items.map { item -> item.encounterId }) {
                 "Captured diagnostic response order changed"
             }
@@ -49,12 +52,13 @@ internal class ListeningAssessmentStore(private val db: AppDatabase, private val
     }
 
     private fun validate(form: AssessmentForm) {
-        require(form.version == 1 && form.blueprint == ListeningAssessmentBlueprint.ID) { "Unsupported captured assessment form" }
-        require(form.projectedMs in ListeningAssessmentBlueprint.MIN_MS..ListeningAssessmentBlueprint.MAX_MS) { "Invalid captured form duration" }
-        require(form.items.size == 28 && form.items.map { it.taskId }.distinct().size == 28 &&
-            form.items.map { it.encounterId }.distinct().size == 28) { "Invalid captured assessment membership" }
+        val profile = form.profile
+        require(form.version == 1) { "Unsupported captured assessment form" }
+        require(form.projectedMs in profile.minimumMs..profile.maximumMs) { "Invalid captured form duration" }
+        require(form.items.size == profile.itemCount && form.items.map { it.taskId }.distinct().size == profile.itemCount &&
+            form.items.map { it.encounterId }.distinct().size == profile.itemCount) { "Invalid captured assessment membership" }
         var offset = 0
-        ListeningAssessmentBlueprint.groups.forEach { group ->
+        profile.groups.forEach { group ->
             val items = form.items.subList(offset, offset + group.scored + 1)
             require(items.all { it.type == group.type } && items.first().example && items.drop(1).none { it.example }) {
                 "Invalid captured assessment group order"
@@ -70,6 +74,7 @@ internal class ListeningAssessmentStore(private val db: AppDatabase, private val
         val binding = row.branch == parent.branch && row.revision == parent.revision && row.contentVersion == parent.contentVersion
         require(ownership && binding && !row.newReservation && !row.introduced && row.reviewLogId == null) { "Invalid diagnostic item ownership" }
         val record = tasks.record(row)
+        require(ListeningAssessmentProfile.fromId(parent.blueprint).includes(record.task)) { "Captured diagnostic task has a different profile/level" }
         require(record.task.id == item.taskId && record.contentHash == item.contentHash && record.mediaHash == item.mediaHash) {
             "Captured diagnostic item changed"
         }
@@ -121,7 +126,8 @@ internal class ListeningAssessmentStore(private val db: AppDatabase, private val
         val scored = responses.filterNot { it.example }
         val complete = fullTimeline && !snapshot.state.interrupted && scored.all { it.outcome != AssessmentOutcome.NotAssessed }
         val result = AssessmentResult(completedFullForm = complete, interrupted = snapshot.state.interrupted,
-            interruptions = snapshot.state.interruptions, planned = scored.size, examples = responses.size - scored.size, responses = responses)
+            interruptions = snapshot.state.interruptions, planned = scored.size, examples = responses.size - scored.size, responses = responses,
+            blueprint = snapshot.form.blueprint, jlpt = snapshot.form.jlpt)
         val state = snapshot.state.copy(phase = AssessmentPhase.Results, paused = false, deadlineMs = null, remainingMs = null,
             version = snapshot.state.version + 1)
         dao.putAssessment(snapshot.row.copy(stateJson = Json.encodeToString(state), responseJson = Json.encodeToString(result)))

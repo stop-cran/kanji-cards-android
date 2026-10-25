@@ -82,7 +82,7 @@ internal fun ListeningBrowser(services: Services, onBack: () -> Unit, onEncounte
                 }
                 OutlinedButton(onClick = { onEncounter("listening-assessment-preview:${java.util.UUID.randomUUID()}") },
                     enabled = !occupied && !busy, modifier = Modifier.fillMaxWidth()) { Text("Japanese diagnostic section") }
-                Text("A separate N5 24-item diagnostic with four examples; no SRS or daily-allowance changes.")
+                Text("Choose a separate N5 (24-item) or N4 (28-item) diagnostic, each with four examples and no SRS or daily-allowance changes.")
                 Text("Shared new-item allowance: ${queue.shared.remaining} of ${queue.shared.total} remaining today.")
                 Text("Listening time budget: ${queue.allowance.milliseconds / 1_000} estimated seconds remaining today.")
                 pacingExplanation(queue.shared)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }

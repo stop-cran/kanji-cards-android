@@ -49,16 +49,27 @@ class ListeningAssessmentFlowTest {
                 assertTrue(runBlocking { fixture.db.listeningTasks().allAssessments().isEmpty() })
                 assertTrue(runBlocking { fixture.db.listeningTasks().allExposures().isEmpty() })
                 screenshot("F-unavailable.png")
+                rule.onNodeWithText("N4").performScrollTo().performClick()
+                rule.waitUntil(10_000) { !vm.busy && vm.preview?.profile == ListeningAssessmentProfile.N4 }
+                rule.onNodeWithText("Capture this section").assertDoesNotExist()
+                assertTrue(vm.preview!!.selection.items.isEmpty())
+                screenshot("N4-C-unavailable.png")
             } finally { rule.runOnIdle { returned.value = true; vm.leave() }; rule.waitForIdle() }
         }
     }
 
-    @Test fun fullFixtureHostKeepsSpokenChoicesHiddenAndMatchesExactSimulatedTimeline() {
+    @Test fun fullFixtureHostKeepsSpokenChoicesHiddenAndMatchesExactSimulatedTimeline() =
+        fullFixtureTimeline(ListeningAssessmentProfile.N5)
+
+    @Test fun n4FullFixtureUsesCapturedTwentyEightItemTotalsAndExactSimulatedTimeline() =
+        fullFixtureTimeline(ListeningAssessmentProfile.N4)
+
+    private fun fullFixtureTimeline(profile: ListeningAssessmentProfile) {
         ListeningUiFixture().use { fixture ->
-            fixture.assessmentPool()
+            fixture.assessmentPool(profile)
             val elapsed = AtomicLong(1_000)
             val study = ListeningAssessmentStudy(fixture.db, fixture.services.settings, fixture.services.listeningTasks, elapsed = elapsed::get)
-            val preview = runBlocking { study.preview(42) }
+            val preview = runBlocking { study.preview(42, profile = profile) }
             val id = runBlocking { study.start(preview) }
             val player = InstantFixturePlayer(elapsed)
             val vm = ListeningAssessmentViewModel(fixture.services, id, player, study)
@@ -69,7 +80,7 @@ class ListeningAssessmentFlowTest {
             try {
                 ready(vm)
                 rule.onNodeWithText("Begin section").performScrollTo().performClick()
-                repeat(28) { index ->
+                repeat(profile.itemCount) { index ->
                     rule.waitUntil(15_000) {
                         val current = vm.snapshot
                         current?.state?.index == index && current.state.phase in setOf(AssessmentPhase.Preview, AssessmentPhase.Answer)
@@ -93,12 +104,14 @@ class ListeningAssessmentFlowTest {
                     rule.waitUntil(5_000) { !vm.busy }
                     expire(study, id, vm, elapsed)
                     if (task.usage == TaskUsage.Example) {
+                        rule.onNodeWithText(task.explanation).performScrollTo().assertIsDisplayed()
                         rule.waitUntil(5_000) { vm.snapshot!!.state.deadlineMs != null }
                         expire(study, id, vm, elapsed)
                     }
                 }
                 rule.waitUntil(10_000) { vm.snapshot!!.result != null }
-                assertEquals(24, vm.snapshot!!.result!!.correct)
+                assertEquals(profile.scoredCount, vm.snapshot!!.result!!.correct)
+                assertEquals(profile.jlpt, vm.snapshot!!.result!!.jlpt)
                 assertTrue(vm.snapshot!!.result!!.completedFullForm)
                 assertEquals(preview.selection.durationMs, elapsed.get() - 1_000)
                 val expected = preview.selection.items.flatMap { candidate ->
@@ -107,19 +120,27 @@ class ListeningAssessmentFlowTest {
                         .map { requireNotNull(task.media).audio.getValue(it.id).sha256 }
                 }
                 assertEquals(expected, player.hashes)
-                rule.onNodeWithText("24 / 24 correct").assertIsDisplayed()
+                rule.onNodeWithText("${profile.scoredCount} / ${profile.scoredCount} correct").performScrollTo().assertIsDisplayed()
                 assertTrue(runBlocking { fixture.db.reviews().allLog().isEmpty() })
-                screenshot("F-simulated-full-result.png")
-                File(fixture.context.filesDir, "F-simulated-full-result.json").writeText(
-                    """{"fixturePlayback":true,"actualJapaneseListeningApproval":false,"nativeFullSection":false,"durationMs":${elapsed.get() - 1_000}}""")
+                screenshot("N${profile.jlpt}-simulated-full-result.png")
+                File(fixture.context.filesDir, "N${profile.jlpt}-simulated-full-result.json").writeText(
+                    """{"profile":"${profile.id}","fixturePlayback":true,"actualJapaneseListeningApproval":false,"nativeFullSection":false,"durationMs":${elapsed.get() - 1_000}}""")
             } finally { finish(vm) { returned.value = true } }
         }
     }
 
-    @Test fun actualNativeInstructionAndSilentPreviewFocusOrBackgroundLossNeverAutoResume() {
+    @Test fun actualNativeInstructionAndSilentPreviewFocusOrBackgroundLossNeverAutoResume() =
+        nativeInterruption(ListeningAssessmentProfile.N5)
+
+    @Test fun n4NativeInstructionAndSilentWindowInterruptionsRetainTheCapturedProfile() =
+        nativeInterruption(ListeningAssessmentProfile.N4)
+
+    private fun nativeInterruption(profile: ListeningAssessmentProfile) {
         ListeningUiFixture().use { fixture ->
-            fixture.assessmentPool()
-            val id = runBlocking { fixture.services.listeningAssessments.start(fixture.services.listeningAssessments.preview(77)) }
+            fixture.assessmentPool(profile)
+            val id = runBlocking {
+                fixture.services.listeningAssessments.start(fixture.services.listeningAssessments.preview(77, profile = profile))
+            }
             val vm = ListeningAssessmentViewModel(fixture.services, id)
             val returned = mutableStateOf(false)
             rule.setContent { KanjiTheme {
@@ -152,11 +173,46 @@ class ListeningAssessmentFlowTest {
                 assertEquals(1, runBlocking { fixture.db.listeningTasks().allExposures().size })
                 assertTrue(runBlocking { fixture.db.reviews().allLog().isEmpty() })
                 rule.onNodeWithText("Continue as interrupted practice").performScrollTo().assertIsDisplayed()
-                screenshot("F-native-focus-background-interruption.png")
+                screenshot("N${profile.jlpt}-native-focus-background-interruption.png")
                 rule.runOnIdle { vm.end() }
                 rule.waitUntil(5_000) { vm.snapshot!!.result != null && !vm.busy }
-                assertEquals(24, vm.snapshot!!.result!!.notAssessed)
+                assertEquals(profile.scoredCount, vm.snapshot!!.result!!.notAssessed)
+                assertEquals(profile.id, vm.snapshot!!.result!!.blueprint)
             } finally { manager.abandonAudioFocusRequest(competing); finish(vm) { returned.value = true } }
+        }
+    }
+
+    @Test fun n4PreflightCapturesOnlyTheConfirmedDiagnosticLevel() {
+        ListeningUiFixture().use { fixture ->
+            fixture.assessmentPool(ListeningAssessmentProfile.N4)
+            val vm = ListeningAssessmentPreviewModel(fixture.services)
+            val returned = mutableStateOf(false)
+            var captured: String? = null
+            rule.setContent { KanjiTheme {
+                if (returned.value) Text("Captured") else ListeningAssessmentPreviewView(vm, { returned.value = true }) {
+                    captured = it
+                    returned.value = true
+                }
+            } }
+            try {
+                rule.waitUntil(10_000) { !vm.busy && vm.preview != null }
+                rule.onNodeWithText("Capture this section").assertDoesNotExist()
+                rule.onNodeWithText("N4").performScrollTo().performClick()
+                rule.waitUntil(10_000) { !vm.busy && vm.preview?.profile == ListeningAssessmentProfile.N4 }
+                rule.onNodeWithText("Capture this section").performScrollTo().assertIsDisplayed()
+                screenshot("N4-C-confirmed-preview.png")
+                rule.onNodeWithText("Capture this section").performClick()
+                rule.waitUntil(10_000) { captured != null && !vm.busy }
+                runBlocking {
+                    val snapshot = fixture.services.listeningAssessments.snapshot(requireNotNull(captured))
+                    assertEquals(4, snapshot.form.jlpt)
+                    assertEquals(32, snapshot.form.items.size)
+                    assertTrue(fixture.db.listeningTasks().allExposures().isEmpty())
+                    assertTrue(fixture.db.reviews().allLog().isEmpty())
+                    fixture.services.listeningAssessments.end(requireNotNull(captured))
+                    fixture.services.listeningAssessments.close(requireNotNull(captured))
+                }
+            } finally { rule.runOnIdle { returned.value = true; vm.leave() }; rule.waitForIdle() }
         }
     }
 

@@ -2,7 +2,7 @@
 
 Adopted design from [content A / #48](https://github.com/stop-cran/learning-japanese/issues/48)
 and its independently reconciled A-G work items. **B implements package/scoped-practice/capacity
-support; C's diagnostic profile and the real media pool remain pending.**
+support; C implements the captured diagnostic profile. The real N4 media pool remains pending.**
 The [N4 authoring profile](https://github.com/stop-cran/learning-japanese/blob/main/docs/listening-n4.md)
 and [source ledger](https://github.com/stop-cran/learning-japanese/blob/main/docs/listening-n4-sources.json)
 own language/coverage evidence. This extension preserves [contract 1](LISTENING-TASKS.md)
@@ -54,11 +54,16 @@ profile, example eligibility, timing, captures, results and exports.
 | Verbal expression | 5 | 10 | 1 |
 | Quick response | 8 | 16 | 1 |
 
-The projected N4 full-form envelope is initially 31-39 minutes, using existing 5-second
+The projected N4 full-form envelope is 31-39 minutes, using existing 5-second
 previews except quick response, 15/10-second focused/spoken-choice answer windows and
 10-second example answer plus 10-second explanation windows. Count every recorded stage
 occurrence; do not add fictional instruction completion or silent padding. Counts and
 tolerances are project design informed by the 2018 sample, not universal JLPT specifications.
+The fixed windows total 550 seconds, leaving 1,310-1,790 seconds for audio occurrences.
+N4 preflight bounds every eligible scored selection and every eligible example, including
+extra fork members; one lucky seed cannot hide an outlier. N5 retains its existing selected-form
+check. An assigned N4 task must have schema 2/level 4, and cannot reuse an N5 story identity,
+including source-scoped legacy passage IDs retained in the catalog or encounter history.
 
 Default N4 scored stories must be unseen. Worked examples may recur after the unchanged
 24-hour exposure cooldown, with example familiarity separately disclosed. This is N4-only:
@@ -68,15 +73,33 @@ after practice or of two immediately available sections.
 
 Capture selected profile/level and all source, package, media, policy, timing and consent
 data. Stale previews require fresh confirmation; live settings cannot retarget a capture.
+Changing diagnostic level clears the preview and familiar-material opt-in. A changed configured
+branch also expires consent, even before sync replaces the accepted snapshot. The preview names
+both branches when it uses last-known-good content from a different configured branch.
+The existing version-1 form/result JSON adds explicit N4 blueprint/level values; omitted fields
+decode as historical N5 defaults. Parent, form, result and captured child membership must agree.
+The versioned profile, policy 1 and captured stage durations determine the fixed timeline;
+changing those rules requires a new version, not reinterpretation of existing captures.
 No cross-level fill, repeated stories, example-as-score, implicit shortened section or
 hidden relaxation of media/accessibility/cooldown rules. Preserve the common active-activity
 guard, all pins, interruption labeling and no-SRS/no-introduction diagnostic behavior.
 Report raw captured-profile denominators and familiarity, never an official scaled score.
+Progress ZIP v6 already exports parent/child captures and raw results, so no format bump is needed.
+The grammar progress analyzer accepts those v6 members but does not score Listening.
 
-The normal pool checker requires approved runtime packages. An explicit read-only
-unpublished-candidate path may verify complete real media, identities, counts and all-form
-extrema without granting approval or scoring readiness. Use the shared timing machinery;
-do not duplicate the player, grading or content-integrity implementation.
+The normal content pool checker requires approved runtime packages. Its default remains N5.
+Use `python -B tools\check_listening_pool.py --root <candidate-tree> --profile n4-section-v1`
+for N4, adding `--unpublished-candidate` only for explicit read-only prepublication feasibility.
+The candidate tree must include complete actual media, existing source identities and a current
+manifest. Candidate mode validates the same shape, files, hashes, identities and all-form extrema;
+malformed approval declarations still fail. It emits `candidateScoredIds`/`candidateExampleIds`,
+never mislabels drafts approved, and states that publication/scoring readiness is **not established**.
+It neither writes approval nor changes normal app/checker admission. Both profiles share the
+existing player, grading, timing and content-integrity machinery.
+
+Native fixtures exercise preflight, 32 captured items, all four families, paced answers,
+interruption/resume and raw N4 results. The full fixture timeline advances a simulated clock;
+native tone playback and synthetic pictures are not actual Japanese/full-section acceptance.
 
 ## Sequential acceptance and publication
 

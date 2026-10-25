@@ -10,6 +10,7 @@ data class ListeningAssessmentPreview(
     val sourceId: String, val branch: String?, val revision: String?, val contentVersion: String?,
     val seed: Long, val includeFamiliar: Boolean, val visualAccess: Boolean, val selection: AssessmentSelection,
     val words: Map<String, Map<String, String>>, val notice: String?,
+    val profile: ListeningAssessmentProfile, val requestedBranch: String,
 )
 
 internal class ListeningAssessmentCapture(
@@ -17,18 +18,20 @@ internal class ListeningAssessmentCapture(
 ) {
     private val assets = ListeningTaskAssets(db)
 
-    suspend fun preview(seed: Long, familiar: Boolean, visual: Boolean): ListeningAssessmentPreview {
-        val source = settings.source.value.id
+    suspend fun preview(seed: Long, familiar: Boolean, visual: Boolean, profile: ListeningAssessmentProfile): ListeningAssessmentPreview {
+        val requested = settings.source.value
+        val source = requested.id
         val dao = db.listeningTasks()
         val sync = dao.sync(source)
         val exposures = db.listening().exposures(source).associate { it.passageId to it.lastPracticeAtMs }
+        val legacyStories = db.listening().knownPassageIds(source).toSet()
         val candidates = dao.tasks(source).filter { it.json != null }.map { row ->
             val record = ListeningTaskContent.parse("listening-tasks/${row.id}.json", requireNotNull(row.json))
             require(record.contentHash == row.contentHash && record.task.exposureId == row.exposureId) { "Cached task changed; sync again" }
             val problem = if (!row.ready) row.reason ?: "Task is unavailable" else assetProblem(source, record)
-            AssessmentCandidate(record, exposures[record.task.exposureId], problem)
+            AssessmentCandidate(record, exposures[record.task.exposureId], problem, record.task.exposureId in legacyStories)
         }
-        var selection = ListeningAssessmentBlueprint.select(candidates, clock().toEpochMilli(), seed, familiar, visual)
+        var selection = profile.select(candidates, clock().toEpochMilli(), seed, familiar, visual)
         val words = selection.items.associate { candidate ->
             val task = candidate.record.task
             val refs = task.vocabulary.mapNotNull { it.word }
@@ -40,7 +43,7 @@ internal class ListeningAssessmentCapture(
             selection = selection.copy(problems = selection.problems + "No accepted Japanese listening source snapshot.")
         }
         return ListeningAssessmentPreview(source, sync?.acceptedBranch, sync?.acceptedRevision, sync?.acceptedContentVersion,
-            seed, familiar, visual, selection, words, sync?.problem)
+            seed, familiar, visual, selection, words, sync?.problem, profile, requested.branch)
     }
 
     private suspend fun assetProblem(source: String, record: ListeningTaskRecord): String? =
@@ -48,9 +51,11 @@ internal class ListeningAssessmentCapture(
         catch (e: IllegalArgumentException) { e.message ?: "Task media is unavailable" }
 
     suspend fun capture(expected: ListeningAssessmentPreview): String {
-        require(expected.sourceId == settings.source.value.id) { "Selected source changed; confirm a fresh assessment preview" }
+        require(expected.sourceId == settings.source.value.id && expected.requestedBranch == settings.source.value.branch) {
+            "Selected source/branch changed; confirm a fresh assessment preview"
+        }
         db.requireNoOtherListeningActivity(expected.sourceId)
-        val current = preview(expected.seed, expected.includeFamiliar, expected.visualAccess)
+        val current = preview(expected.seed, expected.includeFamiliar, expected.visualAccess, expected.profile)
         require(current == expected) { "Assessment availability changed; confirm a fresh preview" }
         require(current.selection.available) { current.selection.problems.joinToString("\n") }
         val id = "listening-assessment:${UUID.randomUUID()}"
@@ -58,13 +63,16 @@ internal class ListeningAssessmentCapture(
         val items = current.selection.items.mapIndexed { index, candidate ->
             captureItem(id, index, current, candidate, now)
         }
-        val form = AssessmentForm(seed = current.seed, includeFamiliar = current.includeFamiliar, visualAccess = current.visualAccess,
+        val form = AssessmentForm(blueprint = current.profile.id, jlpt = current.profile.jlpt, seed = current.seed,
+            includeFamiliar = current.includeFamiliar, visualAccess = current.visualAccess,
             projectedMs = requireNotNull(current.selection.durationMs), items = items)
         db.listeningTasks().putAssessment(ListeningAssessmentEntity(id, current.sourceId, requireNotNull(current.branch),
             current.revision, requireNotNull(current.contentVersion), form.blueprint, ListeningTaskContent.POLICY_VERSION,
             Json.encodeToString(form), Json.encodeToString(AssessmentState()), now))
         db.reviews().insertSession(StudySessionEntity(id, current.sourceId, LISTENING_STACK, LISTENING_MODE, true, now))
-        require(expected.sourceId == settings.source.value.id) { "Selected source changed; confirm a fresh assessment preview" }
+        require(expected.sourceId == settings.source.value.id && expected.requestedBranch == settings.source.value.branch) {
+            "Selected source/branch changed; confirm a fresh assessment preview"
+        }
         return id
     }
 

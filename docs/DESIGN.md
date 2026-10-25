@@ -256,7 +256,8 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 The [N4 extension](LISTENING-N4.md) adds schema-2/policy-1/N4 tasks alongside unchanged
 schema-1/policy-1/N5 tasks. Task parser epoch 2 reimports unchanged revisions after upgrade;
 failure preserves accepted history, captures and media pins. No N5 content is relabeled.
-Its diagnostic profile and actual N4 recordings remain separate pending installments.
+Its exact-level diagnostic profile is implemented independently of practice scope; actual N4
+recordings remain a separate, approval-gated rollout.
 
 Listening practice defaults to a source-saved N5 scope, with explicit cumulative N4 + N5.
 The browser intersects level and format before bounded fresh allocation, not after selecting
@@ -407,21 +408,33 @@ Distinct one/two/three-pulse native fixtures expose swapped media/order, but are
 spoken Japanese. Real script-to-audio correspondence and exact heard numbering still require E's
 actual listener approval. Synthetic scene/short-tone fixtures are not production-media approval.
 
-#### Diagnostic section wrapper (F)
+#### Diagnostic section wrapper (N5 F / N4 C)
 
-Listening has a separate diagnostic entry, not a new scheduling mode. Contract-1 selection requires
+Listening has a separate exact N5/N4 diagnostic selector, not a new scheduling mode or a mirror of
+the cumulative guided-practice scope. N5 contract-1 selection requires
 the approved 8/7/6/7 scored pool and four separate examples, then chooses 7/6/5/6 scored items without
 repeating story identities. Readiness, assets, words, visual access, 24-hour cooldowns, familiarity
 consent and the exact 26-34-minute projection are checked before capture and compared again at Start.
 An unavailable full section explains shortages; it never substitutes a shortened exam.
+`ListeningAssessmentProfile.N4` requires schema-2/level-4 `n4-section-v1` members: a
+16/14/10/16 scored pool, selecting 8/7/5/8 plus four separate examples (32 captured items).
+Its 31-39-minute envelope applies to every eligible selection, including extra fork examples
+and scored candidates. The unchanged fixed windows total 550 seconds; repeated audio stages
+count per occurrence. N4 scored stories are unseen by default; examples may recur only after
+cooldown, with familiarity separately disclosed. N5 keeps its existing familiar-example rule.
+Cross-level story reuse cannot manufacture an independent N4 pool.
 
-`ListeningAssessmentStudy` atomically captures the accepted source, seed, form and all 28 task/word
+`ListeningAssessmentStudy` atomically captures the accepted source, profile/level, seed, form and all task/word
 snapshots, with one assessment media-pin owner. Diagnostic encounters have no reservation, introduction,
 canonical review or SRS write. Responses and cursor transitions share a Room transaction; Skip freezes
 an unanswered response immediately but retains its answer-window deadline. Cancellation marks remaining
 items not assessed without inventing exposure. Results freeze once; the results page retains source
 ownership and pins until Done so captured feedback remains available. Unreadable future-policy captures
 may be explicitly discarded without interpreting or rewriting their unknown responses.
+Parent/form/result profile and child schema/level membership must agree. New explicit N4 JSON values
+preserve historical omitted-field N5 decoding; export v6 already retains this captured data.
+Changing the preview level clears familiar-material consent; changing the configured source/branch
+requires fresh confirmation even when accepted offline content has not changed.
 
 F reuses C/D layout, numbered choices, pictures, transcripts and B's native staged coordinator. Its
 timeline owns the read/answer/example windows; scored instruction omissions do not fabricate completed
@@ -431,10 +444,14 @@ interrupted practice. Lifecycle, window/audio focus, noisy-device events and man
 sequence without automatic restart. A shared audio-focus request stays held through silent windows,
 while ordinary guided/legacy playback still releases its per-stage focus.
 
-Results report raw correct/assessed, unanswered, not-assessed, 24 planned items and four examples, with
+Results report raw correct/assessed, unanswered, not-assessed, captured-profile planned items
+(24 N5 / 28 N4) and four examples, with
 type, familiarity, exposure, picture, help and interruption distinctions. No official JLPT scale,
 prediction or proficiency claim is made. Fixture-backed implementation does not approve E's recordings
 or satisfy the complete approved offline emulator/physical-device acceptance gates.
+The content checker has an explicit read-only `--profile n4-section-v1 --unpublished-candidate`
+mode for complete private media/identity/timing feasibility, not approval or scoring readiness.
+Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTENING-N4.md).
 
 ## 5. Words, levels and advancement
 

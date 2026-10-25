@@ -110,13 +110,14 @@ internal class ListeningUiFixture : AutoCloseable {
         n4
     }
 
-    fun assessmentPool(): List<ListeningTaskRecord> = runBlocking {
+    fun assessmentPool(profile: ListeningAssessmentProfile = ListeningAssessmentProfile.N5): List<ListeningTaskRecord> = runBlocking {
         val long = asset("assessment-tone.ogg")
-        val pool = ListeningAssessmentBlueprint.groups.flatMap { group ->
+        val pool = profile.groups.flatMap { group ->
             val original = records.single { it.task.taskType == group.type }
             (0..group.pool).map { index ->
-                val id = "n5-task-assessment-${group.type.wire}-$index"
-                val draft = original.task.copy(id = id, exposureId = id, blueprint = ListeningAssessmentBlueprint.ID,
+                val id = "n${profile.jlpt}-task-assessment-${group.type.wire}-$index"
+                val draft = original.task.copy(id = id, exposureId = id, blueprint = profile.id,
+                    schemaVersion = profile.schemaVersion, jlpt = profile.jlpt,
                     usage = if (index == 0) TaskUsage.Example else TaskUsage.Scored, media = null, approval = null)
                 val hash = ListeningTaskContent.parse("listening-tasks/$id.json",
                     Json.encodeToString(ListeningTaskPackage.serializer(), draft)).contentHash

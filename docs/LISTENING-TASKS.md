@@ -182,6 +182,10 @@ equivalent requires its own reviewed evidence/policy, not an alt-text shortcut.
 
 ## 5. Diagnostic Japanese exam-style session
 
+This section specifies the historical N5 profile. [N4 C](LISTENING-N4.md#c-captured-n4-diagnostic-profile)
+adds a separate exact-level 28-scored/four-example profile, its own pool/timing envelope and
+cooldown-eligible recurring examples; it does not reinterpret existing N5 captures.
+
 Assessment is **diagnostic only**: no SRS writes, no introductions and no daily learning-budget
 reservation/debit. Entry explicitly warns that listening creates familiarity and a 24-hour cooldown
 for exposed stories. It acquires the same source's active-activity guard; a legacy/guided attempt

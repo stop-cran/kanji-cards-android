@@ -25,7 +25,10 @@ data class AssessmentItem(
 data class AssessmentForm(
     val version: Int = 1, val blueprint: String = ListeningAssessmentBlueprint.ID, val seed: Long,
     val includeFamiliar: Boolean, val visualAccess: Boolean, val projectedMs: Long, val items: List<AssessmentItem>,
-)
+    val jlpt: Int = 5,
+) {
+    val profile: ListeningAssessmentProfile get() = ListeningAssessmentProfile.fromId(blueprint)
+}
 
 @Serializable
 enum class AssessmentOutcome {
@@ -46,6 +49,7 @@ data class AssessmentResponse(
 data class AssessmentResult(
     val version: Int = 1, val completedFullForm: Boolean, val interrupted: Boolean, val interruptions: Set<String>,
     val planned: Int, val examples: Int, val responses: List<AssessmentResponse>,
+    val blueprint: String = ListeningAssessmentBlueprint.ID, val jlpt: Int = 5,
 ) {
     val scored: List<AssessmentResponse> get() = responses.filterNot { it.example }
     val assessed: Int get() = scored.count { it.outcome != AssessmentOutcome.NotAssessed }

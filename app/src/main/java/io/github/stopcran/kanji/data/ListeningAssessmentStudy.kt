@@ -18,8 +18,9 @@ class ListeningAssessmentStudy(
     private val store = ListeningAssessmentStore(db, tasks)
     private val freshCaptures = mutableSetOf<String>()
 
-    suspend fun preview(seed: Long, familiar: Boolean = false, visual: Boolean = true): ListeningAssessmentPreview =
-        db.withTransaction { captures.preview(seed, familiar, visual) }
+    suspend fun preview(
+        seed: Long, familiar: Boolean = false, visual: Boolean = true, profile: ListeningAssessmentProfile = ListeningAssessmentProfile.N5,
+    ): ListeningAssessmentPreview = db.withTransaction { captures.preview(seed, familiar, visual, profile) }
 
     suspend fun start(preview: ListeningAssessmentPreview): String = lock.withLock {
         db.withTransaction { captures.capture(preview) }.also { freshCaptures += it }

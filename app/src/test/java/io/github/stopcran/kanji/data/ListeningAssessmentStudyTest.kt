@@ -13,6 +13,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -73,8 +74,8 @@ class ListeningAssessmentStudyTest {
         }
     }
 
-    private suspend fun start(): String {
-        val preview = study.preview(42)
+    private suspend fun start(profile: ListeningAssessmentProfile = ListeningAssessmentProfile.N5): String {
+        val preview = study.preview(42, profile = profile)
         assertTrue(preview.selection.problems.toString(), preview.selection.available)
         return study.start(preview).also { study.restore(it); study.begin(it) }
     }
@@ -106,8 +107,45 @@ class ListeningAssessmentStudyTest {
     }
 
     @Test fun fullTimelineIsDiagnosticOnlyAndScoredInstructionsAreNotInvented() = runBlocking {
-        val id = start()
-        repeat(28) { index ->
+        verifyFullTimeline(ListeningAssessmentProfile.N5)
+    }
+
+    @Test fun n4FullTimelineAndRawExportRetainTheirCapturedProfileAndDenominators() = runBlocking {
+        install(pool.map { it.record } + assessmentPool(profile = ListeningAssessmentProfile.N4).map { it.record })
+        verifyFullTimeline(ListeningAssessmentProfile.N4)
+        val row = db.listeningTasks().allAssessments().single()
+        assertEquals("n4-section-v1", row.blueprint)
+        val form = Json.decodeFromString<AssessmentForm>(row.contentJson)
+        assertEquals(4, form.jlpt)
+        assertEquals(32, form.items.size)
+        val result = Json.decodeFromString<AssessmentResult>(row.responseJson!!)
+        assertEquals(28, result.planned)
+        assertEquals(4, result.jlpt)
+        assertEquals(form.blueprint, result.blueprint)
+        val bytes = ByteArrayOutputStream()
+        assertEquals(0, ProgressExport.write(db, settings, bytes))
+        var exported = false
+        ZipInputStream(bytes.toByteArray().inputStream()).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                if (entry.name == "listening_assessments.json") {
+                    val parent = Json.parseToJsonElement(zip.readBytes().decodeToString()).jsonArray.single().jsonObject
+                    assertEquals("n4-section-v1", parent.getValue("blueprint").jsonPrimitive.content)
+                    val response = parent.getValue("response").jsonObject
+                    assertEquals("28", response.getValue("planned").jsonPrimitive.content)
+                    assertEquals("4", response.getValue("jlpt").jsonPrimitive.content)
+                    assertEquals(32, response.getValue("responses").jsonArray.size)
+                    exported = true
+                }
+            }
+        }
+        assertTrue(exported)
+    }
+
+    private suspend fun verifyFullTimeline(profile: ListeningAssessmentProfile) {
+        val id = start(profile)
+        settings.setListeningScope(source, ListeningScope.N5)
+        repeat(profile.itemCount) { index ->
             val answer = untilAnswer(id)
             assertEquals(index, answer.state.index)
             study.answer(id, answer.state.generation, answer.record.task.answer)
@@ -118,14 +156,14 @@ class ListeningAssessmentStudyTest {
                 elapsed = requireNotNull(next.state.deadlineMs)
                 next = study.pulse(id, next.state.generation)
             }
-            if (index == 27) assertEquals(AssessmentPhase.Results, next.state.phase)
+            if (index == profile.itemCount - 1) assertEquals(AssessmentPhase.Results, next.state.phase)
         }
         val completed = study.snapshot(id)
-        assertEquals(24, completed.result!!.correct)
-        assertEquals(24, completed.result.assessed)
+        assertEquals(profile.scoredCount, completed.result!!.correct)
+        assertEquals(profile.scoredCount, completed.result.assessed)
         assertTrue(completed.result.completedFullForm)
         assertEquals(4, completed.result.examples)
-        assertEquals(28, db.listeningTasks().allExposures().size)
+        assertEquals(profile.itemCount, db.listeningTasks().allExposures().size)
         assertTrue(db.reviews().allLog().isEmpty())
         assertTrue(db.reviews().allStates().isEmpty())
         assertEquals(0, db.listeningTasks().reservedNew(source))
@@ -278,13 +316,23 @@ class ListeningAssessmentStudyTest {
     }
 
     @Test fun restorationSourceReplacementAndTechnicalFailureRetainCaptureWithoutGrading() = runBlocking {
-        val id = start()
+        verifyRestoration(ListeningAssessmentProfile.N5)
+    }
+
+    @Test fun n4RestorationIgnoresCurrentSourceAndRetainsPartialTwentyEightItemResult() = runBlocking {
+        verifyRestoration(ListeningAssessmentProfile.N4)
+    }
+
+    private suspend fun verifyRestoration(profile: ListeningAssessmentProfile) {
+        val capturedPool = assessmentPool(profile = profile)
+        install(capturedPool.map { it.record })
+        val id = start(profile)
         val first = untilAnswer(id)
         elapsed += 2_000
         study.pulse(id, first.state.generation)
         val original = study.snapshot(id)
         install(emptyList())
-        pool.flatMap { it.record.assetHashes }.distinct().forEach { assertNotNull(db.listeningTasks().asset(source, it)) }
+        capturedPool.flatMap { it.record.assetHashes }.distinct().forEach { assertNotNull(db.listeningTasks().asset(source, it)) }
         settings.setSource("https://github.com/another/source", "different")
         wall = wall.plusSeconds(100_000)
         elapsed = 1
@@ -299,12 +347,69 @@ class ListeningAssessmentStudyTest {
         study.interrupt(id, "Decoder failure")
         val ended = study.end(id)
         assertEquals(0, ended.result!!.assessed)
-        assertEquals(24, ended.result.notAssessed)
+        assertEquals(profile.scoredCount, ended.result.notAssessed)
+        assertEquals(profile.id, ended.result.blueprint)
+        assertEquals(profile.jlpt, ended.result.jlpt)
         assertTrue(db.reviews().allLog().isEmpty())
         assertEquals(1, db.listeningTasks().allExposures().size)
         assertEquals(source, ended.row.sourceId)
         study.close(id)
-        pool.flatMap { it.record.assetHashes }.distinct().forEach { assertNull(db.listeningTasks().asset(source, it)) }
+        capturedPool.flatMap { it.record.assetHashes }.distinct().forEach { assertNull(db.listeningTasks().asset(source, it)) }
         assertTrue(Json.decodeFromString<AssessmentResult>(ended.row.responseJson!!).interrupted)
+    }
+
+    @Test fun n4StaleProfileBranchAndMalformedCapturesNeverFallBackToN5() = runBlocking {
+        install(pool.map { it.record } + assessmentPool(profile = ListeningAssessmentProfile.N4).map { it.record })
+        val preview = study.preview(42, profile = ListeningAssessmentProfile.N4)
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking { study.start(preview.copy(profile = ListeningAssessmentProfile.N5)) }
+        }
+        settings.setSource("https://github.com/$source", "different")
+        assertThrows(IllegalArgumentException::class.java) { runBlocking { study.start(preview) } }
+        assertTrue(db.listeningTasks().allEncounters().isEmpty())
+        assertTrue(db.listeningTasks().allAssessments().isEmpty())
+        settings.setSource("https://github.com/$source", "main")
+        val id = study.start(preview)
+        val row = db.listeningTasks().assessment(id)!!
+        val form = Json.decodeFromString<AssessmentForm>(row.contentJson)
+        val malformed = listOf(
+            row.copy(blueprint = ListeningAssessmentBlueprint.ID),
+            row.copy(blueprint = "n4-section-v2"),
+            row.copy(contentJson = Json.encodeToString(form.copy(jlpt = 5))),
+            row.copy(contentJson = Json.encodeToString(form.copy(items = form.items.dropLast(1)))),
+        )
+        malformed.forEach {
+            db.listeningTasks().putAssessment(it)
+            assertThrows(IllegalArgumentException::class.java) { runBlocking { study.snapshot(id) } }
+        }
+        db.listeningTasks().putAssessment(row)
+        val ended = study.end(id)
+        db.listeningTasks().putAssessment(ended.row.copy(responseJson = Json.encodeToString(ended.result!!.copy(planned = 24))))
+        assertThrows(IllegalArgumentException::class.java) { runBlocking { study.snapshot(id) } }
+        db.listeningTasks().putAssessment(ended.row)
+        study.close(id)
+    }
+
+    @Test fun unheardSourceScopedLegacyIdentityBlocksN4AndExpiresAnEarlierPreview() = runBlocking {
+        val profile = ListeningAssessmentProfile.N4
+        val n4 = assessmentPool(profile = profile).map { it.record }.toMutableList()
+        n4[1] = approvedTask(n4[1].task.copy(exposureId = "example"))
+        install(pool.map { it.record } + n4)
+        val legacy = approvedListening()
+        val audio = requireNotNull(legacy.passage.audio)
+        val foreign = ListeningEntity("other/source", "example", legacy.json, legacy.contentHash,
+            audio.sha256, audio.durationMs, true, null, 0)
+        db.content().insertListening(listOf(foreign))
+        val before = study.preview(42, profile = profile)
+        assertTrue(before.selection.problems.toString(), before.selection.available)
+        db.content().insertListening(listOf(foreign.copy(sourceId = source)))
+        assertTrue(db.listeningTasks().allExposures().isEmpty())
+        val blocked = study.preview(42, profile = profile)
+        assertFalse(blocked.selection.available)
+        assertTrue(blocked.selection.problems.any { "another level" in it })
+        assertThrows(IllegalArgumentException::class.java) { runBlocking { study.start(before) } }
+        assertTrue(db.listeningTasks().allAssessments().isEmpty())
+        assertTrue(db.listeningTasks().allEncounters().isEmpty())
+        assertTrue(study.preview(42).selection.available)
     }
 }

@@ -51,7 +51,8 @@ class ListeningAssessmentViewModelTest {
             .associateBy(ContentParser::rawSha256)
         db.withTransaction {
             val problems = db.importListeningTasks(ParsedContent(Manifest(1, "fixture-vm", emptyMap()), emptyList(), emptyList(), emptyList(),
-                emptyMap(), emptyList(), listeningTasks = ListeningTaskCatalog(records = assessmentPool().map { it.record }, assets = assets)),
+                emptyMap(), emptyList(), listeningTasks = ListeningTaskCatalog(
+                    records = ListeningAssessmentProfile.entries.flatMap { profile -> assessmentPool(profile = profile).map { it.record } }, assets = assets)),
                 services.settings.source.value, "a".repeat(40)).problems
             assertTrue(problems.toString(), problems.isEmpty())
         }
@@ -94,6 +95,25 @@ class ListeningAssessmentViewModelTest {
         time.set(requireNotNull(timed.state.deadlineMs))
         val after = study.pulse(id, timed.state.generation)
         waitFor { vm.snapshot!!.state.version >= after.state.version }
+    }
+
+    @Test fun profileChangeRebuildsPreviewAndDoesNotCarryFamiliarConsentAcrossLevels() = runBlocking {
+        services.settings.setListeningScope(services.settings.source.value.id, ListeningScope.N4)
+        val vm = ListeningAssessmentPreviewModel(services)
+        models.put("preview", vm)
+        vm.refresh(includeFamiliar = true)
+        waitFor { !vm.busy && vm.preview != null }
+        assertTrue(vm.familiar)
+        assertEquals(ListeningAssessmentProfile.N5, vm.preview!!.profile)
+        vm.refresh(profile = ListeningAssessmentProfile.N4)
+        waitFor { !vm.busy && vm.preview?.profile == ListeningAssessmentProfile.N4 }
+        assertNull(vm.error)
+        assertFalse(vm.familiar)
+        assertFalse(vm.preview!!.includeFamiliar)
+        assertTrue(vm.preview!!.selection.available)
+        assertEquals(32, vm.preview!!.selection.items.size)
+        assertTrue(vm.preview!!.selection.items.all { it.record.task.jlpt == 4 })
+        vm.leave()
     }
 
     @Test fun fullWrapperPlaysExactlyRequiredStagesWithoutGuidedGradingOrInstructionCredit() = runBlocking {

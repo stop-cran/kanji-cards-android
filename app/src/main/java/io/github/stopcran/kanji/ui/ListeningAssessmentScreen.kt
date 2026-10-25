@@ -127,7 +127,7 @@ private fun ListeningAssessmentItem(vm: ListeningAssessmentViewModel, evidence: 
     val example = task.usage == TaskUsage.Example
     Text(task.taskType.label, style = MaterialTheme.typography.titleLarge)
     Text(if (example) "Worked example - not in the score" else
-        "Scored item ${current.form.items.take(state.index).count { !it.example } + 1}/24")
+        "Scored item ${current.form.items.take(state.index).count { !it.example } + 1}/${current.form.items.count { !it.example }}")
     if (state.paused) {
         Text("Paused. ${state.interruptions.joinToString()}")
         Button(onClick = vm::continuePractice, enabled = !vm.busy && !vm.playing) { Text("Continue as interrupted practice") }
@@ -168,7 +168,7 @@ private fun ListeningAssessmentItem(vm: ListeningAssessmentViewModel, evidence: 
         Button(onClick = { vm.pause() }, enabled = !vm.busy) { Text("Pause (interrupts section)") }
     }
     Text(if (state.interrupted) "Interrupted practice - never an uninterrupted full-form attempt" else "Single-play diagnostic")
-    Text("${current.row.sourceId} (${current.row.branch})", style = MaterialTheme.typography.bodySmall)
+    Text("N${current.form.jlpt} - ${current.row.sourceId} (${current.row.branch})", style = MaterialTheme.typography.bodySmall)
     if (vm.help) {
         task.visual?.let { Text(it.description, evidence) }
         ListeningTaskTranscript(task, evidence, { vm.replay(it) }, !vm.busy && !vm.playing)
@@ -178,6 +178,7 @@ private fun ListeningAssessmentItem(vm: ListeningAssessmentViewModel, evidence: 
 @Composable
 private fun ListeningAssessmentResults(result: AssessmentResult, detail: (Int) -> Unit) {
     Text(if (result.completedFullForm) "Completed full-form diagnostic" else "Partial / interrupted diagnostic", style = MaterialTheme.typography.headlineSmall)
+    Text("N${result.jlpt} - ${result.blueprint}", style = MaterialTheme.typography.bodySmall)
     Text("${result.correct} / ${result.assessed} correct", style = MaterialTheme.typography.titleLarge)
     Text("Unanswered: ${result.unanswered}; not assessed: ${result.notAssessed}; planned scored items: ${result.planned}; examples: ${result.examples}.")
     Text("No SRS or daily-allowance changes. Familiar or helped performance does not prove unseen-listening proficiency.")

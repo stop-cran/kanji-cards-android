@@ -147,6 +147,10 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   Keep timed evidence ahead of auxiliary source/control text so ordinary preview frames do not stall offscreen.
   Key timed evidence by capture and phase, not only its scroll state: unchanged picture geometry may not
   trigger another placement callback. Bind visible callbacks to that rendered capture/generation/phase.
+  N4 diagnostics select an exact captured profile, not the cumulative practice scope. Default N4
+  freshness excludes scored stories but permits cooled-down examples; retain N5's historical rule.
+  Check every eligible N4 timing combination, not one lucky seed. Bind parent/form/result/child level
+  and derive UI/export denominators from the capture; omitted new JSON fields still mean historical N5.
   Picture exposure cannot start a worked explanation's clock. Finalized raw results must remain readable
   when media recovery fails; only opening captured feedback needs its media.
   Fixtures and simulated elapsed time never satisfy approved Japanese-media or physical-device acceptance.
