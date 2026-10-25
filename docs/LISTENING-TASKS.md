@@ -1,5 +1,9 @@
 # Japanese listening tasks: contract 1
 
+The adopted [N4 extension](LISTENING-N4.md) separately specifies schema-2 support,
+level scopes, bounded capacity and an N4 diagnostic profile. Its implementation/media
+work is pending; the N5 behavior and acceptance boundaries below remain unchanged.
+
 Design deliverable for [A / #66](https://github.com/stop-cran/kanji-cards-android/issues/66).
 **Independently reviewed implementation contract, adopted under delegated autonomous decision-making.**
 Installment B supplies the shared importer, persistence, accounting and staged-player foundation;

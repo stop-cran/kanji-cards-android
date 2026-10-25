@@ -253,6 +253,10 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 
 ### N5 listening
 
+The adopted [N4 extension](LISTENING-N4.md) separately records the planned schema-2
+packages, level scopes, finite capacity and diagnostic profile. Its software/media work
+is pending; the existing N5 behavior below is unchanged.
+
 The adopted [Japanese task/assessment contract](LISTENING-TASKS.md) settles the design gate for #66
 under delegated autonomous decision-making. B supplies the shared data/media infrastructure described below;
 C adds the common guided host and focused formats; D extends it with spoken choices.
