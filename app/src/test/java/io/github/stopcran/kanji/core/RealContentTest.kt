@@ -95,26 +95,8 @@ class RealContentTest {
         assertTrue(parsed.kanji.size >= 20)
         assertTrue(parsed.words.size >= 20)
         assertEquals(parsed.kanji.size, parsed.strokes.size)
-        assertEquals(22, parsed.counters.size)
-        assertEquals(124, parsed.counters.sumOf { it.cards.size })
-        assertEquals(20, parsed.counters.sumOf { it.reverse.size })
-        assertEquals(123, parsed.counters.sumOf { it.expressions.size })
+        assertCounters(parsed.counters)
         val j = Json { ignoreUnknownKeys = true }
-        val again = parsed.counters.map { j.decodeFromString(CounterFile.serializer(), j.encodeToString(CounterFile.serializer(), it)) }
-        assertEquals(parsed.counters, again)
-        val index = io.github.stopcran.kanji.core.counters.CounterIndex(again)
-        assertEquals(124, index.ids(io.github.stopcran.kanji.core.counters.CounterMode.Choose).size)
-        assertEquals(123, index.ids(io.github.stopcran.kanji.core.counters.CounterMode.Expression).size)
-        val readable = index.ids(io.github.stopcran.kanji.core.counters.CounterMode.Reading)
-        assertEquals(246, readable.size)
-        assertTrue("Already-kana prompts must not become reading copy questions", "tsu-question-1" !in readable)
-        readable.forEach { id ->
-            val expression = index.expression(id)
-            assertTrue(id, io.github.stopcran.kanji.core.counters.CounterExpressions.grade(expression.reading, expression, true).ok)
-        }
-        val time = index.inGroup(io.github.stopcran.kanji.core.counters.CounterGroup.Time)
-        assertEquals(105, time.expressions.size)
-        assertTrue(time.cards.isEmpty())
         val serializer = GrammarSet.serializer()
         val declared = j.decodeFromString(Manifest.serializer(), files.getValue("manifest.json").decodeToString())
         assertEquals(declared.images.keys, parsed.images.keys)
@@ -150,6 +132,29 @@ class RealContentTest {
             val expected = j.decodeFromString(GrammarCurriculumData.serializer(), files.getValue(GrammarCurriculum.PATH).decodeToString())
             assertCurriculum(expected, parsed.curriculum as GrammarCurriculumState.Ready, expectedGrammar)
         }
+    }
+
+    private fun assertCounters(counters: List<CounterFile>) {
+        assertEquals(22, counters.size)
+        assertEquals(124, counters.sumOf { it.cards.size })
+        assertEquals(20, counters.sumOf { it.reverse.size })
+        assertEquals(123, counters.sumOf { it.expressions.size })
+        val j = Json { ignoreUnknownKeys = true }
+        val again = counters.map { j.decodeFromString(CounterFile.serializer(), j.encodeToString(CounterFile.serializer(), it)) }
+        assertEquals(counters, again)
+        val index = io.github.stopcran.kanji.core.counters.CounterIndex(again)
+        assertEquals(124, index.ids(io.github.stopcran.kanji.core.counters.CounterMode.Choose).size)
+        assertEquals(123, index.ids(io.github.stopcran.kanji.core.counters.CounterMode.Expression).size)
+        val readable = index.ids(io.github.stopcran.kanji.core.counters.CounterMode.Reading)
+        assertEquals(246, readable.size)
+        assertTrue("Already-kana prompts must not become reading copy questions", "tsu-question-1" !in readable)
+        readable.forEach { id ->
+            val expression = index.expression(id)
+            assertTrue(id, io.github.stopcran.kanji.core.counters.CounterExpressions.grade(expression.reading, expression, true).ok)
+        }
+        val time = index.inGroup(io.github.stopcran.kanji.core.counters.CounterGroup.Time)
+        assertEquals(105, time.expressions.size)
+        assertTrue(time.cards.isEmpty())
     }
 
     private fun assertCurriculum(expected: GrammarCurriculumData, actual: GrammarCurriculumState.Ready, sets: List<GrammarSet>) {

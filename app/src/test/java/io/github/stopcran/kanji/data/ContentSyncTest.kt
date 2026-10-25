@@ -143,6 +143,67 @@ private class FakeHttp : ContentHttp {
 @Config(sdk = [28], manifest = Config.NONE, application = Application::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @SQLiteMode(SQLiteMode.Mode.NATIVE)
+class CounterSyncTest {
+    private val source = RepoSource("Owner", "Repo", "main")
+    private val http = FakeHttp()
+    private lateinit var db: AppDatabase
+    private lateinit var settings: Settings
+    private lateinit var sync: ContentSync
+
+    @Before
+    fun setUp() {
+        val context = RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("settings", 0).edit().clear().commit()
+        db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
+        settings = Settings(context)
+        sync = ContentSync(db, settings, http)
+        http.archiveBytes = archive("v1", mapOf("日" to "sun"))
+    }
+
+    @After
+    fun tearDown() {
+        db.close()
+    }
+
+    @Test
+    fun counterEpochRefreshesRecentLaunchSameHeadAndSameVersionWithoutResettingOtherSources() = runBlocking {
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
+        val epoch = io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH
+        assertEquals(epoch, settings.counterParserEpoch(source.id))
+        settings.setCounterParserEpoch(source.id, 0)
+        settings.setCounterParserEpoch("other/repo", 0)
+        val downloads = http.downloads
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
+        assertEquals(downloads + 1, http.downloads)
+        assertEquals(epoch, settings.counterParserEpoch(source.id))
+        assertEquals(0, settings.counterParserEpoch("other/repo"))
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.UpToDate)
+        assertEquals(downloads + 1, http.downloads)
+        settings.setCounterParserEpoch(source.id, 0)
+        http.headSha = SHA_B
+        assertTrue(sync.sync(source) is SyncResult.Updated)
+        assertEquals(downloads + 2, http.downloads)
+    }
+
+    @Test
+    fun failedCounterUpgradeLeavesEpochPendingAndRetriesSameHead() = runBlocking {
+        assertTrue(sync.sync(source) is SyncResult.Updated)
+        settings.setCounterParserEpoch(source.id, 0)
+        http.archiveBytes = archive("v1", mapOf("日" to "sun"), corrupt = setOf("日"))
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Failed)
+        assertEquals(0, settings.counterParserEpoch(source.id))
+        assertEquals("sun", db.content().kanji(source.id).single().title)
+        http.archiveBytes = archive("v1", mapOf("日" to "sun"))
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
+        assertEquals(io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH,
+            settings.counterParserEpoch(source.id))
+    }
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28], manifest = Config.NONE, application = Application::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@SQLiteMode(SQLiteMode.Mode.NATIVE)
 class ContentSyncTest {
     private val source = RepoSource("Owner", "Repo", "main")
     private val http = FakeHttp()
@@ -187,40 +248,6 @@ class ContentSyncTest {
         assertEquals(downloads + 1, http.downloads)
         assertEquals(io.github.stopcran.kanji.core.listening.ListeningTaskContent.PARSER_EPOCH,
             db.listeningTasks().sync(source.id)?.parserEpoch)
-    }
-
-    @Test
-    fun counterEpochRefreshesRecentLaunchSameHeadAndSameVersionWithoutResettingOtherSources() = runBlocking {
-        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
-        val epoch = io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH
-        assertEquals(epoch, settings.counterParserEpoch(source.id))
-        settings.setCounterParserEpoch(source.id, 0)
-        settings.setCounterParserEpoch("other/repo", 0)
-        val downloads = http.downloads
-        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
-        assertEquals(downloads + 1, http.downloads)
-        assertEquals(epoch, settings.counterParserEpoch(source.id))
-        assertEquals(0, settings.counterParserEpoch("other/repo"))
-        assertTrue(sync.syncOnLaunch(source) is SyncResult.UpToDate)
-        assertEquals(downloads + 1, http.downloads)
-        settings.setCounterParserEpoch(source.id, 0)
-        http.headSha = SHA_B
-        assertTrue(sync.sync(source) is SyncResult.Updated)
-        assertEquals(downloads + 2, http.downloads)
-    }
-
-    @Test
-    fun failedCounterUpgradeLeavesEpochPendingAndRetriesSameHead() = runBlocking {
-        assertTrue(sync.sync(source) is SyncResult.Updated)
-        settings.setCounterParserEpoch(source.id, 0)
-        http.archiveBytes = archive("v1", mapOf("日" to "sun"), corrupt = setOf("日"))
-        assertTrue(sync.syncOnLaunch(source) is SyncResult.Failed)
-        assertEquals(0, settings.counterParserEpoch(source.id))
-        assertEquals("sun", db.content().kanji(source.id).single().title)
-        http.archiveBytes = archive("v1", mapOf("日" to "sun"))
-        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
-        assertEquals(io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH,
-            settings.counterParserEpoch(source.id))
     }
 
     @Before

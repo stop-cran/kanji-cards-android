@@ -362,26 +362,7 @@ object ContentParser {
         val fields = json.parseToJsonElement(text).jsonObject
         val version = fields["schemaVersion"] as? JsonPrimitive
         require(version != null && !version.isString && version.content in listOf("1", "2")) { "unsupported counter schema version" }
-        if (version.content == "2") {
-            require(fields.keys.containsAll(setOf(
-                "schemaVersion", "id", "counter", "reading", "title", "level", "group", "article", "expressions",
-            ))) { "incomplete expression file" }
-            requireCounterStrings(fields, listOf("id", "counter", "reading", "title", "group", "article"))
-            require((fields["level"] as? JsonPrimitive)?.let { !it.isString && it.content in listOf("1", "2", "3", "4", "5") } == true) {
-                "counter level must be an integer 1-5"
-            }
-            fields["sources"]?.jsonArray?.forEach { requireCounterString(it) }
-            fields["expressions"]!!.jsonArray.forEach { raw ->
-                val item = raw.jsonObject
-                requireCounterStrings(item, listOf("id", "cue", "written", "reading", "explanation"))
-                listOf("writtenAnswers", "readingAnswers").forEach { key ->
-                    requireNotNull(item[key]) { "missing $key" }.jsonArray.forEach { requireCounterString(it) }
-                }
-            }
-            fields["vocabulary"]?.jsonObject?.values?.forEach { word ->
-                word.jsonObject.values.forEach { requireCounterString(it) }
-            }
-        }
+        if (version.content == "2") validateCounterExpressionFields(fields)
         val decoder = if (version.content == "2") Json else json
         val f = decoder.decodeFromString(CounterFile.serializer(), text)
         require(f.schemaVersion in 1..2) { "unsupported counters schema ${f.schemaVersion}" }
@@ -390,9 +371,11 @@ object ContentParser {
         require(f.article == null || f.article.matches(Regex("articles/[a-z0-9-]+\\.md"))) { "invalid counter article path" }
         if (f.schemaVersion == 2) {
             io.github.stopcran.kanji.core.counters.CounterExpressions.validate(f)
-            return f
-        }
+        } else validateLegacyCounterFile(f)
+        return f
+    }
 
+    private fun validateLegacyCounterFile(f: CounterFile) {
         require(f.expressions.isEmpty()) { "whole expressions require counters schema 2" }
         require(f.counter.isNotBlank() && f.cards.isNotEmpty()) { "missing counter or cards" }
         for (c in f.cards) {
@@ -412,7 +395,28 @@ object ContentParser {
                 "reverse '${r.id}' needs 4 distinct options including the answer"
             }
         }
-        return f
+    }
+
+    private fun validateCounterExpressionFields(fields: JsonObject) {
+        require(fields.keys.containsAll(setOf(
+            "schemaVersion", "id", "counter", "reading", "title", "level", "group", "article", "expressions",
+        ))) { "incomplete expression file" }
+        requireCounterStrings(fields, listOf("id", "counter", "reading", "title", "group", "article"))
+        require((fields["level"] as? JsonPrimitive)?.let { !it.isString && it.content in listOf("1", "2", "3", "4", "5") } == true) {
+            "counter level must be an integer 1-5"
+        }
+        fields["sources"]?.jsonArray?.forEach { requireCounterString(it) }
+        fields.getValue("expressions").jsonArray.forEach { raw -> validateCounterExpressionRecord(raw.jsonObject) }
+        fields["vocabulary"]?.jsonObject?.values?.forEach { word ->
+            word.jsonObject.values.forEach { requireCounterString(it) }
+        }
+    }
+
+    private fun validateCounterExpressionRecord(item: JsonObject) {
+        requireCounterStrings(item, listOf("id", "cue", "written", "reading", "explanation"))
+        listOf("writtenAnswers", "readingAnswers").forEach { key ->
+            requireNotNull(item[key]) { "missing $key" }.jsonArray.forEach { requireCounterString(it) }
+        }
     }
 
     private fun requireCounterStrings(fields: JsonObject, keys: List<String>) {
