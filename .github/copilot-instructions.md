@@ -74,6 +74,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - Grammar additional correct choices are authored, not derived from typed spellings. Use the captured presentation for grading,
   both correct highlights, rationales and response export; bind callbacks to its instance because different exercises can reuse IDs.
   Advance `ContentParser.GRAMMAR_PARSER_EPOCH` for newly retained Grammar metadata, not the historical level/group readiness thresholds.
+- Grammar blanks can hold a whole sentence or response label, not only a construction fragment. Keep global answer instructions
+  neutral; #74 fixed a native prohibition that contradicted valid whole-sentence tasks. The existing typing cap counts 80 UTF-16 units.
 - Grammar roadmap catalog errors stay separate from `grammarProblem`: a navigation-only failure must not block valid lessons.
   An authored group without a chapter is not an unowned compatibility group. A valid leaf DAG can collapse into a chapter cycle;
   validate both graphs without deleting true prerequisites or inventing an "Ungrouped" prerequisite chapter.

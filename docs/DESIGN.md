@@ -163,7 +163,11 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 
 - **Architecture:** the Grammar, Quiz, Word, Reading and Draw session ViewModels share the pure `core/quiz/QuizSession` (queue, tallies, grade choice, `Relearn` reinsertion; Draw uses `confirm = false`). They receive `Services(db, settings, context)` through `serviceViewModel(key) { … }` instead of casting `Application`. `HomeData` loads the seven state maps as one non-null `StateSet`; the N4 offer is the pure `shouldOfferN4`. `InkRecognizer` and `ContentSync` rethrow `CancellationException` and turn any other failure into a fallback / `SyncResult.Failed`.
 - **Grammar questions:** a session starts with a shuffled choice question and alternates choose/type, including re-asks. Both show the
-  complete Japanese prompt and English meaning; checking reveals evidence, explanation and all option rationales. The article opens on
+  complete Japanese prompt and authored English meaning or task instructions; checking reveals evidence, explanation and all option rationales.
+  Answer instructions refer to the missing text, not exclusively a construction fragment: a whole sentence can fill one blank.
+  Ordering/text-grammar tasks can put an answer-independent instruction in `translation` and the full translation in answer-side
+  `explanation`; existing pre-answer translations remain unchanged. Choice recognizes a fitting order; typing constructs it.
+  The article opens on
   the normal document stack and Back preserves the current question/answer. Grammar-only choices with authored alternatives independently
   show two correct options on 20% of eligible choice appearances, not 20% of all questions and not a session quota. One random alternative
   is appended to the primary and every original distractor, then shuffled. No frequency setting or spelling-derived choices are added.
@@ -172,7 +176,7 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   correct options have explicit checkmarks/labels and correct colors; a selected wrong option is separately marked. A correct alternate
   completes the answer-side prompt with its captured label. Counters and all other quiz modes are unchanged. Typing trims and NFKC-normalizes
   both input and all accepted answers, then requires exact membership (no script folding, transliteration or typo tolerance).
-  Input is limited to 80 characters. Empty Check does nothing; "I don't know" is Again. Correct is Good, or Hard when a correct-choice user
+  Input is limited to 80 UTF-16 code units. Empty Check does nothing; "I don't know" is Again. Correct is Good, or Hard when a correct-choice user
   selects "I guessed"; choice first success is capped at one day, typing is not. Advancing a recorded answer atomically saves one state,
   one canonical review log and one linked response detail. A successful confirmation is still practice only, regardless of presentation.
 - **Grammar vocabulary:** optional reviewed occurrence ranges link lexical words in both question and answer-check prompts, never the

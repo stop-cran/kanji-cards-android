@@ -140,7 +140,7 @@ private fun GrammarSessionBody(
                 GrammarPrompt(vm, state.exercise)
                 Text(
                     if (state.choices.correctOptionIds.size > 1) "Choose any one of the correct answers."
-                    else "Choose the construction that best fits the context.",
+                    else "Choose an answer that fits the task.",
                     Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
                 )
                 state.options.forEach { option ->
@@ -151,7 +151,7 @@ private fun GrammarSessionBody(
             is GrammarUi.Type -> {
                 GrammarRemaining(state.remaining)
                 GrammarPrompt(vm, state.exercise)
-                Text("Type the construction (not the whole sentence).", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                Text("Type the missing text. Follow the task instructions.", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 TypeAnswer(vm)
             }
             is GrammarUi.Answer -> {

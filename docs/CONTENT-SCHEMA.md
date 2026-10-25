@@ -101,6 +101,13 @@ Translation, evidence and explanation are required, nonblank strings. Options ha
 and `rationale`, at least two choices, and exactly one occurrence of the answer ID. The nonempty `acceptedAnswers` list contains no blank
 forms and must include the correct option label after trimming.
 
+The response slot may hold a construction fragment, a defined response label, or a whole sentence. The `translation` field can instead
+hold answer-independent English task instructions when a full translation would reveal a tested order or discourse relation; put that
+translation in answer-side `explanation`. This does not hide or relocate existing authored pre-answer translations.
+For scrambled-chunk tasks, state whether to omit labels, spaces and punctuation. Authors must enumerate valid constrained orders
+and verify that every accepted string uses the supplied chunks as instructed; the runtime does not independently check chunk use.
+Typed feedback shows the learner's response separately from the canonical model completion, so explain meaningful accepted orders.
+
 Optional `additionalCorrectOptions` is an array (default empty; explicit null is invalid) of `{id, label, rationale}` objects.
 Each field is a nonblank string; IDs are lowercase slugs local to the exercise, distinct from every base/additional option ID.
 They identify authored realizations, not constructions or new schedules. Every additional label must match an accepted typed answer
@@ -131,12 +138,12 @@ or automatic familiarity. Phase D uses the already-retained epoch-2 fields witho
 The importer also rejects duplicate set/exercise identities across the content snapshot and missing article references. Construction and
 relationship IDs are validated within a set, not as global grammatical concepts. Structural validation does not establish linguistic
 uniqueness: authors/reviewers must keep every fitting in-pool completion, never use an accepted equivalent as a wrong button, and make each
-accepted string fit the actual blank and the app's 80-character typing limit. There is no arbitrary count cap on accepted alternatives.
+accepted string fit the actual blank and the app's 80-UTF-16-code-unit typing limit. There is no arbitrary count cap on accepted alternatives.
 See the content repository's authoring guide for the source/review requirements.
 
 Typing grades exact membership after trimming and Unicode NFKC normalization of both the input and accepted forms. There is no kana
 folding, romaji conversion, typo tolerance or substring matching. Choice grades the option ID, not its label. The complete Japanese prompt
-and English meaning appear before answering; feedback and the linked article do not supply hidden required context.
+and authored English meaning or task instructions appear before answering; feedback and the linked article do not supply hidden required context.
 
 ### Optional occurrence-addressed vocabulary
 
