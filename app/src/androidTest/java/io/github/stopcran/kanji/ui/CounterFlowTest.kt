@@ -54,8 +54,13 @@ class CounterFlowTest {
     @Test fun realWritingAndExtraContinuation() = exercise(CounterMode.Expression)
     @Test fun realN4EverydayReading() = exercise(CounterMode.Reading, CounterScope.N4, CounterGroup.Everyday)
     @Test fun realN4TimeWriting() = exercise(CounterMode.Expression, CounterScope.N4)
+    @Test fun realN4PracticalReading() = exercise(CounterMode.Reading, CounterScope.N4,
+        CounterGroup.Everyday, setOf("soku", "chaku", "ken", "mei", "do"))
+    @Test fun realN4OvernightWriting() = exercise(CounterMode.Expression, CounterScope.N4,
+        CounterGroup.Time, setOf("hakuexpressions"))
 
-    private fun exercise(mode: CounterMode, scope: CounterScope = CounterScope.N5, group: CounterGroup = CounterGroup.Time) {
+    private fun exercise(mode: CounterMode, scope: CounterScope = CounterScope.N5,
+                         group: CounterGroup = CounterGroup.Time, focusFiles: Set<String> = emptySet()) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val archive = File(context.getExternalFilesDir(null), "counter-acceptance.zip")
         assumeTrue("Provide the real content archive for native acceptance", archive.isFile)
@@ -66,6 +71,10 @@ class CounterFlowTest {
             assumeTrue("Provide published or candidate N4 content",
                 parsed.counters.any { it.level == 4 && it.group == group.code && it.expressions.isNotEmpty() })
         }
+        assumeTrue("Provide the practical-family content",
+            focusFiles.all { id -> parsed.counters.any { it.id == id } })
+        val knownFiles = if (focusFiles.isEmpty()) parsed.counters.filter { it.level == 5 }
+            else parsed.counters.filterNot { it.id in focusFiles }
         val preferenceName = "counter-flow-${UUID.randomUUID()}"
         val isolated = object : ContextWrapper(context) {
             override fun getSharedPreferences(name: String, mode: Int) = context.getSharedPreferences(preferenceName, mode)
@@ -86,7 +95,7 @@ class CounterFlowTest {
                     val known = SrsState(CardPhase.Review, 30.0, 5.0, Instant.now().plus(30, ChronoUnit.DAYS),
                         Instant.now().minus(2, ChronoUnit.DAYS), 3, 0)
                     db.withTransaction {
-                        CounterIndex(parsed.counters).inScope(scope = CounterScope.N5).ids(mode).forEach { id ->
+                        CounterIndex(knownFiles).ids(mode).forEach { id ->
                             db.reviews().putState(known.toEntity(source, COUNTER_STACK, id, mode.mode))
                         }
                     }
@@ -112,7 +121,7 @@ class CounterFlowTest {
                 }
             }
             rule.waitUntil(10_000) { vm.value.ui is CounterUi.ExpressionQuestion }
-            assertQuestionScope(vm.value, scope, group)
+            assertQuestionScope(vm.value, scope, group, focusFiles)
             rule.onNode(hasSetTextAction()).performScrollTo().performClick()
             rule.onNode(hasSetTextAction()).performTextReplacement(if (mode == CounterMode.Reading) "さい" else "時")
             rule.onNodeWithText("Check").performScrollTo().performClick()
@@ -126,7 +135,7 @@ class CounterFlowTest {
             var openedArticle = false
             while (vm.value.ui is CounterUi.ExpressionQuestion && answered++ < 12) {
                 val question = vm.value.ui as CounterUi.ExpressionQuestion
-                assertQuestionScope(vm.value, scope, group)
+                assertQuestionScope(vm.value, scope, group, focusFiles)
                 rule.onNode(hasSetTextAction()).performScrollTo()
                     .performTextReplacement(if (question.reading) question.item.reading else question.item.written)
                 rule.onNodeWithText("Check").performScrollTo().performClick()
@@ -148,7 +157,7 @@ class CounterFlowTest {
             assertEquals(group, CounterGroup.fromRoute(route.value))
             assertEquals(scope, CounterScope.fromRoute(route.value))
             assertTrue(route.value.endsWith(":extra"))
-            assertQuestionScope(vm.value, scope, group)
+            assertQuestionScope(vm.value, scope, group, focusFiles)
             runBlocking {
                 db.withTransaction {}
                 val log = db.reviews().allLog()
@@ -164,10 +173,12 @@ class CounterFlowTest {
         }
     }
 
-    private fun assertQuestionScope(vm: CounterQuizViewModel, scope: CounterScope, group: CounterGroup) {
+    private fun assertQuestionScope(vm: CounterQuizViewModel, scope: CounterScope,
+                                    group: CounterGroup, focusFiles: Set<String>) {
         val id = (vm.ui as CounterUi.ExpressionQuestion).item.id
         val owner = vm.index.files.single { f -> f.cards.any { it.id == id } || f.expressions.any { it.id == id } }
         assertEquals(if (scope == CounterScope.N4) 4 else 5, owner.level)
+        assertTrue("Expected a focused practical family, got ${owner.id}", focusFiles.isEmpty() || owner.id in focusFiles)
         assertEquals(setOf(group.code), vm.index.files.map { it.group }.toSet())
         assertEquals(if (scope == CounterScope.N4) setOf(4, 5) else setOf(5), vm.index.files.map { it.level }.toSet())
     }
