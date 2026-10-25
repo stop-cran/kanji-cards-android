@@ -62,6 +62,9 @@ interface ListeningTaskDao {
     @Query("SELECT * FROM listening_tasks WHERE sourceId = :sourceId ORDER BY position")
     suspend fun tasks(sourceId: String): List<ListeningTaskEntity>
 
+    @Query("SELECT COUNT(*) FROM listening_tasks WHERE sourceId = :sourceId AND json IS NOT NULL")
+    suspend fun importedCount(sourceId: String): Int
+
     @Query("SELECT * FROM listening_tasks WHERE sourceId = :sourceId ORDER BY position")
     fun observeTasks(sourceId: String): Flow<List<ListeningTaskEntity>>
 

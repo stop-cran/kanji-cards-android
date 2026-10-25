@@ -67,10 +67,14 @@ object ContentParser {
                 if (!it) problems += "counters/${f.id}.json: linked article '${f.article}' is missing"
             }
         }
+        val counters = resolveCounters(counterFiles, problems)
+        val retainedCounterIds = counters.mapTo(hashSetOf()) { it.id }
+        val rejectedCounterQuestions = counterFiles.filter { it.id in retainedCounterIds }.sumOf { it.reverse.size } -
+            counters.sumOf { it.reverse.size }
         return ParsedContent(
             manifest, unique, words, text.articles, text.strokes, problems,
-            resolveCounters(counterFiles, problems), images, vocabularySets, grammarProblems,
-            listening.records, listening.audio, listening.problems, curriculum, tasks,
+            counters, images, vocabularySets, grammarProblems,
+            listening.records, listening.audio, listening.problems, curriculum, tasks, rejectedCounterQuestions,
         )
     }
 

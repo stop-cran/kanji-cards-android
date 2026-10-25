@@ -221,4 +221,5 @@ data class ParsedContent(
     val curriculum: GrammarCurriculumState = GrammarCurriculumState.Absent,
     val listeningTasks: io.github.stopcran.kanji.core.listening.ListeningTaskCatalog =
         io.github.stopcran.kanji.core.listening.ListeningTaskCatalog(),
+    val rejectedCounterQuestions: Int = 0,
 )

@@ -4,27 +4,30 @@ import io.github.stopcran.kanji.core.content.ParsedContent
 import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.listening.ListeningTaskContent
 
+internal data class ListeningTaskImport(val problems: List<String>, val rejectedPaths: Set<String> = emptySet())
+
 /** Called inside the same transaction as ordinary content replacement. Task rejection preserves this catalog independently. */
-internal suspend fun AppDatabase.importListeningTasks(parsed: ParsedContent, source: RepoSource, revision: String?): List<String> {
+internal suspend fun AppDatabase.importListeningTasks(parsed: ParsedContent, source: RepoSource, revision: String?): ListeningTaskImport {
     val dao = listeningTasks()
     val old = dao.sync(source.id)
     val catalog = parsed.listeningTasks
     val bindings = dao.identities(source.id).associate { it.taskId to it.exposureId }
     val legacyIds = listening().knownPassageIds(source.id).toSet()
-    val problems = catalog.problems + catalog.records.mapNotNull { record ->
+    val identityProblems = catalog.records.mapNotNull { record ->
         val previous = bindings[record.task.id]
         when {
             record.task.id in legacyIds -> "Listening task ${record.task.id} reused a legacy scored identity"
             previous != null && previous != record.task.exposureId -> "Listening task ${record.task.id} changed its exposure identity"
             else -> null
-        }
-    }
+        }?.let { "listening-tasks/${record.task.id}.json" to it }
+    }.toMap()
+    val problems = catalog.problems + identityProblems.values
     if (problems.isNotEmpty()) {
         catalog.unsupported.forEach { dao.blockTask(source.id, it.id, it.reason) }
         val message = "Japanese listening tasks rejected; keeping the last accepted task catalog.\n${problems.joinToString("\n")}"
         dao.putSync(ListeningTaskSyncEntity(source.id, old?.acceptedBranch, old?.acceptedRevision, old?.acceptedContentVersion,
             old?.parserEpoch ?: 0, source.branch, revision, message, System.currentTimeMillis()))
-        return listOf(message)
+        return ListeningTaskImport(listOf(message), identityProblems.keys)
     }
     val rows = catalog.records.mapIndexed { index, record ->
         val p = record.task
@@ -43,5 +46,5 @@ internal suspend fun AppDatabase.importListeningTasks(parsed: ParsedContent, sou
     dao.putSync(ListeningTaskSyncEntity(source.id, source.branch, revision, parsed.manifest.contentVersion,
         ListeningTaskContent.PARSER_EPOCH, source.branch, revision, null, System.currentTimeMillis()))
     dao.pruneAssets(source.id)
-    return catalog.unsupported.map { "${it.id}: ${it.reason}" }
+    return ListeningTaskImport(catalog.unsupported.map { "${it.id}: ${it.reason}" })
 }

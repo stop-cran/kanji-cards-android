@@ -69,6 +69,14 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   a *successful partial* import (some manifest files skipped for hash/parse errors) replaces it, so a skipped file disappears until fixed.
   Only files listed in the manifest are imported. For duplicate kanji titles the first in sorted path order is kept.
 - Only `replaceContent` may clear/insert content tables; the synced SHA is stored after it succeeds.
+- Settings reports the stored totals after sync: kanji, words, Grammar exercises (not sets), and Listening packages
+  across legacy passages and new tasks, including worked examples. Unsupported task placeholders are excluded;
+  if task import keeps an earlier catalog, its actual stored count is used rather than the rejected candidate count.
+  Nonzero rejected-file counts are shown by type in the theme's red error colour. A malformed Grammar/counter
+  file can contain an unknowable number of cards, so these are explicitly file counts; individually removed
+  counter questions are counted separately. Optional metadata/media warnings are diagnostics, not rejected cards.
+  Failed imports retain their rejection report when parsing completed, without presenting candidate totals as synced.
+  Result text survives rotation; a cancelled in-flight Settings sync becomes an explicit retry message.
 - **Grammar curriculum contract (#59):** optional `curriculum/grammar.json` is hash-bound in the separate
   `manifest.curriculum` namespace. Older clients ignore it; it adds no fields to strict introduction-group objects.
   One mapped group has one chapter, while valid authored groups may remain deliberately unmapped. All real leaf prerequisites

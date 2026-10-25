@@ -166,6 +166,7 @@ class CountersTest {
         val p = parse("counters/hon.json" to json("hon", card("hon-a-1") + "," + card("hon-b-1") + "," + card("hon-c-1"), reverse))
         assertTrue(p.counters.single().reverse.isEmpty())
         assertTrue(p.problems.any { it.contains("missing cards") })
+        assertEquals(1, p.rejectedCounterQuestions)
     }
 
     private val age = CounterExpression("age-expression-1", "20 years old.", "二十歳",

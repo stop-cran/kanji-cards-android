@@ -30,7 +30,6 @@ import io.github.stopcran.kanji.Defaults
 import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.core.srs.Commitment
 import io.github.stopcran.kanji.core.srs.DayLevel
-import io.github.stopcran.kanji.data.SyncResult
 import kotlinx.coroutines.launch
 
 @Composable
@@ -40,20 +39,24 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
     var url by rememberSaveable { mutableStateOf(app.settings.repoUrl) }
     var branch by rememberSaveable { mutableStateOf(app.settings.branch) }
     var dailyNew by rememberSaveable { mutableStateOf(app.settings.dailyNewCards.value.toString()) }
-    var status by rememberSaveable { mutableStateOf("") }
+    var status by rememberSaveable(stateSaver = SyncStatus.Saver) { mutableStateOf(SyncStatus()) }
+    var syncing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) { status = status.afterRecreation() }
 
     fun saveAndSync() {
+        status = SyncStatus()
         if (!app.settings.setSource(url, branch)) {
-            status = "Invalid repository URL (expected https://github.com/<owner>/<repo>) or branch"
+            status = SyncStatus("Invalid repository URL (expected https://github.com/<owner>/<repo>) or branch")
             return
         }
-        status = "Syncing…"
+        status = SyncStatus(SyncStatus.SYNCING)
+        syncing = true
         scope.launch {
-            status = when (val r = app.contentSync.sync(app.settings.source.value, force = true)) {
-                is SyncResult.Updated -> "Synced ${r.kanji} kanji, ${r.words} words" + if (r.problems.isEmpty()) "" else " (${r.problems.size} files skipped: ${r.problems.first()})"
-                SyncResult.UpToDate -> "Up to date"
-                is SyncResult.Failed -> "Sync failed: ${r.message}"
+            try {
+                status = SyncStatus.from(app.contentSync.sync(app.settings.source.value, force = true))
+            } finally {
+                syncing = false
             }
         }
     }
@@ -144,7 +147,7 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             io.github.stopcran.kanji.data.ReminderWorker.schedule(appContext, app.settings.reminderHour.value, replace = true)
         }
         val notificationPermission = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) enableReminder() else status = "Notifications are blocked for this app, so reminders stay off."
+            if (granted) enableReminder() else status = SyncStatus("Notifications are blocked for this app, so reminders stay off.")
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.daily_study_reminder), modifier = Modifier.weight(1f))
@@ -211,10 +214,10 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
         OutlinedTextField(url, { url = it }, label = { Text(stringResource(R.string.repository_url)) }, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri, imeAction = androidx.compose.ui.text.input.ImeAction.Next), modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(branch, { branch = it }, label = { Text(stringResource(R.string.branch)) }, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done), modifier = Modifier.fillMaxWidth(), singleLine = true)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = ::saveAndSync) { Text(stringResource(R.string.save_sync)) }
+            Button(onClick = ::saveAndSync, enabled = !syncing) { Text(stringResource(R.string.save_sync)) }
             OutlinedButton(onClick = { url = Defaults.CONTENT_REPO_URL; branch = Defaults.CONTENT_BRANCH }) { Text(stringResource(R.string.use_default_repo)) }
         }
-        if (status.isNotEmpty()) Text(status)
+        SyncStatusText(status)
         HorizontalDivider()
         Text(stringResource(R.string.voice_input), style = MaterialTheme.typography.titleSmall)
         val voiceOn by app.settings.voiceInput.collectAsState()

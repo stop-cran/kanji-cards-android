@@ -52,7 +52,7 @@ class ListeningAssessmentViewModelTest {
         db.withTransaction {
             val problems = db.importListeningTasks(ParsedContent(Manifest(1, "fixture-vm", emptyMap()), emptyList(), emptyList(), emptyList(),
                 emptyMap(), emptyList(), listeningTasks = ListeningTaskCatalog(records = assessmentPool().map { it.record }, assets = assets)),
-                services.settings.source.value, "a".repeat(40))
+                services.settings.source.value, "a".repeat(40)).problems
             assertTrue(problems.toString(), problems.isEmpty())
         }
     }

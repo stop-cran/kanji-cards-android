@@ -3,6 +3,7 @@ package io.github.stopcran.kanji.data
 import android.app.Application
 import androidx.room.Room
 import io.github.stopcran.kanji.core.content.ContentParser
+import io.github.stopcran.kanji.core.content.ContentType
 import io.github.stopcran.kanji.core.content.GrammarVocabulary
 import io.github.stopcran.kanji.core.content.GrammarVocabularyData
 import io.github.stopcran.kanji.core.content.GrammarVocabularySpan
@@ -136,6 +137,104 @@ private class FakeHttp : ContentHttp {
             override fun header(name: String) = if (isHead && name == "ETag") headEtag else null
             override fun close() {}
         }
+    }
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28], manifest = Config.NONE, application = Application::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@SQLiteMode(SQLiteMode.Mode.NATIVE)
+class SyncReportingTest {
+    private val source = RepoSource("Owner", "Repo", "main")
+    private val http = FakeHttp()
+    private lateinit var db: AppDatabase
+    private lateinit var sync: ContentSync
+    private val base = mapOf("kanji/日.md" to kanjiMd("日", "sun").toByteArray())
+
+    @Before fun setup() {
+        val context = RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("settings", 0).edit().clear().commit()
+        db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
+        sync = ContentSync(db, Settings(context), http)
+    }
+
+    @After fun cleanup() { db.close() }
+
+    private fun taskFiles(id: String = "n5-task-open-window", exposure: String = id): Map<String, ByteArray> {
+        val task = io.github.stopcran.kanji.core.taskFixture().task.copy(id = id, exposureId = exposure, vocabulary = emptyList())
+        return mapOf("listening-tasks/$id.json" to
+            Json.encodeToString(io.github.stopcran.kanji.core.listening.ListeningTaskPackage.serializer(), task).toByteArray())
+    }
+
+    private suspend fun import(files: Map<String, ByteArray>): SyncResult {
+        http.archiveBytes = archiveFiles("report", base + files)
+        return sync.sync(source, force = true)
+    }
+
+    @Test fun totalsIncludeGrammarExercisesAllTaskFormatsAndLegacyButNotUnsupportedPlaceholders() = runBlocking {
+        val grammar = io.github.stopcran.kanji.core.grammarFixture()
+        val legacy = io.github.stopcran.kanji.core.listeningPassage()
+        val tasks = listOf("open-window", "rainy-class", "borrow-pencil", "park-invitation").associate { name ->
+            val task = io.github.stopcran.kanji.core.taskFixture(name).task.copy(vocabulary = emptyList())
+            "listening-tasks/${task.id}.json" to
+                Json.encodeToString(io.github.stopcran.kanji.core.listening.ListeningTaskPackage.serializer(), task).toByteArray()
+        }
+        val result = import(tasks + mapOf(
+            grammar.article to "# Grammar".toByteArray(),
+            "grammar/${grammar.id}.json" to Json.encodeToString(GrammarSet.serializer(), grammar).toByteArray(),
+            "listening/${legacy.id}.json" to
+                Json.encodeToString(io.github.stopcran.kanji.core.listening.ListeningPassage.serializer(), legacy).toByteArray(),
+            "listening-tasks/future.json" to """{"schemaVersion":2}""".toByteArray(),
+        )) as SyncResult.Updated
+        assertEquals(6, result.grammar)
+        assertEquals(5, result.listening)
+        assertEquals(mapOf(ContentType.Listening to 1), result.rejected.files)
+        assertEquals(5, db.listeningTasks().tasks(source.id).size)
+        assertEquals(4, db.listeningTasks().importedCount(source.id))
+        db.listeningTasks().putTasks(db.listeningTasks().tasks(source.id).map { it.copy(sourceId = "other/repo") })
+        assertEquals(4, db.listeningTasks().importedCount(source.id))
+    }
+
+    @Test fun rejectedCandidateCountsDoNotCountValidSiblingsOrTheRetainedCatalogAsNew() = runBlocking {
+        assertEquals(1, (import(taskFiles()) as SyncResult.Updated).listening)
+        val candidate = taskFiles("new-one") + taskFiles("new-two") +
+            ("listening-tasks/n5-task-open-window.json" to "{".toByteArray())
+        val result = import(candidate) as SyncResult.Updated
+        assertEquals(1, result.listening)
+        assertEquals(mapOf(ContentType.Listening to 1), result.rejected.files)
+        assertEquals(listOf("n5-task-open-window"), db.listeningTasks().tasks(source.id).map { it.id })
+        assertTrue(result.problems.any { "keeping the last accepted" in it })
+    }
+
+    @Test fun identityConflictsAreRejectedEvenWhenDocumentsParsedSuccessfully() = runBlocking {
+        import(taskFiles())
+        val changed = import(taskFiles(exposure = "changed")) as SyncResult.Updated
+        assertEquals(1, changed.listening)
+        assertEquals(mapOf(ContentType.Listening to 1), changed.rejected.files)
+        val legacy = io.github.stopcran.kanji.core.listeningPassage("n5-task-open-window")
+        val collision = import(mapOf("listening/${legacy.id}.json" to
+            Json.encodeToString(io.github.stopcran.kanji.core.listening.ListeningPassage.serializer(), legacy).toByteArray())) as SyncResult.Failed
+        assertEquals(mapOf(ContentType.Listening to 1), collision.rejected.files)
+        assertEquals(1, db.listeningTasks().importedCount(source.id))
+        val previousLegacy = io.github.stopcran.kanji.core.listeningPassage("old-passage")
+        import(mapOf("listening/old-passage.json" to
+            Json.encodeToString(io.github.stopcran.kanji.core.listening.ListeningPassage.serializer(), previousLegacy).toByteArray()))
+        val reusedLegacy = import(taskFiles("old-passage")) as SyncResult.Updated
+        assertEquals(mapOf(ContentType.Listening to 1), reusedLegacy.rejected.files)
+        assertEquals(0, reusedLegacy.listening)
+    }
+
+    @Test fun failedImportStillReportsMalformedFilesWithoutClaimingSyncedTotals() = runBlocking {
+        import(emptyMap())
+        val result = import(mapOf(
+            "kanji/日.md" to "malformed".toByteArray(),
+            "grammar/bad.json" to "{".toByteArray(),
+            "words/bad.md" to "malformed".toByteArray(),
+            "listening/bad.json" to "{".toByteArray(),
+        )) as SyncResult.Failed
+        assertEquals(mapOf(ContentType.Kanji to 1, ContentType.Words to 1, ContentType.Grammar to 1, ContentType.Listening to 1),
+            result.rejected.files)
+        assertEquals("sun", db.content().kanji(source.id).single().title)
     }
 }
 
@@ -298,7 +397,7 @@ class ContentSyncTest {
     fun sceneEpochRefreshesAnUnchangedSnapshotWithoutResettingWordOrGrammarProgress() = runBlocking {
         val grammar = io.github.stopcran.kanji.core.grammarFixture().copy(article = "articles/pilot.md")
         http.archiveBytes = sceneArchive(second = true, grammar = grammar.id to Json.encodeToString(GrammarSet.serializer(), grammar))
-        assertEquals(SyncResult.Updated(1, 1, emptyList()), sync.sync(source))
+        assertEquals(SyncResult.Updated(1, 1, emptyList(), grammar = grammar.exercises.size), sync.sync(source))
         assertEquals(listOf(true, false), db.content().wordScenes(source.id).map { it.quizEligible })
         assertEquals(SceneCatalog.PARSER_EPOCH, settings.sceneParserEpoch(source.id))
         assertEquals(0, settings.sceneParserEpoch("other/repo"))
@@ -316,7 +415,7 @@ class ContentSyncTest {
         settings.setSceneParserEpoch(source.id, 0)
         settings.setGrammarNewScope(source.id, GrammarScope.N3)
         settings.lastCheckMs = System.currentTimeMillis()
-        assertEquals(SyncResult.Updated(1, 1, emptyList()), sync.syncOnLaunch(source))
+        assertEquals(SyncResult.Updated(1, 1, emptyList(), grammar = grammar.exercises.size), sync.syncOnLaunch(source))
         assertEquals(2, http.downloads)
         assertEquals(2, db.content().wordScenes(source.id).size)
         assertEquals(GrammarScope.N3, settings.grammarFor(source.id).newScope)
@@ -402,7 +501,7 @@ class ContentSyncTest {
                "options":[{"id":"alpha","label":"甲","rationale":"No."},{"id":"beta","label":"乙","rationale":"Fits."}]}
             ]}"""
         http.archiveBytes = archive("v2", mapOf("日" to "sun"), grammar = "pilot" to grammar)
-        assertEquals(SyncResult.Updated(1, 0, emptyList()), run())
+        assertEquals(SyncResult.Updated(1, 0, emptyList(), grammar = 2), run())
         val stored = runBlocking { db.grammarSets(source.id) }
         assertEquals(listOf("alpha-one", "beta-one"), stored.single().exercises.map { it.id })
         assertEquals(listOf(4, null), stored.single().exercises.map { it.jlpt })
@@ -426,7 +525,7 @@ class ContentSyncTest {
         settings.setGrammarNewScope(source.id, GrammarScope.N3)
         settings.setGrammarBrowseScope(source.id, GrammarScope.Unclassified)
         settings.lastCheckMs = System.currentTimeMillis()
-        assertEquals(SyncResult.Updated(1, 0, emptyList()), runBlocking { sync.syncOnLaunch(source) })
+        assertEquals(SyncResult.Updated(1, 0, emptyList(), grammar = 2), runBlocking { sync.syncOnLaunch(source) })
         assertEquals(2, http.downloads)
         assertEquals(listOf(4, null), runBlocking { db.grammarSets(source.id).single().exercises.map { it.jlpt } })
         assertEquals(GrammarPreferences(GrammarScope.N3, GrammarScope.Unclassified, ContentParser.GRAMMAR_PARSER_EPOCH), settings.grammarFor(source.id))
@@ -435,7 +534,7 @@ class ContentSyncTest {
         })
         http.headSha = SHA_B
         http.archiveBytes = archive("v3", mapOf("日" to "sun"), grammar = "pilot" to grammar.replace("Context.", "Updated context."))
-        assertEquals(SyncResult.Updated(1, 0, emptyList()), run())
+        assertEquals(SyncResult.Updated(1, 0, emptyList(), grammar = 2), run())
         assertEquals("Updated context.", runBlocking { db.grammarSets(source.id).single().exercises.first().evidence })
         assertEquals(before, runBlocking {
             Triple(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses())

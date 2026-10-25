@@ -2,6 +2,8 @@ package io.github.stopcran.kanji.data
 
 import io.github.stopcran.kanji.core.content.ContentException
 import io.github.stopcran.kanji.core.content.ContentParser
+import io.github.stopcran.kanji.core.content.ContentRejections
+import io.github.stopcran.kanji.core.content.rejectedContent
 import io.github.stopcran.kanji.core.content.GrammarCurriculumData
 import io.github.stopcran.kanji.core.content.GrammarCurriculumState
 import io.github.stopcran.kanji.core.content.RepoSource
@@ -15,9 +17,14 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 
 sealed interface SyncResult {
-    data class Updated(val kanji: Int, val words: Int, val problems: List<String>) : SyncResult
+    data class Updated(
+        val kanji: Int, val words: Int, val problems: List<String>,
+        val grammar: Int = 0, val listening: Int = 0, val rejected: ContentRejections = ContentRejections(),
+    ) : SyncResult
     data object UpToDate : SyncResult
-    data class Failed(val message: String, val retryable: Boolean) : SyncResult
+    data class Failed(
+        val message: String, val retryable: Boolean, val rejected: ContentRejections = ContentRejections(),
+    ) : SyncResult
 }
 
 private fun List<io.github.stopcran.kanji.core.content.GrammarSet>.toGrammarEntities(sourceId: String): List<GrammarEntity> =
@@ -140,35 +147,32 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             val files = download(url) { SafeZip.read(it) }
             val parsed = ContentParser.parse(files, SceneImages::problem)
             val dao = db.content()
-            legacyListeningProblem(parsed, source.id)?.let { return@withContext SyncResult.Failed(it, retryable = false) }
+            legacyListeningFailure(parsed, source.id)?.let { return@withContext it }
             if (maySkipImport && parsed.listeningTasks.problems.isEmpty() &&
                 dao.meta(source.id)?.contentVersion == parsed.manifest.contentVersion) {
                 head?.let { settings.setSyncedCommit(commitKey, it) }
                 return@withContext SyncResult.UpToDate
             }
             if (parsed.kanji.isEmpty()) {
-                return@withContext SyncResult.Failed("No valid cards: ${parsed.problems.firstOrNull() ?: "empty manifest"}", retryable = false)
+                return@withContext SyncResult.Failed(
+                    "No valid cards: ${parsed.problems.firstOrNull() ?: "empty manifest"}",
+                    retryable = false, rejected = parsed.rejectedContent(),
+                )
             }
             if (!force && parsed.problems.isNotEmpty() && shrinks(parsed, source.id)) {
                 return@withContext SyncResult.Failed(
-                    "${parsed.problems.size} files rejected (${parsed.problems.first()}); keeping previous cards", retryable = true,
+                    "${parsed.problems.size} content issue(s) (${parsed.problems.first()}); keeping previous cards", retryable = true,
+                    rejected = parsed.rejectedContent(),
                 )
             }
-            val rows = parsed.toRows(source.id)
-            val meta = parsed.toSyncMeta(source.id)
-            val taskProblems = db.withTransaction {
-                val taskProblems = db.importListeningTasks(parsed, source, head)
-                dao.replaceContent(source.id, rows, meta.copy(problems = meta.problems + taskProblems.size))
-                db.listening().pruneAudio(source.id)
-                taskProblems
-            }
+            val result = replaceContent(parsed, source, head)
             settings.setGrammarParserEpoch(source.id, ContentParser.GRAMMAR_PARSER_EPOCH)
             settings.setCounterParserEpoch(source.id, io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH)
             settings.setSceneParserEpoch(source.id, SceneCatalog.PARSER_EPOCH)
             settings.setListeningParserEpoch(source.id, io.github.stopcran.kanji.core.listening.ListeningContent.PARSER_EPOCH)
             head?.let { settings.setSyncedCommit(commitKey, it) }
             db.rebuildGrammarReadiness(source.id)
-            SyncResult.Updated(rows.kanji.size, rows.words.size, parsed.problems + taskProblems)
+            result
         } catch (e: ContentException) {
             SyncResult.Failed(e.message ?: "Invalid content", retryable = false)
         } catch (e: java.io.IOException) {
@@ -180,13 +184,34 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
         }
     } }
 
-    private suspend fun legacyListeningProblem(parsed: io.github.stopcran.kanji.core.content.ParsedContent, source: String): String? {
+    private suspend fun replaceContent(
+        parsed: io.github.stopcran.kanji.core.content.ParsedContent, source: RepoSource, head: String?,
+    ): SyncResult.Updated = db.withTransaction {
+        val rows = parsed.toRows(source.id)
+        val meta = parsed.toSyncMeta(source.id)
+        val tasks = db.importListeningTasks(parsed, source, head)
+        db.content().replaceContent(source.id, rows, meta.copy(problems = meta.problems + tasks.problems.size))
+        db.listening().pruneAudio(source.id)
+        SyncResult.Updated(
+            rows.kanji.size, rows.words.size, parsed.problems + tasks.problems,
+            parsed.grammar.sumOf { it.exercises.size }, rows.listening.size + db.listeningTasks().importedCount(source.id),
+            parsed.rejectedContent(tasks.rejectedPaths),
+        )
+    }
+
+    private suspend fun legacyListeningFailure(parsed: io.github.stopcran.kanji.core.content.ParsedContent, source: String): SyncResult.Failed? {
         val taskIds = db.listeningTasks().identities(source).mapTo(hashSetOf()) { it.taskId }
+        val collisions = parsed.listening.filter { it.passage.id in taskIds }.mapTo(hashSetOf()) { "listening/${it.passage.id}.json" }
         return when {
-            parsed.listening.any { it.passage.id in taskIds } ->
-                "A legacy passage reused an existing Japanese listening task's scored ID; keeping previous content"
+            collisions.isNotEmpty() -> SyncResult.Failed(
+                "A legacy passage reused an existing Japanese listening task's scored ID; keeping previous content",
+                retryable = false, rejected = parsed.rejectedContent(collisions),
+            )
             parsed.listeningProblems.isNotEmpty() && db.listening().passages(source).isNotEmpty() ->
-                "Listening content rejected (${parsed.listeningProblems.first()}); keeping previous playable content"
+                SyncResult.Failed(
+                    "Listening content rejected (${parsed.listeningProblems.first()}); keeping previous playable content",
+                    retryable = false, rejected = parsed.rejectedContent(),
+                )
             else -> null
         }
     }

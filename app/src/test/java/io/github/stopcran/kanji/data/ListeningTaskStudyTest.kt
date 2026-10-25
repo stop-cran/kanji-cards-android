@@ -75,7 +75,7 @@ class ListeningTaskStudyTest {
     ): List<String> {
         val parsed = ParsedContent(Manifest(1, "fixture", emptyMap()), emptyList(), emptyList(), emptyList(), emptyMap(), emptyList(),
             listeningTasks = ListeningTaskCatalog(records = records, assets = assets, problems = errors, unsupported = unsupported))
-        return db.withTransaction { db.importListeningTasks(parsed, settings.source.value, "a".repeat(40)) }
+        return db.withTransaction { db.importListeningTasks(parsed, settings.source.value, "a".repeat(40)).problems }
     }
     private suspend fun rejected(block: suspend () -> Unit) {
         try { block(); fail("Expected explicit rejection") } catch (_: IllegalArgumentException) { }

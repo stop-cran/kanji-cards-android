@@ -63,6 +63,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - Word reading help uses a per-run transactional word/scene/kanji snapshot and the selected vocabulary deck's cumulative level.
   Japanese choices already show kana: highlight only, never nest a help action in an answer button. Reading/typing get no answer-revealing aid.
 - **Content is untrusted.** Parse defensively, skip bad files instead of failing the sync, never render raw HTML, cap archive sizes.
+- Sync diagnostics are not rejected-card counts: optional metadata warnings keep their owning cards.
+  Report distinct rejected files with explicit units, and count retained Listening catalogs from the accepted cache, excluding unsupported placeholders.
 - Counter reading metadata belongs to the displayed canonical phrase, not every counter in legacy `kana`.
   Whole-expression modes use narrow authored-answer matching, never legacy numeral arithmetic (十十 must not become 二十).
   Keep v2 files separate from v1, advance the source-scoped counter parser epoch for newly retained metadata,

@@ -2,6 +2,8 @@ package io.github.stopcran.kanji.core
 
 import io.github.stopcran.kanji.core.content.ContentException
 import io.github.stopcran.kanji.core.content.ContentParser
+import io.github.stopcran.kanji.core.content.ContentType
+import io.github.stopcran.kanji.core.content.rejectedContent
 import io.github.stopcran.kanji.core.content.FrontMatter
 import io.github.stopcran.kanji.core.content.GrammarSet
 import io.github.stopcran.kanji.core.content.SafeZip
@@ -73,6 +75,29 @@ class ContentTest {
         "strokes/日.json" to strokesJson.toByteArray(),
         "articles/x.md" to "# Title X\ntext".toByteArray(),
     )
+
+    @Test
+    fun rejectedFileCountsExcludeWarningsButIncludeUnknownFormatsAndResolutionFailures() {
+        val grammar = grammarFixture().recommending("missing" to 1)
+        val files = sample() + mapOf(
+            "kanji/月.md" to kanjiMd.replace("日", "月").toByteArray(),
+            "kanji/future.json" to "{}".toByteArray(),
+            "words/ねこ.md" to wordMd("quiz_distractors: [missing]").toByteArray(),
+            "words/bad.md" to "malformed".toByteArray(),
+            grammar.article to "# Grammar".toByteArray(),
+            "grammar/${grammar.id}.json" to kotlinx.serialization.json.Json.encodeToString(GrammarSet.serializer(), grammar).toByteArray(),
+            "grammar/sample-set.json" to grammarJson.replace("articles/x.md", "articles/missing.md").toByteArray(),
+            "counters/bad.json" to "{".toByteArray(),
+        )
+        val parsed = ContentParser.parse(files + ("manifest.json" to manifest(files)))
+        assertEquals(1, parsed.grammar.size)
+        assertEquals(1, parsed.words.size)
+        assertTrue(parsed.problems.any { "dropped missing optional next" in it })
+        assertTrue(parsed.problems.any { "quiz_distractors" in it })
+        assertEquals(mapOf(
+            ContentType.Kanji to 2, ContentType.Words to 1, ContentType.Grammar to 1, ContentType.Counters to 1,
+        ), parsed.rejectedContent().files)
+    }
 
     @Test
     fun frontMatterParsesScalarsAndLists() {

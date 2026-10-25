@@ -115,7 +115,7 @@ internal class ListeningUiFixture : AutoCloseable {
         db.withTransaction {
             val problems = db.importListeningTasks(ParsedContent(Manifest(1, "assessment-native-fixture", emptyMap()), emptyList(),
                 emptyList(), emptyList(), emptyMap(), emptyList(), listeningTasks = ListeningTaskCatalog(records = pool,
-                    assets = assets + (ContentParser.rawSha256(long) to long))), settings.source.value, "b".repeat(40))
+                    assets = assets + (ContentParser.rawSha256(long) to long))), settings.source.value, "b".repeat(40)).problems
             require(problems.isEmpty()) { problems.joinToString() }
         }
         pool
