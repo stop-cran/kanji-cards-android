@@ -2,6 +2,20 @@ package io.github.stopcran.kanji.ui
 
 import android.app.Application
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsEnabled
@@ -12,6 +26,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performScrollTo
@@ -180,6 +195,115 @@ class ComposeUiTest {
         assertEquals("wrong", picked.value)
         rule.onNodeWithText("Correct: correct").assertIsDisplayed()
         rule.onNodeWithText("Your choice: wrong").assertIsDisplayed()
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun longJapaneseWordFitsThePromptAcrossFontsAndTextScales() {
+        val word = WordEntity("owner/repo", "きょろきょろ", "きょろきょろ", "looking around restlessly", "wago", "", "", "")
+        val font = mutableStateOf(KanjiFont.Gothic)
+        val scale = mutableStateOf(1f)
+        rule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, scale.value)) {
+                MaterialTheme {
+                    Box(Modifier.requiredWidth(280.dp)) {
+                        WordQuizPrompt(word, WordDirection.JpToEn, font.value, true)
+                    }
+                }
+            }
+        }
+        for (size in listOf(1f, 1.3f)) for (face in KanjiFont.entries) {
+            rule.runOnIdle { scale.value = size; font.value = face }
+            val layouts = mutableListOf<TextLayoutResult>()
+            rule.onNodeWithText(word.word).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) {
+                it(layouts)
+            }
+            val layout = layouts.single()
+            assertEquals("$face at $size", 1, layout.lineCount)
+            assertTrue(!layout.hasVisualOverflow)
+            assertEquals(word.word, layout.layoutInput.text.text)
+        }
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun largeWordSizingPreservesShortWordsAndWrapsReadablyAtTheFloor() {
+        val text = mutableStateOf("猫")
+        val maximum = mutableStateOf(64.sp)
+        val scale = mutableStateOf(1f)
+        rule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, scale.value)) {
+                MaterialTheme {
+                    androidx.compose.foundation.layout.Column(
+                        Modifier.requiredWidth(180.dp).verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                    ) {
+                        WordQuizWord(AnnotatedString(text.value), KanjiFont.Textbook, maximum.value)
+                        androidx.compose.material3.Text(
+                            text.value, fontSize = if (text.value == "猫") maximum.value else 28.sp,
+                            fontFamily = KanjiFont.Textbook.family(), lineHeight = 1.2.em,
+                        )
+                    }
+                }
+            }
+        }
+        for (size in listOf(48.sp, 56.sp, 64.sp)) {
+            rule.runOnIdle { maximum.value = size }
+            val layouts = mutableListOf<TextLayoutResult>()
+            for (index in 0..1) rule.onAllNodesWithText(text.value)[index]
+                .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertEquals(1, layouts.first().lineCount)
+            assertEquals(layouts.last().getBoundingBox(0).height, layouts.first().getBoundingBox(0).height, 0.1f)
+            assertEquals(layouts.last().getBoundingBox(0).width, layouts.first().getBoundingBox(0).width, 0.1f)
+        }
+        rule.runOnIdle { text.value = "きょろきょろ".repeat(3); scale.value = 2f }
+        val layouts = mutableListOf<TextLayoutResult>()
+        for (index in 0..1) rule.onAllNodesWithText(text.value)[index]
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val layout = layouts.first()
+        assertEquals(layouts.last().getBoundingBox(0).height, layout.getBoundingBox(0).height, 0.1f)
+        assertEquals(layouts.last().getBoundingBox(0).width, layout.getBoundingBox(0).width, 0.1f)
+        assertTrue(layout.lineCount > 1)
+        assertTrue(!layout.hasVisualOverflow)
+        assertEquals(text.value.length, layout.getLineEnd(layout.lineCount - 1))
+        for (line in 1 until layout.lineCount) {
+            val previous = layout.getBoundingBox(layout.getLineStart(line - 1))
+            val current = layout.getBoundingBox(layout.getLineStart(line))
+            assertTrue("Wrapped glyph rows overlap", previous.bottom <= current.top)
+        }
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun fittedAndWrappedBoldKanjiKeepReadingLinksClickable() {
+        val word = WordEntity("owner/repo", "難難難難難難", "なんなん", "Meaning", null, "", "", "")
+        val help = WordKanjiHelp.build(word.word, word.reading, WordStacks.n5, mapOf("難" to 3))!!
+        val width = mutableStateOf(280.dp)
+        val scale = mutableStateOf(1f)
+        var opens = 0
+        rule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, scale.value)) {
+                MaterialTheme {
+                    androidx.compose.foundation.layout.Column(Modifier.requiredWidth(width.value)) {
+                        WordQuizPrompt(word, WordDirection.JpToEn, KanjiFont.Gothic, true, help) { opens++ }
+                    }
+                }
+            }
+        }
+        for (wrapped in listOf(false, true)) {
+            if (wrapped) rule.runOnIdle { width.value = 180.dp; scale.value = 2f }
+            val layouts = mutableListOf<TextLayoutResult>()
+            val node = rule.onNodeWithText(word.word)
+            node.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val layout = layouts.single()
+            assertEquals(wrapped, layout.lineCount > 1)
+            assertTrue(!layout.hasVisualOverflow)
+            assertEquals(word.word, layout.layoutInput.text.text)
+            val links = layout.layoutInput.text.getLinkAnnotations(0, word.word.length)
+            assertEquals(word.word.length, links.size)
+            assertTrue(links.all { it.item.styles?.style?.fontWeight == androidx.compose.ui.text.font.FontWeight.Bold })
+            node.performTouchInput { click(layout.getBoundingBox(word.word.lastIndex).center) }
+        }
+        assertEquals(2, opens)
     }
 
     @Test

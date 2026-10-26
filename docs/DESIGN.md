@@ -216,6 +216,9 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - Meaning quiz options are titles, unique by title, so exactly one answer is correct. Preference for wrong options: the card's own
   `distractors`, then most shared tags, then random.
 - Word quiz: `JpToEn` shows the word and asks for the meaning; `EnToJp` shows the meaning (+ tags as a hint) and asks for `word (reading)`.
+  Large Japanese words in prompts and both feedback forms fit the available width using the renderer's actual font/annotation metrics.
+  Short words retain their original maximum size. The 28sp floor preserves readable enlarged text; longer words wrap with proportional
+  line spacing rather than overlapping, clipping or ellipsizing. Reading-help links and full semantic text remain intact.
   Options deduplicate exact titles and written forms. A curated `quiz_exclusions` declaration on either word keeps the pair apart,
   both against the target and among chosen options, in both directions; exclusions are not transitive and do not infer synonyms.
   Scoring applies only to eligible candidates. A small pool yields fewer options, possibly only the target, rather than restoring an excluded word.

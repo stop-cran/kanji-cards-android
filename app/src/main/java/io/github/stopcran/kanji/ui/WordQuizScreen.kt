@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.text.modifiers.TextAutoSizeLayoutScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -18,6 +21,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
@@ -29,7 +34,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.stopcran.kanji.core.words.WordDirection
@@ -134,13 +143,41 @@ internal fun WordQuizPrompt(
 ) {
     val wordFirst = direction == WordDirection.JpToEn || direction == WordDirection.Reading || direction.usesPictures
     if (wordFirst || !big) {
-        Text(wordKanjiText(word.word, help, onRead), fontSize = if (big) 64.sp else 48.sp,
-            fontFamily = font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        WordQuizWord(wordKanjiText(word.word, help, onRead), font, if (big) 64.sp else 48.sp)
         if (help != null && onRead != null) WordReadingHelp(help, onRead)
     } else {
         Text(word.title, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         val hint = (listOfNotNull(word.type) + word.tags.splitSep()).filter { it !in originTags }.distinct().joinToString(" · ")
         if (hint.isNotEmpty()) Text(hint, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+internal fun WordQuizWord(text: AnnotatedString, font: io.github.stopcran.kanji.core.srs.KanjiFont, maxFontSize: TextUnit) {
+    val style = LocalTextStyle.current
+    BasicText(
+        text,
+        modifier = Modifier.fillMaxWidth(),
+        style = style.copy(
+            color = if (style.color == Color.Unspecified) LocalContentColor.current else style.color,
+            fontSize = maxFontSize, fontFamily = font.family(), textAlign = TextAlign.Center, lineHeight = 1.2.em,
+        ),
+        autoSize = WordTextAutoSize(maxFontSize),
+    )
+}
+
+private data class WordTextAutoSize(val maximum: TextUnit) : TextAutoSize {
+    override fun TextAutoSizeLayoutScope.getFontSize(constraints: Constraints, text: AnnotatedString): TextUnit {
+        fun fits(size: Float) = performLayout(constraints, text, size.sp).let { it.lineCount <= 1 && !it.hasVisualOverflow }
+        if (fits(maximum.value)) return maximum
+        var low = 28f
+        var high = maximum.value
+        repeat(8) {
+            val middle = (low + high) / 2
+            if (fits(middle)) low = middle else high = middle
+        }
+        // Below this size, keep the text readable and let the proportional line height support wrapping.
+        return low.sp
     }
 }
 
@@ -169,7 +206,7 @@ private fun TypeQuestion(s: WordQuizUi.TypeQuestion, vm: WordQuizViewModel) {
 @Composable
 private fun TypeAnswer(s: WordQuizUi.TypeAnswer, vm: WordQuizViewModel, onOpenDoc: (String) -> Unit) {
     val verdict = s.result.verdict
-    Text(s.word.word, fontSize = 56.sp, fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    WordQuizWord(AnnotatedString(s.word.word), s.font, 56.sp)
     Text(stringResource(R.string.value_dash_detail, s.word.reading, s.word.title), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Text(
         when {
@@ -200,7 +237,7 @@ private fun Answer(s: WordQuizUi.Answer, vm: WordQuizViewModel, onOpenDoc: (Stri
         val target = picture.question.target.scene
         SceneBitmap(picture.images.getValue(target.image), target.description)
     }
-    Text(s.word.word, fontSize = 56.sp, fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    WordQuizWord(AnnotatedString(s.word.word), s.font, 56.sp)
     Text(stringResource(R.string.value_dash_detail, s.word.reading, s.word.title), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     s.picture?.question?.target?.scene?.let {
         Text("${it.sense}: ${it.description}", style = MaterialTheme.typography.bodyMedium)
