@@ -251,7 +251,8 @@ private fun computeModes(
         val q = WordQueues.build(d, ids, own, other, now, newLeft, noise = 0.0)
         val extra = WordQueues.build(d, ids, own, other, now, 0, extra = true, noise = 0.0)
         val offerExtra = extra.isNotEmpty() || d.mode in ex.unlocks.padModes
-        return ModeState.of(ids.size >= 2, "Needs at least 2 words", q.count { !it.isNew }, q.count { it.isNew }, offerExtra, locked)
+        val unavailable = if (d == WordDirection.Reading) "Needs at least two words with kanji" else "Needs at least 2 words"
+        return ModeState.of(ids.size >= 2, unavailable, q.count { !it.isNew }, q.count { it.isNew }, offerExtra, locked)
     }
     val cards = inStack.map { it.toReadingCard() }
     val readingStates = mapOf(ReadingKind.On to on, ReadingKind.Kun to kun)

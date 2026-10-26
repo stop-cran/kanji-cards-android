@@ -321,6 +321,17 @@ class WordsTest {
     }
 
     @Test
+    fun readingRequiresWrittenKanjiNotJustDifferentScripts() {
+        for ((word, reading) in listOf("ぴかぴか" to "ぴかぴか", "ネコ" to "ねこ", "ﾈｺ" to "ねこ", "ABC" to "えーびーしー", "々" to "くりかえし")) {
+            assertFalse(word, hasReadingToLearn(word, reading))
+        }
+        for ((word, reading) in listOf("猫" to "ねこ", "食べる" to "たべる", "消しゴム" to "けしごむ", "𠮷" to "よし")) {
+            assertTrue(word, hasReadingToLearn(word, reading))
+        }
+        assertFalse(hasReadingToLearn("猫", "猫"))
+    }
+
+    @Test
     fun readingDirectionIsGatedAndKanaOnlyWordsAreSkipped() {
         assertTrue(WordDirection.Reading.gated && WordDirection.EnToJp.gated && !WordDirection.JpToEn.gated)
         assertEquals(WordDirection.JpToEn, WordDirection.Reading.other)

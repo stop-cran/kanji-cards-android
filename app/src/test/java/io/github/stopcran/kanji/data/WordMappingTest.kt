@@ -199,11 +199,35 @@ class WordMappingTest {
     }
 
     @Test
+    fun readingFiltersNewDueAndExtraWordsWithoutChangingOtherDirections() {
+        val pool = listOf(
+            word("猫", jlpt = 5).copy(reading = "ねこ"),
+            word("日めくり", jlpt = 5).copy(reading = "ひめくり"),
+            word("ネコ", listOf("猫"), 5).copy(reading = "ねこ"),
+            word("ぴかぴか", jlpt = 5),
+        ).map { it.copy(quizImage = "images/scene.webp") }
+        val readable = pool.forDirection(WordDirection.Reading).map { it.word }
+        assertEquals(listOf("猫", "日めくり"), readable)
+        for (direction in WordDirection.entries.filter { it != WordDirection.Reading }) {
+            assertEquals(pool, pool.forDirection(direction))
+        }
+        val known = pool.associate { it.word to solid }
+        val new = WordQueues.build(WordDirection.Reading, readable, emptyMap(), known, now, 10, noise = 0.0)
+        assertEquals(readable.toSet(), new.map { it.kanji }.toSet())
+        assertTrue(new.all { it.isNew })
+        for (extra in listOf(false, true)) {
+            val queue = WordQueues.build(WordDirection.Reading, readable, known, emptyMap(), now, 0, extra = extra, noise = 0.0)
+            assertEquals(readable.toSet(), queue.map { it.kanji }.toSet())
+            assertTrue(queue.none { it.isNew })
+        }
+    }
+
+    @Test
     fun readingQueuesPreserveExplicitLevelsMetadataAndWrittenWordIdentity() {
-        val explicit = word("explicit-hard", listOf("hard"), 5).copy(reading = "reading-hard", quizExclusions = "paired")
+        val explicit = word("難しい", listOf("hard"), 5).copy(reading = "むずかしい", quizExclusions = "paired")
         val kana = word("explicit-kana", jlpt = 5)
-        val n4 = word("explicit-n4", listOf("easy"), 4).copy(reading = "reading-n4")
-        val legacy = word("legacy-n5", listOf("easy")).copy(reading = "reading-legacy")
+        val n4 = word("開く", listOf("easy"), 4).copy(reading = "ひらく")
+        val legacy = word("日", listOf("easy")).copy(reading = "にち")
         val all = listOf(explicit, kana, n4, legacy)
         val inStack = all.inWordStack(WordStacks.n5, levels)
         val readable = inStack.forDirection(WordDirection.Reading)

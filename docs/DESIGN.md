@@ -229,8 +229,12 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   Popup state lives beside the question and survives rotation without changing options/font. Presentation-identity guards reject stale
   picks/retries/dismissals; opening help cancels and invalidates pending voice input. Help never writes reviews, enrolls kanji, spends an
   introduction or changes ordinary Good/Hard/Again grading. A new run refreshes metadata, not a sync/source/stack change mid-question.
-- Reading quiz (`WordDirection.Reading`): shows the word and asks for its kana reading. Only words whose reading differs from the written form
-  (`hasReadingToLearn`) are asked. Options (`ReadingOptions`) are all distinct readings, never equal to the correct one: generated
+- Reading quiz (`WordDirection.Reading`): shows the word and asks for its kana reading. Only written words containing a Unicode ideograph
+  (including supplementary kanji) whose reading differs from that form are asked (`hasReadingToLearn`), regardless of component metadata.
+  Kana-only script conversion is excluded, even for previously learned Reading entries; their stored history/state are retained.
+  Home counts, queues, padding, reminders and advancement share this filter. Other word directions are unchanged.
+  The Reading availability message is "Needs at least two words with kanji".
+  Options (`ReadingOptions`) are all distinct readings, never equal to the correct one: generated
   look-alikes (voiced/unvoiced, long/short vowel, small っ) first, then real readings of words sharing a kanji or of similar shape. The option
   key is the reading (`WordQuizUi.Answer.key`), unlike the other directions where it is the written word. Tap only for now (voice: issue #5).
   Curated `quiz_distractors` (at most 3 word IDs, never the word itself or an excluded pair; references to missing words are pruned with a sync problem) are offered first, but never fill more than `count - 2` slots so scored candidates still vary the options.

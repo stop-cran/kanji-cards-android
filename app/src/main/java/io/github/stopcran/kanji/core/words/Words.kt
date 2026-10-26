@@ -77,8 +77,9 @@ data class WordCard(
     val image: String? = null,
 )
 
-/** A reading is worth asking only when it differs from the written form, i.e. the word contains kanji. */
-fun hasReadingToLearn(word: String, reading: String) = word != reading
+/** Ask for a separate reading only when the written word contains kanji, not just a different kana script. */
+fun hasReadingToLearn(word: String, reading: String) =
+    word != reading && word.codePoints().anyMatch(Character::isIdeographic)
 
 /**
  * An explicit vocabulary JLPT level wins, independently of the written kanji. Otherwise use the hardest kanji

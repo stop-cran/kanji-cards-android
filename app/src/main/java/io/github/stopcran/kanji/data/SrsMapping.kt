@@ -52,7 +52,7 @@ fun WordSceneEntity.toPictureScene() = PictureScene(
     word, WordScene(id, sense, image, description, quizEligible), imageHash,
 )
 
-/** The reading quiz skips words whose written form already gives the reading. */
+/** Reading requires written kanji; kana-only words remain available in the other directions. */
 fun List<WordEntity>.forDirection(direction: WordDirection): List<WordEntity> = when (direction) {
     WordDirection.Reading -> filter { hasReadingToLearn(it.word, it.reading) }
     WordDirection.Picture, WordDirection.WordToPicture -> filter { it.quizImage != null }

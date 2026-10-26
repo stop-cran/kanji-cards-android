@@ -10,6 +10,7 @@ import io.github.stopcran.kanji.core.words.WordStacks
 import io.github.stopcran.kanji.data.AppDatabase
 import io.github.stopcran.kanji.data.ImageEntity
 import io.github.stopcran.kanji.data.KanjiEntity
+import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.ReviewStateEntity
 import io.github.stopcran.kanji.data.Settings
 import io.github.stopcran.kanji.data.WordEntity
@@ -252,6 +253,38 @@ class WordKanjiHelpViewModelTest {
             assertSame(q.picture, retry.picture)
             assertSame(q.kanjiHelp, retry.kanjiHelp)
         }
+    }
+
+    @Test
+    fun readingExtraSkipsLearnedKanaIncludingPaddingWithoutDeletingItsHistory() = runBlocking {
+        install()
+        val kanji = db.content().words(source).map { it.word }.toSet()
+        val kana = setOf("ネコ", "ピカピカ")
+        db.content().insertWords(kana.map { word ->
+            WordEntity(source, word, if (word == "ネコ") "ねこ" else "ぴかぴか", "Meaning $word", "wago", "", "", "Body", 5)
+        })
+        gate(owner = WordStacks.n4.id, modes = listOf("WordReading"))
+        db.reviews().record(
+            ReviewStateEntity(source, stack, "ネコ", "WordReading", "Review", 3.0, 5.0, 999, 500, 2, 0),
+            ReviewLogEntity(0, source, stack, "ネコ", "WordReading", 3, 500),
+        )
+        val oldStates = db.reviews().allStates().filter { it.kanji in kana }
+        val oldLog = db.reviews().allLog().filter { it.kanji in kana }
+        val vm = WordQuizViewModel(services)
+        vm.ensureStarted(WordDirection.Reading, true)
+        val seen = mutableSetOf<String>()
+        repeat(kanji.size) {
+            val q = question(vm)
+            assertTrue(q.word.word in kanji)
+            seen += q.word.word
+            vm.pick(q.word.reading, origin = q)
+            advance(vm)
+        }
+        assertEquals(kanji, seen)
+        assertTrue(vm.ui is WordQuizUi.Done)
+        assertEquals(oldStates, db.reviews().allStates().filter { it.kanji in kana })
+        assertEquals(oldLog, db.reviews().allLog().filter { it.kanji in kana })
+        assertTrue(db.reviews().allLog().filter { it.kanji in kanji }.all { it.stack == WordStacks.n4.id })
     }
 
     @Test
