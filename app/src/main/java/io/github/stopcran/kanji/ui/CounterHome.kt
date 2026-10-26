@@ -16,8 +16,10 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.counters.CounterMode
 import io.github.stopcran.kanji.core.counters.CounterGroup
 import io.github.stopcran.kanji.core.counters.CounterScope
@@ -76,12 +78,9 @@ fun CountersPage(app: KanjiApp, onBack: () -> Unit, a: HomeActions) {
     val group = CounterGroup.fromCode(selected)
     val home = rememberCounterHome(app, group)
     Page("Numbers & counters", onBack) {
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CounterScope.entries.forEach { item ->
-                FilterChip(selected = scope == item, onClick = { app.settings.setCounterScope(source.id, item) },
-                    label = { Text(item.label) })
-            }
-        }
+        LevelFilter(CounterScope.entries, scope, { app.settings.setCounterScope(source.id, it) }, { it.label },
+            description = if (scope == CounterScope.N4)
+                stringResource(R.string.level_filter_includes_easier) else null)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CounterGroup.entries.forEach { item ->
                 FilterChip(selected = group == item, onClick = { selected = item.code }, label = { Text(item.label) })

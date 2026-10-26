@@ -2,8 +2,8 @@ package io.github.stopcran.kanji.core.counters
 
 enum class CounterScope(val code: String, val label: String, private val minimumLevel: Int) {
     N5("n5", "N5", 5),
-    N4("n4", "N4 + N5", 4),
-    All("all", "All levels", 1);
+    N4("n4", "N4", 4),
+    All("all", "All", 1);
 
     fun includes(level: Int): Boolean = level in minimumLevel..5
 

@@ -462,12 +462,19 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
 
 ## 5. Words, levels and advancement
 
+- **Level selectors (#80):** Kanji, Words, Numbers & counters, Grammar (new material and browsing), and Listening
+  (practice and diagnostics) share horizontally scrollable filter chips. Show only offered choices, ordered N5 to N1,
+  then All, then named thematic/unclassified choices. Chip labels omit "JLPT", counts and cumulative suffixes.
+  Counts live outside the chips; Kanji reports the selected stack's count. Scope explanations remain outside the row:
+  Kanji matches only the selected tag, Words/counters/Listening N4 includes easier levels, Grammar filters cumulative
+  new material separately from exact-level browsing, and diagnostics select an exact level. IDs, saved selections,
+  fallback behavior, unlock rules, membership and review schedules are unchanged.
 - Word stacks are cumulative in *membership* (`words-n4` includes N5 words) but keyed independently in SRS state, so switching from `words-n5`
   to `words-n4` starts those words afresh. Never share state across stacks.
 - **Onomatopoeia stack** (`words-onomatopoeia`, a `WordStack` with `tag = "onomatopoeia"`): membership is the word's tag alone, independent of
-  JLPT level or kanji, so it covers unlevelled kana-only words that appear otherwise only in "All words". It is offered whenever at least
+  JLPT level or kanji, so it covers unlevelled kana-only words that appear otherwise only in "All". It is offered whenever at least
   `MIN_TAG_STACK_WORDS` (4) tagged words exist, even before N4 is unlocked, so a quiz always has distractors. It uses the normal word quiz
-  directions, its own SRS state (a word studied here and in "All words" has two schedules, as for N5/N4) and the shared daily new-card
+  directions, its own SRS state (a word studied here and in "All" has two schedules, as for N5/N4) and the shared daily new-card
   allowance. Distractors come only from the stack's own words, so options are all onomatopoeia. `offeredStacks()` keeps home, quizzes and
   reminders in agreement; an unavailable saved stack falls back to N5. The N4 advancement offer needs the N5 word states, which exist only for
   the selected stack, so `shouldOfferN4` makes no offer while any other stack (including this one) is selected.

@@ -1,11 +1,9 @@
 package io.github.stopcran.kanji.ui
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -255,9 +253,6 @@ internal fun GrammarRecommendationReadout(candidate: FocusCandidate) {
 
 @Composable
 internal fun GrammarScopeChips(selected: GrammarScope, onSelect: (GrammarScope) -> Unit) {
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        GrammarScope.entries.forEach { scope ->
-            FilterChip(selected = selected == scope, onClick = { onSelect(scope) }, label = { Text(scope.label) })
-        }
-    }
+    val levels = GrammarScope.entries.filter { it != GrammarScope.All && it != GrammarScope.Unclassified }
+    LevelFilter(levels + listOf(GrammarScope.All, GrammarScope.Unclassified), selected, onSelect, { it.label })
 }

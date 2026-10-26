@@ -4,17 +4,14 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import io.github.stopcran.kanji.R
 import androidx.compose.ui.res.stringResource
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -124,13 +121,11 @@ private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeA
 private fun KanjiPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: HomeActions) {
     Page("Kanji", onBack) {
         LoadingBar(data)
-        Text(stringResource(R.string.cards, data.kanji.size))
+        Text(data.stack.label + " · " + stringResource(R.string.cards, data.kanji.inStack(data.stack.id).size))
         if (data.stacks.size > 1) {
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                data.stacks.forEach { s ->
-                    FilterChip(selected = s.id == data.stack.id, onClick = { app.settings.setStack(s.id) }, label = { Text(stringResource(R.string.label_with_count, s.label, data.kanji.inStack(s.id).size)) })
-                }
-            }
+            LevelFilter(data.stacks, data.stack, { app.settings.setStack(it.id) }, { it.label },
+                description = if (data.stack.tag?.startsWith("jlpt-") == true)
+                    stringResource(R.string.level_filter_kanji_exact, data.stack.label) else null)
             Text(stringResource(R.string.each_stack_keeps_its_own), style = MaterialTheme.typography.bodySmall)
         }
         ModeRow("Meaning quiz", data.mode(HomeMode.Meaning), onStart = a.onQuiz)
@@ -147,11 +142,8 @@ private fun WordsPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: Home
         Text(data.wordStack.label + " · " + stringResource(R.string.words, data.wordCount))
         N4Offer(app, data)
         if (data.wordStacks.size > 1) {
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                data.wordStacks.forEach { s ->
-                    FilterChip(selected = s.id == data.wordStack.id, onClick = { app.settings.setWordStack(s.id) }, label = { Text(s.label) })
-                }
-            }
+            LevelFilter(data.wordStacks, data.wordStack, { app.settings.setWordStack(it.id) }, { it.label },
+                description = if (data.wordStack == WordStacks.n4) stringResource(R.string.level_filter_includes_easier) else null)
         }
         ModeRow("Japanese → English", data.mode(HomeMode.WordJp), onStart = { a.onWords(WordDirection.JpToEn, it) })
         ModeRow("English → Japanese", data.mode(HomeMode.WordEn), onStart = { a.onWords(WordDirection.EnToJp, it) })

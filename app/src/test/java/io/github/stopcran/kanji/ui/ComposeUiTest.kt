@@ -21,6 +21,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -66,6 +67,68 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [28], application = Application::class)
 class ComposeUiTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun conciseLevelChipsKeepStableSelectionsAndDisabledCallbacks() {
+        val selected = mutableStateOf(WordStacks.n4)
+        val enabled = mutableStateOf(true)
+        var selectedId: String? = null
+        rule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 1.5f)) {
+                MaterialTheme {
+                    androidx.compose.foundation.layout.Column(Modifier.requiredWidth(280.dp)) {
+                        LevelFilter(WordStacks.offered(true, 4), selected.value, {
+                            selected.value = it
+                            selectedId = it.id
+                        }, { it.label }, description = "Includes easier levels.", enabled = enabled.value)
+                    }
+                }
+            }
+        }
+        rule.onNodeWithText("N4").assertIsSelected()
+        rule.onNodeWithText("Includes easier levels.").assertIsDisplayed()
+        rule.onNodeWithText("Onomatopoeia").performScrollTo().performClick().assertIsSelected()
+        rule.runOnIdle { assertEquals("words-onomatopoeia", selectedId); enabled.value = false }
+        rule.onNodeWithText("All").performScrollTo().assertIsNotEnabled().performClick()
+        rule.runOnIdle { assertEquals("words-onomatopoeia", selectedId); enabled.value = true }
+        rule.onNodeWithText("All").performClick().assertIsSelected()
+        rule.runOnIdle { assertEquals("words-all", selectedId) }
+    }
+
+    @Test
+    fun kanjiLevelChipsOfferOnlyAvailableTagsAndKeepTheAllFallback() {
+        val choices = io.github.stopcran.kanji.core.srs.Stacks.available(listOf(listOf("jlpt-n4", "starter")))
+        val selected = mutableStateOf(io.github.stopcran.kanji.core.srs.Stacks.find("jlpt-n1", choices))
+        rule.setContent {
+            LevelFilter(choices, selected.value, { selected.value = it }, { it.label })
+        }
+        rule.onNodeWithText("All").assertIsSelected()
+        rule.onNodeWithText("N5").assertDoesNotExist()
+        rule.onNodeWithText("N4").performClick().assertIsSelected()
+        rule.runOnIdle { assertEquals("jlpt-n4", selected.value.id) }
+        rule.onNodeWithText("Starter").performClick().assertIsSelected()
+        rule.runOnIdle { assertEquals("starter", selected.value.id) }
+    }
+
+    @Test
+    fun grammarLevelChipsPutLevelsBeforeAllAndKeepTrailingChoicesReachable() {
+        val selected = mutableStateOf(GrammarScope.All)
+        rule.setContent {
+            Box(Modifier.requiredWidth(280.dp)) {
+                GrammarScopeChips(selected.value) { selected.value = it }
+            }
+        }
+        val chips = rule.onAllNodes(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(
+            androidx.compose.ui.semantics.SemanticsProperties.Selected,
+        )).fetchSemanticsNodes()
+        assertEquals(listOf("N5", "N4", "N3", "N2", "N1", "All", "Unclassified"),
+            chips.map { it.config[androidx.compose.ui.semantics.SemanticsProperties.Text].single().text })
+        rule.onNodeWithText("Unclassified").performScrollTo().performClick().assertIsSelected()
+        rule.runOnIdle { assertEquals(GrammarScope.Unclassified, selected.value) }
+        rule.onNodeWithText("N4").performScrollTo().performClick().assertIsSelected()
+        rule.runOnIdle { assertEquals(GrammarScope.N4, selected.value) }
+    }
 
     @Test
     fun targetedPreviewRequiresALabeledOptInAndDropsItForAChangedSnapshot() {

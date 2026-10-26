@@ -104,9 +104,9 @@ data class WordStack(val id: String, val label: String, val minLevel: Int?, val 
 }
 
 object WordStacks {
-    val n5 = WordStack("words-n5", "N5 words", 5)
-    val n4 = WordStack("words-n4", "N4 words (with N5)", 4)
-    val all = WordStack("words-all", "All words", null)
+    val n5 = WordStack("words-n5", "N5", 5)
+    val n4 = WordStack("words-n4", "N4", 4)
+    val all = WordStack("words-all", "All", null)
     val onomatopoeia = WordStack("words-onomatopoeia", "Onomatopoeia", null, tag = "onomatopoeia")
 
     /**

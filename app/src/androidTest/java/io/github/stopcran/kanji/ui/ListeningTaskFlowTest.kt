@@ -74,18 +74,19 @@ class ListeningTaskFlowTest {
                 rule.waitUntil(10_000) { rule.onAllNodesWithText("Study without scoring").fetchSemanticsNodes().size == 4 }
                 rule.onNodeWithText("N5").assertIsSelected()
                 rule.onNodeWithText(n4.task.title).assertDoesNotExist()
-                rule.onNodeWithText("N4 + N5").performScrollTo().performClick()
+                rule.onNodeWithText("N4").performScrollTo().performClick()
                 val quick = hasText("Quick response") and hasClickAction()
                 rule.onNode(quick).performScrollTo().performClick()
                 rule.waitUntil(10_000) { rule.onAllNodesWithText("Study without scoring").fetchSemanticsNodes().size == 2 }
-                rule.onNodeWithText("N4 + N5").performScrollTo().assertIsSelected().assertIsDisplayed()
+                rule.onNodeWithText("N4").performScrollTo().assertIsSelected().assertIsDisplayed()
+                rule.onNodeWithText("Includes easier levels.").assertIsDisplayed()
                 screenshot("N4-B-scope-narrow-large-light.png")
                 rule.runOnIdle { dark.value = true }
                 rule.waitForIdle()
-                rule.onNodeWithText("N4 + N5").assertIsDisplayed()
+                rule.onNodeWithText("N4").assertIsDisplayed()
                 screenshot("N4-B-scope-narrow-large-dark.png")
                 restoration.emulateSavedInstanceStateRestore()
-                rule.onNodeWithText("N4 + N5").assertIsSelected()
+                rule.onNodeWithText("N4").assertIsSelected()
                 rule.onNode(quick).assertIsSelected()
                 rule.waitUntil(10_000) { rule.onAllNodesWithText(n4.task.title).fetchSemanticsNodes().isNotEmpty() }
                 rule.onNodeWithText(n4.task.title).performScrollTo().assertIsDisplayed()

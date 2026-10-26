@@ -10,7 +10,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.listening.*
 import io.github.stopcran.kanji.data.ListeningQueue
@@ -45,13 +47,10 @@ internal fun ListeningBrowser(services: Services, onBack: () -> Unit, onEncounte
     Page("Listening - ${level.label}", onBack, scrollable = home.overview != null && home.queue != null) {
         Text(home.summary())
         Text("English listen-first passages and Japanese task formats share the same daily allowance and exposure cooldown.")
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ListeningScope.entries.forEach { choice ->
-                FilterChip(selected = level == choice, enabled = !busy,
-                    onClick = { services.settings.setListeningScope(source.id, choice); error = null },
-                    label = { Text(choice.label) })
-            }
-        }
+        LevelFilter(ListeningScope.entries, level, { services.settings.setListeningScope(source.id, it); error = null }, { it.label },
+            description = if (level == ListeningScope.N4)
+                stringResource(R.string.level_filter_includes_easier) else null,
+            enabled = !busy)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val filters = listOf("all" to "All formats", "legacy" to "English listen-first") +
                 ListeningTaskPolicy.supportedTypes.map { it.wire to it.label }

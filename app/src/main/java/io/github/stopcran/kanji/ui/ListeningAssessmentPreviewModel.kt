@@ -1,12 +1,9 @@
 package io.github.stopcran.kanji.ui
 
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.stopcran.kanji.Services
@@ -83,12 +80,8 @@ internal fun ListeningAssessmentPreviewView(vm: ListeningAssessmentPreviewModel,
     LaunchedEffect(vm) { vm.refresh() }
     DisposableEffect(vm) { onDispose { vm.leave() } }
     Page("Japanese diagnostic section", onBack) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ListeningAssessmentProfile.entries.forEach { choice ->
-                FilterChip(selected = vm.profile == choice, onClick = { vm.refresh(profile = choice) }, enabled = !vm.busy,
-                    label = { Text("N${choice.jlpt}") })
-            }
-        }
+        LevelFilter(ListeningAssessmentProfile.entries, vm.profile, { vm.refresh(profile = it) }, { "N${it.jlpt}" },
+            enabled = !vm.busy)
         Text("N${vm.profile.jlpt}: ${vm.profile.scoredCount} scored items and ${vm.profile.groups.size} separate worked examples; " +
             "${vm.profile.minimumMs / 60_000}-${vm.profile.maximumMs / 60_000} minutes.")
         Text("This exact diagnostic level is separate from the cumulative guided-practice level.")

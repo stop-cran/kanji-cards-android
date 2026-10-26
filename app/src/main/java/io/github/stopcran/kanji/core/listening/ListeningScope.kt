@@ -2,7 +2,7 @@ package io.github.stopcran.kanji.core.listening
 
 enum class ListeningScope(val code: String, val label: String, private val minimumLevel: Int) {
     N5("n5", "N5", 5),
-    N4("n4", "N4 + N5", 4);
+    N4("n4", "N4", 4);
 
     fun includes(level: Int): Boolean = level in minimumLevel..5
 }

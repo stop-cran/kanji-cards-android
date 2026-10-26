@@ -78,6 +78,8 @@
     <string name="cards">%1$s cards</string>
     <string name="label_with_count">%1$s (%2$s)</string>
     <string name="each_stack_keeps_its_own">Each stack keeps its own review schedule.</string>
+    <string name="level_filter_includes_easier">Includes easier levels.</string>
+    <string name="level_filter_kanji_exact">Only cards tagged %1$s.</string>
     <string name="browse_cards">Browse cards</string>
     <string name="words">%1$s words</string>
     <string name="browse_words">Browse words</string>

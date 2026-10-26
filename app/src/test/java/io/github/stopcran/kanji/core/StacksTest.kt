@@ -11,7 +11,8 @@ class StacksTest {
 
     @Test
     fun listsOnlyStacksWithCards() {
-        assertEquals(listOf("all", "starter", "jlpt-n5", "jlpt-n4", "jlpt-n3"), Stacks.available(cards).map { it.id })
+        assertEquals(listOf("jlpt-n5", "jlpt-n4", "jlpt-n3", "all", "starter"), Stacks.available(cards).map { it.id })
+        assertEquals(listOf(Stacks.everything), Stacks.available(emptyList()))
     }
 
     @Test

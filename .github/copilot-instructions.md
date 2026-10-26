@@ -66,6 +66,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   Use the shared code-point-aware `hasReadingToLearn` filter for all admission paths; retain excluded kana-only words' saved progress.
 - Large word text must not inherit body line height: use proportional spacing and renderer-based fitting, with readable wrapping at the
   size floor. Preserve annotated reading links and test their bold metrics/clicks under narrow widths and enlarged text.
+- Level chips use bare N5-N1/All labels; explain cumulative versus exact scope outside the shared `LevelFilter` row.
+  Never infer membership or saved identity from a chip's text or position; concise labels do not unify scope semantics.
 - **Content is untrusted.** Parse defensively, skip bad files instead of failing the sync, never render raw HTML, cap archive sizes.
 - Sync diagnostics are not rejected-card counts: optional metadata warnings keep their owning cards.
   Report distinct rejected files with explicit units, and count retained Listening catalogs from the accepted cache, excluding unsupported placeholders.
