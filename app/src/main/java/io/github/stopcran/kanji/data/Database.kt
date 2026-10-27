@@ -11,6 +11,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import io.github.stopcran.kanji.core.kana.KANA_SOURCE_ID
 import io.github.stopcran.kanji.core.reading.ReadingCard
 import io.github.stopcran.kanji.core.reading.ReadingKind
 import kotlinx.coroutines.flow.Flow
@@ -475,8 +476,9 @@ interface ReviewDao {
     @Query("SELECT COUNT(*) FROM (SELECT kanji FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode = :mode GROUP BY kanji HAVING MIN(atMs) >= :sinceMs)")
     suspend fun newCardsIntroducedSince(sourceId: String, stack: String, mode: String, sinceMs: Long): Int
 
-    /** Distinct items (kanji or words, across every mode) whose first-ever review happened since [sinceMs]: the shared daily new-item pool. */
-    @Query("SELECT COUNT(*) FROM (SELECT 1 FROM review_log WHERE sourceId = :sourceId GROUP BY stack, kanji, reading, CASE WHEN reading = '' THEN '' ELSE mode END HAVING MIN(atMs) >= :sinceMs)")
+    /** First-ever introductions in the shared pool: Kana skills and reading cards count separately per mode. */
+    @Query("SELECT COUNT(*) FROM (SELECT 1 FROM review_log WHERE sourceId = :sourceId GROUP BY stack, kanji, reading, " +
+        "CASE WHEN sourceId = '$KANA_SOURCE_ID' OR reading != '' THEN mode ELSE '' END HAVING MIN(atMs) >= :sinceMs)")
     suspend fun itemsIntroducedSince(sourceId: String, sinceMs: Long): Int
 
     /** Cards that were reviewed before and are due at [nowMs], in any mode. */

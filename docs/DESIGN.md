@@ -627,6 +627,12 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   After process death ephemeral session routes are dropped from the restored back stack and the user lands on the page they started from.
   Durable listening encounter routes are retained and restore their captured package and playback/answer state.
 - **Kana progression:** Hiragana and katakana have independent review state. Yōon cards unlock per script and per mode only when both plain component kana are in Review with at least seven days of FSRS stability; voiced and semi-voiced kana (が, ぱ…) unlock the same way once their unvoiced base (か, は) is in Review with at least three days (`VOICED_UNLOCK_STABILITY_DAYS`; a first Good already gives about 3.2 days, so this is deliberately light, tune it from real use). A card already started in that mode stays available. Locked cards are excluded from that mode's study queues, quiz distractors and new-card counts, and the Kana page reports one total of locked kana per mode. In Kana drawing, a card with no prior Draw review is first shown with the faint numbered reference; this is a practice-only trace, then the card returns later to be drawn from memory without recording the trace attempt.
+- **Kana daily intake (#82):** the built-in Kana source counts each first recorded `(script, kana, mode)` exercise once
+  against its shared daily allowance across both scripts and all modes. Forward familiarity does not make a first reverse,
+  typing or drawing exercise free. Repeat reviews and unrecorded traces do not spend new slots. Home and ordinary sessions
+  consume the same allowance; exhausting it stops new-mode batches from refilling. Due reviews stay available, and explicit
+  Practice more may exceed the allowance. Accounting reads existing history, so today's earlier first-time exercises count
+  immediately without rewriting progress or schedules. Other sources retain their existing cross-mode item/reading rules.
 - Home loads asynchronously. The nine main flows (kanji, words, seven review-state sets) start as null = "not yet" and the screen shows a progress
   bar until all emit; empty means "no data". The new-card-introduced counts still start at 0 (meaning "none today") and settle a moment later.
 - Home reads only slim rows (`observeKanjiLite`/`observeWordsLite`: no article body, `strokesJson` reduced to `''` or NULL). Screens that need bodies

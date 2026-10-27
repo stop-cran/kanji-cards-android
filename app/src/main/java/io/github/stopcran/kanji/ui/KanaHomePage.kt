@@ -34,7 +34,8 @@ internal fun KanaPage(
                 "A combination such as ちゅ unlocks separately in each mode once both parts (ち and ゆ) have FSRS stability of at least " +
                 "${KanaCatalog.UNLOCK_STABILITY_DAYS.toInt()} days in that mode. A voiced or semi-voiced kana such as が or ぱ " +
                 "unlocks the same way once its plain kana (か, は) reaches ${KanaCatalog.VOICED_UNLOCK_STABILITY_DAYS.toInt()} days. " +
-                "Hiragana and katakana keep separate review schedules. The uncommon ぢ and づ use di/du " +
+                "Hiragana and katakana keep separate review schedules. First-time practice in each mode counts toward " +
+                "one shared daily Kana allowance; due reviews are not capped. The uncommon ぢ and づ use di/du " +
                 "to keep reverse romaji questions distinct; ji/zu are accepted when typing.",
             style = MaterialTheme.typography.bodyMedium,
         )
