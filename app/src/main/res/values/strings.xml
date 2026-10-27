@@ -1,4 +1,14 @@
 <resources>
+    <string name="content_reading_cache">Loading saved content…</string>
+    <string name="content_downloading">Getting your content… Kana is ready to try.</string>
+    <string name="content_updating">Updating content…</string>
+    <string name="content_download_failed">Couldn’t download content. Kana is still available.</string>
+    <string name="content_download_interrupted">Download interrupted. Kana is still available.</string>
+    <string name="content_update_failed">Couldn’t update content. Saved content is still available.</string>
+    <string name="content_update_interrupted">Update interrupted. Saved content is still available.</string>
+    <string name="content_loading_summary">Loading content…</string>
+    <string name="content_unavailable_summary">Content unavailable</string>
+    <string name="content_retry">Retry</string>
     <string name="article_table_scroll">Scroll sideways to read all columns.</string>
     <string name="article_table_columns">Columns %1$d–%2$d of %3$d</string>
     <string name="article_table_previous">Earlier columns</string>

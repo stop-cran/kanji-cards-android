@@ -188,6 +188,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   windows for unusually wide tables; an unbounded minimum-width sum can overflow Compose constraints.
 - Weekly study days observe persisted `review_log` for the selected source plus built-in Kana. Selected-source
   state-map changes alone miss late Kana writes; rebind the observation on source/local-date/time-zone changes.
+- Missing `sync_meta` does not mean an empty source: upgrades can retain usable content. First-load summaries
+  wait for a source-bound cache observation and use sync activity scoped to the repository and branch.
 - Quiz routes: `quiz:<ts>` (due + new) and `quiz:<ts>:extra` (`QueueBuilder.extra`, max(10, batch size) cards: overdue, unseen, soonest due; a short session is padded by `PracticePadding` with weak learned cards of other stacks, which are recorded in their owner stack via the view model's `owners` map, never the selected one). The ViewModel starts via `ensureStarted(extra)` from `LaunchedEffect`, never in `init`.
 
 - Downloadable Google Fonts (`ui-text-google-fonts`) do NOT work for CJK: the provider serves only the Latin subset, and Compose falls back to the system face silently. Bundle subsetted fonts instead (see README "Fonts").

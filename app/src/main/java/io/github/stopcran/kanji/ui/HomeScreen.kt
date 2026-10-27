@@ -19,9 +19,12 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -40,8 +43,8 @@ import io.github.stopcran.kanji.core.kana.KanaMode
 import io.github.stopcran.kanji.core.kana.KanaScript
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.WordStacks
-import io.github.stopcran.kanji.data.SyncResult
 import io.github.stopcran.kanji.data.inStack
+import kotlinx.coroutines.launch
 
 /** Where the user can go from the home pages; sessions are started by the caller. */
 @Suppress("LongParameterList")
@@ -73,47 +76,48 @@ class HomeActions(
 /** The main screen and the Kanji / Words pages share one [HomeData], so every count agrees across them. */
 @Composable
 fun HomePages(app: KanjiApp, route: String, onBack: () -> Unit, actions: HomeActions) {
-    val data = rememberHomeData(app)
-    val syncStatus by produceState("", data.sourceId) {
-        if (app.db.content().meta(data.sourceId) == null) {
-            value = "Downloading cards…"
-            value = when (val r = app.contentSync.sync(app.settings.source.value)) {
-                is SyncResult.Failed -> "Could not download cards: ${r.message}"
-                else -> ""
+    val source by app.settings.source.collectAsState()
+    key(source) {
+        val data = rememberHomeData(app)
+        LaunchedEffect(source) {
+            if (app.db.content().meta(source.id) == null) {
+                app.contentSync.sync(source)
             }
         }
-    }
-    when (route) {
-        "kanji-home" -> KanjiPage(app, data, onBack, actions)
-        "words-home" -> WordsPage(app, data, onBack, actions)
-        "counters-home" -> CountersPage(app, onBack, actions)
-        "grammar-home" -> GrammarPage(app, onBack, actions.onGrammarDoc, actions.onGrammar, actions.onGrammarTarget)
-        "kana-home" -> KanaPage(app, onBack, actions.onKanaStudy)
-        else -> MainPage(app, data, syncStatus, actions)
+        when (route) {
+            "kanji-home" -> KanjiPage(app, data, onBack, actions)
+            "words-home" -> WordsPage(app, data, onBack, actions)
+            "counters-home" -> CountersPage(app, onBack, actions)
+            "grammar-home" -> GrammarPage(app, onBack, actions.onGrammarDoc, actions.onGrammar, actions.onGrammarTarget)
+            "kana-home" -> KanaPage(app, onBack, actions.onKanaStudy)
+            else -> MainPage(app, source, data, actions)
+        }
     }
 }
 
 @Composable
-private fun MainPage(app: KanjiApp, data: HomeData, syncStatus: String, a: HomeActions) {
+private fun MainPage(app: KanjiApp, source: RepoSource, data: HomeData, a: HomeActions) {
     val kana = rememberKanaOverview(app)
+    val content = rememberHomeContent(app.db, app.contentSync, source)
+    val scope = rememberCoroutineScope()
     Page("Ensō Nihongo", actions = { IconButton(onClick = a.onSettings) { Image(painterResource(R.drawable.settings_brush), "Settings", Modifier.size(27.dp)) } }) {
-        if (syncStatus.isNotEmpty()) Text(syncStatus)
-        LoadingBar(data)
+        HomeContentNotice(content) { scope.launch { app.contentSync.sync(source) } }
+        if (content.usable) LoadingBar(data)
         val defaultId = remember { RepoSource.parse(Defaults.CONTENT_REPO_URL, Defaults.CONTENT_BRANCH)?.id }
         if (data.sourceId != defaultId) Text(stringResource(R.string.cards_from, data.sourceId))
         N4Offer(app, data)
         PacingHint(data)
         Entry("Kana", kana.summary(), R.drawable.kana_sumi, a.onKanaPage)
-        Entry("Kanji", data.summary(HomeMode.Meaning, HomeMode.Drawing, HomeMode.Readings) ?: "Loading…", ArtSet.current.kanji, a.onKanjiPage)
+        Entry("Kanji", content.summary(data.summary(HomeMode.Meaning, HomeMode.Drawing, HomeMode.Readings) ?: "Loading…"), ArtSet.current.kanji, a.onKanjiPage)
         val words = data.summary(
             HomeMode.WordJp, HomeMode.WordEn, HomeMode.WordReading, HomeMode.WordType, HomeMode.WordPicture, HomeMode.WordToPicture,
         ) ?: "Loading…"
-        Entry("Words", words, ArtSet.current.words, a.onWordsPage)
+        Entry("Words", content.summary(words), ArtSet.current.words, a.onWordsPage)
         val counters = rememberCounterHome(app)
-        Entry("Numbers & counters", counters.summary(), ArtSet.current.counters, a.onCountersPage)
+        Entry("Numbers & counters", content.summary(counters.summary()), ArtSet.current.counters, a.onCountersPage)
         val grammar = rememberGrammarHome(app).value
-        Entry("Grammar", grammar.summary(), ArtSet.current.grammar, a.onGrammarPage)
-        Entry("Listening", rememberListeningHome(app).value.summary(), ArtSet.current.listening, a.onListeningPage)
+        Entry("Grammar", content.summary(grammar.summary()), ArtSet.current.grammar, a.onGrammarPage)
+        Entry("Listening", content.summary(rememberListeningHome(app).value.summary()), ArtSet.current.listening, a.onListeningPage)
     }
 }
 

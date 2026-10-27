@@ -23,6 +23,8 @@ import io.github.stopcran.kanji.core.approvedTask
 import io.github.stopcran.kanji.core.taskTone
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.JsonObject
@@ -48,6 +50,8 @@ import java.io.InputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import java.util.zip.CRC32
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 private const val SHA_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 private const val SHA_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -120,6 +124,7 @@ private fun archiveFiles(version: String, files: Map<String, ByteArray>): ByteAr
 }
 
 private class FakeHttp : ContentHttp {
+    var beforeOpen: () -> Unit = {}
     var headCode = 200
     var headSha: String? = SHA_A
     var headEtag: String? = "\"etag-1\""
@@ -133,6 +138,7 @@ private class FakeHttp : ContentHttp {
     val headChecks get() = requests.count { it.first.startsWith("https://api.github.com") }
 
     override fun open(url: String, headers: Map<String, String>, connectTimeoutMs: Int, readTimeoutMs: Int): ContentResponse {
+        beforeOpen()
         requests += url to headers
         val isHead = url.startsWith("https://api.github.com")
         if (if (isHead) headFails else archiveFails) throw IOException("offline")
@@ -421,6 +427,69 @@ class CounterSyncTest {
         assertEquals(io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH,
             settings.counterParserEpoch(source.id))
     }
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28], manifest = Config.NONE, application = Application::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@SQLiteMode(SQLiteMode.Mode.NATIVE)
+class ContentLoadStateTest {
+    private val source = RepoSource("Owner", "Repo", "main")
+    private val http = FakeHttp()
+    private lateinit var db: AppDatabase
+    private lateinit var settings: Settings
+    private lateinit var sync: ContentSync
+
+    @Test fun syncActivityRetainsSourceAndBranchBoundResultsAndReportsCancellation() = runBlocking {
+        val success = sync.sync(source)
+        assertTrue(success is SyncResult.Updated)
+        assertEquals(SyncActivity.Finished(success), sync.activity.value[source])
+        val branch = source.copy(branch = "alternate")
+        http.archiveCode = 503
+        val failure = sync.sync(branch, force = true)
+        assertTrue(failure is SyncResult.Failed)
+        assertEquals(SyncActivity.Finished(failure), sync.activity.value[branch])
+        assertEquals(SyncActivity.Finished(success), sync.activity.value[source])
+
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        http.beforeOpen = { entered.countDown(); check(release.await(10, TimeUnit.SECONDS)) }
+        val other = source.copy(repo = "other")
+        val job = launch(Dispatchers.IO) { sync.sync(other) }
+        try {
+            assertTrue(entered.await(10, TimeUnit.SECONDS))
+            assertEquals(SyncActivity.Running, sync.activity.value[other])
+            job.cancel()
+        } finally {
+            release.countDown()
+            job.join()
+        }
+        assertEquals(SyncActivity.Interrupted, sync.activity.value[other])
+        assertEquals(SyncActivity.Finished(success), sync.activity.value[source])
+        assertNull(db.content().meta(other.id))
+    }
+
+    @Test fun contentAvailabilityKeepsMetadataLessCacheAndSeparatesSources() = runBlocking {
+        assertEquals(false, db.content().observeContentReady(source.id).first())
+        db.content().insertWords(listOf(WordEntity(source.id, "語", "ご", "word", null, "語", "", "body")))
+        assertNull(db.content().meta(source.id))
+        assertEquals(true, db.content().observeContentReady(source.id).first())
+        assertEquals(false, db.content().observeContentReady("fixture/other").first())
+        db.content().clearWords(source.id)
+        db.content().putMeta(SyncMetaEntity(source.id, "empty-optional-sections", 0, 0))
+        assertEquals(true, db.content().observeContentReady(source.id).first())
+    }
+
+    @Before fun setup() {
+        val context = RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("settings", 0).edit().clear().commit()
+        db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
+        settings = Settings(context)
+        sync = ContentSync(db, settings, http)
+        http.archiveBytes = archive("v1", mapOf("日" to "sun"))
+    }
+
+    @After fun cleanup() { db.close() }
 }
 
 @RunWith(RobolectricTestRunner::class)

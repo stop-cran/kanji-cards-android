@@ -654,6 +654,12 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
 - Home reads only slim rows (`observeKanjiLite`/`observeWordsLite`: no article body, `strokesJson` reduced to `''` or NULL). Screens that need bodies
   or strokes load a single card (`kanjiCard`, `word`). Slim word rows retain `jlpt` and `quizExclusions`; omitting metadata from a projection must
   not turn explicit levels into the legacy fallback or drop curated exclusions. Never observe whole content rows in a list that recomposes on every state change.
+- **Initial content presentation (#93):** Home waits for a source-bound cache observation before choosing loading,
+  unavailable or normal section summaries. Accepted metadata or actual saved content makes the source usable;
+  missing metadata alone is not an empty cache. Existing sync operations publish their source-and-branch-bound
+  running/result/interruption state, so navigation does not leave a stale download label. First-load failures
+  offer Retry; built-in Kana stays available. Refreshing or failing to refresh a usable cache does not hide it,
+  and empty optional sections retain their normal empty labels. Import formats and retry policy are unchanged.
 - **Settings order: basic to advanced, grouped with dividers.** Groups: Studying (new items per day and weekly rhythm, fonts, reminder), Drawing (brush), then Advanced
   (content repository, handwriting data), then About. Put new settings in the group they belong to by how often a typical learner needs them;
   anything that can break or reset the user's content or privacy posture goes under Advanced. Settings that are a single value apply

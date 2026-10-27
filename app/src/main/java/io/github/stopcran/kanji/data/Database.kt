@@ -243,6 +243,19 @@ interface ContentDao {
     @Query("SELECT * FROM sync_meta WHERE sourceId = :sourceId")
     fun observeMeta(sourceId: String): Flow<SyncMetaEntity?>
 
+    /** Metadata can be cleared by an upgrade while usable saved content remains. */
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM sync_meta WHERE sourceId = :sourceId) " +
+            "OR EXISTS(SELECT 1 FROM kanji WHERE sourceId = :sourceId) " +
+            "OR EXISTS(SELECT 1 FROM words WHERE sourceId = :sourceId) " +
+            "OR EXISTS(SELECT 1 FROM articles WHERE sourceId = :sourceId) " +
+            "OR EXISTS(SELECT 1 FROM counters WHERE sourceId = :sourceId) " +
+            "OR EXISTS(SELECT 1 FROM grammar_sets WHERE sourceId = :sourceId) " +
+            "OR EXISTS(SELECT 1 FROM listening_passages WHERE sourceId = :sourceId) " +
+            "OR EXISTS(SELECT 1 FROM listening_tasks WHERE sourceId = :sourceId)",
+    )
+    fun observeContentReady(sourceId: String): Flow<Boolean>
+
     @Query("SELECT * FROM sync_meta WHERE sourceId = :sourceId")
     suspend fun meta(sourceId: String): SyncMetaEntity?
 

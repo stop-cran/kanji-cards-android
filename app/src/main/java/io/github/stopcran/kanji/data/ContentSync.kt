@@ -10,6 +10,10 @@ import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.content.SafeZip
 import io.github.stopcran.kanji.core.content.SceneCatalog
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import androidx.room.withTransaction
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -25,6 +29,12 @@ sealed interface SyncResult {
     data class Failed(
         val message: String, val retryable: Boolean, val rejected: ContentRejections = ContentRejections(),
     ) : SyncResult
+}
+
+internal sealed interface SyncActivity {
+    data object Running : SyncActivity
+    data class Finished(val result: SyncResult) : SyncActivity
+    data object Interrupted : SyncActivity
 }
 
 private fun List<io.github.stopcran.kanji.core.content.GrammarSet>.toGrammarEntities(sourceId: String): List<GrammarEntity> =
@@ -79,6 +89,8 @@ private fun io.github.stopcran.kanji.core.content.ParsedContent.toRows(sourceId:
 
 class ContentSync(private val db: AppDatabase, private val settings: Settings, private val http: ContentHttp = UrlConnectionHttp) {
     private val lock = Mutex()
+    private val _activity = MutableStateFlow<Map<RepoSource, SyncActivity>>(emptyMap())
+    internal val activity = _activity.asStateFlow()
 
     /** Cheap check at app start: at most every [LAUNCH_INTERVAL_MS], and only downloads when the branch head moved. */
     suspend fun syncOnLaunch(source: RepoSource): SyncResult {
@@ -125,7 +137,19 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             null
         }
     }
-    suspend fun sync(source: RepoSource, force: Boolean = false): SyncResult = lock.withLock { withContext(Dispatchers.IO) {
+    private suspend fun trackActivity(source: RepoSource, block: suspend () -> SyncResult): SyncResult {
+        _activity.update { it + (source to SyncActivity.Running) }
+        return try {
+            block().also { result ->
+                _activity.update { it + (source to SyncActivity.Finished(result)) }
+            }
+        } catch (cancelled: CancellationException) {
+            _activity.update { it + (source to SyncActivity.Interrupted) }
+            throw cancelled
+        }
+    }
+
+    suspend fun sync(source: RepoSource, force: Boolean = false): SyncResult = lock.withLock { trackActivity(source) { withContext(Dispatchers.IO) {
         try {
             if (db.content().meta(source.id) != null && db.reviews().grammarReadinessStatus(source.id)?.complete != true) {
                 db.rebuildGrammarReadiness(source.id)
@@ -182,7 +206,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             if (e is kotlinx.coroutines.CancellationException) throw e
             SyncResult.Failed(e.message ?: e.javaClass.simpleName, retryable = false)
         }
-    } }
+    } } }
 
     private suspend fun replaceContent(
         parsed: io.github.stopcran.kanji.core.content.ParsedContent, source: RepoSource, head: String?,
