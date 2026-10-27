@@ -1,4 +1,9 @@
 <resources>
+    <string name="grammar_read_topic">Read about: %1$s</string>
+    <string name="article_context">Reference for: %1$s</string>
+    <string name="article_contents">Article contents</string>
+    <string name="article_contents_entry">%1$d. %2$s</string>
+    <string name="article_contents_close">Close contents</string>
     <string name="word_unlock_show">How do word modes unlock?</string>
     <string name="word_unlock_hide">Hide word-mode help</string>
     <string name="word_unlock_path">Start with Japanese → English. English → Japanese, Reading and picture modes use that progress. For Type it, first practise English → Japanese.</string>

@@ -456,13 +456,40 @@ class GrammarQuizViewModelTest {
     }
 
     @Test
+    fun articleReferencesCaptureDistinctTopicsBeforeContentAndSettingsChange() {
+        install(3)
+        val owner = sourceId
+        val row = runBlocking { db.content().grammar(owner).single() }
+        val original = Json.decodeFromString(GrammarSet.serializer(), row.json)
+        val set = original.copy(
+            relationships = listOf(
+                original.relationships.single().copy(id = "alpha", label = "Topic: alpha / one"),
+                original.relationships.single().copy(id = "beta", label = "Topic: beta / two"),
+            ),
+            exercises = original.exercises.mapIndexed { index, exercise -> exercise.copy(relationship = if (index == 0) "alpha" else "beta") },
+        )
+        runBlocking { db.content().insertGrammar(listOf(row.copy(json = Json.encodeToString(GrammarSet.serializer(), set)))) }
+        val vm = launch()
+        val first = GrammarArticleReference("articles/fixture.md", "Topic: alpha / one")
+        val second = GrammarArticleReference("articles/fixture.md", "Topic: beta / two")
+        assertEquals(first, vm.articleReference("exercise-0"))
+        assertEquals(second, vm.articleReference("exercise-1"))
+        val changed = set.copy(article = "articles/changed.md", relationships = set.relationships.map { it.copy(label = "Changed") })
+        runBlocking { db.content().insertGrammar(listOf(row.copy(json = Json.encodeToString(GrammarSet.serializer(), changed)))) }
+        assertTrue(services.settings.setSource("https://github.com/fixture/other", "main"))
+        assertEquals(owner, vm.sourceId)
+        assertEquals(first, vm.articleReference("exercise-0"))
+        assertEquals(second, vm.articleReference("exercise-1"))
+    }
+
+    @Test
     fun choiceAndTypingRecordGoodAndGuessedChoiceRecordsHard() {
         val vm = start()
         val first = vm.ui as GrammarUi.Choose
         vm.pick(first.exercise.answer)
         assertTrue((vm.ui as GrammarUi.Answer).correct)
         assertTrue(logs().isEmpty())
-        assertEquals("articles/fixture.md", vm.articlePath(first.exercise.id))
+        assertEquals("articles/fixture.md", vm.articleReference(first.exercise.id).path)
         advance(vm)
         answerCorrect(vm)
         val last = vm.ui as GrammarUi.Choose

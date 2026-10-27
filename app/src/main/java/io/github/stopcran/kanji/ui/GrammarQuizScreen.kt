@@ -41,7 +41,7 @@ import kotlinx.coroutines.flow.collectLatest
 fun GrammarQuizScreen(
     sessionKey: String,
     onBack: () -> Unit,
-    onOpenDoc: (String, String) -> Unit,
+    onOpenDoc: (String, String, String?) -> Unit,
     onPracticeMore: () -> Unit,
     onOpenTopic: (GrammarPracticeTarget) -> Unit,
     onBrowse: () -> Unit,
@@ -62,7 +62,7 @@ fun GrammarQuizScreen(
         else -> "question:$sessionKey"
     }) {
         if (article != null) {
-            GrammarVocabularyArticle(article, vm::closeLookupArticle) { onOpenDoc(vm.sourceId, it) }
+            GrammarVocabularyArticle(article, vm::closeLookupArticle) { onOpenDoc(vm.sourceId, it, null) }
         } else if (details) {
             GrammarTopicDetails(vm, requireNotNull(target), sessionKey, onBack, onOpenDoc, onOpenTopic, onBrowse)
         } else {
@@ -89,7 +89,7 @@ private fun GrammarTopicDetails(
     target: GrammarPracticeTarget,
     sessionKey: String,
     onBack: () -> Unit,
-    onOpenDoc: (String, String) -> Unit,
+    onOpenDoc: (String, String, String?) -> Unit,
     onOpenTopic: (GrammarPracticeTarget) -> Unit,
     onBrowse: () -> Unit,
 ) {
@@ -98,7 +98,7 @@ private fun GrammarTopicDetails(
     val (actions, message) = rememberGrammarMapActions(app, source, { destination ->
         val next = destination.target()
         if (next == null) onBrowse() else onOpenTopic(next)
-    }, { onOpenDoc(target.sourceId, it) })
+    }, { path, label -> onOpenDoc(target.sourceId, path, label) })
     val state = vm.ui
     val loaded = when (state) {
         is GrammarUi.Preview -> GrammarMapState.Ready(requireNotNull(vm.practiceDetails))
@@ -115,7 +115,7 @@ private fun GrammarSessionBody(
     vm: GrammarQuizViewModel,
     sessionKey: String,
     onBack: () -> Unit,
-    onOpenDoc: (String, String) -> Unit,
+    onOpenDoc: (String, String, String?) -> Unit,
     onPracticeMore: () -> Unit,
 ) {
     GrammarVocabularyHelp(vm)
@@ -169,8 +169,9 @@ private fun GrammarSessionBody(
                 GrammarOptionFeedback(state)
                 Text(state.exercise.evidence, style = MaterialTheme.typography.bodyMedium)
                 Text(state.exercise.explanation, style = MaterialTheme.typography.bodyLarge)
-                OutlinedButton(onClick = { onOpenDoc(vm.sourceId, vm.articlePath(state.exercise.id)) }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Read the grammar article")
+                val reference = vm.articleReference(state.exercise.id)
+                OutlinedButton(onClick = { onOpenDoc(vm.sourceId, reference.path, reference.topic) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.grammar_read_topic, reference.topic))
                 }
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),

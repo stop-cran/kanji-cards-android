@@ -57,11 +57,15 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   mid-answer. The quiz route is `quiz:<timestamp>` and the VM is created with that key, giving each start a fresh session while still
   surviving rotation. Do the same for any new session-like screen.
 - **Back stack route strings:** `home`, `kanji-home`, `words-home`, `settings`, `about`, `cards`, `word-cards`, `doc:<repo path>`, and session routes `quiz:<ts>[:extra]`, `wquiz:<ts>:<jp|en|rd|ty|pc|wp>[:extra]`, `kreading:<ts>[:extra]`, `draw:<ts>[:extra]`. Wire new routes in `MainActivity`.
+- Source-bound docs encode source/path and optional captured Grammar topic separately. Never resolve a session's reference context
+  from later settings/content. Contents jumps use real lazy indices, including leading items, and must not rerun on nested Back.
 - **Manifest hashes** are computed over LF-normalised bytes (`tools/build_manifest.py` in the content repo and `ContentParser.sha256`). Keep
   both in sync, otherwise files fail with "hash mismatch" on Windows checkouts with CRLF.
 - Named word scenes use the separate manifest `scenes` map, never `files` (older clients discard that folder). A declared bad catalog
   disables quiz eligibility rather than synthesizing a legacy fallback. Graded image questions use predecoded, hash-checked snapshots;
   `WordImage` is only the live article loader. Scene IDs must never become SRS keys.
+- Image cache rows use the basename (`name.webp`), while article references use `images/name.webp`; native gallery fixtures must
+  match that key and wait for the asynchronously decoded image, not merely for surrounding article text.
 - Word reading help uses a per-run transactional word/scene/kanji snapshot and the selected vocabulary deck's cumulative level.
   Japanese choices already show kana: highlight only, never nest a help action in an answer button. Reading/typing get no answer-revealing aid.
 - Word Reading requires an ideograph in the written word, not just different spelling/reading or nonempty kanji metadata.

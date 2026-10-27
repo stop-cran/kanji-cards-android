@@ -67,10 +67,10 @@ class GrammarRoadmapPerformanceTest {
                 if (route != null) {
                     key(route) {
                         if (route == "grammar-home") {
-                            GrammarPage(app, {}, { _, _ -> }, {}, { realRoute.value = GrammarPracticeRoutes.create(it) })
+                            GrammarPage(app, {}, { _, _, _ -> }, {}, { realRoute.value = GrammarPracticeRoutes.create(it) })
                         } else {
                             GrammarQuizScreen(
-                                route, {}, { _, _ -> }, {}, { realRoute.value = GrammarPracticeRoutes.create(it) },
+                                route, {}, { _, _, _ -> }, {}, { realRoute.value = GrammarPracticeRoutes.create(it) },
                                 { realRoute.value = "grammar-home" }, target = GrammarPracticeRoutes.target(route),
                             )
                         }

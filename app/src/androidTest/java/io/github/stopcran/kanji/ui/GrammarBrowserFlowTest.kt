@@ -82,7 +82,7 @@ class GrammarBrowserFlowTest {
                     holder.SaveableStateProvider(stateKey(1, route.value)) {
                         GrammarQuizScreen(
                             route.value, { error("Active practice must return to fresh details, not pop its parent") },
-                            { _, _ -> }, { fresh() }, {}, {}, target = target, vm = vm.value,
+                            { _, _, _ -> }, { fresh() }, {}, {}, target = target, vm = vm.value,
                         )
                     }
                 }

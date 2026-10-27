@@ -69,6 +69,8 @@ sealed interface GrammarUi {
     }
 }
 
+data class GrammarArticleReference(val path: String, val topic: String)
+
 /** One SRS queue per authored exercise; the choose/type prompt is presentation detail, not another schedule. */
 class GrammarQuizViewModel(
     private val app: Services,
@@ -88,7 +90,7 @@ class GrammarQuizViewModel(
         private set
 
     private lateinit var exercises: Map<String, GrammarExercise>
-    private lateinit var articlePaths: Map<String, String>
+    private lateinit var articleReferences: Map<String, GrammarArticleReference>
     private val states = mutableMapOf<String, SrsState>()
     private var session = QuizSession<String>(emptyList(), { it })
     var sourceId = ""
@@ -221,7 +223,13 @@ class GrammarQuizViewModel(
     private suspend fun activate(study: GrammarStudy, queue: List<QueueItem>, extra: Boolean) {
         val sets = study.sets
         exercises = sets.flatMap { it.exercises }.associateBy { it.id }
-        articlePaths = sets.flatMap { set -> set.exercises.map { it.id to set.article } }.toMap()
+        articleReferences = sets.flatMap { set ->
+            val groups = set.introductionGroups.flatMap { group -> group.members.map { it.exerciseId to group.label } }.toMap()
+            val relationships = set.relationships.associate { it.id to it.label }
+            set.exercises.map { exercise ->
+                exercise.id to GrammarArticleReference(set.article, groups[exercise.id] ?: relationships[exercise.relationship] ?: set.title)
+            }
+        }.toMap()
         if (exercises.isEmpty()) {
             ui = GrammarUi.Empty("No grammar exercises are available. Sync the content first (⚙ settings).")
             return
@@ -234,7 +242,7 @@ class GrammarQuizViewModel(
         showNext()
     }
 
-    fun articlePath(exerciseId: String): String = articlePaths.getValue(exerciseId)
+    fun articleReference(exerciseId: String): GrammarArticleReference = articleReferences.getValue(exerciseId)
 
     val currentExercise: GrammarExercise? get() = when (val state = ui) {
         is GrammarUi.Choose -> state.exercise

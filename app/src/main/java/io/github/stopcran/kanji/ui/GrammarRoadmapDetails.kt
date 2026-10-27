@@ -58,7 +58,7 @@ internal fun GrammarMapGroupDetails(
     )
     practice?.invoke()
     item.articles.forEach { (path, label) ->
-        TextButton(onClick = { actions.article(path) }) { Text(stringResource(R.string.grammar_map_read_article, label)) }
+        TextButton(onClick = { actions.article(path, group.label) }) { Text(stringResource(R.string.grammar_map_read_article, label)) }
     }
     snapshot.study.sets.filter { set -> snapshot.groupsBySet[set.id].orEmpty().any { it.group.id == group.id } }.forEach { set ->
         TextButton(onClick = { actions.navigate(destination.set(set.id)) }) {
@@ -133,7 +133,7 @@ internal fun GrammarMapCollectionDetails(
     Text(stringResource(R.string.grammar_map_chapter_help), style = MaterialTheme.typography.bodySmall)
     practice?.invoke()
     if (set != null) {
-        TextButton(onClick = { actions.article(set.article) }) { Text(stringResource(R.string.grammar_map_read_article, set.title)) }
+        TextButton(onClick = { actions.article(set.article, set.title) }) { Text(stringResource(R.string.grammar_map_read_article, set.title)) }
     }
     detailState.SaveableStateProvider(GrammarRoadmapRoutes.create(destination)) {
         Text(stringResource(R.string.grammar_browser_contents), style = MaterialTheme.typography.titleMedium)
@@ -158,7 +158,7 @@ private fun GrammarMapRelated(
             TextButton(onClick = { actions.navigate(destination.set(related.id)) }) {
                 Text(stringResource(R.string.grammar_browser_related_set, related.title, count, related.exercises.size))
             }
-            TextButton(onClick = { actions.article(related.article) }) {
+            TextButton(onClick = { actions.article(related.article, related.title) }) {
                 Text(stringResource(R.string.grammar_map_read_article, related.title))
             }
         }

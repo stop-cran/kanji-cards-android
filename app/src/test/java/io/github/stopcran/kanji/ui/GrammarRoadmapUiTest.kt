@@ -117,9 +117,9 @@ class GrammarRoadmapUiTest {
         val snapshot = partialSnapshot()
         var navigated: GrammarMapDestination? = null
         var practiced: String? = null
-        var article: String? = null
+        var article: Pair<String, String>? = null
         var focus: String? = null
-        val actions = GrammarMapActions({ navigated = it }, { article = it }, { focus = it }, {})
+        val actions = GrammarMapActions({ navigated = it }, { path, topic -> article = path to topic }, { focus = it }, {})
         val current = mutableStateOf("q")
         rule.setContent {
             Page("Grammar roadmap", onBack = {}) {
@@ -139,7 +139,7 @@ class GrammarRoadmapUiTest {
         rule.runOnIdle { current.value = requireNotNull(navigated?.group) }
         rule.onNodeWithText("Unmapped authored group — its real foundations and earned readiness still apply.").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("Read: p").performScrollTo().performClick()
-        assertEquals("articles/x.md", article)
+        assertEquals("articles/x.md" to snapshot.groups.getValue("p").group.label, article)
         assertNull(focus)
     }
 
@@ -148,7 +148,7 @@ class GrammarRoadmapUiTest {
         val snapshot = partialSnapshot()
         val loaded = mutableStateOf<GrammarMapState>(GrammarMapState.Ready(snapshot))
         val route = mutableStateOf("map")
-        val actions = GrammarMapActions({}, { route.value = "article" }, {}, {})
+        val actions = GrammarMapActions({}, { _, _ -> route.value = "article" }, {}, {})
         val restoration = StateRestorationTester(rule)
         restoration.setContent {
             val holder = rememberSaveableStateHolder()
@@ -179,7 +179,7 @@ class GrammarRoadmapUiTest {
     fun chapterSelectionSurvivesDetailsBackModeChangesAndProcessRestoration() {
         val snapshot = partialSnapshot()
         val route = mutableStateOf("chapter")
-        val actions = GrammarMapActions({ route.value = "group" }, {}, {}, {})
+        val actions = GrammarMapActions({ route.value = "group" }, { _, _ -> }, {}, {})
         val restoration = StateRestorationTester(rule)
         restoration.setContent {
             val holder = rememberSaveableStateHolder()
@@ -235,7 +235,7 @@ class GrammarRoadmapUiTest {
         restoration.setContent {
             val holder = rememberSaveableStateHolder()
             holder.SaveableStateProvider(stateKey(2, route)) {
-                GrammarRoadmapPage(GrammarMapState.Ready(snapshot), destination.group("q"), GrammarMapActions({}, {}, {}, {}), {}) {
+                GrammarRoadmapPage(GrammarMapState.Ready(snapshot), destination.group("q"), GrammarMapActions({}, { _, _ -> }, {}, {}), {}) {
                     GrammarPracticePreviewContent(state.value, route, embedded = true) {}
                 }
             }
@@ -267,7 +267,7 @@ class GrammarRoadmapUiTest {
             val holder = rememberSaveableStateHolder()
             holder.SaveableStateProvider(phase.value) {
                 if (phase.value == "details") {
-                    GrammarRoadmapPage(loaded.value, target, GrammarMapActions({}, {}, {}, {}), {}) {
+                    GrammarRoadmapPage(loaded.value, target, GrammarMapActions({}, { _, _ -> }, {}, {}), {}) {
                         GrammarPracticePreviewContent(state.value, session.value, embedded = true) { loaded.value = GrammarMapState.Loading }
                     }
                 } else {
@@ -363,7 +363,7 @@ class GrammarRoadmapUiTest {
         val snapshot = partialSnapshot().copy(curriculum = GrammarCurriculumState.Absent)
         rule.setContent {
             Page("Grammar", onBack = {}, ime = true) {
-                GrammarMapBrowser(snapshot, destination, GrammarMapActions({}, {}, {}, {}))
+                GrammarMapBrowser(snapshot, destination, GrammarMapActions({}, { _, _ -> }, {}, {}))
             }
         }
         rule.onNodeWithText("Chapter browsing is unavailable. Showing the topic list; article sets remain available.").assertIsDisplayed()

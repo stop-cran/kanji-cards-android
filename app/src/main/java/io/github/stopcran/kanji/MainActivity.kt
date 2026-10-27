@@ -120,7 +120,16 @@ private fun AppNav(app: KanjiApp) {
 /** Index in the key so the same document opened twice in one stack keeps separate scroll state. */
 internal fun stateKey(index: Int, route: String) = "$index:${GrammarPracticeRoutes.savedStateIdentity(route)}"
 
-private fun sourceDocRoute(sourceId: String, path: String) = "source-doc:${Uri.encode(sourceId)}:${Uri.encode(path)}"
+internal fun sourceDocRoute(sourceId: String, path: String, topic: String? = null) =
+    "source-doc:${Uri.encode(sourceId)}:${Uri.encode(path)}" + (topic?.let { ":${Uri.encode(it)}" } ?: "")
+
+@Composable
+internal fun SourceDocScreen(app: KanjiApp, route: String, pop: () -> Unit, push: (String) -> Unit) {
+    val parts = remember(route) { route.removePrefix("source-doc:").split(":", limit = 3).map(Uri::decode) }
+    val (sourceId, path) = parts
+    DocScreen(app, path, onBack = pop, onOpenDoc = { push(sourceDocRoute(sourceId, it)) },
+        sourceId = sourceId, topic = parts.getOrNull(2)?.takeIf { it.isNotBlank() })
+}
 
 @Composable
 private fun RouteContent(
@@ -185,7 +194,7 @@ private fun RouteContent(
                 GrammarQuizScreen(
                     sessionKey = route,
                     onBack = pop,
-                    onOpenDoc = { sourceId, path -> push(sourceDocRoute(sourceId, path)) },
+                    onOpenDoc = { sourceId, path, topic -> push(sourceDocRoute(sourceId, path, topic)) },
                     onPracticeMore = {
                         if (target == null) {
                             pop()
@@ -224,8 +233,7 @@ private fun RouteContent(
                 },
             )
         } else if (route.startsWith("source-doc:")) {
-            val (sourceId, path) = route.removePrefix("source-doc:").split(":", limit = 2).map(Uri::decode)
-            DocScreen(app, path, onBack = pop, onOpenDoc = { push(sourceDocRoute(sourceId, it)) }, sourceId = sourceId)
+            SourceDocScreen(app, route, pop, push)
         } else if (route.startsWith("doc:")) {
             val path = route.removePrefix("doc:")
             DocScreen(app, path, onBack = pop, onOpenDoc = { push("doc:$it") })
@@ -244,7 +252,7 @@ private fun RouteContent(
                     onGrammarPage = { push("grammar-home") },
                     onListeningPage = { push("listening-home") },
                     onOpenDoc = { push("doc:$it") },
-                    onGrammarDoc = { sourceId, path -> push(sourceDocRoute(sourceId, path)) },
+                    onGrammarDoc = { sourceId, path, topic -> push(sourceDocRoute(sourceId, path, topic)) },
                     onKanaPage = { push("kana-home") },
                     onKanaStudy = { script, mode, extra ->
                         push("kana-study:${script.id}:${mode.name}:${System.currentTimeMillis()}" + if (extra) ":extra" else "")

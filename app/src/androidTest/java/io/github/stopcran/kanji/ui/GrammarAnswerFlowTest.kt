@@ -119,7 +119,7 @@ class GrammarAnswerFlowTest {
                         holder.SaveableStateProvider(if (document.value == null) session else "article") {
                             val path = document.value
                             if (path == null) {
-                                GrammarQuizScreen(session, {}, { owner, article ->
+                                GrammarQuizScreen(session, {}, { owner, article, _ ->
                                     assertEquals(source, owner)
                                     document.value = article
                                 }, {}, {}, {}, vm = vm)
@@ -145,7 +145,7 @@ class GrammarAnswerFlowTest {
                 if (answer.correct) correctModes += mode
                 if (!openedArticle) {
                     val before = runBlocking { db.reviews().allLog() }
-                    rule.onNodeWithText("Read the grammar article").performScrollTo().performClick()
+                    rule.onNodeWithText("Read about: ${vm.articleReference(answer.exercise.id).topic}").performScrollTo().performClick()
                     rule.onNodeWithText("Grammar reference").assertIsDisplayed()
                     rule.onNodeWithContentDescription("Back").performClick()
                     assertSame(answer, vm.ui)

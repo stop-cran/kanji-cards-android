@@ -93,7 +93,7 @@ internal fun rememberGrammarHome(app: KanjiApp): State<GrammarHome> {
 fun GrammarPage(
     app: KanjiApp,
     onBack: () -> Unit,
-    onOpenDoc: (String, String) -> Unit,
+    onOpenDoc: (String, String, String?) -> Unit,
     onStart: (Boolean) -> Unit,
     onTarget: (GrammarPracticeTarget) -> Unit,
 ) {
@@ -102,7 +102,7 @@ fun GrammarPage(
         val loaded by rememberGrammarMap(app, source)
         val (actions, message) = rememberGrammarMapActions(app, source, { destination ->
             destination.target()?.let(onTarget)
-        }, { onOpenDoc(source.id, it) })
+        }, { path, label -> onOpenDoc(source.id, path, label) })
         Page("Grammar", onBack, ime = true, scrollable = loaded != GrammarMapState.Loading) {
             when (val state = loaded) {
                 GrammarMapState.Loading -> Text(stringResource(R.string.loading))

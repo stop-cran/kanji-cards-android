@@ -58,7 +58,7 @@ class HomeActions(
     val onGrammarPage: () -> Unit,
     val onListeningPage: () -> Unit,
     val onOpenDoc: (String) -> Unit,
-    val onGrammarDoc: (String, String) -> Unit,
+    val onGrammarDoc: (String, String, String?) -> Unit,
     val onKanaPage: () -> Unit,
     val onKanaStudy: (KanaScript, KanaMode, extra: Boolean) -> Unit,
     val onCounters: (

@@ -21,7 +21,7 @@ internal data class GrammarMapNode(
 
 internal class GrammarMapActions(
     val navigate: (GrammarMapDestination) -> Unit,
-    val article: (String) -> Unit,
+    val article: (String, String) -> Unit,
     val focus: (String) -> Unit,
     val browseScope: (GrammarScope) -> Unit,
 )

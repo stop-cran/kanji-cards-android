@@ -16,6 +16,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -27,11 +28,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -51,6 +54,7 @@ import io.github.stopcran.kanji.core.markdown.Block
 import io.github.stopcran.kanji.core.markdown.LinkTarget
 import io.github.stopcran.kanji.core.markdown.Markdown
 import io.github.stopcran.kanji.core.markdown.Span
+import kotlinx.coroutines.launch
 
 /** Renders content Markdown. In-repo links call [onOpenDoc] with the repo-relative path; https links open the browser. */
 @Composable
@@ -69,15 +73,28 @@ fun MarkdownView(text: String, path: String, onOpenDoc: (String) -> Unit, modifi
 
 /** Same rendering as [MarkdownView] but lazy: only visible blocks are composed. For a full-page article; do not nest in a scrolling parent. */
 @Composable
-fun LazyMarkdownView(text: String, path: String, onOpenDoc: (String) -> Unit, modifier: Modifier = Modifier, header: (@Composable () -> Unit)? = null) {
+fun LazyMarkdownView(
+    text: String, path: String, onOpenDoc: (String) -> Unit, modifier: Modifier = Modifier,
+    header: (@Composable () -> Unit)? = null, topic: String? = null,
+) {
     val blocks = remember(text, path) { Markdown.parse(text, path) }
+    val headings = remember(blocks) { blocks.mapIndexedNotNull { index, block -> (block as? Block.Heading)?.let { IndexedValue(index, it) } } }
+    val state = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val prefixCount = listOf(topic != null, header != null, headings.isNotEmpty()).count { it }
     val onLink = rememberLinkHandler(onOpenDoc)
     val linkColor = MaterialTheme.colorScheme.primary
     val codeBg = MaterialTheme.colorScheme.surfaceVariant
     SelectionContainer(modifier) {
-        androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (header != null) item { header() }
-            items(blocks.size) { RenderBlock(blocks[it], onLink, linkColor, codeBg) }
+        androidx.compose.foundation.lazy.LazyColumn(
+            Modifier.fillMaxSize().testTag("article-body"), state, verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (topic != null) item("context") { Text(stringResource(R.string.article_context, topic), style = MaterialTheme.typography.titleSmall) }
+            if (header != null) item("gallery") { header() }
+            if (headings.isNotEmpty()) item("contents") {
+                ArticleContents(headings) { index -> scope.launch { state.scrollToItem(prefixCount + index) } }
+            }
+            items(blocks.size, key = { "block:$it" }) { RenderBlock(blocks[it], onLink, linkColor, codeBg) }
         }
     }
 }

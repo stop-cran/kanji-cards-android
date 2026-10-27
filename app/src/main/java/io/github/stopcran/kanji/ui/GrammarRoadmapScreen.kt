@@ -33,7 +33,7 @@ internal fun rememberGrammarMapActions(
     app: KanjiApp,
     source: RepoSource,
     navigate: (GrammarMapDestination) -> Unit,
-    article: (String) -> Unit,
+    article: (String, String) -> Unit,
 ): Pair<GrammarMapActions, String?> {
     val scope = rememberCoroutineScope()
     var focusMessage by rememberSaveable { mutableStateOf<String?>(null) }
