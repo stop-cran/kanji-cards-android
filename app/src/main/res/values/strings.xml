@@ -136,7 +136,8 @@
     <string name="level_filter_kanji_exact">Only cards tagged %1$s.</string>
     <string name="browse_cards">Browse cards</string>
     <string name="words">%1$s words</string>
-    <string name="browse_words">Browse words</string>
+    <string name="browse_words">Browse all words</string>
+    <string name="all_words_count">All words (%1$s)</string>
     <string name="loading_your_cards">Loading your cards…</string>
     <string name="chevron">›</string>
     <string name="start">Start</string>

@@ -66,6 +66,7 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   `WordImage` is only the live article loader. Scene IDs must never become SRS keys.
 - Image cache rows use the basename (`name.webp`), while article references use `images/name.webp`; native gallery fixtures must
   match that key and wait for the asynchronously decoded image, not merely for surrounding article text.
+- Markdown links are file-relative: a word links to `../articles/name.md`, not `articles/name.md`, which is rejected as a nested path.
 - Word reading help uses a per-run transactional word/scene/kanji snapshot and the selected vocabulary deck's cumulative level.
   Japanese choices already show kana: highlight only, never nest a help action in an answer button. Reading/typing get no answer-revealing aid.
 - Word Reading requires an ideograph in the written word, not just different spelling/reading or nonempty kanji metadata.
