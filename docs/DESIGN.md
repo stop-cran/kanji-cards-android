@@ -71,7 +71,8 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   intake; epoch 1 permits level-aware unguided intake; started reviews remain available throughout.
   If the head lookup fails and content exists, the branch archive is downloaded at most once per 6h per source/branch (persisted
   `fallback:` timestamp; throttled calls return a non-retryable failure so the worker does not loop); with no content it downloads at once.
-  `SafeZip` drains skipped entries too and caps total inflated bytes (100 MB) besides the wanted-file cap.
+  `SafeZip` counts all archive entries, including directories and skipped files, against a 20,000-entry cap.
+  It drains skipped files too and caps total inflated bytes (100 MiB) besides the wanted-file cap.
 - Import is one Room `@Transaction` (`replaceContent`) that replaces the whole snapshot: readers never see a half-imported snapshot.
   Consequences: a *fatal* failure (exception, no valid kanji, unsafe zip entry or archive limits in `SafeZip`) keeps the previous content;
   a *successful partial* import (some manifest files skipped for hash/parse errors) replaces it, so a skipped file disappears until fixed.
@@ -274,10 +275,13 @@ hidden-backlog effects. A changed scope cannot admit a stale start, erase progre
 budgets or retarget/hide an existing capture. Unknown-level unsupported placeholders remain
 unavailable notices under All formats. All four guided hosts label their captured task level.
 
-The bounded archive download/retained caps are now 48/64 MiB. Inflation (100 MiB), entry
-count (8,000) and per-file limits are unchanged. Older 30-MiB clients cannot fetch an oversized
-future archive; they retain offline content and report failure. Deliver the upgraded APK
-before such publication. N4 fixture/native checks do not approve Japanese recordings.
+The bounded archive download/retained caps are 48/64 MiB, with 100 MiB inflation and unchanged
+per-file limits. Future N1 capacity raises only the entry cap to 20,000; the content publishing
+guard is 18,000. The [content sizing rationale](https://github.com/stop-cran/learning-japanese#app-archive-packaging)
+projects 13,847 entries before supporting content/media, not guaranteed byte capacity.
+Older 8,000-entry or 30-MiB clients cannot fetch an oversized future archive; they retain offline
+content and report failure. Deliver the upgraded APK before such publication; publishing source
+does not upgrade installed clients. N4 fixture/native checks do not approve Japanese recordings.
 
 The adopted [Japanese task/assessment contract](LISTENING-TASKS.md) settles the design gate for #66
 under delegated autonomous decision-making. B supplies the shared data/media infrastructure described below;

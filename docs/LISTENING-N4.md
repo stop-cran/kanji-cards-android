@@ -31,12 +31,12 @@ The selected level persists per source, while the format is saved browser state.
 
 App download/retained caps are 48/64 MiB; content publication guards are 42 MiB
 compressed, 56 MiB retained and 20 MiB combined task audio/images. Inflation remains
-100 MiB app/80 MiB publishing, entries 8,000/7,000, audio files 512 KiB and images 150 KiB.
+100 MiB app/80 MiB publishing, entries 20,000/18,000, audio files 512 KiB and images 150 KiB.
 Path, codec, hash, exact-approval and expansion checks remain strict. The last measured
 baseline and 9-13-MiB new-media projection are in the source ledger; output measurements,
 not the projection, authorize fit.
 
-An archive above the older 30-MiB download cap cannot be fetched by those apps, even though
+An archive above the older 8,000-entry or 30-MiB download cap cannot be fetched by those apps, even though
 they skip schema 2. They retain their last-known-good offline collection and report update
 failure; continuing sync requires the upgraded release. Deliver the new APK before such
 runtime publication, without claiming a copied APK was installed.

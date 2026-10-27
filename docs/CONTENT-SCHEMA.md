@@ -19,9 +19,10 @@ What the app enforces when importing (`core/content/ContentParser.kt`, `FrontMat
 - The repo archive (`codeload.github.com/<owner>/<repo>/zip/refs/heads/<branch>`) must contain `manifest.json` with `schemaVersion` 1.
 - Only `manifest.json` and files directly in `kanji/`, `words/`, `articles/`, `strokes/`, `counters/`, `grammar/`, `scenes/`, `listening/`, `curriculum/`, `listening-tasks/` are read,
   plus `images/*.webp` and `task-images/*.webp` (at most 150 KiB each), and `audio/*.ogg` and `task-audio/*.ogg` (at most 512 KiB each).
-  Zip-slip paths, more than 8,000 entries, wanted text files over 2 MiB or wanted data over 64 MiB are rejected.
+  Zip-slip paths, more than 20,000 entries (including directories and skipped files), wanted text files over 2 MiB or wanted data over 64 MiB are rejected.
   Downloaded bytes are capped at 48 MiB; the separate 100 MiB inflated limit includes skipped entries too.
-  Older apps retain their last accepted content if an expanded archive exceeds their former 30-MiB download cap.
+  Older apps retain their last accepted content if an expanded archive exceeds their former 8,000-entry or 30-MiB download cap.
+  Deliver an upgraded APK before publishing an archive beyond an installed client's limits.
 - Images are listed in the manifest's separate `images` map with SHA-256 over the raw bytes (no LF normalisation). A word's `image` and
   `image_scene` keys are read together; an image that is missing, oversize, not WebP, hash-mismatched or shared by two words is reported as a
   problem and only that word's picture is dropped.

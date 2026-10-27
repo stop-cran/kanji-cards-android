@@ -594,6 +594,19 @@ class ContentTest {
     }
 
     @Test
+    fun defaultEntryLimitAccepts20000AndRejectsOneMoreIncludingDirectoriesAndSkippedFiles() {
+        val entries = listOf("repo/" to "", "repo/docs/" to "", "repo/manifest.json" to "{}") +
+            (1..19_997).map { "repo/docs/ignored-$it.txt" to "" }
+        val files = SafeZip.read(ByteArrayInputStream(zip(*entries.toTypedArray())))
+        assertEquals(setOf("manifest.json"), files.keys)
+        val tooMany = zip(*(entries + ("repo/docs/extra.txt" to "")).toTypedArray())
+        val error = assertThrows(ContentException::class.java) {
+            SafeZip.read(ByteArrayInputStream(tooMany))
+        }
+        assertEquals("Archive has too many entries", error.message)
+    }
+
+    @Test
     fun zipStripsRootAndFiltersFolders() {
         val bytes = zip("repo-main/manifest.json" to "{}", "repo-main/kanji/日.md" to "x", "repo-main/.github/a.yml" to "y", "repo-main/kanji/sub/a.md" to "z")
         val files = SafeZip.read(ByteArrayInputStream(bytes))

@@ -71,6 +71,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - Built-in Kana intake counts first recorded practice per script/kana/mode, matching its per-mode new queues.
   Keep this exception source-scoped; other sections retain their existing item/reading accounting.
 - **Content is untrusted.** Parse defensively, skip bad files instead of failing the sync, never render raw HTML, cap archive sizes.
+- N2 nearly exhausted entry headroom while byte budgets still passed. Count directories/skipped ZIP entries and coordinate the content
+  publishing guard with `SafeZip` (see `docs/DESIGN.md`); more entry capacity does not relax byte limits or upgrade installed APKs.
+  Complete-archive integration fixtures must honor Git `export-ignore` too, rather than zip contributor evidence that never ships.
 - Sync diagnostics are not rejected-card counts: optional metadata warnings keep their owning cards.
   Report distinct rejected files with explicit units, and count retained Listening catalogs from the accepted cache, excluding unsupported placeholders.
 - Counter reading metadata belongs to the displayed canonical phrase, not every counter in legacy `kana`.

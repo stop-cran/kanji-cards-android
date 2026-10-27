@@ -7,7 +7,7 @@ import java.util.zip.ZipInputStream
 /** Reads a GitHub archive zip into memory with hard limits (zip-slip, zip bombs, entry count). */
 object SafeZip {
     data class Limits(
-        val maxEntries: Int = 8_000,
+        val maxEntries: Int = 20_000,
         val maxFileBytes: Long = 2L * 1024 * 1024,
         /** Scene images are small by contract (<= 100 KiB in the content validator); a larger one is hostile or broken. */
         val maxImageBytes: Long = 150L * 1024,

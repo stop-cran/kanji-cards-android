@@ -29,13 +29,11 @@ class RealContentTest {
     fun completeMixedArchiveKeepsShortTaskAudioOutOfTheLegacyReaderWhenRepoPresent() {
         val root = File("../../learning-japanese")
         assumeTrue(File(root, "manifest.json").exists())
-        val git = ProcessBuilder("git", "-C", root.absolutePath, "ls-files", "-z").start()
+        val git = ProcessBuilder("git", "-C", root.absolutePath, "ls-files", "-c", "-o",
+            "--exclude-standard", "-z", "--", ":(exclude,attr:export-ignore)").start()
         val tracked = git.inputStream.readBytes().decodeToString().split('\u0000').filter { it.isNotEmpty() }
         assertEquals(0, git.waitFor())
         val files = tracked.associateWith { File(root, it).readBytes() }.toMutableMap()
-        listOf("tools/validate_listening_tasks.py", "tools/test_listening_tasks.py").forEach { path ->
-            if (File(root, path).exists()) files[path] = File(root, path).readBytes()
-        }
         val tone = requireNotNull(javaClass.getResourceAsStream("/listening-short-tone.ogg")).use { it.readBytes() }
         val task = approvedTask(taskFixture().task.copy(id = "test-only-content-import", exposureId = "test-only-content-import"), tone, 250)
         val path = "listening-tasks/${task.task.id}.json"
@@ -48,16 +46,7 @@ class RealContentTest {
             listeningTaskAudio = JsonObject(declared.listeningTaskAudio.jsonObject +
                 ("task-audio/test-tone.ogg" to JsonPrimitive(ContentParser.rawSha256(tone)))))
         files["manifest.json"] = json.encodeToString(Manifest.serializer(), mixed).toByteArray()
-        val archive = ByteArrayOutputStream()
-        ZipOutputStream(archive).use { zip ->
-            files.forEach { (name, bytes) ->
-                zip.putNextEntry(ZipEntry("repo-main/$name"))
-                zip.write(bytes)
-                zip.closeEntry()
-            }
-        }
-        assertTrue("Full fixture archive must retain publication headroom", archive.size() < 28 * 1024 * 1024)
-        val retained = SafeZip.read(archive.toByteArray().inputStream())
+        val retained = SafeZip.read(publicationArchive(files).inputStream())
         val current = ContentParser.parse(retained)
         assertTrue(current.problems.toString(), current.problems.isEmpty())
         assertTrue(current.listeningTasks.problems.toString(), current.listeningTasks.problems.isEmpty())
@@ -82,6 +71,28 @@ class RealContentTest {
         assertEquals(legacy.kanji, current.kanji)
         assertEquals(legacy.words, current.words)
         assertTrue(legacy.listeningTasks.records.isEmpty())
+    }
+
+    private fun publicationArchive(files: Map<String, ByteArray>): ByteArray {
+        val directories = setOf("repo-main/") + files.keys.flatMap { name ->
+            val parts = name.split('/')
+            (1 until parts.size).map { depth -> "repo-main/${parts.take(depth).joinToString("/")}/" }
+        }
+        assertTrue("Full fixture archive must retain entry headroom", files.size + directories.size <= 18_000)
+        val archive = ByteArrayOutputStream()
+        ZipOutputStream(archive).use { zip ->
+            directories.forEach { directory ->
+                zip.putNextEntry(ZipEntry(directory))
+                zip.closeEntry()
+            }
+            files.forEach { (name, bytes) ->
+                zip.putNextEntry(ZipEntry("repo-main/$name"))
+                zip.write(bytes)
+                zip.closeEntry()
+            }
+        }
+        assertTrue("Full fixture archive must retain publication headroom", archive.size() <= 42 * 1024 * 1024)
+        return archive.toByteArray()
     }
 
     @Test
