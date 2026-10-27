@@ -2,7 +2,7 @@
 characters that the content articles use and that phone system fonts usually cannot draw.
 
 Usage: python tools/make_rare_font.py [content-repo-dir] [dir-with-HanaMinA.otf-and-HanaMinB.otf]
-Fonts: https://github.com/cjkvi/HanaMinAFDKO/releases (Hanazono Font License / SIL OFL 1.1; see third_party/fonts/).
+Fonts: https://github.com/cjkvi/HanaMinAFDKO/releases (GlyphWiki licence; see third_party/fonts/).
 Needs: pip install fonttools
 """
 import sys
@@ -68,4 +68,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

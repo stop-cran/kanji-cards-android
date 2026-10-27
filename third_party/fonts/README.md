@@ -17,12 +17,22 @@ subsets may keep their original family names. If an upstream release adds one, r
 
 ## Rare-glyph font (GlyphWiki licence)
 
-`app/src/main/res/font/rare_han_a.otf` and `rare_han_b.otf` are subsets (about ten glyphs) of
-HanaMinA / HanaMinB 8.030 (Hanazono Mincho AFDKO build, https://github.com/cjkvi/HanaMinAFDKO),
+`app/src/main/res/font/rare_han_a.otf` and `rare_han_b.otf` are small subsets of
+HanaMinA / HanaMinB 8.030 (Hanazono Mincho AFDKO build, https://github.com/cjkvi/HanaMinAFDKO/releases/tag/8.030),
 renamed to "Kanji Rare Subset". Copyright 2007-2018 GlyphWiki. The font's licence is the
-GlyphWiki licence (http://glyphwiki.org/license.html), as stated in the upstream README. It is credited in the About screen.
+GlyphWiki licence, as stated in the [pinned upstream README](https://github.com/cjkvi/HanaMinAFDKO/blob/8.030/README.md#licence).
+It is credited in the About screen, and the original embedded copyright/licence records are preserved.
 
-**Open item before a Google Play release:** the licence page could not be fetched when this was written (HTTP 403 from the site), so its exact
-terms are unverified. Read it in a browser; if redistribution of subsets is not clearly allowed, drop `RareHan` (articles fall back to the system font).
+**Licence verification (2026-10-27):** [GlyphWiki-license.txt](GlyphWiki-license.txt) preserves the Japanese original and its dated
+English translation from [Mozilla's copy](https://github.com/mozilla-firefox/firefox/blob/d9098b3e11c2fbc2b2d84e53a3c784814cbdab3e/layout/reftests/fonts/glyphwiki-license.txt).
+The terms explicitly permit reproduction, modification, and using the glyphs in new fonts and published works, without author-attribution
+restrictions; the Japanese original takes precedence. This verification uses the pinned font project's own licence linkage and the actual
+bilingual terms, not an assumption that this release is SIL OFL. The live GlyphWiki wiki pages returned HTTP 403 and the old
+`license.html` endpoint returned HTTP 404, so the primary page was not fetched directly.
+
+Source font SHA-256 values for the pinned release assets:
+
+- `HanaMinA.otf`: `f068fbe4f7e091828d23dc833f9438aebe0446ce341b69497fbb514affaee190`
+- `HanaMinB.otf`: `cfec2d1577f15b4bb9fbeab956b03d3fc6317ee97da3ab1515889cb5ce4fd46e`
 
 Regenerate with `python tools/make_rare_font.py <content-repo> <dir with HanaMinA.otf, HanaMinB.otf>`.
