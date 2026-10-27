@@ -6,14 +6,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.kana.KanaCatalog
 import io.github.stopcran.kanji.core.kana.KanaMode
 import io.github.stopcran.kanji.core.kana.KanaScript
@@ -24,19 +27,21 @@ internal fun KanaPage(
     onBack: () -> Unit,
     onStudy: (KanaScript, KanaMode, extra: Boolean) -> Unit,
 ) {
-    val overview = rememberKanaOverview(app)
+    KanaPage(rememberKanaOverview(app), onBack, onStudy)
+}
+
+@Composable
+internal fun KanaPage(
+    overview: KanaOverview,
+    onBack: () -> Unit,
+    onStudy: (KanaScript, KanaMode, extra: Boolean) -> Unit,
+) {
     var selectedId by rememberSaveable { mutableStateOf(KanaScript.Hiragana.id) }
     val script = KanaScript.entries.first { it.id == selectedId }
     Page("Kana", onBack) {
         Text("${KanaCatalog.all(script).size} ${script.label} cards", style = MaterialTheme.typography.bodyLarge)
         Text(
-            "Includes the basic syllabary, voiced and semi-voiced kana, and common yōon combinations. " +
-                "A combination such as ちゅ unlocks separately in each mode once both parts (ち and ゆ) have FSRS stability of at least " +
-                "${KanaCatalog.UNLOCK_STABILITY_DAYS.toInt()} days in that mode. A voiced or semi-voiced kana such as が or ぱ " +
-                "unlocks the same way once its plain kana (か, は) reaches ${KanaCatalog.VOICED_UNLOCK_STABILITY_DAYS.toInt()} days. " +
-                "Hiragana and katakana keep separate review schedules. First-time practice in each mode counts toward " +
-                "one shared daily Kana allowance; due reviews are not capped. The uncommon ぢ and づ use di/du " +
-                "to keep reverse romaji questions distinct; ji/zu are accepted when typing.",
+            stringResource(R.string.kana_intro),
             style = MaterialTheme.typography.bodyMedium,
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -48,6 +53,7 @@ internal fun KanaPage(
                 )
             }
         }
+        KanaProgressionHelp()
         KanaMode.entries.forEach { mode ->
             val locked = overview.lockedCount(script, mode)
             val lockSummary = when (locked) {
@@ -64,4 +70,19 @@ internal fun KanaPage(
             )
         }
     }
+}
+
+@Composable
+private fun KanaProgressionHelp() {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    TextButton(onClick = { expanded = !expanded }) {
+        Text(stringResource(if (expanded) R.string.kana_help_hide else R.string.kana_help_show))
+    }
+    if (!expanded) return
+    Text(stringResource(R.string.kana_help_combinations, KanaCatalog.UNLOCK_STABILITY_DAYS.toInt()))
+    Text(stringResource(R.string.kana_help_voiced, KanaCatalog.VOICED_UNLOCK_STABILITY_DAYS.toInt()))
+    Text(stringResource(R.string.kana_help_stability))
+    Text(stringResource(R.string.kana_help_scope))
+    Text(stringResource(R.string.kana_help_allowance))
+    Text(stringResource(R.string.kana_help_typing))
 }

@@ -1,4 +1,13 @@
 <resources>
+    <string name="kana_intro">Choose Hiragana or Katakana, then Start under Kana → romaji (sounds written in Latin letters).</string>
+    <string name="kana_help_show">How does Kana progression work?</string>
+    <string name="kana_help_hide">Hide Kana help</string>
+    <string name="kana_help_combinations">Combinations such as ちゅ unlock when both parts (ち and ゆ) are in Review (past initial learning), with FSRS stability of at least %1$d days.</string>
+    <string name="kana_help_voiced">Voiced and semi-voiced kana such as が or ぱ unlock when their plain base (か or は) is in Review with stability of at least %1$d days.</string>
+    <string name="kana_help_stability">Stability estimates how long you can remember a character. It is not a calendar waiting period: keep practising when reviews are due.</string>
+    <string name="kana_help_scope">Each script and each mode has its own progress and review schedule. Practise the components in the same script and mode you want to unlock. Already-started cards stay available.</string>
+    <string name="kana_help_allowance">First-time practice in each mode uses one shared daily Kana allowance across both scripts, separate from content study. Due reviews have no daily cap; Practice more can exceed the allowance.</string>
+    <string name="kana_help_typing">To keep Romaji → kana questions distinct, ぢ/ヂ and づ/ヅ use di/du. Type the romaji also accepts ji/zu.</string>
     <string name="grammar_read_topic">Read about: %1$s</string>
     <string name="article_context">Reference for: %1$s</string>
     <string name="article_contents">Article contents</string>

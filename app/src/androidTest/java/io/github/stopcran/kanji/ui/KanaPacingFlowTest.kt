@@ -6,18 +6,26 @@ import android.graphics.Bitmap
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.StateRestorationTester
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.unit.Density
 import androidx.lifecycle.ViewModelStore
 import androidx.room.Room
 import androidx.test.platform.app.InstrumentationRegistry
@@ -49,6 +57,55 @@ import java.util.UUID
 
 class KanaPacingFlowTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test fun optionalKanaHelpPreservesKatakanaAndAllModeActionsAcrossBackAndRestoration() {
+        Fixture(seedHistory = false).use { fixture ->
+            val overview = runBlocking { fixture.overview() }
+            val studying = mutableStateOf(false)
+            val scale = mutableStateOf(1f)
+            val starts = mutableListOf<Triple<KanaScript, KanaMode, Boolean>>()
+            val restoration = StateRestorationTester(rule)
+            restoration.setContent {
+                val saved = rememberSaveableStateHolder()
+                CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, scale.value)) {
+                    MaterialTheme {
+                        if (studying.value) {
+                            Page("Test practice", onBack = { studying.value = false }) { Text("No answer recorded") }
+                        } else saved.SaveableStateProvider("kana") {
+                            KanaPage(overview, {}, { script, mode, extra ->
+                                starts += Triple(script, mode, extra)
+                                studying.value = true
+                            })
+                        }
+                    }
+                }
+            }
+            rule.onAllNodesWithText("Start")[0].assertIsDisplayed()
+            rule.onNodeWithText("Stability estimates", substring = true).assertDoesNotExist()
+            rule.onNodeWithText("Katakana").performClick()
+            rule.runOnIdle { scale.value = 1.5f }
+            rule.onAllNodesWithText("Start")[0].assertIsDisplayed()
+            rule.onNodeWithText("How does Kana progression work?").performClick()
+            listOf(
+                "Combinations such as", "Voiced and semi-voiced", "Stability estimates",
+                "Each script and each mode", "First-time practice in each mode", "To keep Romaji",
+            ).forEach { rule.onNodeWithText(it, substring = true).performScrollTo().assertIsDisplayed() }
+            restoration.emulateSavedInstanceStateRestore()
+            rule.onNodeWithText("Katakana").performScrollTo().assertIsSelected()
+            rule.onNodeWithText("Hide Kana help").performScrollTo().performClick()
+            rule.onNodeWithText("Stability estimates", substring = true).assertDoesNotExist()
+            KanaMode.entries.forEachIndexed { index, mode ->
+                rule.onAllNodesWithText("Start")[index].performScrollTo().assertIsEnabled().performClick()
+                rule.onNodeWithText("Test practice").assertIsDisplayed()
+                assertEquals(Triple(KanaScript.Katakana, mode, false), starts.last())
+                rule.onNodeWithText("← Back").performClick()
+                rule.onNodeWithText("Katakana").performScrollTo().assertIsSelected()
+                rule.onNodeWithText("How does Kana progression work?").assertIsDisplayed()
+            }
+            assertEquals(KanaMode.entries.size, starts.size)
+            assertEquals(0, runBlocking { fixture.db.reviews().allLog().size })
+        }
+    }
 
     @Test fun homeCountsDelayedKanaWritesAndRebindsItsWeekAndSelectedSource() {
         Fixture(seedHistory = false).use { fixture ->
@@ -295,7 +352,11 @@ class KanaPacingFlowTest {
         suspend fun remaining() = db.newAllowance(settings, KANA_SOURCE_ID, Instant.now()).remaining
 
         suspend fun overview(): KanaOverview {
-            val states = mapOf(KanaStateKey(script, mode) to db.reviews().states(KANA_SOURCE_ID, script.id, mode.name))
+            val states = KanaScript.entries.flatMap { script ->
+                KanaMode.entries.map { mode ->
+                    KanaStateKey(script, mode) to db.reviews().states(KANA_SOURCE_ID, script.id, mode.name)
+                }
+            }.toMap()
             val now = Instant.now()
             return KanaOverview(states, db.newAllowance(settings, KANA_SOURCE_ID, now), now)
         }

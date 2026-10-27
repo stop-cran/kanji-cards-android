@@ -667,6 +667,11 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   After process death ephemeral session routes are dropped from the restored back stack and the user lands on the page they started from.
   Durable listening encounter routes are retained and restore their captured package and playback/answer state.
 - **Kana progression:** Hiragana and katakana have independent review state. Yōon cards unlock per script and per mode only when both plain component kana are in Review with at least seven days of FSRS stability; voiced and semi-voiced kana (が, ぱ…) unlock the same way once their unvoiced base (か, は) is in Review with at least three days (`VOICED_UNLOCK_STABILITY_DAYS`; a first Good already gives about 3.2 days, so this is deliberately light, tune it from real use). A card already started in that mode stays available. Locked cards are excluded from that mode's study queues, quiz distractors and new-card counts, and the Kana page reports one total of locked kana per mode. In Kana drawing, a card with no prior Draw review is first shown with the faint numbered reference; this is a practice-only trace, then the card returns later to be drawn from memory without recording the trace attempt.
+- **Kana entry help (#86):** the initial page gives one short first action, followed by script selection and optional
+  inline progression help. The disclosure follows the Word/daily-count pattern and preserves selection and expansion
+  across saved page restoration. Details retain Review-phase/stability thresholds, per-script/per-mode progress,
+  already-started availability, the shared Kana allowance and typing exceptions. Stability is an estimated memory
+  interval, not elapsed calendar waiting. This changes presentation only, not gates, schedules or accepted answers.
 - **Kana daily intake (#82):** the built-in Kana source counts each first recorded `(script, kana, mode)` exercise once
   against its shared daily allowance across both scripts and all modes. Forward familiarity does not make a first reverse,
   typing or drawing exercise free. Repeat reviews and unrecorded traces do not spend new slots. Home and ordinary sessions
