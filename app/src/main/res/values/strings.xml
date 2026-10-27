@@ -45,6 +45,7 @@
     <string name="daily_counts_disabled">New items are turned off by the daily limit in Settings.</string>
     <string name="daily_counts_used">Today’s allowance is used or reserved. Due reviews have no daily cap.</string>
     <string name="content_reading_cache">Loading saved content…</string>
+    <string name="content_not_downloaded">Content not downloaded yet. Kana is available.</string>
     <string name="content_downloading">Getting your content… Kana is ready to try.</string>
     <string name="content_updating">Updating content…</string>
     <string name="content_download_failed">Couldn’t download content. Kana is still available.</string>

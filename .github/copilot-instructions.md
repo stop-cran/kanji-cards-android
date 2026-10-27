@@ -82,6 +82,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - Daily-count copy must distinguish the Kana pool from the selected-repository pool, and allowance ceilings from eligible opportunities.
   Listening's extra introduction/time ceilings are not a third pool; unintroduced scored encounters can reserve repository slots before answers.
 - **Content is untrusted.** Parse defensively, skip bad files instead of failing the sync, never render raw HTML, cap archive sizes.
+- First-import readiness is separate from completed empty DB observations. Gate repository entry UI, not captured
+  Listening recovery; test actual section controls and both cache-loading and section-projection restoration frames.
 - N2 nearly exhausted entry headroom while byte budgets still passed. Count directories/skipped ZIP entries and coordinate the content
   publishing guard with `SafeZip` (see `docs/DESIGN.md`); more entry capacity does not relax byte limits or upgrade installed APKs.
   Complete-archive integration fixtures must honor Git `export-ignore` too, rather than zip contributor evidence that never ships.

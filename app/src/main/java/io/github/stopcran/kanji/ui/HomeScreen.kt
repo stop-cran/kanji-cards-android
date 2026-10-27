@@ -43,6 +43,7 @@ import io.github.stopcran.kanji.core.kana.KanaMode
 import io.github.stopcran.kanji.core.kana.KanaScript
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.WordStacks
+import io.github.stopcran.kanji.data.Settings
 import io.github.stopcran.kanji.data.inStack
 import kotlinx.coroutines.launch
 
@@ -84,13 +85,28 @@ fun HomePages(app: KanjiApp, route: String, onBack: () -> Unit, actions: HomeAct
                 app.contentSync.sync(source)
             }
         }
-        when (route) {
-            "kanji-home" -> KanjiPage(app, data, onBack, actions)
-            "words-home" -> WordsPage(app, data, onBack, actions)
-            "counters-home" -> CountersPage(app, onBack, actions)
-            "grammar-home" -> GrammarPage(app, onBack, actions.onGrammarDoc, actions.onGrammar, actions.onGrammarTarget)
-            "kana-home" -> KanaPage(app, onBack, actions.onKanaStudy)
-            else -> MainPage(app, source, data, actions)
+        val section = when (route) {
+            "kanji-home" -> "Kanji"
+            "words-home" -> "Words"
+            "counters-home" -> "Numbers & counters"
+            "grammar-home" -> "Grammar"
+            else -> null
+        }
+        if (section != null) {
+            val content = rememberHomeContent(app.db, app.contentSync, source)
+            val scope = rememberCoroutineScope()
+            ContentSection(content, section, onBack, { scope.launch { app.contentSync.sync(source) } }) {
+                when (route) {
+                    "kanji-home" -> KanjiPage(app, data, onBack, actions)
+                    "words-home" -> WordsPage(app.settings, data, onBack, actions.onWordCards, actions.onWords)
+                    "counters-home" -> CountersPage(app, onBack, actions)
+                    else -> GrammarPage(app, onBack, actions.onGrammarDoc, actions.onGrammar, actions.onGrammarTarget)
+                }
+            }
+        } else if (route == "kana-home") {
+            KanaPage(app, onBack, actions.onKanaStudy)
+        } else {
+            MainPage(app, source, data, actions)
         }
     }
 }
@@ -105,7 +121,7 @@ private fun MainPage(app: KanjiApp, source: RepoSource, data: HomeData, a: HomeA
         if (content.usable) LoadingBar(data)
         val defaultId = remember { RepoSource.parse(Defaults.CONTENT_REPO_URL, Defaults.CONTENT_BRANCH)?.id }
         if (data.sourceId != defaultId) Text(stringResource(R.string.cards_from, data.sourceId))
-        N4Offer(app, data)
+        N4Offer(app.settings, data)
         PacingHint(data)
         StartingGuide(app.settings, a.onKanaPage, a.onWordsPage, a.onGrammarPage)
         DailyCountsHelp(kana.allowance, data.pacing)
@@ -125,7 +141,7 @@ private fun MainPage(app: KanjiApp, source: RepoSource, data: HomeData, a: HomeA
 
 @Composable
 private fun KanjiPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: HomeActions) {
-    Page("Kanji", onBack) {
+    Page("Kanji", onBack, scrollable = !data.loading) {
         LoadingBar(data)
         Text(data.stack.label + " · " + stringResource(R.string.cards, data.kanji.inStack(data.stack.id).size))
         if (data.stacks.size > 1) {
@@ -142,25 +158,33 @@ private fun KanjiPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: Home
 }
 
 @Composable
-private fun WordsPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: HomeActions) {
-    Page("Words", onBack) {
+internal fun WordsPage(
+    settings: Settings,
+    data: HomeData,
+    onBack: () -> Unit,
+    onBrowse: () -> Unit,
+    onStart: (WordDirection, Boolean) -> Unit,
+) {
+    Page("Words", onBack, scrollable = !data.loading) {
         LoadingBar(data)
         Text(data.wordStack.label + " · " + stringResource(R.string.words, data.wordCount))
-        N4Offer(app, data)
+        N4Offer(settings, data)
         if (data.wordStacks.size > 1) {
-            LevelFilter(data.wordStacks, data.wordStack, { app.settings.setWordStack(it.id) }, { it.label },
+            LevelFilter(data.wordStacks, data.wordStack, { settings.setWordStack(it.id) }, { it.label },
                 description = if (data.wordStack == WordStacks.n4) stringResource(R.string.level_filter_includes_easier) else null)
         }
         WordUnlockHelp()
-        WordModeRow(data, "Japanese → English", HomeMode.WordJp, WordDirection.JpToEn) { a.onWords(WordDirection.JpToEn, it) }
-        WordModeRow(data, "English → Japanese", HomeMode.WordEn, WordDirection.EnToJp) { a.onWords(WordDirection.EnToJp, it) }
-        WordModeRow(data, "Reading", HomeMode.WordReading, WordDirection.Reading) { a.onWords(WordDirection.Reading, it) }
-        WordModeRow(data, "Type it", HomeMode.WordType, WordDirection.Type) { a.onWords(WordDirection.Type, it) }
+        WordModeRow(data, "Japanese → English", HomeMode.WordJp, WordDirection.JpToEn) { onStart(WordDirection.JpToEn, it) }
+        WordModeRow(data, "English → Japanese", HomeMode.WordEn, WordDirection.EnToJp) { onStart(WordDirection.EnToJp, it) }
+        WordModeRow(data, "Reading", HomeMode.WordReading, WordDirection.Reading) { onStart(WordDirection.Reading, it) }
+        WordModeRow(data, "Type it", HomeMode.WordType, WordDirection.Type) { onStart(WordDirection.Type, it) }
         if (data.pictureWordCount > 0) {
-            WordModeRow(data, "Picture → word", HomeMode.WordPicture, WordDirection.Picture) { a.onWords(WordDirection.Picture, it) }
-            WordModeRow(data, "Word → picture", HomeMode.WordToPicture, WordDirection.WordToPicture) { a.onWords(WordDirection.WordToPicture, it) }
+            WordModeRow(data, "Picture → word", HomeMode.WordPicture, WordDirection.Picture) { onStart(WordDirection.Picture, it) }
+            WordModeRow(data, "Word → picture", HomeMode.WordToPicture, WordDirection.WordToPicture) { onStart(WordDirection.WordToPicture, it) }
         }
-        OutlinedButton(onClick = a.onWordCards, enabled = data.wordCount > 0, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text(stringResource(R.string.browse_words)) }
+        OutlinedButton(onClick = onBrowse, enabled = data.wordCount > 0, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            Text(stringResource(R.string.browse_words))
+        }
     }
 }
 
@@ -228,15 +252,15 @@ internal fun pacingExplanation(p: NewAllowance): String? = when (p.note) {
 }
 
 @Composable
-private fun N4Offer(app: KanjiApp, data: HomeData) {
+private fun N4Offer(settings: Settings, data: HomeData) {
     if (!data.n4Offer) return
     Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.you_know_n5_well), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.most_n5_kanji_and_words))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { app.settings.setN4Unlocked(true); app.settings.setWordStack(WordStacks.n4.id) }) { Text(stringResource(R.string.add_n4_words)) }
-                TextButton(onClick = { app.settings.dismissAdvance(System.currentTimeMillis()) }) { Text(stringResource(R.string.not_yet)) }
+                Button(onClick = { settings.setN4Unlocked(true); settings.setWordStack(WordStacks.n4.id) }) { Text(stringResource(R.string.add_n4_words)) }
+                TextButton(onClick = { settings.dismissAdvance(System.currentTimeMillis()) }) { Text(stringResource(R.string.not_yet)) }
             }
         }
     }

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -63,10 +64,10 @@ class ListeningTaskFlowTest {
                     LocalDensity provides Density(LocalDensity.current.density, 2f)) {
                     KanjiTheme { Box(Modifier.width(320.dp)) {
                         if (show.value) ListeningTaskEncounterView(requireNotNull(vm), {}) { _, _ -> }
-                        else ListeningBrowser(fixture.services, {}) { id ->
+                        else ListeningBrowser(fixture.services, {}, onEncounter = { id ->
                             vm = ListeningTaskViewModel(fixture.services, id)
                             show.value = true
-                        }
+                        })
                     } }
                 }
             }
@@ -229,6 +230,7 @@ class ListeningTaskFlowTest {
 
     @Test fun filtersDoNotRetargetAnOpenCaptureAndNonvisualChoiceIsExplicitStudy() {
         ListeningUiFixture().use { fixture ->
+            val sync = io.github.stopcran.kanji.data.ContentSync(fixture.db, fixture.services.settings)
             val id = fixture.start(ListeningTaskType.TaskBased, described = true)
             val before = runBlocking { requireNotNull(fixture.db.listeningTasks().encounter(id)) }
             var selected: String? = null
@@ -240,7 +242,11 @@ class ListeningTaskFlowTest {
                 when {
                     returned.value -> Text("Study closed without a grade")
                     showEncounter.value -> ListeningTaskEncounterView(vm, { returned.value = true }) { _, _ -> }
-                    else -> ListeningBrowser(fixture.services, {}, { selected = it })
+                    else -> {
+                        val source = fixture.services.settings.source.collectAsState().value
+                        val content = rememberHomeContent(fixture.db, sync, source)
+                        ListeningBrowser(fixture.services, {}, { selected = it }, content)
+                    }
                 }
             } }
             try {
@@ -252,8 +258,13 @@ class ListeningTaskFlowTest {
                 rule.runOnIdle { fixture.services.settings.setSource("https://github.com/different/source", "other") }
                 val resume = "Resume captured encounter - ${fixture.source}"
                 rule.waitUntil(10_000) { rule.onAllNodesWithText(resume).fetchSemanticsNodes().isNotEmpty() }
+                restoration.emulateSavedInstanceStateRestore()
+                rule.waitUntil(10_000) { rule.onAllNodesWithText(resume).fetchSemanticsNodes().isNotEmpty() }
                 rule.onNodeWithText(resume).performScrollTo().performClick()
                 assertEquals(id, selected)
+                rule.onNodeWithText("Content not downloaded yet. Kana is available.").assertExists()
+                rule.onNodeWithText("Retry").assertExists()
+                rule.onNodeWithText("No items in this level/format yet. Sync an approved collection in Settings.").assertDoesNotExist()
                 val after = runBlocking { requireNotNull(fixture.db.listeningTasks().encounter(id)) }
                 assertEquals(before.stateJson, after.stateJson)
                 assertNull(after.exposedAtMs)

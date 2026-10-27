@@ -10,6 +10,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import io.github.stopcran.kanji.R
@@ -24,7 +25,8 @@ internal data class HomeContentState(val ready: Boolean?, val activity: SyncActi
     val failure get() = (activity as? SyncActivity.Finished)?.result as? SyncResult.Failed
     val failed get() = failure != null
     val interrupted get() = activity == SyncActivity.Interrupted
-    val loading get() = ready == null || (!usable && !failed && !interrupted)
+    val idle get() = ready == false && activity == null
+    val loading get() = ready == null || (!usable && !failed && !interrupted && !idle)
 
     @Composable
     fun summary(loaded: String): String = if (usable) loaded else stringResource(
@@ -50,12 +52,31 @@ internal fun HomeContentNotice(state: HomeContentState, onRetry: () -> Unit) {
         state.usable -> return
         state.failed -> R.string.content_download_failed
         state.interrupted -> R.string.content_download_interrupted
+        state.idle -> R.string.content_not_downloaded
         else -> R.string.content_downloading
     }
+
     if (state.loading || running) LinearProgressIndicator(Modifier.fillMaxWidth())
     Text(stringResource(message))
     state.failure?.let { Text(it.message, style = MaterialTheme.typography.bodySmall) }
-    if (state.failed || state.interrupted) {
+    if (state.failed || state.interrupted || state.idle) {
         TextButton(onClick = onRetry) { Text(stringResource(R.string.content_retry)) }
+    }
+}
+
+@Composable
+internal fun ContentSection(
+    state: HomeContentState,
+    title: String,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    // Keep saved page state out of the short cache-loading page, including across restoration.
+    val pages = rememberSaveableStateHolder()
+    if (state.usable) {
+        pages.SaveableStateProvider("content", content)
+    } else {
+        Page(title, onBack) { HomeContentNotice(state, onRetry) }
     }
 }

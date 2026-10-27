@@ -78,7 +78,12 @@ internal fun rememberListeningHome(services: Services, format: String = "all"): 
 
 @Composable
 fun ListeningPage(app: KanjiApp, onBack: () -> Unit, onEncounter: (String) -> Unit) {
-    ListeningBrowser(app.services, onBack, onEncounter)
+    val source by app.settings.source.collectAsState()
+    key(source) {
+        val content = rememberHomeContent(app.db, app.contentSync, source)
+        val scope = rememberCoroutineScope()
+        ListeningBrowser(app.services, onBack, onEncounter, content) { scope.launch { app.contentSync.sync(source) } }
+    }
 }
 
 @Composable

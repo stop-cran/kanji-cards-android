@@ -21,7 +21,13 @@ import io.github.stopcran.kanji.data.ListeningTaskStart
 import kotlinx.coroutines.launch
 
 @Composable
-internal fun ListeningBrowser(services: Services, onBack: () -> Unit, onEncounter: (String) -> Unit) {
+internal fun ListeningBrowser(
+    services: Services,
+    onBack: () -> Unit,
+    onEncounter: (String) -> Unit,
+    content: HomeContentState = HomeContentState(true, null),
+    onRetry: () -> Unit = {},
+) {
     val source by services.settings.source.collectAsState()
     val levels by services.settings.listeningScopes.collectAsState()
     val level = levels[source.id] ?: ListeningScope.N5
@@ -44,8 +50,9 @@ internal fun ListeningBrowser(services: Services, onBack: () -> Unit, onEncounte
             } finally { busy = false }
         }
     }
-    Page("Listening - ${level.label}", onBack, scrollable = home.overview != null && home.queue != null) {
-        Text(home.summary())
+    Page("Listening - ${level.label}", onBack, scrollable = content.ready != null && home.overview != null && home.queue != null) {
+        HomeContentNotice(content, onRetry)
+        if (content.usable) Text(home.summary())
         Text("English listen-first passages and Japanese task formats share the same daily allowance and exposure cooldown.")
         LevelFilter(ListeningScope.entries, level, { services.settings.setListeningScope(source.id, it); error = null }, { it.label },
             description = if (level == ListeningScope.N4)
@@ -73,7 +80,7 @@ internal fun ListeningBrowser(services: Services, onBack: () -> Unit, onEncounte
                 Text("Resume uses the captured content, even outside this level/format. Resume or explicitly discard it before starting another.")
             } else if (home.assessmentPending) {
                 Text("An unfinished assessment owns this source. Resume it before starting another listening activity.")
-            } else {
+            } else if (content.usable) {
                 val selected = data.copy(due = queue.due, fresh = queue.fresh, extra = queue.extra)
                 ListeningStartButton(selected, busy) { id, extra -> start(id, queue.tasks.any { it.id == id }, false, extra) }
                 if (selected.due.isEmpty() && selected.fresh.isEmpty() && selected.extra.isNotEmpty()) {
@@ -93,7 +100,9 @@ internal fun ListeningBrowser(services: Services, onBack: () -> Unit, onEncounte
             home.resumes.filter { it.sourceId != data.sourceId }.forEach { pending ->
                 OutlinedButton(onClick = { onEncounter(pending.id) }, enabled = !busy) { Text("Resume captured encounter - ${pending.sourceId}") }
             }
-            if (queue.passages.isEmpty() && queue.tasks.isEmpty()) Text("No items in this level/format yet. Sync an approved collection in Settings.")
+            if (content.usable && queue.passages.isEmpty() && queue.tasks.isEmpty()) {
+                Text("No items in this level/format yet. Sync an approved collection in Settings.")
+            }
             if (filter == "all" || filter == "legacy") {
                 Text("English listen-first: one passage, then three English questions; one aggregate result.")
                 queue.passages.forEach { row ->

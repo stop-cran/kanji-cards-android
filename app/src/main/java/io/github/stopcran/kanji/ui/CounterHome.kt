@@ -77,7 +77,7 @@ fun CountersPage(app: KanjiApp, onBack: () -> Unit, a: HomeActions) {
     var selected by rememberSaveable(source.id, source.branch) { mutableStateOf(CounterGroup.All.code) }
     val group = CounterGroup.fromCode(selected)
     val home = rememberCounterHome(app, group)
-    Page("Numbers & counters", onBack) {
+    Page("Numbers & counters", onBack, scrollable = home.cards != null) {
         LevelFilter(CounterScope.entries, scope, { app.settings.setCounterScope(source.id, it) }, { it.label },
             description = if (scope == CounterScope.N4)
                 stringResource(R.string.level_filter_includes_easier) else null)

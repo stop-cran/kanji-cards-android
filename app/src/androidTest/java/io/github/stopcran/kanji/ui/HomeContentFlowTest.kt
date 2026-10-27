@@ -3,17 +3,27 @@ package io.github.stopcran.kanji.ui
 import android.content.ContextWrapper
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.room.Room
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.content.ContentParser
 import io.github.stopcran.kanji.core.content.Manifest
 import io.github.stopcran.kanji.core.content.RepoSource
@@ -32,6 +42,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -93,7 +104,7 @@ class HomeContentFlowTest {
                 runBlocking {
                     f.db.content().insertWords(listOf(WordEntity(cached.id, "語", "ご", "word", null, "語", "", "body")))
                 }
-                rule.runOnIdle { f.source.value = cached }
+                rule.runOnIdle { f.select(cached) }
                 rule.waitUntil(10_000) { f.state.value?.usable == true && f.observedSource == cached }
                 val refresh = f.http.hold(503)
                 val refreshJob = f.start()
@@ -107,7 +118,7 @@ class HomeContentFlowTest {
                 rule.onNodeWithText("Cards ready").assertIsDisplayed()
 
                 val empty = RepoSource("fixture", "empty", "main")
-                rule.runOnIdle { f.source.value = empty }
+                rule.runOnIdle { f.select(empty) }
                 rule.waitUntil(10_000) { f.observedSource == empty && f.state.value?.ready == false }
                 rule.runOnIdle { assertFalse(f.frames.any { it.first == empty && it.second.usable }) }
                 rule.onNodeWithText("No exercises yet").assertDoesNotExist()
@@ -125,7 +136,81 @@ class HomeContentFlowTest {
         }
     }
 
-    private class Fixture : AutoCloseable {
+    @Test fun wordsEntryWaitsForImportAndRetryThenShowsAnAcceptedEmptySection() {
+        Fixture(words = true).use { f ->
+            val gate = f.http.hold(503)
+            val job = f.start()
+            f.render(rule)
+            try {
+                assertTrue(gate.entered.await(10, TimeUnit.SECONDS))
+                rule.waitUntil(10_000) { f.state.value?.ready == false && f.data.value?.loading == false }
+                rule.onNodeWithText("Getting your content… Kana is ready to try.").assertIsDisplayed()
+                rule.onNodeWithText("N5 · 0 words").assertDoesNotExist()
+                rule.onAllNodesWithText("Needs at least 2 words").assertCountEquals(0)
+                gate.release.countDown()
+                runBlocking { job.join() }
+                rule.waitUntil(10_000) { f.state.value?.failed == true }
+                rule.onNodeWithText("Couldn’t download content. Kana is still available.").assertIsDisplayed()
+                rule.onNodeWithText("N5 · 0 words").assertDoesNotExist()
+                f.http.allow()
+                rule.onNodeWithText("Retry").performClick()
+                rule.waitUntil(10_000) { f.state.value?.usable == true && f.data.value?.loading == false }
+                rule.onNodeWithText("N5 · 0 words").assertIsDisplayed()
+                assertTrue(rule.onAllNodesWithText("Needs at least 2 words").fetchSemanticsNodes().isNotEmpty())
+
+                f.seedWords()
+                rule.waitUntil(10_000) { f.data.value?.wordCount == 2 }
+                val refresh = f.http.hold(503)
+                val refreshJob = f.start()
+                assertTrue(refresh.entered.await(10, TimeUnit.SECONDS))
+                rule.onNodeWithText("N5 · 2 words").assertIsDisplayed()
+                refresh.release.countDown()
+                runBlocking { refreshJob.join() }
+                rule.waitUntil(10_000) { f.state.value?.failed == true }
+                rule.onNodeWithText("Browse all words").performScrollTo().assertIsEnabled().performClick()
+                assertTrue(f.browsed)
+            } finally { f.hide(rule) }
+        }
+    }
+
+    @Test fun wordsHelpAndScrollSurviveCacheAndProjectionLoadingDuringRestoration() {
+        Fixture(words = true).use { f ->
+            f.seedWords()
+            val restoration = StateRestorationTester(rule)
+            f.render(rule, restoration)
+            try {
+                rule.waitUntil(10_000) { f.data.value?.loading == false && f.state.value?.usable == true }
+                rule.onNodeWithText("How do word modes unlock?").performClick()
+                rule.onNodeWithText("Browse all words").performScrollTo()
+                val before = scrollOffset()
+                assertTrue(before > 0)
+                rule.runOnIdle { f.readingCache.value = true; f.projecting.value = true }
+                rule.onNodeWithText("Loading saved content…").assertIsDisplayed()
+                restoration.emulateSavedInstanceStateRestore()
+                rule.runOnIdle { f.readingCache.value = false }
+                rule.onNodeWithText("Loading your cards…").assertExists()
+                rule.waitForIdle()
+                rule.runOnIdle { f.projecting.value = false }
+                rule.waitUntil(10_000) { f.data.value?.loading == false }
+                rule.onNodeWithText("Hide word-mode help").assertExists()
+                rule.onNodeWithText("Browse all words").assertIsDisplayed()
+                assertEquals(before, scrollOffset(), 1f)
+
+                val empty = RepoSource("fixture", "empty", "main")
+                rule.runOnIdle { f.select(empty) }
+                rule.waitUntil(10_000) { f.observedSource == empty && f.state.value?.ready == false }
+                rule.onNodeWithText("N5 · 2 words").assertDoesNotExist()
+                rule.onNodeWithText("N5 · 0 words").assertDoesNotExist()
+                rule.onNodeWithText("Content not downloaded yet. Kana is available.").assertIsDisplayed()
+                rule.onNodeWithText("Retry").assertIsDisplayed()
+            } finally { f.hide(rule) }
+        }
+    }
+
+    private fun scrollOffset(): Float = rule.onNode(hasScrollAction()).fetchSemanticsNode()
+        .config[SemanticsProperties.VerticalScrollAxisRange].value()
+
+    private class Fixture(private val words: Boolean = false) : AutoCloseable {
         private val context = InstrumentationRegistry.getInstrumentation().targetContext
         private val preferences = "home-content-${UUID.randomUUID()}"
         private val isolated = object : ContextWrapper(context) {
@@ -133,28 +218,58 @@ class HomeContentFlowTest {
         }
         val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
         val http = GateHttp()
-        private val sync = ContentSync(db, Settings(isolated), http)
+        private val settings = Settings(isolated).also {
+            it.setSource("https://github.com/fixture/first", "main")
+            it.setWeekPlan("FFFFFFF")
+        }
+        private val services = Services(db, settings, context)
+        private val sync = ContentSync(db, settings, http)
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         private val jobs = mutableListOf<Job>()
-        val source = mutableStateOf(RepoSource("fixture", "first", "main"))
+        val source = settings.source
         val home = mutableStateOf(true)
         val state = mutableStateOf<HomeContentState?>(null)
         var observedSource: RepoSource? = null
         val frames = mutableListOf<Pair<RepoSource, HomeContentState>>()
+        val data = mutableStateOf<HomeData?>(null)
+        val readingCache = mutableStateOf(false)
+        val projecting = mutableStateOf(false)
+        var browsed = false
+
+        fun select(value: RepoSource) { settings.setSource("https://github.com/${value.owner}/${value.repo}", value.branch) }
+
+        fun seedWords() = runBlocking {
+            db.content().insertWords(listOf(
+                WordEntity(source.value.id, "猫", "ねこ", "cat", "wago", "猫", "", "", 5),
+                WordEntity(source.value.id, "犬", "いぬ", "dog", "wago", "犬", "", "", 5),
+            ))
+        }
 
         fun start(): Job {
             val selected = source.value
             return scope.launch { sync.sync(selected, force = true) }.also { jobs += it }
         }
 
-        fun render(rule: ComposeContentTestRule) {
-            rule.setContent {
+        fun render(rule: ComposeContentTestRule, restoration: StateRestorationTester? = null) {
+            val content: @Composable () -> Unit = {
                 MaterialTheme {
                     if (home.value) {
-                        val selected = source.value
+                        val selected by source.collectAsState()
                         val current = rememberHomeContent(db, sync, selected)
                         SideEffect { state.value = current; observedSource = selected; frames += selected to current }
-                        Page("Home content fixture") {
+                        if (words) key(selected) {
+                            val actual = rememberHomeData(services)
+                            SideEffect { data.value = actual }
+                            val displayed = if (projecting.value) HomeData(
+                                true, selected.id, emptyList(),
+                                StackChoices(emptyList(), actual.stack, emptyList(), actual.wordStack, 0),
+                                emptyMap(), HomeGuidance(false),
+                            ) else actual
+                            val availability = if (readingCache.value) HomeContentState(null, null) else current
+                            ContentSection(availability, "Words", { home.value = false }, { start() }) {
+                                WordsPage(settings, displayed, { home.value = false }, { browsed = true }) { _, _ -> }
+                            }
+                        } else Page("Home content fixture") {
                             HomeContentNotice(current) { start() }
                             Text("Kana is available")
                             Text(current.summary("Cards ready"))
@@ -163,6 +278,7 @@ class HomeContentFlowTest {
                     } else Text("Kana practice")
                 }
             }
+            if (restoration != null) restoration.setContent(content) else rule.setContent(content)
         }
 
         fun hide(rule: ComposeContentTestRule) { rule.runOnIdle { home.value = false }; rule.waitForIdle() }
