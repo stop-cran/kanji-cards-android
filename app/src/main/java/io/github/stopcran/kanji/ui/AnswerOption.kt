@@ -56,6 +56,12 @@ private data class Look(val container: Color, val content: Color, val mark: Stri
 const val NO_ANSWER = ""
 
 @Composable
+internal fun SessionRemaining(count: Int) {
+    Text(stringResource(R.string.session_remaining, count), style = MaterialTheme.typography.labelMedium)
+    Text(stringResource(R.string.session_repeats_hint), style = MaterialTheme.typography.bodySmall)
+}
+
+@Composable
 fun DontKnowButton(onClick: () -> Unit) {
     TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.i_don_t_know)) }
 }

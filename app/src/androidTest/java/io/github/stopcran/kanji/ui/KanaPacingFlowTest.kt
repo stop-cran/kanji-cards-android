@@ -159,6 +159,76 @@ class KanaPacingFlowTest {
         }
     }
 
+    @Test fun queuedKanaRepeatFollowsOtherQuestionsWithoutAConfirmation() {
+        Fixture().use { fixture ->
+            fixture.settings.setDailyNewCards(6)
+            val vm = showSession(fixture)
+            val seen = mutableListOf<String>()
+            val remaining = listOf(6, 6, 5, 4, 3, 2, 1)
+            remaining.forEachIndexed { index, count ->
+                val question = question(vm)
+                seen += question.card.kana
+                assertEquals(count, question.remaining)
+                rule.onNodeWithText("Attempts left: $count").assertIsDisplayed()
+                rule.onNodeWithText("Includes queued repeats.", substring = true).assertIsDisplayed()
+                if (index == 1) assertTrue(seen[0] != seen[1])
+                if (index == 4) assertEquals(seen[0], question.card.kana)
+                rule.onNodeWithText(if (index == 0) "I don't know" else question.card.kana)
+                    .performScrollTo().performClick()
+                assertEquals(index, recorded(fixture))
+                rule.onNodeWithText("Next").performScrollTo().performClick()
+                rule.waitUntil(10_000) {
+                    vm.ui !is KanaStudyUi.QuizAnswer && recorded(fixture) == index + 1
+                }
+            }
+            rule.onNodeWithText("Session complete").assertIsDisplayed()
+            waitForWrites(fixture, 1)
+            assertEquals(6, seen.distinct().size)
+            assertEquals(7, recorded(fixture))
+        }
+    }
+
+    @Test fun guessedKanaWaitsBehindAnotherQuestionAndTheFinalMissDoesNotPromiseAnotherAttempt() {
+        Fixture().use { fixture ->
+            fixture.settings.setDailyNewCards(2)
+            val vm = showSession(fixture)
+            val first = question(vm)
+            rule.onNodeWithText(first.card.kana).performScrollTo().performClick()
+            assertEquals(0, recorded(fixture))
+            rule.onNodeWithText("I guessed").performScrollTo().performClick()
+            rule.waitUntil(10_000) { vm.ui is KanaStudyUi.QuizQuestion && recorded(fixture) == 1 }
+            assertTrue(first.card.kana != question(vm).card.kana)
+            assertEquals(2, question(vm).remaining)
+            answerCorrectly { vm }
+            rule.waitUntil(10_000) { recorded(fixture) == 2 }
+            assertEquals(first.card.kana, question(vm).card.kana)
+            rule.onNodeWithText("Attempts left: 1").assertIsDisplayed()
+            rule.onNodeWithText("I don't know").performScrollTo().performClick()
+            assertEquals(2, recorded(fixture))
+            rule.onNodeWithText("Next").performScrollTo().performClick()
+            rule.onNodeWithText("Session complete").assertIsDisplayed()
+            waitForWrites(fixture, 1)
+            assertEquals(listOf(2, 3, 1), runBlocking {
+                fixture.db.reviews().allLog().filter { it.mode == fixture.mode.name }.sortedBy { it.id }.map { it.grade }
+            })
+        }
+    }
+
+    private fun showSession(fixture: Fixture): KanaStudyViewModel {
+        val (route, vm) = fixture.session(false)
+        rule.setContent { MaterialTheme { KanaStudyScreen(route, {}, { _, _ -> }, vm) } }
+        return vm
+    }
+
+    private fun question(vm: KanaStudyViewModel): KanaStudyUi.QuizQuestion {
+        rule.waitUntil(10_000) { vm.ui is KanaStudyUi.QuizQuestion }
+        return rule.runOnIdle { vm.ui as KanaStudyUi.QuizQuestion }
+    }
+
+    private fun recorded(fixture: Fixture): Int = runBlocking {
+        fixture.db.reviews().allLog().count { it.mode == fixture.mode.name }
+    }
+
     private fun answerCorrectly(vm: () -> KanaStudyViewModel) {
         rule.waitUntil(10_000) { vm().ui is KanaStudyUi.QuizQuestion }
         val question = rule.runOnIdle { vm().ui as KanaStudyUi.QuizQuestion }

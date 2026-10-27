@@ -41,7 +41,7 @@ fun KanjiReadingScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (Strin
                 OutlinedButton(onClick = onPracticeMore, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.practice_more)) }
             }
             is ReadingUi.Question -> {
-                Text(stringResource(R.string.left, s.remaining), style = MaterialTheme.typography.labelMedium)
+                SessionRemaining(s.remaining)
                 Text(s.card.kanji, fontSize = bigKanjiSize(120), fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 Text(stringResource(R.string.pick_the, s.question.kind.label), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
                 s.question.options.forEach { o ->
@@ -82,7 +82,7 @@ private fun AnswerState(s: ReadingUi.Answer, vm: KanjiReadingViewModel, onOpenDo
     }
     Text("${s.card.title}: ${s.allReadings.joinToString("、")}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Button(onClick = { vm.next() }, modifier = Modifier.weight(1f)) { Text(if (s.correct) "Next" else "Next (will repeat)") }
+        Button(onClick = { vm.next() }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.next)) }
         if (s.correct) OutlinedButton(onClick = { vm.next(guessed = true) }) { Text(stringResource(R.string.i_guessed)) }
     }
     ArticleSection(s.correct, "r:${s.card.kanji}:${s.picked}:${s.remaining}", s.card.body, "kanji/${s.card.kanji}.md", onOpenDoc)

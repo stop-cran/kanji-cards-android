@@ -96,7 +96,7 @@ fun DrawScreen(
 @Composable
 private fun QuestionState(s: DrawUi.Question, vm: DrawViewModel) {
     val strokes = vm.ink
-    Text(stringResource(R.string.left, s.remaining), style = MaterialTheme.typography.labelMedium)
+    SessionRemaining(s.remaining)
     Text(if (s.trace) "Trace the kanji for" else stringResource(R.string.draw_the_kanji_for), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     Text(s.card.title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     DrawingPad(
@@ -156,12 +156,7 @@ private fun AnswerState(s: DrawUi.Answer, vm: DrawViewModel, onOpenDoc: (String)
     }
     if (showIssues) s.match.issues.forEach { Text(stringResource(R.string.bullet_prefix) + it.describe(), color = wrongTextColor()) }
     if (!s.recognizerUsed && s.drawn.isNotEmpty()) Text(stringResource(R.string.graded_by_stroke_shapes_only), style = MaterialTheme.typography.bodySmall)
-    val nextLabel = when {
-        s.trace -> "Next (now from memory)"
-        s.outcome == DrawOutcome.NotRecognized -> "Next (will repeat)"
-        else -> "Next"
-    }
-    Button(onClick = { vm.next() }, modifier = Modifier.fillMaxWidth()) { Text(nextLabel) }
+    Button(onClick = { vm.next() }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.next)) }
     HorizontalDivider(Modifier.padding(vertical = 4.dp))
     MarkdownView(s.card.body, "kanji/${s.card.kanji}.md", onOpenDoc)
 }

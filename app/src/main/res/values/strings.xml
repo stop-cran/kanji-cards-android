@@ -91,7 +91,9 @@
     <string name="done">Done</string>
     <string name="practice_more">Practice more</string>
     <string name="checking">Checking…</string>
-    <string name="left">%1$s left</string>
+    <string name="session_remaining">Attempts left: %1$d</string>
+    <string name="session_repeats_hint">Includes queued repeats. Repeats follow other questions when available.</string>
+    <string name="next">Next</string>
     <string name="draw_the_kanji_for">Draw the kanji for</string>
     <string name="downloading_the_handwriting_model_first">Downloading the handwriting model (first use only)…</string>
     <string name="handwriting_model_unavailable_graded_by">Handwriting model unavailable: graded by stroke shapes only.</string>
@@ -126,7 +128,7 @@
     <string name="i_guessed">I guessed</string>
     <string name="back">← Back</string>
     <string name="what_does_it_mean">What does it mean?</string>
-    <string name="new_kanji_left">New kanji · %1$s left</string>
+    <string name="new_kanji">New kanji</string>
     <string name="take_a_moment_with_it">Take a moment with it, then you will be asked what it means.</string>
     <string name="got_it_quiz_me">Got it — quiz me</string>
     <string name="you_chose_that_is">You chose “%1$s” — that is %2$s.</string>

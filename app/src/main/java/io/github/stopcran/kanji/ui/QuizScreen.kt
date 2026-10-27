@@ -46,7 +46,7 @@ fun QuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Un
             }
             is QuizUi.Study -> StudyState(s, vm, onOpenDoc)
             is QuizUi.Question -> {
-                Text(stringResource(R.string.left, s.remaining), style = MaterialTheme.typography.labelMedium)
+                SessionRemaining(s.remaining)
                 Text(s.card.kanji, fontSize = bigKanjiSize(120), fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 Text(stringResource(R.string.what_does_it_mean), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 s.options.forEach { o ->
@@ -62,7 +62,8 @@ fun QuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Un
 
 @Composable
 private fun StudyState(s: QuizUi.Study, vm: QuizViewModel, onOpenDoc: (String) -> Unit) {
-    Text(stringResource(R.string.new_kanji_left, s.remaining), style = MaterialTheme.typography.labelMedium)
+    SessionRemaining(s.remaining)
+    Text(stringResource(R.string.new_kanji), style = MaterialTheme.typography.labelMedium)
     Text(s.card.kanji, fontSize = bigKanjiSize(120), fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Text(s.card.title, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().semantics { heading() })
     val readings = listOf(s.card.onyomi.splitSep().take(3), s.card.kunyomi.splitSep().take(3)).filter { it.isNotEmpty() }.joinToString("  ·  ") { it.joinToString("  ") }
@@ -100,7 +101,7 @@ private fun AnswerState(s: QuizUi.Answer, vm: QuizViewModel, onOpenDoc: (String)
     s.heard?.let { VoiceHeard(it, vm::retry) }
     Text(stringResource(R.string.plain_value, s.card.title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 4.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Button(onClick = { vm.next() }, modifier = Modifier.weight(1f)) { Text(if (s.correct) "Next" else "Next (will repeat)") }
+        Button(onClick = { vm.next() }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.next)) }
         if (s.correct) OutlinedButton(onClick = { vm.next(guessed = true) }) { Text(stringResource(R.string.i_guessed)) }
     }
     ArticleSection(s.correct, "q:${s.card.kanji}:${s.picked}:${s.remaining}", s.card.body, "kanji/${s.card.kanji}.md", onOpenDoc)

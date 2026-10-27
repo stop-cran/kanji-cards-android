@@ -143,14 +143,16 @@ class GrammarAnswerFlowTest {
                 val answer = vm.ui as GrammarUi.Answer
                 rule.onNodeWithText(if (answer.correct) "Correct!" else "Not quite").performScrollTo().assertIsDisplayed()
                 if (answer.correct) correctModes += mode
-                if (answer.correct && !openedArticle) {
+                if (!openedArticle) {
+                    val before = runBlocking { db.reviews().allLog() }
                     rule.onNodeWithText("Read the grammar article").performScrollTo().performClick()
                     rule.onNodeWithText("Grammar reference").assertIsDisplayed()
                     rule.onNodeWithContentDescription("Back").performClick()
                     assertSame(answer, vm.ui)
+                    assertEquals(before, runBlocking { db.reviews().allLog() })
                     openedArticle = true
                 }
-                rule.onNodeWithText(if (answer.correct) "Next" else "Next (will repeat)").performScrollTo().performClick()
+                rule.onNodeWithText("Next").performScrollTo().performClick()
                 rule.waitUntil(10_000) { vm.ui is GrammarUi.Choose || vm.ui is GrammarUi.Type || vm.ui is GrammarUi.Done }
                 rule.waitForIdle()
             }

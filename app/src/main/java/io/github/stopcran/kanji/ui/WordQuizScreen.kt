@@ -86,7 +86,7 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
                 }
             }
             is WordQuizUi.Question -> {
-                Text(stringResource(R.string.left, s.remaining), style = MaterialTheme.typography.labelMedium)
+                SessionRemaining(s.remaining)
                 if (s.direction == WordDirection.Picture) {
                     val picture = requireNotNull(s.picture)
                     val target = picture.question.target.scene
@@ -185,7 +185,7 @@ private data class WordTextAutoSize(val maximum: TextUnit) : TextAutoSize {
 private fun TypeQuestion(s: WordQuizUi.TypeQuestion, vm: WordQuizViewModel) {
     val focus = androidx.compose.runtime.remember { androidx.compose.ui.focus.FocusRequester() }
     LaunchedEffect(s) { runCatching { focus.requestFocus() } }
-    Text(stringResource(R.string.left, s.remaining), style = MaterialTheme.typography.labelMedium)
+    SessionRemaining(s.remaining)
     WordQuizPrompt(s.word, WordDirection.Type, s.font, big = true)
     Text("Type it in Japanese", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     androidx.compose.material3.OutlinedTextField(
@@ -226,7 +226,7 @@ private fun TypeAnswer(s: WordQuizUi.TypeAnswer, vm: WordQuizViewModel, onOpenDo
         Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     }
     val ok = verdict != TypedVerdict.Wrong
-    Button(onClick = { vm.next(origin = s) }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) { Text(if (ok) "Next" else "Next (will repeat)") }
+    Button(onClick = { vm.next(origin = s) }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) { Text(stringResource(R.string.next)) }
     ArticleSection(ok, "t:${s.word.word}:${s.typed}:${s.remaining}", s.word.body, "words/${s.word.word}.md", onOpenDoc)
 }
 
@@ -267,7 +267,7 @@ private fun Answer(s: WordQuizUi.Answer, vm: WordQuizViewModel, onOpenDoc: (Stri
     }
     s.heard?.let { VoiceHeard(it) { vm.retry(s) } }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-        Button(onClick = { vm.next(origin = s) }, modifier = Modifier.weight(1f)) { Text(if (s.correct) "Next" else "Next (will repeat)") }
+        Button(onClick = { vm.next(origin = s) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.next)) }
         if (s.correct) OutlinedButton(onClick = { vm.next(guessed = true, origin = s) }) { Text(stringResource(R.string.i_guessed)) }
     }
     ArticleSection(s.correct, "w:${s.word.word}:${s.picked}:${s.remaining}", s.word.body, "words/${s.word.word}.md", onOpenDoc)

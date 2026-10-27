@@ -127,10 +127,10 @@ class CounterFlowTest {
             rule.onNodeWithText("Check").performScrollTo().performClick()
             assertFalse((vm.value.ui as CounterUi.ExpressionAnswer).correct)
             rule.onNodeWithText("Not quite").performScrollTo().assertIsDisplayed()
-            rule.onNodeWithText("Next (will repeat)").performScrollTo().performClick()
+            rule.onNodeWithText("Next").performScrollTo().performClick()
             rule.onNodeWithText("I don't know").performScrollTo().performClick()
             assertTrue((vm.value.ui as CounterUi.ExpressionAnswer).gaveUp)
-            rule.onNodeWithText("Next (will repeat)").performScrollTo().performClick()
+            rule.onNodeWithText("Next").performScrollTo().performClick()
             var answered = 0
             var openedArticle = false
             while (vm.value.ui is CounterUi.ExpressionQuestion && answered++ < 12) {

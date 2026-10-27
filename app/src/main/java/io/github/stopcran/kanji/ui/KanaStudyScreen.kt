@@ -17,6 +17,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -24,6 +25,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.draw.DrawOutcome
 import io.github.stopcran.kanji.core.draw.describe
 import io.github.stopcran.kanji.core.kana.KanaMode
@@ -73,7 +75,7 @@ fun KanaStudyScreen(
 
 @Composable
 private fun QuizQuestion(state: KanaStudyUi.QuizQuestion, mode: KanaMode, vm: KanaStudyViewModel) {
-    Text("Left: ${state.remaining}", style = MaterialTheme.typography.labelMedium)
+    SessionRemaining(state.remaining)
     val forward = mode == KanaMode.QuizKanaToRomaji
     Text(
         if (forward) state.card.kana else state.card.romaji,
@@ -122,7 +124,7 @@ private fun QuizAnswer(state: KanaStudyUi.QuizAnswer, mode: KanaMode, vm: KanaSt
 @Composable
 private fun TypeQuestion(kana: String, romaji: String, remaining: Int, mode: KanaMode, vm: KanaStudyViewModel) {
     val forward = mode == KanaMode.TypeKanaToRomaji
-    Text("Left: $remaining", style = MaterialTheme.typography.labelMedium)
+    SessionRemaining(remaining)
     Text(
         if (forward) kana else romaji,
         fontSize = if (forward) 96.sp else 52.sp,
@@ -165,7 +167,7 @@ private fun TypeAnswer(state: KanaStudyUi.TypeAnswer, mode: KanaMode, vm: KanaSt
 @Composable
 private fun DrawQuestion(state: KanaStudyUi.DrawQuestion, vm: KanaStudyViewModel) {
     val strokes = vm.ink
-    Text("Left: ${state.remaining}", style = MaterialTheme.typography.labelMedium)
+    SessionRemaining(state.remaining)
     Text(
         if (state.trace) "Trace the kana for" else "Draw the kana for",
         textAlign = TextAlign.Center,
@@ -250,7 +252,7 @@ private fun DrawAnswer(state: DrawAnswer, vm: KanaStudyViewModel) {
         onClick = vm::next,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Text(if (state.trace) "Next (now from memory)" else if (state.outcome == DrawOutcome.NotRecognized) "Next (will repeat)" else "Next")
+        Text(stringResource(R.string.next))
     }
 }
 
@@ -258,7 +260,7 @@ private fun DrawAnswer(state: DrawAnswer, vm: KanaStudyViewModel) {
 private fun NextButtons(correct: Boolean, vm: KanaStudyViewModel) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = vm::next, modifier = Modifier.weight(1f)) {
-            Text(if (correct) "Next" else "Next (will repeat)")
+            Text(stringResource(R.string.next))
         }
         if (correct) OutlinedButton(onClick = { vm.next(guessed = true) }) { Text("I guessed") }
     }

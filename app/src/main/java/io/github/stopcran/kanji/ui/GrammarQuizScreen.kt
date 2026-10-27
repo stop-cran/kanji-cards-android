@@ -136,7 +136,7 @@ private fun GrammarSessionBody(
                 }
             }
             is GrammarUi.Choose -> {
-                GrammarRemaining(state.remaining)
+                SessionRemaining(state.remaining)
                 GrammarPrompt(vm, state.exercise)
                 Text(
                     if (state.choices.correctOptionIds.size > 1) "Choose any one of the correct answers."
@@ -149,7 +149,7 @@ private fun GrammarSessionBody(
                 DontKnowButton { vm.pick(null, state) }
             }
             is GrammarUi.Type -> {
-                GrammarRemaining(state.remaining)
+                SessionRemaining(state.remaining)
                 GrammarPrompt(vm, state.exercise)
                 Text("Type the missing text. Follow the task instructions.", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 TypeAnswer(vm)
@@ -177,7 +177,7 @@ private fun GrammarSessionBody(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(top = 4.dp),
                 ) {
-                    Button(onClick = { vm.next(origin = state) }, modifier = Modifier.weight(1f)) { Text(if (state.correct) "Next" else "Next (will repeat)") }
+                    Button(onClick = { vm.next(origin = state) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.next)) }
                     if (state.correct && state.type == "choose") {
                         OutlinedButton(onClick = { vm.next(guessed = true, origin = state) }) { Text("I guessed") }
                     }
@@ -221,9 +221,4 @@ private fun TypeAnswer(vm: GrammarQuizViewModel) {
     )
     Button(onClick = { vm.check() }, enabled = vm.draft.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Check") }
     DontKnowButton { vm.check(giveUp = true) }
-}
-
-@Composable
-private fun GrammarRemaining(count: Int) {
-    Text("Questions remaining: $count", style = MaterialTheme.typography.labelMedium)
 }

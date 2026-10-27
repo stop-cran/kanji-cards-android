@@ -23,6 +23,8 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
 - Gradle treats `RealContentTest.parsesRealContentRepoWhenPresent` as up to date when only the sibling content clone changed; re-run it with
   `./gradlew cleanTestDebugUnitTest testDebugUnitTest --tests '*ContentTest*'` after pulling or editing `../../learning-japanese`.
 - Check the exit status/test results before committing; a chained `test; commit; push` publishes a red build.
+- Native `OK (N tests)` can include `assumeTrue` skips. Use raw instrumentation output (`-w -r`) and require a
+  status-code 0 for each selected case; provide the external acceptance archives those cases require.
 
 ## Work flow
 
@@ -169,6 +171,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   Fixtures and simulated elapsed time never satisfy approved Japanese-media or physical-device acceptance.
 - **Quiz semantics:** options are meaning titles and unique by title (one correct answer). Wrong = Again (re-asked after 3 cards),
   right = Good, "I guessed" = Hard. Time-based Easy was dropped: with 4 options a fast answer is often luck.
+- Keep Next neutral: feedback precedes retry insertion, and a final item can omit its retry.
+  Kana guessing passes `weak`; ordinary Word/Grammar guessing does not itself request reinsertion. Trace-memory steps can also be deferred.
 - **Daily new-card budget** counts kanji whose first review log entry is today (`newCardsIntroducedSince`), per mode.
 - **FSRS:** weights are the FSRS-5 defaults typed from memory; verify against the official table before relying on exact intervals. Sub-day
   reviews use the short-term stability formula, so same-session re-asks don't inflate stability.

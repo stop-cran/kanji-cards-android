@@ -60,7 +60,7 @@ fun CounterQuizScreen(
                 OutlinedButton(onClick = onPracticeMore, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.practice_more)) }
             }
             is CounterUi.Choose -> {
-                Remaining(s.remaining)
+                SessionRemaining(s.remaining)
                 Sentence(vm, s.card, filled = false)
                 Text("Which counter fits?", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 s.options.forEach { o -> OutlinedButton(onClick = { vm.pick(o) }, modifier = Modifier.fillMaxWidth()) { Text(vm.index.counterLabel(o)) } }
@@ -81,7 +81,7 @@ fun CounterQuizScreen(
             }
             is CounterUi.TypeQuestion -> TypeQuestion(s, vm)
             is CounterUi.ExpressionQuestion -> {
-                Remaining(s.remaining)
+                SessionRemaining(s.remaining)
                 Text(s.item.cue, style = MaterialTheme.typography.titleMedium)
                 if (s.reading) Text(s.item.written, fontSize = 32.sp)
                 Text(if (s.reading) "Type the complete reading in kana." else "Type the complete Japanese written expression, not just its counter.")
@@ -119,7 +119,7 @@ fun CounterQuizScreen(
                 NextRow(s.result.ok, canGuess = false, vm)
             }
             is CounterUi.NounQuestion -> {
-                Remaining(s.remaining)
+                SessionRemaining(s.remaining)
                 Text(s.file.counter, fontSize = 72.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 Text(s.file.reading, Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 Text("Which of these can it count?", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
@@ -146,9 +146,6 @@ fun CounterQuizScreen(
         }
     }
 }
-
-@Composable
-private fun Remaining(n: Int) = Text(stringResource(R.string.left, n), style = MaterialTheme.typography.labelMedium)
 
 @Composable
 private fun Result(correct: Boolean, gaveUp: Boolean) {
@@ -187,14 +184,14 @@ private fun Details(card: CounterCard, title: String) {
 @Composable
 private fun NextRow(ok: Boolean, canGuess: Boolean, vm: CounterQuizViewModel) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-        Button(onClick = { vm.next() }, modifier = Modifier.weight(1f)) { Text(if (ok) "Next" else "Next (will repeat)") }
+        Button(onClick = { vm.next() }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.next)) }
         if (ok && canGuess) OutlinedButton(onClick = { vm.next(guessed = true) }) { Text(stringResource(R.string.i_guessed)) }
     }
 }
 
 @Composable
 private fun TypeQuestion(s: CounterUi.TypeQuestion, vm: CounterQuizViewModel) {
-    Remaining(s.remaining)
+    SessionRemaining(s.remaining)
     Sentence(vm, s.card, filled = false)
     Text("Type the number and counter, e.g. 三本, or just the counter", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     CounterInput(vm)

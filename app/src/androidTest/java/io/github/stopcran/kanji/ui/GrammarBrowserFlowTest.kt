@@ -91,7 +91,7 @@ class GrammarBrowserFlowTest {
             val first = route.value
             startRestricted()
             rule.waitUntil(10_000) { vm.value.ui is GrammarUi.Choose }
-            rule.onNodeWithText("Questions remaining: 4").assertIsDisplayed()
+            rule.onNodeWithText("Attempts left: 4").assertIsDisplayed()
             rule.onNodeWithContentDescription("Back").performClick()
             awaitPreview(vm.value)
             assertNotEquals(first, route.value)
