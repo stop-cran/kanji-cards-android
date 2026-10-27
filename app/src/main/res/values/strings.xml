@@ -1,4 +1,8 @@
 <resources>
+    <string name="article_table_scroll">Scroll sideways to read all columns.</string>
+    <string name="article_table_columns">Columns %1$d–%2$d of %3$d</string>
+    <string name="article_table_previous">Earlier columns</string>
+    <string name="article_table_next">More columns</string>
     <string name="grammar_browser_title">Browse Grammar</string>
     <string name="grammar_topic_details">Grammar topic</string>
     <string name="grammar_practice">Practice</string>

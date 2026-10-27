@@ -10,6 +10,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Density
@@ -17,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsOff
@@ -25,6 +28,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
@@ -536,6 +540,90 @@ class ComposeUiTest {
         rule.setContent { Page("t") { MarkdownView("# Title\n\nSome *body* text.", "kanji/x.md", {}) } }
         rule.onNodeWithText("Title").assertIsDisplayed()
         assertTrue(rule.onAllNodesWithTextContains("body").isNotEmpty())
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun markdownTablesKeepReadableHeadersAndScrollableStyledLinks() {
+        val scale = mutableStateOf(1f)
+        val longCell = "explanation ".repeat(80).trim()
+        val table = "| Expression | A useful literal interpretation | Natural English |\n" +
+            "| --- | --- | --- |\n| 日本語を勉強すること | **$longCell** | `code` [Read related](../words/related.md) |"
+        var opened: String? = null
+        rule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, scale.value)) {
+                MaterialTheme {
+                    Page("Table") {
+                        Box(Modifier.requiredWidth(280.dp)) { MarkdownView(table, "articles/table.md", { opened = it }) }
+                        androidx.compose.material3.Text("After the table")
+                    }
+                }
+            }
+        }
+        for (size in listOf(1f, 1.5f)) {
+            rule.runOnIdle { scale.value = size; opened = null }
+            // performScrollTo targets the nearest scroller, which is horizontal inside this table.
+            rule.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange))
+                .performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, -100_000f) }
+            val header = mutableListOf<TextLayoutResult>()
+            rule.onNodeWithText("Expression").performScrollTo().assertIsDisplayed()
+                .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(header) }
+            assertEquals(1, header.single().lineCount)
+            val link = rule.onNodeWithText("code Read related").performScrollTo().assertIsDisplayed()
+            val layouts = mutableListOf<TextLayoutResult>()
+            link.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertTrue(layouts.single().layoutInput.text.spanStyles.any { it.item.fontFamily == androidx.compose.ui.text.font.FontFamily.Monospace })
+            link.performTouchInput { click(layouts.single().getBoundingBox(5).center) }
+            val linkBounds = link.fetchSemanticsNode().boundsInRoot
+            rule.runOnIdle { assertEquals("Link at scale $size, bounds $linkBounds", "words/related.md", opened) }
+            val body = mutableListOf<TextLayoutResult>()
+            rule.onNodeWithText(longCell).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(body) }
+            assertTrue(!body.single().hasVisualOverflow)
+            assertEquals(longCell.length, body.single().getLineEnd(body.single().lineCount - 1))
+            rule.onNodeWithText("After the table").performScrollTo().assertIsDisplayed()
+        }
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun markdownWideTablesKeepAllColumnsReachableWithoutOversizedRows() {
+        val columns = 200
+        val table = "|" + (0 until columns).joinToString("|") { "Heading $it" } + "|\n|" +
+            (0 until columns).joinToString("|") { "---" } + "|\n|" +
+            (0 until columns).joinToString("|") { "Value $it" } + "|"
+        rule.setContent { MaterialTheme { Page("Wide table") { MarkdownView(table, "articles/wide.md", {}) } } }
+        var moves = 0
+        while (rule.onAllNodesWithText("Value 199").fetchSemanticsNodes().isEmpty()) {
+            assertTrue("Every column must be reachable", moves++ < columns)
+            rule.onNodeWithText("More columns").performScrollTo().performClick()
+        }
+        rule.onNodeWithText("Value 199").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Earlier columns").performScrollTo().performClick()
+        rule.onNodeWithText("Value 199").assertDoesNotExist()
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w360dp-h800dp-xxxhdpi")
+    fun markdownTableColumnNavigationSurvivesFontScaleChanges() {
+        val scale = mutableStateOf(2f)
+        val table = "|" + (0 until 8).joinToString("|") { "Heading $it" } + "|\n|" +
+            (0 until 8).joinToString("|") { "---" } + "|\n|" +
+            (0 until 8).joinToString("|") { "Value $it" } + "|"
+        val restoration = StateRestorationTester(rule)
+        restoration.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(4.5f, scale.value)) {
+                MaterialTheme { Page("Table") { MarkdownView(table, "articles/table.md", {}) } }
+            }
+        }
+        rule.onNodeWithText("More columns").performScrollTo().performClick()
+        rule.onNodeWithText("Value 7").performScrollTo().assertIsDisplayed()
+        rule.runOnIdle { scale.value = 1f }
+        rule.onNodeWithText("More columns").assertDoesNotExist()
+        rule.onNodeWithText("Value 0").performScrollTo().assertIsDisplayed()
+        restoration.emulateSavedInstanceStateRestore()
+        rule.onNodeWithText("Value 0").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Value 7").performScrollTo().assertIsDisplayed()
     }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onAllNodesWithTextContains(s: String) =
