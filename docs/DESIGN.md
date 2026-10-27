@@ -147,7 +147,8 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - Queue order (`QueueBuilder`): due cards by urgency (how overdue relative to the card's own interval) **plus noise** (default 0.3 of an
   interval), mixed with new cards drawn at random. Noise stops the same sequence acting as a cue. Whether a card is *due* never depends on noise.
 - **Session-count presentation (#89):** queued practice modes show attempts remaining, including queued repeats,
-  separately from daily new-item allowances. A nearby hint explains that repeats follow other questions when available.
+  separately from daily new-item allowances. A nearby hint explicitly explains that the total may stay unchanged
+  after an answer because it includes queued repeats, which follow other questions when available.
   Feedback uses neutral Next, including tracing (whose memory attempt is deferred), not a prediction about this answer's retry.
   Reinsertion/confirmation rules and the existing recording boundary remain unchanged; feedback/article navigation does not advance.
 - **Pacing** (`core/srs/Pacing.kt`, `data/Pacing.kt`): one shared pool per source, with built-in Kana separate from the selected content repository.

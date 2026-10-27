@@ -227,7 +227,7 @@ class KanaPacingFlowTest {
                 seen += question.card.kana
                 assertEquals(count, question.remaining)
                 rule.onNodeWithText("Attempts left: $count").assertIsDisplayed()
-                rule.onNodeWithText("Includes queued repeats.", substring = true).assertIsDisplayed()
+                rule.onNodeWithText("the total may stay unchanged after an answer.", substring = true).assertIsDisplayed()
                 if (index == 1) assertTrue(seen[0] != seen[1])
                 if (index == 4) assertEquals(seen[0], question.card.kana)
                 rule.onNodeWithText(if (index == 0) "I don't know" else question.card.kana)
