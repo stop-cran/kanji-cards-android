@@ -8,6 +8,12 @@ import java.time.Instant
 import kotlin.random.Random
 
 object WordQueues {
+    fun eligible(
+        direction: WordDirection, words: List<String>, own: Map<String, SrsState>, other: Map<String, SrsState>,
+    ): List<String> = if (!direction.gated) words else words.filter { w ->
+        WordGate.reverseUnlocked(other[w]) || own[w]?.phase.let { it != null && it != CardPhase.New }
+    }
+
     /**
      * Queue for one direction. Gated directions only include words unlocked by their [WordDirection.gate] direction (or already
      * started); [other] is that gate direction's state (the caller passes the states of `direction.gate`). The other direction's
@@ -25,7 +31,7 @@ object WordQueues {
         noise: Double = QueueBuilder.DEFAULT_NOISE,
         rnd: Random = Random.Default,
     ): List<QueueItem> {
-        val eligible = if (!direction.gated) words else words.filter { w -> WordGate.reverseUnlocked(other[w]) || own[w]?.phase.let { it != null && it != CardPhase.New } }
+        val eligible = eligible(direction, words, own, other)
         return if (extra) QueueBuilder.extra(eligible, own, now, limit, noise, rnd)
         else QueueBuilder.build(eligible, own, now, newBudget, limit, noise, rnd) { w ->
             if (direction == WordDirection.Reading || direction == WordDirection.Type) 1.0 else WordBlend.urgencyFactor(other[w], now)

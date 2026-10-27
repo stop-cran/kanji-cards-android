@@ -66,6 +66,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   Japanese choices already show kana: highlight only, never nest a help action in an answer button. Reading/typing get no answer-revealing aid.
 - Word Reading requires an ideograph in the written word, not just different spelling/reading or nonempty kanji metadata.
   Use the shared code-point-aware `hasReadingToLearn` filter for all admission paths; retain excluded kana-only words' saved progress.
+- Word unlock counts reuse `WordQueues.eligible`, not queue length (which is budget/due constrained). Review phase, repetition count
+  and stability all matter; started modes remain eligible. Candidate-pool size is not the unlocked-target count.
 - Large word text must not inherit body line height: use proportional spacing and renderer-based fitting, with readable wrapping at the
   size floor. Preserve annotated reading links and test their bold metrics/clicks under narrow widths and enlarged text.
 - Level chips use bare N5-N1/All labels; explain cumulative versus exact scope outside the shared `LevelFilter` row.

@@ -96,17 +96,28 @@ class WordsTest {
     }
 
     @Test
-    fun reverseDirectionNeedsTwoForwardAnswers() {
+    fun reverseDirectionNeedsReviewRepetitionsAndStabilityOrOwnHistory() {
         assertFalse(WordGate.reverseUnlocked(null))
         assertFalse(WordGate.reverseUnlocked(review(2.0, reps = 1)))
         assertTrue(WordGate.reverseUnlocked(review(2.0, reps = 2)))
         assertFalse(WordGate.reverseUnlocked(review(1.4, reps = 3)))
+        assertFalse(WordGate.reverseUnlocked(review(1.999, reps = 2)))
+        for (phase in listOf(CardPhase.New, CardPhase.Learning)) {
+            assertFalse(WordGate.reverseUnlocked(review(2.0, reps = 2).copy(phase = phase)))
+        }
         val words = listOf("a", "b", "c")
         val jp = mapOf("a" to review(2.0, reps = 2, dueOffsetSec = 99999), "b" to review(2.0, reps = 1))
         val en = mapOf("c" to review(1.0, reps = 1, dueOffsetSec = -10))
         val q = WordQueues.build(WordDirection.EnToJp, words, en, jp, now, newBudget = 10, noise = 0.0)
         // "a" is unlocked (new here), "c" was already started, "b" is still locked
         assertEquals(setOf("a", "c"), q.map { it.kanji }.toSet())
+        assertEquals(listOf("a", "c"), WordQueues.eligible(WordDirection.EnToJp, words, en, jp))
+        val onlyOneUnlocked = WordQueues.eligible(WordDirection.Reading, words.take(2), emptyMap(), jp)
+        assertEquals(listOf("a"), onlyOneUnlocked)
+        assertTrue(WordQueues.build(WordDirection.Reading, words.take(2), emptyMap(), jp, now, newBudget = 0).isEmpty())
+        assertEquals(listOf("a"), WordQueues.build(
+            WordDirection.Reading, words.take(2), emptyMap(), jp, now, newBudget = 0, extra = true, noise = 0.0,
+        ).map { it.kanji })
     }
 
     @Test

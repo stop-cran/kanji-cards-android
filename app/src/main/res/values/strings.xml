@@ -1,4 +1,13 @@
 <resources>
+    <string name="word_unlock_show">How do word modes unlock?</string>
+    <string name="word_unlock_hide">Hide word-mode help</string>
+    <string name="word_unlock_path">Start with Japanese → English. English → Japanese, Reading and picture modes use that progress. For Type it, first practise English → Japanese.</string>
+    <string name="word_unlock_rule">For each word, the earlier mode must be in Review (past initial learning), with at least %1$d recorded attempts and estimated stability of at least %2$s days.</string>
+    <string name="word_unlock_stability">Stability estimates how long you can remember the word; it is not a waiting period. Two correct answers alone do not guarantee an unlock. Continue the earlier mode when reviews are due.</string>
+    <string name="word_unlock_pool">A session also needs at least two suitable words in the selected deck; they do not both have to be unlocked. Reading uses words written with kanji, not kana-only words. Picture modes need suitable illustrations.</string>
+    <string name="word_unlock_scope">Unlocked counts describe progress in this deck, not today’s allowance or the number of answer choices. Each deck and mode keeps its own history. Already-started modes stay unlocked. Extra practice can also borrow eligible words from another deck.</string>
+    <string name="word_unlock_practise">First practise %1$s.</string>
+    <string name="word_unlock_count">Unlocked words: %1$d of %2$d in this selection</string>
     <string name="study_due_new">%1$d due, %2$d new</string>
     <string name="daily_counts_show">Daily counts &amp; shared limits</string>
     <string name="daily_counts_hide">Hide daily-count help</string>

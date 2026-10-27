@@ -29,7 +29,7 @@ enum class WordDirection(val mode: StudyMode) {
     /** The direction whose memory opens this one: typing is offered once the word is known as a choice from English. */
     val gate: WordDirection get() = if (this == Type) EnToJp else other
 
-    /** Directions other than the forward one open only after their [gate] direction has been answered a couple of times. */
+    /** Directions other than the forward one require established review memory in their [gate] direction; see [WordGate]. */
     val gated: Boolean get() = this != JpToEn
     val usesPictures: Boolean get() = this == Picture || this == WordToPicture
 
@@ -124,14 +124,11 @@ object WordStacks {
     fun find(id: String, offered: List<WordStack>): WordStack = offered.firstOrNull { it.id == id } ?: offered.first()
 }
 
-/**
- * English to Japanese is harder recall, so it is offered only for words already answered a couple of times
- * in the forward direction.
- */
+/** Established review memory in a prerequisite direction, not merely two correct answers. */
 object WordGate {
     const val MIN_FORWARD_REPS = 2
 
-    /** Stability that a card only reaches after a successful review on a later day (same-day reviews grow it far less). */
+    /** Minimum estimated stability in days, not a calendar waiting period. */
     const val MIN_FORWARD_STABILITY = 2.0
 
     fun reverseUnlocked(forward: SrsState?): Boolean =

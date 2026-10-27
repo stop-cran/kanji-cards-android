@@ -150,13 +150,14 @@ private fun WordsPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: Home
             LevelFilter(data.wordStacks, data.wordStack, { app.settings.setWordStack(it.id) }, { it.label },
                 description = if (data.wordStack == WordStacks.n4) stringResource(R.string.level_filter_includes_easier) else null)
         }
-        ModeRow("Japanese → English", data.mode(HomeMode.WordJp), onStart = { a.onWords(WordDirection.JpToEn, it) })
-        ModeRow("English → Japanese", data.mode(HomeMode.WordEn), onStart = { a.onWords(WordDirection.EnToJp, it) })
-        ModeRow("Reading", data.mode(HomeMode.WordReading), onStart = { a.onWords(WordDirection.Reading, it) })
-        ModeRow("Type it", data.mode(HomeMode.WordType), onStart = { a.onWords(WordDirection.Type, it) })
+        WordUnlockHelp()
+        WordModeRow(data, "Japanese → English", HomeMode.WordJp, WordDirection.JpToEn) { a.onWords(WordDirection.JpToEn, it) }
+        WordModeRow(data, "English → Japanese", HomeMode.WordEn, WordDirection.EnToJp) { a.onWords(WordDirection.EnToJp, it) }
+        WordModeRow(data, "Reading", HomeMode.WordReading, WordDirection.Reading) { a.onWords(WordDirection.Reading, it) }
+        WordModeRow(data, "Type it", HomeMode.WordType, WordDirection.Type) { a.onWords(WordDirection.Type, it) }
         if (data.pictureWordCount > 0) {
-            ModeRow("Picture → word", data.mode(HomeMode.WordPicture), onStart = { a.onWords(WordDirection.Picture, it) })
-            ModeRow("Word → picture", data.mode(HomeMode.WordToPicture), onStart = { a.onWords(WordDirection.WordToPicture, it) })
+            WordModeRow(data, "Picture → word", HomeMode.WordPicture, WordDirection.Picture) { a.onWords(WordDirection.Picture, it) }
+            WordModeRow(data, "Word → picture", HomeMode.WordToPicture, WordDirection.WordToPicture) { a.onWords(WordDirection.WordToPicture, it) }
         }
         OutlinedButton(onClick = a.onWordCards, enabled = data.wordCount > 0, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text(stringResource(R.string.browse_words)) }
     }

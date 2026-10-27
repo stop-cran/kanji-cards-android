@@ -138,7 +138,7 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   Detail page state uses stack position plus logical source/branch/kind/ID, while consent and question state use the session UUID.
   Thus article Back/rotation can retain an unchanged pending approval, but a new batch/process cannot inherit it. Route removal
   releases the large detail projection even though the Activity retains its route-keyed ViewModel.
-- **Typed words** (`WordType`, `core/words/TypedAnswer.kt`): English prompt, free-text answer, no options. Gate is `WordDirection.gate` (EnToJp, twice answered).
+- **Typed words** (`WordType`, `core/words/TypedAnswer.kt`): English prompt, free-text answer, no options. Gate is `WordDirection.gate` (established Review memory in EnToJp).
   Exact written form or a same-title/same-type synonym = Good; kana reading of a kanji word = Hard (re-asked); else Again. IME conversion is accepted as typed;
   kana-to-kanji recall is left to other modes. No first-success cap. Its new items share the daily `newBudget`.
 - Grades: wrong = Again (FSRS schedules it about 10 minutes later in a learning state; the quiz view models also re-insert it about 3 cards
@@ -538,7 +538,14 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   selected, the N5 words in every direction (the reading quiz counts only N5 words with kanji). An item is solid at stability of at least 7 days and recall of at least 85%; the offer needs 85%
   solid overall, 60% in each non-empty mode (modes with no items, e.g. kanji without stroke data, are ignored) and at least 20 item-mode
   entries. Dismissal hides the offer for 7 days.
-- `EnToJp` and `Reading` (harder recall) are offered per word only after 2 answers in `JpToEn`, or once already started (`WordDirection.gated`).
+- Gated word modes use `WordDirection.gate`: `JpToEn` for reverse, Reading and picture modes, `EnToJp` for Type it.
+  `WordGate` requires Review phase, at least 2 recorded repetitions and at least 2 days of estimated stability; two correct answers
+  alone are not the rule, and stability is not calendar waiting. Already-started modes remain eligible.
+- **Word unlock help (#87):** an independently reachable disclosure explains prerequisites, the stability rule and deck-local history.
+  Locked rows give the next practice action; unlocked counts reuse `WordQueues.eligible` from the same state snapshot as queues.
+  Candidate pools and progress-ready targets are distinct: two suitable candidates with one unlocked target can start a session.
+  Reading candidates require actual written ideographs. Counts do not promise choice availability or a daily allowance; eligible
+  extra practice remains available when the normal allowance is empty. No progression rule changes.
 - **Cross-direction blending affects ordering and eligibility only.** Eligibility: the `gated` directions above. `Reading` is gated by `JpToEn` but never deferred by it (knowing the meaning says nothing about the reading). Ordering: for *overdue* cards
   (positive urgency only; scaling a negative urgency would make it sooner) urgency is multiplied by `1 - 0.2 * R_other` (retrievability of
   the other direction; unseen or forgotten changes nothing). Due dates and stored states of each direction are never changed by the other. Don't make weights additive: FSRS stability and difficulty are not additive quantities.

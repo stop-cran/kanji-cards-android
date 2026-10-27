@@ -64,6 +64,14 @@ class HomeGuidance(
     val pacing: NewAllowance? = null,
     val week: WeekProgress? = null,
     val focus: io.github.stopcran.kanji.data.FocusStatus? = null,
+    val wordReadiness: Map<WordDirection, WordReadiness> = emptyMap(),
+)
+
+data class WordReadiness(val candidates: Int, val unlocked: Int)
+
+private class HomeModes(
+    val states: Map<HomeMode, ModeState> = emptyMap(),
+    val wordReadiness: Map<WordDirection, WordReadiness> = emptyMap(),
 )
 
 /** Canonical state of the main screen and the Kanji / Words pages; computed once and consumed as slices so counts never drift. */
@@ -85,6 +93,7 @@ class HomeData(
     val pacing get() = guidance.pacing
     val week get() = guidance.week
     val focus get() = guidance.focus
+    val wordReadiness get() = guidance.wordReadiness
 
     fun mode(m: HomeMode): ModeState = if (loading) ModeState.Loading else modes[m] ?: ModeState.Loading
 
@@ -235,25 +244,27 @@ internal fun rememberHomeData(app: Services, clock: Clock = Clock.systemDefaultZ
     val ex = extras?.takeIf { it.stackId == stack.id && it.wordStackId == wordStack.id }
     val loading = !statesReady || ex == null
 
-    val modes = remember(loading, ex, tick, inStack, wordsInStack, stateSet) {
-        if (loading || ex == null || stateSet == null) emptyMap() else computeModes(inStack, wordsInStack, ex, tick, stateSet)
+    val projection = remember(loading, ex, tick, inStack, wordsInStack, stateSet) {
+        if (loading || ex == null || stateSet == null) HomeModes() else computeModes(inStack, wordsInStack, ex, tick, stateSet)
     }
 
     val n4Offer = remember(loading, stateSet, kanji, words, levels, wordStack, n4Unlocked, dismissedMs) {
         stateSet != null && !loading && shouldOfferN4(inStack, words, levels, wordStack, stateSet, n4Unlocked, dismissedMs, Instant.now(), System.currentTimeMillis())
     }
     return HomeData(
-        loading, source.id, kanji, StackChoices(stacks, stack, wordStacks, wordStack, wordsInStack.size, wordsInStack.count { it.quizImage != null }), modes,
-        HomeGuidance(n4Offer, ex?.allowance, week, ex?.focus),
+        loading, source.id, kanji,
+        StackChoices(stacks, stack, wordStacks, wordStack, wordsInStack.size, wordsInStack.count { it.quizImage != null }), projection.states,
+        HomeGuidance(n4Offer, ex?.allowance, week, ex?.focus, projection.wordReadiness),
     )
 }
 
 /** Counts use strict (noise-free) queues so the numbers are stable; sessions build their own randomised queues. */
 private fun computeModes(
     inStack: List<KanjiEntity>, words: List<io.github.stopcran.kanji.data.WordEntity>, ex: Extras, now: Instant, states: StateSet,
-): Map<HomeMode, ModeState> {
+): HomeModes {
     val (quiz, draw, on, kun, jp, en, rd) = states
     val newLeft = ex.allowance.remaining
+    val readiness = mutableMapOf<WordDirection, WordReadiness>()
     fun plain(
         ids: List<String>, states: Map<String, SrsState>, min: Int, what: String, locked: String = "", pool: Int = ids.size, pad: Boolean = false,
     ): ModeState {
@@ -262,6 +273,7 @@ private fun computeModes(
     }
     fun word(d: WordDirection, own: Map<String, SrsState>, other: Map<String, SrsState>, locked: String): ModeState {
         val ids = words.forDirection(d).map { it.word }
+        readiness[d] = WordReadiness(ids.size, WordQueues.eligible(d, ids, own, other).size)
         val q = WordQueues.build(d, ids, own, other, now, newLeft, noise = 0.0)
         val extra = WordQueues.build(d, ids, own, other, now, 0, extra = true, noise = 0.0)
         val offerExtra = extra.isNotEmpty() || d.mode in ex.unlocks.padModes
@@ -278,7 +290,7 @@ private fun computeModes(
         val q = QueueBuilder.build(inStack.map { it.kanji }, quiz, now, meaningNew, noise = 0.0)
         ModeState.of(inStack.size >= 2, "Needs at least 2 kanji in this stack", q.count { !it.isNew }, q.count { it.isNew }, inStack.size >= 2, "")
     }
-    return mapOf(
+    val modes = mapOf(
         HomeMode.Meaning to meaning,
         HomeMode.Drawing to inStack.filter { it.strokesJson != null }.map { it.kanji }.let { strokeIds ->
             plain(
@@ -297,4 +309,5 @@ private fun computeModes(
         HomeMode.WordPicture to word(WordDirection.Picture, ex.unlocks.wordStates.getValue(StudyMode.WordPicture), jp, "Unlocks as you learn words"),
         HomeMode.WordToPicture to word(WordDirection.WordToPicture, ex.unlocks.wordStates.getValue(StudyMode.WordToPicture), jp, "Unlocks as you learn words"),
     )
+    return HomeModes(modes, readiness)
 }
