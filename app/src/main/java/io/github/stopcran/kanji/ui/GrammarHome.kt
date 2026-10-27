@@ -55,10 +55,11 @@ internal class GrammarHome(
     val focus: GrammarFocusDecision? = null,
     val notice: String? = null,
 ) {
+    @Composable
     fun summary(): String = when {
         sets == null -> "Loading…"
         sets.isEmpty() -> "No exercises yet"
-        mode is ModeState.Start -> "${mode.due} due, ${mode.new} new today"
+        mode is ModeState.Start -> stringResource(R.string.study_due_new, mode.due, mode.new)
         mode == ModeState.PracticeMore -> "All caught up"
         mode is ModeState.Locked -> mode.reason
         mode is ModeState.Unavailable -> mode.reason

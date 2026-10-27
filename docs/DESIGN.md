@@ -146,12 +146,17 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   fast answer is often luck). Drawing: clean = Good, recognised with stroke mistakes = Hard, not recognised or given up = Again.
 - Queue order (`QueueBuilder`): due cards by urgency (how overdue relative to the card's own interval) **plus noise** (default 0.3 of an
   interval), mixed with new cards drawn at random. Noise stops the same sequence acting as a cue. Whether a card is *due* never depends on noise.
-- **Pacing** (`core/srs/Pacing.kt`, `data/Pacing.kt`): one shared pool of new items per day for all modes, kanji and words (distinct stack+item whose
-  first log entry is today, `itemsIntroducedSince`). Allowance = base (`dailyNewCards`) x weekday level (Full 1, Light 0.5, Rest 0; default Sat/Sun
+- **Pacing** (`core/srs/Pacing.kt`, `data/Pacing.kt`): one shared pool per source, with built-in Kana separate from the selected content repository.
+  Repository modes count distinct stack+item whose first log entry is today (`itemsIntroducedSince`); Kana counts per-mode introductions as below.
+  Allowance = base (`dailyNewCards`) x weekday level (Full 1, Light 0.5, Rest 0; default Sat/Sun
   Light, editable in Settings) x backlog factor. Backlog factor is 1 while due reviews <= capacity and falls linearly to 0 at twice capacity;
   capacity = median reviews on active days of the last 14 days, at least 40. Reviews are never capped; the home page explains a reduced
   allowance and shows "This week: X of Y study days" (Y = non-rest days, max 5; a hint, not a streak: missing a day never resets anything). Settings offers commitment presets (Light 5, Steady 10, Intensive 20 new a day; the
   number field stays for custom values). Allowance is shared by every consumer through `AppDatabase.newAllowance`.
+  Home and Settings expose optional daily-count help: mode/section new opportunities are not additive budgets.
+  Counter summaries retain explicit allowance units, even when prerequisites leave no eligible exercise.
+  Listening additionally limits introductions/time and reserves repository slots before recorded introductions.
+  Home's backlog notice is explicitly for content; expanded help shows each pool's remaining amount and reason separately.
 - **Weekly study days (#94):** the home indicator counts distinct local dates, Monday through Sunday, with
   persisted answers in built-in Kana or the selected repository. Overlapping modes/scripts/sources count once;
   unrelated repositories are excluded. It observes review history directly, including writes completing after

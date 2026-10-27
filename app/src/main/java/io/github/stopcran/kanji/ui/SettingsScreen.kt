@@ -99,9 +99,10 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             }
         }
         Text(
-            "New items are shared by all quizzes, and pause automatically while many reviews are waiting. Reviews are never limited.",
+            stringResource(R.string.daily_counts_settings),
             style = MaterialTheme.typography.bodySmall,
         )
+        DailyCountsHelp()
         val vary by app.settings.varyFonts.collectAsState()
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.vary_kanji_fonts_as_cards), modifier = Modifier.weight(1f))

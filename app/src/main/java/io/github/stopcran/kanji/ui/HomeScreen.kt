@@ -107,6 +107,7 @@ private fun MainPage(app: KanjiApp, source: RepoSource, data: HomeData, a: HomeA
         if (data.sourceId != defaultId) Text(stringResource(R.string.cards_from, data.sourceId))
         N4Offer(app, data)
         PacingHint(data)
+        DailyCountsHelp(kana.allowance, data.pacing)
         Entry("Kana", kana.summary(), R.drawable.kana_sumi, a.onKanaPage)
         Entry("Kanji", content.summary(data.summary(HomeMode.Meaning, HomeMode.Drawing, HomeMode.Readings) ?: "Loading…"), ArtSet.current.kanji, a.onKanjiPage)
         val words = data.summary(
@@ -183,7 +184,7 @@ internal fun ModeRow(
 ) {
     val summary = when (state) {
         ModeState.Loading -> "Loading…"
-        is ModeState.Start -> "${state.due} due, ${state.new} new today"
+        is ModeState.Start -> stringResource(R.string.study_due_new, state.due, state.new)
         ModeState.PracticeMore -> "Nothing due right now"
         is ModeState.Locked -> state.reason
         is ModeState.Unavailable -> state.reason
@@ -213,7 +214,7 @@ private fun PacingHint(data: HomeData) {
     }
     if (p == null) return
     val text = pacingExplanation(p) ?: return
-    Text(text, style = MaterialTheme.typography.bodySmall)
+    Text(stringResource(R.string.content_pacing_notice, text), style = MaterialTheme.typography.bodySmall)
 }
 
 internal fun pacingExplanation(p: NewAllowance): String? = when (p.note) {

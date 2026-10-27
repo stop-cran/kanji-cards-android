@@ -88,7 +88,7 @@ fun CountersPage(app: KanjiApp, onBack: () -> Unit, a: HomeActions) {
         }
         Text(if (home.cards == null) "Loading…" else "${home.cards} prompts in this selection")
         Text("Levels are learning targets, not an official JLPT syllabus. Filters keep the same review history.")
-        Text("Shared allowance: ${home.allowance} new items remaining today. Mode opportunities below are not added together.")
+        Text(stringResource(R.string.counter_shared_allowance, home.allowance))
         Text("Choose a counter, write a complete expression, or recall its complete kana reading. Each skill has its own review history.")
         home.modes.forEach { (mode, state) ->
             ModeRow(mode.label, state, onStart = { a.onCounters(mode, it, group, scope) })

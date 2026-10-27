@@ -82,8 +82,9 @@ internal fun ListeningBrowser(services: Services, onBack: () -> Unit, onEncounte
                 OutlinedButton(onClick = { onEncounter("listening-assessment-preview:${java.util.UUID.randomUUID()}") },
                     enabled = !occupied && !busy, modifier = Modifier.fillMaxWidth()) { Text("Japanese diagnostic section") }
                 Text("Choose a separate N5 (24-item) or N4 (28-item) diagnostic, each with four examples and no SRS or daily-allowance changes.")
-                Text("Shared new-item allowance: ${queue.shared.remaining} of ${queue.shared.total} remaining today.")
+                Text(stringResource(R.string.content_allowance_remaining, queue.shared.remaining, queue.shared.total))
                 Text("Listening time budget: ${queue.allowance.milliseconds / 1_000} estimated seconds remaining today.")
+                Text(stringResource(R.string.daily_counts_listening))
                 pacingExplanation(queue.shared)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 Text("Budgets and reservations are shared across all levels and formats. Due backlog, including hidden items, reduces new-listening time.")
                 if (queue.hiddenDueCount > 0) Text("${queue.hiddenDueCount} due items outside this selection still affect its new-listening allowance.")

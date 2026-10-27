@@ -70,6 +70,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   Never infer membership or saved identity from a chip's text or position; concise labels do not unify scope semantics.
 - Built-in Kana intake counts first recorded practice per script/kana/mode, matching its per-mode new queues.
   Keep this exception source-scoped; other sections retain their existing item/reading accounting.
+- Daily-count copy must distinguish the Kana pool from the selected-repository pool, and allowance ceilings from eligible opportunities.
+  Listening's extra introduction/time ceilings are not a third pool; unintroduced scored encounters can reserve repository slots before answers.
 - **Content is untrusted.** Parse defensively, skip bad files instead of failing the sync, never render raw HTML, cap archive sizes.
 - N2 nearly exhausted entry headroom while byte budgets still passed. Count directories/skipped ZIP entries and coordinate the content
   publishing guard with `SafeZip` (see `docs/DESIGN.md`); more entry capacity does not relax byte limits or upgrade installed APKs.

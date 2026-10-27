@@ -128,7 +128,7 @@ class KanaPacingFlowTest {
                     }
                 }
             }
-            rule.onNodeWithText("0 due, 3 new today").assertIsDisplayed()
+            rule.onNodeWithText("0 due, 3 new").assertIsDisplayed()
             screenshot("kana-pacing-before.png")
             rule.onNodeWithText("Start").performClick()
             repeat(3) { answerCorrectly { requireNotNull(active.value).second } }
@@ -137,7 +137,7 @@ class KanaPacingFlowTest {
             rule.onNodeWithText("Done").performClick()
             rule.waitUntil(10_000) { active.value == null }
             rule.onNodeWithText("Practice more").assertIsDisplayed()
-            rule.onNodeWithText("0 due, 3 new today").assertDoesNotExist()
+            rule.onNodeWithText("0 due, 3 new").assertDoesNotExist()
             screenshot("kana-pacing-after.png")
             assertEquals(0, runBlocking { fixture.remaining() })
             assertEquals(3, runBlocking {

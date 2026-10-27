@@ -5,7 +5,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.ui.res.stringResource
 import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.core.kana.KANA_SOURCE_ID
 import io.github.stopcran.kanji.core.kana.KanaCatalog
@@ -27,7 +29,7 @@ private data class KanaStateSnapshot(val key: KanaStateKey, val rows: List<Revie
 
 internal class KanaOverview(
     private val states: Map<KanaStateKey, List<ReviewStateEntity>>,
-    private val allowance: NewAllowance?,
+    val allowance: NewAllowance?,
     private val now: Instant,
 ) {
     fun lockedCount(script: KanaScript, mode: KanaMode): Int? {
@@ -52,6 +54,7 @@ internal class KanaOverview(
         )
     }
 
+    @Composable
     fun summary(): String {
         val budget = allowance?.remaining ?: return "Loading…"
         val due = KanaScript.entries.sumOf { script ->
@@ -67,7 +70,8 @@ internal class KanaOverview(
                 KanaCatalog.unlocked(script, rows.associate { it.kanji to it.toSrs() }).count { it.kana !in seenInMode }
             }
         }
-        return if (due == 0 && (budget == 0 || availableNew == 0)) "All caught up" else "$due due, ${minOf(budget, availableNew)} new today"
+        return if (due == 0 && (budget == 0 || availableNew == 0)) "All caught up"
+        else stringResource(R.string.study_due_new, due, minOf(budget, availableNew))
     }
 }
 

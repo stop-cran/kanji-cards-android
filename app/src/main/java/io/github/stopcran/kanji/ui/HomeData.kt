@@ -6,7 +6,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.ui.res.stringResource
 import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.core.draw.DrawGate
@@ -87,12 +89,13 @@ class HomeData(
     fun mode(m: HomeMode): ModeState = if (loading) ModeState.Loading else modes[m] ?: ModeState.Loading
 
     /** "3 due, 5 new" over the given modes, or null while loading / when nothing is offered. */
+    @Composable
     fun summary(vararg ms: HomeMode): String? {
         if (loading) return null
         val starts = ms.mapNotNull { mode(it) as? ModeState.Start }
         if (starts.isEmpty()) return if (ms.any { mode(it) == ModeState.PracticeMore }) "All caught up" else "Nothing to study yet"
         val new = starts.sumOf { it.new }.let { n -> pacing?.let { minOf(n, it.remaining) } ?: n }
-        return "${starts.sumOf { it.due }} due, $new new"
+        return stringResource(R.string.study_due_new, starts.sumOf { it.due }, new)
     }
 }
 

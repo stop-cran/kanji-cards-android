@@ -1,4 +1,19 @@
 <resources>
+    <string name="study_due_new">%1$d due, %2$d new</string>
+    <string name="daily_counts_show">Daily counts &amp; shared limits</string>
+    <string name="daily_counts_hide">Hide daily-count help</string>
+    <string name="daily_counts_settings">The limit applies separately to Kana and to content study. Each allowance follows your weekly rhythm and slows new introductions when reviews build up. Due reviews have no daily cap.</string>
+    <string name="daily_counts_kana">Kana shares one daily allowance across hiragana, katakana and all Kana modes.</string>
+    <string name="daily_counts_content">Kanji, Words, Numbers &amp; counters, Grammar and Listening share a separate allowance for the selected content repository.</string>
+    <string name="kana_allowance_remaining">Kana allowance: %1$d of %2$d left today</string>
+    <string name="content_allowance_remaining">Content allowance: %1$d of %2$d left today</string>
+    <string name="counter_shared_allowance">Shared content allowance: %1$d new items left today. Mode counts are not added together.</string>
+    <string name="content_pacing_notice">Content: %1$s</string>
+    <string name="daily_counts_opportunities">New counts show available first-time practice, within its limits. Do not add mode or section counts. An allowance is a maximum, not a count of unlocked exercises; prerequisites or filters may leave nothing eligible.</string>
+    <string name="daily_counts_listening">Listening also limits new tasks and planned time. Starting a new scored task can reserve a shared content slot before an answer is recorded.</string>
+    <string name="daily_counts_reviews">Due reviews have no daily cap. Extra practice is separate and may exceed these limits.</string>
+    <string name="daily_counts_disabled">New items are turned off by the daily limit in Settings.</string>
+    <string name="daily_counts_used">Today’s allowance is used or reserved. Due reviews have no daily cap.</string>
     <string name="content_reading_cache">Loading saved content…</string>
     <string name="content_downloading">Getting your content… Kana is ready to try.</string>
     <string name="content_updating">Updating content…</string>
