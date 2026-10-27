@@ -35,6 +35,14 @@ class Settings(context: Context) {
     fun snapshot(): Map<String, Any?> = prefs.all.toSortedMap()
     private val _source = MutableStateFlow(load())
     val source: StateFlow<RepoSource> = _source
+    private val _startingGuideVisible = MutableStateFlow(prefs.getBoolean(KEY_STARTING_GUIDE, true))
+    val startingGuideVisible: StateFlow<Boolean> = _startingGuideVisible
+
+    fun setStartingGuideVisible(visible: Boolean) {
+        prefs.edit().putBoolean(KEY_STARTING_GUIDE, visible).apply()
+        _startingGuideVisible.value = visible
+    }
+
     private val _grammarPreferences = MutableStateFlow(loadGrammarPreferences())
     val grammarPreferences: StateFlow<Map<String, GrammarPreferences>> = _grammarPreferences
 
@@ -336,6 +344,7 @@ class Settings(context: Context) {
         val defaultSource = RepoSource("stop-cran", "learning-japanese", Defaults.CONTENT_BRANCH)
         const val KEY_URL = "repoUrl"
         const val KEY_BRANCH = "branch"
+        const val KEY_STARTING_GUIDE = "startingGuideVisible"
         const val KEY_NEW = "dailyNewCards"
         const val KEY_WEEK = "weekPlan"
         const val DEFAULT_WEEK = "FFFFFLL"

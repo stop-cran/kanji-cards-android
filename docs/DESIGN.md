@@ -667,6 +667,11 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   during search; browsing does not change or inherit the study deck. Both browsers open the card's article; the main screen only notes the source when it is not the default repo.
   After process death ephemeral session routes are dropped from the restored back stack and the user lands on the page they started from.
   Durable listening encounter routes are retained and restore their captured package and playback/answer state.
+- **Starting guide (#88):** Home offers optional short guidance to existing Kana, Words and Grammar pages, without
+  replacing or gating any section. It recommends choosing N5 explicitly rather than changing saved N4/All selections.
+  The guide distinguishes practice from an unscored demo and finishing feedback from merely opening a question or
+  article. Hide/reopen is an app-wide SharedPreferences choice, surviving process and source changes; Home retains
+  a Starting guide control for revisiting it. No wizard, new curriculum, extra study mode or progress reset.
 - **Kana progression:** Hiragana and katakana have independent review state. Yōon cards unlock per script and per mode only when both plain component kana are in Review with at least seven days of FSRS stability; voiced and semi-voiced kana (が, ぱ…) unlock the same way once their unvoiced base (か, は) is in Review with at least three days (`VOICED_UNLOCK_STABILITY_DAYS`; a first Good already gives about 3.2 days, so this is deliberately light, tune it from real use). A card already started in that mode stays available. Locked cards are excluded from that mode's study queues, quiz distractors and new-card counts, and the Kana page reports one total of locked kana per mode. In Kana drawing, a card with no prior Draw review is first shown with the faint numbered reference; this is a practice-only trace, then the card returns later to be drawn from memory without recording the trace attempt.
 - **Kana entry help (#86):** the initial page gives one short first action, followed by script selection and optional
   inline progression help. The disclosure follows the Word/daily-count pattern and preserves selection and expansion

@@ -1,4 +1,11 @@
 <resources>
+    <string name="starting_guide_title">Starting guide</string>
+    <string name="starting_guide_hide">Hide guide</string>
+    <string name="starting_guide_choices">New to kana? Choose Kana. Already read kana? Open Words or Grammar and select N5 on that page. Your existing selections stay unchanged.</string>
+    <string name="starting_guide_recording">Practice is not an unscored demo. In these three sections, advance from feedback with Next or I guessed. Saved answers update reviews; Back does not undo them. Opening questions or articles alone records no answer.</string>
+    <string name="starting_guide_kana">Open Kana</string>
+    <string name="starting_guide_words">Open Words</string>
+    <string name="starting_guide_grammar">Open Grammar</string>
     <string name="kana_intro">Choose Hiragana or Katakana, then Start under Kana → romaji (sounds written in Latin letters).</string>
     <string name="kana_help_show">How does Kana progression work?</string>
     <string name="kana_help_hide">Hide Kana help</string>

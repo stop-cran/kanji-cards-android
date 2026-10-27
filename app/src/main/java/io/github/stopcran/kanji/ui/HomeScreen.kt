@@ -107,6 +107,7 @@ private fun MainPage(app: KanjiApp, source: RepoSource, data: HomeData, a: HomeA
         if (data.sourceId != defaultId) Text(stringResource(R.string.cards_from, data.sourceId))
         N4Offer(app, data)
         PacingHint(data)
+        StartingGuide(app.settings, a.onKanaPage, a.onWordsPage, a.onGrammarPage)
         DailyCountsHelp(kana.allowance, data.pacing)
         Entry("Kana", kana.summary(), R.drawable.kana_sumi, a.onKanaPage)
         Entry("Kanji", content.summary(data.summary(HomeMode.Meaning, HomeMode.Drawing, HomeMode.Readings) ?: "Loading…"), ArtSet.current.kanji, a.onKanjiPage)
