@@ -4,9 +4,13 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.Bitmap
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -18,6 +22,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.room.Room
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.stopcran.kanji.Services
+import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.kana.KANA_SOURCE_ID
 import io.github.stopcran.kanji.core.kana.KanaCatalog
 import io.github.stopcran.kanji.core.kana.KanaMode
@@ -28,6 +33,7 @@ import io.github.stopcran.kanji.data.ReviewStateEntity
 import io.github.stopcran.kanji.data.Settings
 import io.github.stopcran.kanji.data.newAllowance
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -37,10 +43,70 @@ import org.junit.Rule
 import org.junit.Test
 import java.io.File
 import java.time.Instant
+import java.time.Clock
+import java.time.ZoneId
 import java.util.UUID
 
 class KanaPacingFlowTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test fun homeCountsDelayedKanaWritesAndRebindsItsWeekAndSelectedSource() {
+        Fixture(seedHistory = false).use { fixture ->
+            val now = Instant.parse("2026-01-07T03:00:00Z")
+            val clock = mutableStateOf(Clock.fixed(now, ZoneId.of("Asia/Tokyo")))
+            val home = mutableStateOf<HomeData?>(null)
+            val visible = mutableStateOf(true)
+            val release = CompletableDeferred<Unit>()
+            val initialSource = fixture.settings.source.value.id
+            val switchedCounts = mutableListOf<Int?>()
+            rule.setContent {
+                if (visible.value) {
+                    val data = rememberHomeData(fixture.services, clock.value)
+                    SideEffect {
+                        home.value = data
+                        if (data.sourceId != initialSource) switchedCounts += data.week?.studied
+                    }
+                    LaunchedEffect(Unit) {
+                        release.await()
+                        fixture.recordWeekAnswer(KANA_SOURCE_ID, Instant.parse("2026-01-04T15:00:00Z"))
+                    }
+                    MaterialTheme {
+                        Page("Home") {
+                            data.week?.let { Text(stringResource(R.string.this_week_of_study_days, it.studied, it.goal, "")) }
+                        }
+                    }
+                }
+            }
+            try {
+                rule.waitUntil(10_000) { home.value?.let { !it.loading && it.week?.studied == 0 } == true }
+                rule.onNodeWithText("This week: 0 of 5 study days").assertIsDisplayed()
+                release.complete(Unit)
+                rule.waitUntil(10_000) { home.value?.week?.studied == 1 }
+                rule.onNodeWithText("This week: 1 of 5 study days").assertIsDisplayed()
+                runBlocking {
+                    fixture.recordWeekAnswer(initialSource, Instant.parse("2026-01-04T16:00:00Z"))
+                    fixture.recordWeekAnswer(initialSource, Instant.parse("2026-01-05T15:00:00Z"))
+                }
+                rule.waitUntil(10_000) { home.value?.week?.studied == 2 }
+                rule.runOnIdle { assertTrue(fixture.settings.setSource("https://github.com/fixture/other", "main")) }
+                rule.waitUntil(10_000) {
+                    home.value?.let { it.sourceId != initialSource && it.week?.studied == 1 } == true
+                }
+                rule.runOnIdle { assertTrue(switchedCounts.none { it == 2 }) }
+                rule.runOnIdle { clock.value = Clock.fixed(now.plusSeconds(7 * 86_400), clock.value.zone) }
+                rule.waitUntil(10_000) { home.value?.week?.studied == 0 }
+                rule.runOnIdle {
+                    clock.value = Clock.fixed(now, clock.value.zone)
+                    fixture.settings.setWeekPlan("FFOOOOO")
+                }
+                rule.waitUntil(10_000) { home.value?.week?.let { it.studied == 1 && it.goal == 2 } == true }
+                assertEquals(3, runBlocking { fixture.db.reviews().allLog().size })
+            } finally {
+                rule.runOnIdle { visible.value = false }
+                rule.waitForIdle()
+            }
+        }
+    }
 
     @Test fun completedReversePracticeSpendsTheAllowanceInsteadOfRefillingNormalSessions() {
         Fixture().use { fixture ->
@@ -113,21 +179,21 @@ class KanaPacingFlowTest {
         }
     }
 
-    private class Fixture : AutoCloseable {
+    private class Fixture(seedHistory: Boolean = true) : AutoCloseable {
         private val context = InstrumentationRegistry.getInstrumentation().targetContext
         private val preferences = "kana-pacing-${UUID.randomUUID()}"
         private val isolated = object : ContextWrapper(context) {
             override fun getSharedPreferences(name: String, mode: Int) = context.getSharedPreferences(preferences, mode)
         }
         val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
-        private val settings = Settings(isolated).also { it.setWeekPlan("FFFFFFF"); it.setDailyNewCards(3) }
-        private val services = Services(db, settings, context)
+        val settings = Settings(isolated).also { it.setWeekPlan("FFFFFFF"); it.setDailyNewCards(3) }
+        val services = Services(db, settings, context)
         val models = ViewModelStore()
         val script = KanaScript.Katakana
         val mode = KanaMode.QuizRomajiToKana
 
         init {
-            runBlocking {
+            if (seedHistory) runBlocking {
                 val earlier = Instant.now().minusSeconds(2 * 86_400).toEpochMilli()
                 for (card in KanaCatalog.all(script)) {
                     db.reviews().record(
@@ -138,6 +204,17 @@ class KanaPacingFlowTest {
                 }
                 assertTrue(db.reviews().allSessions().isEmpty())
             }
+        }
+
+        suspend fun recordWeekAnswer(sourceId: String, at: Instant) {
+            val mode = if (sourceId == KANA_SOURCE_ID) KanaMode.QuizKanaToRomaji.name else "WordJpEn"
+            val stack = if (sourceId == KANA_SOURCE_ID) "hiragana" else "words-n5"
+            val item = if (sourceId == KANA_SOURCE_ID) "あ" else "語"
+            db.reviews().record(
+                ReviewStateEntity(sourceId, stack, item, mode, "Review", 10.0, 5.0,
+                    at.plusSeconds(7 * 86_400).toEpochMilli(), at.toEpochMilli(), 1, 0),
+                ReviewLogEntity(0, sourceId, stack, item, mode, 3, at.toEpochMilli()),
+            )
         }
 
         fun session(extra: Boolean): Pair<String, KanaStudyViewModel> {

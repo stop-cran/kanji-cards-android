@@ -489,6 +489,9 @@ interface ReviewDao {
     @Query("SELECT atMs FROM review_log WHERE sourceId = :sourceId AND atMs >= :sinceMs AND (:excludedMode IS NULL OR mode != :excludedMode)")
     suspend fun reviewTimesSince(sourceId: String, sinceMs: Long, excludedMode: String? = null): List<Long>
 
+    @Query("SELECT atMs FROM review_log WHERE sourceId IN (:sourceIds) AND atMs >= :sinceMs AND atMs < :untilMs")
+    fun observeReviewTimes(sourceIds: List<String>, sinceMs: Long, untilMs: Long): Flow<List<Long>>
+
     /** Reading cards (kanji + reading) whose first review happened since [sinceMs]; each used a unit of the daily budget. */
     @Query("SELECT COUNT(*) FROM (SELECT 1 FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode IN ('KanjiOn', 'KanjiKun') AND reading != '' GROUP BY mode, kanji, reading HAVING MIN(atMs) >= :sinceMs)")
     suspend fun readingCardsIntroducedSince(sourceId: String, stack: String, sinceMs: Long): Int

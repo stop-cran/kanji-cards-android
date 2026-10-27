@@ -1,21 +1,31 @@
 package io.github.stopcran.kanji.data
 
+import io.github.stopcran.kanji.core.kana.KANA_SOURCE_ID
 import io.github.stopcran.kanji.core.srs.DayLevel
 import io.github.stopcran.kanji.core.srs.NewAllowance
 import io.github.stopcran.kanji.core.srs.Pacing
 import io.github.stopcran.kanji.core.srs.WeekProgress
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import java.time.Instant
 import java.time.ZoneId
 
 private const val CAPACITY_WINDOW_DAYS = 14L
 
-/** Distinct days this week (from Monday) with at least one review, against the goal from the weekly rhythm. */
-suspend fun AppDatabase.weekProgress(settings: Settings, sourceId: String, now: Instant, zone: ZoneId = ZoneId.systemDefault()): WeekProgress {
+/** Local study dates from built-in Kana and the selected repository; daily allowances remain separate. */
+fun AppDatabase.observeWeekProgress(settings: Settings, sourceId: String, now: Instant, zone: ZoneId = ZoneId.systemDefault()): Flow<WeekProgress> {
     val today = now.atZone(zone).toLocalDate()
     val monday = today.minusDays((today.dayOfWeek.value - 1).toLong())
-    val studied = reviews().reviewTimesSince(sourceId, monday.atStartOfDay(zone).toInstant().toEpochMilli())
-        .map { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }.toSet().size
-    return WeekProgress(studied, Pacing.weeklyGoal(DayLevel.parseWeek(settings.weekPlan.value)))
+    val times = reviews().observeReviewTimes(
+        listOf(sourceId, KANA_SOURCE_ID).distinct(),
+        monday.atStartOfDay(zone).toInstant().toEpochMilli(),
+        monday.plusDays(7).atStartOfDay(zone).toInstant().toEpochMilli(),
+    )
+    return combine(times, settings.weekPlan) { reviews, plan ->
+        val studied = reviews.map { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }.toSet().size
+        WeekProgress(studied, Pacing.weeklyGoal(DayLevel.parseWeek(plan)))
+    }.distinctUntilChanged()
 }
 
 /** Today's shared allowance of new items across all modes, from the weekday plan, the base amount and the current backlog. */

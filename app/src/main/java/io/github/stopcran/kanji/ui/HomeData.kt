@@ -3,9 +3,11 @@ package io.github.stopcran.kanji.ui
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.core.draw.DrawGate
 import io.github.stopcran.kanji.core.reading.KanjiReadingQueue
@@ -33,14 +35,14 @@ import io.github.stopcran.kanji.data.focusStatus
 import io.github.stopcran.kanji.data.meaningLearned
 import io.github.stopcran.kanji.data.padCandidates
 import io.github.stopcran.kanji.data.padWordCandidates
-import io.github.stopcran.kanji.data.weekProgress
+import io.github.stopcran.kanji.data.observeWeekProgress
 import io.github.stopcran.kanji.data.stacks
 import io.github.stopcran.kanji.data.toReadingCard
 import io.github.stopcran.kanji.data.toReadingStates
 import io.github.stopcran.kanji.data.toSrs
 import kotlinx.coroutines.delay
+import java.time.Clock
 import java.time.Instant
-import java.time.ZoneId
 
 enum class HomeMode { Meaning, Drawing, Readings, WordJp, WordEn, WordReading, WordType, WordPicture, WordToPicture }
 
@@ -101,7 +103,7 @@ private class Unlocks(
 )
 
 private class Extras(
-    val stackId: String, val wordStackId: String, val allowance: NewAllowance, val week: WeekProgress, val unlocks: Unlocks,
+    val stackId: String, val wordStackId: String, val allowance: NewAllowance, val unlocks: Unlocks,
     val focus: io.github.stopcran.kanji.data.FocusStatus?,
 )
 
@@ -142,13 +144,16 @@ internal fun shouldOfferN4(
 }
 /** Null until the first emission, so the screen can tell "still loading" from "nothing yet". */
 @Composable
-private fun rememberStates(app: KanjiApp, sourceId: String, stack: String, mode: StudyMode, byReading: Boolean = false): Map<String, SrsState>? {
+private fun rememberStates(app: Services, sourceId: String, stack: String, mode: StudyMode, byReading: Boolean = false): Map<String, SrsState>? {
     val states by remember(sourceId, stack, mode) { app.db.reviews().observeStates(sourceId, stack, mode.name) }.collectAsState(null)
     return remember(states) { if (byReading) states?.toReadingStates() else states?.associate { it.kanji to it.toSrs() } }
 }
 
 @Composable
-fun rememberHomeData(app: KanjiApp): HomeData {
+fun rememberHomeData(app: KanjiApp): HomeData = rememberHomeData(app.services)
+
+@Composable
+internal fun rememberHomeData(app: Services, clock: Clock = Clock.systemDefaultZone()): HomeData {
     val source by app.settings.source.collectAsState()
     val dailyNew by app.settings.dailyNewCards.collectAsState()
     val weekPlan by app.settings.weekPlan.collectAsState()
@@ -170,9 +175,15 @@ fun rememberHomeData(app: KanjiApp): HomeData {
     val wordsInStack = remember(words, levels, wordStack) { words.inWordStack(wordStack, levels) }
 
     // A clock tick makes cards that become due, and the day rollover, show up without leaving the page.
-    val tick by produceState(Instant.now()) { while (true) { delay(60_000); value = Instant.now() } }
-    val today = tick.atZone(ZoneId.systemDefault()).toLocalDate()
-    val startOfDay = remember(today) { today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() }
+    val tick by produceState(clock.instant(), clock) { while (true) { value = clock.instant(); delay(60_000) } }
+    val zone = clock.zone
+    val today = tick.atZone(zone).toLocalDate()
+    val startOfDay = remember(today, zone) { today.atStartOfDay(zone).toInstant().toEpochMilli() }
+    val week = key(app, source.id, startOfDay, zone) {
+        val progress = remember { app.db.observeWeekProgress(app.settings, source.id, tick, zone) }
+        val observed by progress.collectAsState(null)
+        observed
+    }
 
     val quiz = rememberStates(app, source.id, stack.id, StudyMode.Quiz)
     val draw = rememberStates(app, source.id, stack.id, StudyMode.Draw)
@@ -216,7 +227,7 @@ fun rememberHomeData(app: KanjiApp): HomeData {
             learned, unlockRule, r.readingCardsIntroducedSince(source.id, stack.id, startOfDay),
             padModes, ownStates,
         )
-        value = Extras(stack.id, wordStack.id, allowance, app.db.weekProgress(app.settings, source.id, Instant.now()), unlocks, focus)
+        value = Extras(stack.id, wordStack.id, allowance, unlocks, focus)
     }
     val ex = extras?.takeIf { it.stackId == stack.id && it.wordStackId == wordStack.id }
     val loading = !statesReady || ex == null
@@ -230,7 +241,7 @@ fun rememberHomeData(app: KanjiApp): HomeData {
     }
     return HomeData(
         loading, source.id, kanji, StackChoices(stacks, stack, wordStacks, wordStack, wordsInStack.size, wordsInStack.count { it.quizImage != null }), modes,
-        HomeGuidance(n4Offer, ex?.allowance, ex?.week, ex?.focus),
+        HomeGuidance(n4Offer, ex?.allowance, week, ex?.focus),
     )
 }
 

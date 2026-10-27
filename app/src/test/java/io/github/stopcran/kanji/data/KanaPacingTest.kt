@@ -10,6 +10,7 @@ import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.ui.KanaOverview
 import io.github.stopcran.kanji.ui.KanaStateKey
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -90,6 +91,35 @@ class KanaPacingTest {
         }
         assertEquals(0, remaining(source = source))
         assertEquals(3, remaining())
+    }
+
+    @Test fun weeklyStudyDatesCombineKanaAndSelectedContentWithoutMergingDailyPools() = runBlocking {
+        val source = "fixture/content"
+        assertEquals(0, db.observeWeekProgress(settings, source, now, zone).first().studied)
+        record(log("hiragana", "あ", KanaMode.QuizKanaToRomaji.name))
+        assertEquals(1, db.observeWeekProgress(settings, source, now, zone).first().studied)
+        record(log("words-n5", "語", "WordJpEn").copy(sourceId = source))
+        record(log("katakana", "ア", KanaMode.QuizRomajiToKana.name))
+        assertEquals(1, db.observeWeekProgress(settings, source, now, zone).first().studied)
+        record(log("words-n5", "日", "WordJpEn", now.minusSeconds(86_400)).copy(sourceId = source))
+        assertEquals(2, db.observeWeekProgress(settings, source, now, zone).first().studied)
+        assertEquals(1, remaining())
+        assertEquals(2, remaining(source = source))
+        assertEquals(4, db.reviews().allLog().size)
+    }
+
+    @Test fun weeklyDatesUseLocalMondayAndExcludeUnrelatedSourcesAndAdjacentWeeks() = runBlocking {
+        val source = "fixture/content"
+        val tokyo = ZoneId.of("Asia/Tokyo")
+        val current = Instant.parse("2026-01-07T03:00:00Z")
+        for (at in listOf("2026-01-04T14:59:59Z", "2026-01-04T15:00:00Z", "2026-01-05T15:00:00Z", "2026-01-11T15:00:00Z")) {
+            record(log("hiragana", "あ", KanaMode.QuizKanaToRomaji.name, Instant.parse(at)))
+        }
+        record(log("words-n5", "語", "WordJpEn", Instant.parse("2026-01-04T16:00:00Z")).copy(sourceId = source))
+        record(log("words-n5", "日", "WordJpEn", current).copy(sourceId = "fixture/other"))
+        assertEquals(2, db.observeWeekProgress(settings, source, current, tokyo).first().studied)
+        assertEquals(3, db.observeWeekProgress(settings, "fixture/other", current, tokyo).first().studied)
+        assertEquals(1, db.observeWeekProgress(settings, source, current.plusSeconds(7 * 86_400), tokyo).first().studied)
     }
 
     private fun log(stack: String, kana: String, mode: String, at: Instant = now) =
