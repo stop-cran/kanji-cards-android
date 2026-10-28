@@ -174,6 +174,10 @@ private fun DrawQuestion(state: KanaStudyUi.DrawQuestion, vm: KanaStudyViewModel
         modifier = Modifier.fillMaxWidth(),
     )
     Text(state.card.romaji, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    if (state.trace) {
+        Text(stringResource(R.string.tracing_practice_notice), style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    }
     DrawingPad(
         strokes = strokes,
         onStroke = { strokes += it },

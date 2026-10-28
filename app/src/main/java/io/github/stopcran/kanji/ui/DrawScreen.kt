@@ -99,6 +99,10 @@ private fun QuestionState(s: DrawUi.Question, vm: DrawViewModel) {
     SessionRemaining(s.remaining)
     Text(if (s.trace) "Trace the kanji for" else stringResource(R.string.draw_the_kanji_for), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     Text(s.card.title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    if (s.trace) {
+        Text(stringResource(R.string.tracing_practice_notice), style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    }
     DrawingPad(
         strokes,
         onStroke = { strokes += it },

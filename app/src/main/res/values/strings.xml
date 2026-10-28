@@ -126,6 +126,7 @@
     <string name="session_repeats_hint">Includes queued repeats, so the total may stay unchanged after an answer. Repeats follow other questions when available.</string>
     <string name="next">Next</string>
     <string name="draw_the_kanji_for">Draw the kanji for</string>
+    <string name="tracing_practice_notice">Ungraded tracing practice. You\'ll try from memory later.</string>
     <string name="downloading_the_handwriting_model_first">Downloading the handwriting model (first use only)…</string>
     <string name="handwriting_model_unavailable_graded_by">Handwriting model unavailable: graded by stroke shapes only.</string>
     <string name="undo">Undo</string>
