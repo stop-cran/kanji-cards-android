@@ -69,6 +69,7 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
             WordDirection.WordToPicture -> "Words: word → picture"
         },
         onBack,
+        ime = direction == WordDirection.Type,
         scrollToTopOnBack = true,
     ) {
         vm.pictureNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
@@ -202,8 +203,10 @@ private fun TypeQuestion(s: WordQuizUi.TypeQuestion, vm: WordQuizViewModel) {
         keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { vm.submit() }),
         modifier = Modifier.fillMaxWidth().focusRequester(focus),
     )
-    Button(onClick = { vm.submit() }, enabled = vm.draft.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Check") }
-    DontKnowButton { vm.submit(giveUp = true) }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Button(onClick = { vm.submit() }, enabled = vm.draft.isNotBlank(), modifier = Modifier.weight(1f)) { Text("Check") }
+        DontKnowButton(Modifier.weight(1f)) { vm.submit(giveUp = true) }
+    }
 }
 
 @Composable

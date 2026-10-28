@@ -1,15 +1,22 @@
 package io.github.stopcran.kanji.ui
 
 import android.content.ContextWrapper
+import android.graphics.Bitmap
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.ViewModelStore
 import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -27,14 +34,23 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class WordAnswerFlowTest {
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
+
+    @Before fun edgeToEdge() {
+        rule.activityRule.scenario.onActivity {
+            it.enableEdgeToEdge()
+            it.window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        }
+    }
 
     @Test fun failedAnswerRepeatsLaterAndSuccessfulConfirmationIsNotAnotherReview() = session(6) { vm, db ->
         val seen = mutableListOf<String>()
@@ -111,6 +127,49 @@ class WordAnswerFlowTest {
         assertEquals(grades, runBlocking { db.reviews().allLog().sortedBy { it.id }.map { it.grade } })
     }
 
+    @Test fun typingKeepsBothActionsReachableAboveKeyboardForLongCue() = session(2, typing = true, longCue = true) { vm, db ->
+        rule.waitUntil(10_000) { vm.ui is WordQuizUi.TypeQuestion }
+        rule.onNode(hasSetTextAction()).performScrollTo().performClick()
+        try {
+            rule.waitUntil(10_000) {
+                ViewCompat.getRootWindowInsets(rule.activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+            }
+        } catch (error: Throwable) {
+            captureTypingKeyboard()
+            throw error
+        }
+        val check = rule.onNodeWithText("Check").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
+        val unsure = rule.onNodeWithText("I don't know").assertIsDisplayed().assertIsEnabled()
+        captureTypingKeyboard()
+        val keyboardTop = rule.runOnIdle {
+            val decor = rule.activity.window.decorView
+            decor.height - requireNotNull(ViewCompat.getRootWindowInsets(decor)).getInsets(WindowInsetsCompat.Type.ime()).bottom
+        }
+        val checkBounds = check.fetchSemanticsNode().boundsInWindow
+        val unsureBounds = unsure.fetchSemanticsNode().boundsInWindow
+        assertEquals(checkBounds.center.y, unsureBounds.center.y, 1f)
+        assertTrue("Check is covered by the keyboard", checkBounds.bottom <= keyboardTop)
+        assertTrue("Uncertainty is covered by the keyboard", unsureBounds.bottom <= keyboardTop)
+        unsure.performClick()
+        rule.onNodeWithText("No problem — here it is").performScrollTo().assertIsDisplayed()
+        assertTrue((vm.ui as WordQuizUi.TypeAnswer).gaveUp)
+        assertEquals(0, recorded(db))
+        rule.onNodeWithText("Next").performScrollTo().performClick()
+        rule.waitUntil(10_000) { recorded(db) == 1 }
+        assertEquals(1, runBlocking { db.reviews().allLog().single().grade })
+    }
+
+    private fun captureTypingKeyboard() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val image = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+        try {
+            File(instrumentation.targetContext.getExternalFilesDir(null), "word-typing-keyboard.png")
+                .outputStream().use { assertTrue(image.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        } finally {
+            image.recycle()
+        }
+    }
+
     private fun question(vm: WordQuizViewModel): WordQuizUi.Question {
         rule.waitUntil(10_000) { vm.ui is WordQuizUi.Question }
         return rule.runOnIdle { vm.ui as WordQuizUi.Question }
@@ -124,7 +183,7 @@ class WordAnswerFlowTest {
         }
     }
 
-    private fun session(limit: Int, typing: Boolean = false, exercise: (WordQuizViewModel, AppDatabase) -> Unit) {
+    private fun session(limit: Int, typing: Boolean = false, longCue: Boolean = false, exercise: (WordQuizViewModel, AppDatabase) -> Unit) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val preferences = "word-answer-${UUID.randomUUID()}"
         val isolated = object : ContextWrapper(context) {
@@ -149,7 +208,8 @@ class WordAnswerFlowTest {
                     Triple("魚", "さかな", "fish"), Triple("馬", "うま", "horse"), Triple("牛", "うし", "cow"),
                 )
                 db.content().insertWords(words.map { (word, reading, title) ->
-                    WordEntity(settings.source.value.id, word, reading, title, "wago", word, "", "Fixture word reference", 5)
+                    val cue = if (longCue) "$title, described by a longer English cue that wraps across several lines while the answer keyboard is open" else title
+                    WordEntity(settings.source.value.id, word, reading, cue, "wago", word, "", "Fixture word reference", 5)
                 })
                 if (typing) {
                     val now = System.currentTimeMillis()
