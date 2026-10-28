@@ -103,6 +103,12 @@
     <string name="grammar_practising_topic">Topic: %1$s</string>
     <string name="grammar_session_exception">Restricted new material was approved for this session only.</string>
     <string name="grammar_practice_topic_again">Practice more</string>
+    <string name="grammar_focus_current">Focus: %1$s</string>
+    <string name="grammar_focus_next">Next focus: %1$s</string>
+    <string name="grammar_focus_guidance">Ordinary new material stays on one contrast; reviews may cover others. Familiarity is not mastery. Practice more remains unguided.</string>
+    <string name="grammar_focus_show_details">Show focus details</string>
+    <string name="grammar_focus_hide_details">Hide focus details</string>
+    <string name="grammar_focus_snapshot">Details from the start of this session.</string>
     <string name="grammar_target_restore_unavailable">The previous practice target could not be restored safely. No general practice session was substituted. Choose a topic and review a fresh preview.</string>
     <string name="app_name">Ensō Nihongo</string>
     <string name="kanji_cards">Ensō Nihongo %1$s</string>

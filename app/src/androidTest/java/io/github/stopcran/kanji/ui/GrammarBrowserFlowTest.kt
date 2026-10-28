@@ -2,20 +2,31 @@ package io.github.stopcran.kanji.ui
 
 import android.content.Context
 import android.content.ContextWrapper
+import android.graphics.Bitmap
+import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.room.Room
 import androidx.room.withTransaction
+import androidx.lifecycle.ViewModelStore
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.content.ContentParser
@@ -34,19 +45,157 @@ import io.github.stopcran.kanji.data.AppDatabase
 import io.github.stopcran.kanji.data.GrammarEntity
 import io.github.stopcran.kanji.data.Settings
 import io.github.stopcran.kanji.data.SyncMetaEntity
+import io.github.stopcran.kanji.data.grammarStudy
 import io.github.stopcran.kanji.stateKey
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import java.util.UUID
+import java.io.File
+import java.time.Instant
 
 /** Production details/question host with an isolated database and preferences, never learner history. */
 class GrammarBrowserFlowTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test
+    fun focusedGuidanceIsSharedAndOptionalWhileOrdinaryAndExtraPracticeStayUnguided() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val preferencesName = "grammar-guidance-${UUID.randomUUID()}"
+        val isolated = object : ContextWrapper(context) {
+            override fun getSharedPreferences(name: String, mode: Int) = context.getSharedPreferences(preferencesName, mode)
+        }
+        val settings = Settings(isolated).also {
+            it.setGrammarParserEpoch(it.source.value.id, ContentParser.GRAMMAR_PARSER_EPOCH)
+            it.setGrammarNewScope(it.source.value.id, GrammarScope.N5)
+            it.setWeekPlan("FFFFFFF")
+            it.setDailyNewCards(6)
+        }
+        val source = settings.source.value.id
+        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
+        val services = Services(db, settings, context)
+        val models = ViewModelStore()
+        val active = mutableStateOf<Pair<String, GrammarQuizViewModel>?>(null)
+        val home = mutableStateOf<GrammarHome?>(null)
+        val restoration = StateRestorationTester(rule)
+        fun open(extra: Boolean) {
+            val key = "grammar:${UUID.randomUUID()}" + if (extra) ":extra" else ""
+            active.value = key to GrammarQuizViewModel(services).also { models.put(key, it) }
+        }
+        fun awaitQuestion() {
+            rule.waitUntil(10_000) { active.value?.second?.ui.let { it is GrammarUi.Choose || it is GrammarUi.Type } }
+            rule.onNodeWithText("Attempts left:", substring = true).performScrollTo().assertIsDisplayed()
+        }
+        fun returnHome() {
+            repeat(2) {
+                if (active.value != null) rule.onNodeWithContentDescription("Back").performClick()
+            }
+            rule.waitUntil(10_000) { active.value == null && home.value != null }
+        }
+        fun capture(name: String) {
+            File(context.getExternalFilesDir(null), name).outputStream().use {
+                rule.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+        }
+        try {
+            runBlocking {
+                val set = fixture("focus-topic").let { it.copy(exercises = it.exercises.map { e -> e.copy(jlpt = 5) }) }
+                db.content().insertGrammar(listOf(GrammarEntity(source, set.id, Json.encodeToString(GrammarSet.serializer(), set), 0)))
+                db.content().putMeta(SyncMetaEntity(source, "fixture", System.currentTimeMillis(), 0))
+            }
+            restoration.setContent {
+                val preferences by settings.grammarPreferences.collectAsState()
+                val budget by settings.dailyNewCards.collectAsState()
+                LaunchedEffect(preferences, budget, active.value) {
+                    if (active.value == null) {
+                        val study = db.grammarStudy(settings, source, Instant.now())
+                        home.value = GrammarHome(source, study.preferences, study.sets, study.mode, study.focus, study.notice)
+                    }
+                }
+                KanjiTheme {
+                    val current = active.value
+                    if (current == null) Page("Grammar fixture") {
+                        home.value?.let {
+                            ModeRow("Choose or type the construction", it.mode, onStart = ::open)
+                            GrammarFocusControls(services, it)
+                        } ?: Text("Loading fixture")
+                    } else GrammarQuizScreen(current.first, {
+                        current.second.leaveSession()
+                        home.value = null
+                        active.value = null
+                    }, { _, _, _ -> }, { open(true) }, {}, {}, vm = current.second)
+                }
+            }
+            rule.waitUntil(10_000) { home.value != null }
+            rule.onNode(isToggleable()).assertIsOff()
+            rule.onNodeWithText("Show focus details").assertDoesNotExist()
+            rule.onNodeWithText("Start").performScrollTo().performClick()
+            awaitQuestion()
+            assertNull(active.value!!.second.focus)
+            rule.onNodeWithText("Show focus details").assertDoesNotExist()
+            returnHome()
+
+            rule.onNode(isToggleable()).performScrollTo().performClick()
+            rule.waitUntil(10_000) { home.value?.focus?.current != null }
+            rule.onNode(isToggleable()).assertIsOn()
+            val focus = requireNotNull(home.value!!.focus)
+            val label = requireNotNull(focus.current).group.label
+            rule.onNodeWithText("Next focus: $label").performScrollTo().assertIsDisplayed()
+            rule.onNodeWithText("Familiarity is not mastery.", substring = true).assertIsDisplayed()
+            rule.onNodeWithText(focus.reason).assertDoesNotExist()
+            capture("ux103-preview.png")
+            rule.onNodeWithText("Show focus details").performScrollTo().performClick()
+            rule.onNodeWithText(focus.reason).performScrollTo().assertIsDisplayed()
+            restoration.emulateSavedInstanceStateRestore()
+            rule.onNodeWithText("Hide focus details").performScrollTo().assertIsDisplayed().performClick()
+            assertNull(runBlocking { db.reviews().grammarFocus(source) })
+            rule.onNodeWithText("Start").performScrollTo().performClick()
+            awaitQuestion()
+            assertEquals(focus.current!!.group.id, active.value!!.second.focus!!.current!!.group.id)
+            rule.onNodeWithText("Focus: $label").performScrollTo().assertIsDisplayed()
+            rule.onNodeWithText("Familiarity is not mastery.", substring = true).assertIsDisplayed()
+            rule.onNodeWithText(focus.reason).assertDoesNotExist()
+            capture("ux103-session.png")
+            rule.onNodeWithText("Show focus details").performScrollTo().performClick()
+            rule.onNodeWithText("Details from the start of this session.").performScrollTo().assertIsDisplayed()
+            rule.onNodeWithText(focus.reason).performScrollTo().assertIsDisplayed()
+            rule.onNodeWithText("Recommendation priority:", substring = true).performScrollTo().assertIsDisplayed()
+            capture("ux103-details.png")
+            rule.onNodeWithText("Hide focus details").performScrollTo().performClick()
+            returnHome()
+
+            rule.runOnIdle { settings.setDailyNewCards(0) }
+            rule.waitUntil(10_000) { home.value?.mode == io.github.stopcran.kanji.core.home.ModeState.PracticeMore }
+            val cursor = runBlocking { db.reviews().grammarFocus(source) }
+            rule.onNodeWithText("Practice more").performScrollTo().performClick()
+            awaitQuestion()
+            assertNull(active.value!!.second.focus)
+            rule.onNodeWithText("Show focus details").assertDoesNotExist()
+            assertEquals(cursor, runBlocking { db.reviews().grammarFocus(source) })
+            returnHome()
+            rule.onNode(isToggleable()).performScrollTo().performClick()
+            rule.waitUntil(10_000) { home.value?.preferences?.guided == false }
+            rule.onNode(isToggleable()).assertIsOff()
+            rule.onNodeWithText("Show focus details").assertDoesNotExist()
+            assertEquals(0, runBlocking { db.reviews().allLog().size })
+        } finally {
+            rule.runOnIdle { models.clear() }
+            runBlocking {
+                withTimeout(10_000) {
+                    while (db.reviews().allSessions().any { it.endedAtMs == null }) delay(10)
+                }
+            }
+            db.close()
+            context.deleteSharedPreferences(preferencesName)
+        }
+    }
 
     @Test
     fun acceptedPracticeShowsQuestionsAndAbandonmentAndCompletionReturnFreshDetails() {

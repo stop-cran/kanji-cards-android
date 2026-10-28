@@ -304,6 +304,13 @@ more new material: an exhausted or out-of-scope learned group can still support 
 expiry or a later Again/Hard removes its support on the next calculation. No score or link confers familiarity
 on the destination, bypasses prerequisites, or changes the active session snapshot.
 
+**Learner-facing presentation (#103):** preview and active-session guidance lead with the contrast name,
+what ordinary new material will cover, and the familiarity-not-mastery caveat. Due reviews may cover other
+contrasts; Practice more remains unguided. The full decision readout is collapsed behind Show focus details
+by default, with session details explicitly identified as the start-of-session snapshot. Readiness, sync,
+reset notices and stored-focus errors remain visible independently. Expanding details never selects, reserves,
+records or advances a focus. The pilot stays off by default.
+
 ## Persistence, integration and deployment
 
 Phase B stores source-scoped level/browse preferences and a **parser epoch 1** marker.

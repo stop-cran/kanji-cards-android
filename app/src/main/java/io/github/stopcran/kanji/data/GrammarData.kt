@@ -154,7 +154,8 @@ suspend fun AppDatabase.grammarStudy(
     }
     base.copy(
         ordinaryIds = started + decision.selected.map { it.exerciseId },
-        notice = listOfNotNull(readinessNotice, decision.resetReason, decision.reason).joinToString("\n"),
+        notice = listOfNotNull(readinessNotice, decision.resetReason, decision.reason.takeIf { decision.selected.isEmpty() })
+            .takeIf { it.isNotEmpty() }?.joinToString("\n"),
         focus = decision, ticket = ticket,
         availability = GrammarAvailability.evaluate(
             GrammarFocus.groups(sets), sets.flatMap { it.exercises }.associateBy { it.id }, states, preferences.newScope,

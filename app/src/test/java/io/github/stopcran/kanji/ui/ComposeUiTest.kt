@@ -223,7 +223,7 @@ class ComposeUiTest {
     }
 
     @Test
-    fun grammarRecommendationReadoutExplainsItsAuthoredLinkAndSourceEvidenceNotTheNewGroupsHistory() {
+    fun grammarGuidanceLeadsWithTheContrastAndKeepsFullRecommendationEvidenceOnDemand() {
         val now = Instant.parse("2026-10-18T12:00:00Z")
         val source = grammarFixture("foundation", examples = 2).recommending("beta" to 3)
         val events = familiarEvents(source, now)
@@ -231,14 +231,23 @@ class ComposeUiTest {
             "owner/repo", listOf(source, grammarFixture("beta")),
             events.associate { it.exerciseId to SrsState(CardPhase.Review) }, events, GrammarScope.All, 10, now, GrammarCursor(),
         )
-        val candidate = GrammarFocus.decide(input).current!!
+        val focus = GrammarFocus.decide(input)
         rule.setContent {
-            androidx.compose.foundation.layout.Column { GrammarRecommendationReadout(candidate) }
+            Page("Grammar") { GrammarFocusSummary(focus) }
         }
-        rule.onNodeWithText("Group: beta. Recommendation priority: 3/3 (maximum, not sum).").assertIsDisplayed()
-        rule.onNodeWithText("From foundation (foundation), importance 3: Compare foundation with beta.").assertIsDisplayed()
-        rule.onNodeWithText("Supported source facet a: 2 positive contexts, 1 typed, 24h span within 21 days.").assertIsDisplayed()
-        rule.onNodeWithText("Supported source facet b: 2 positive contexts, 1 typed, 24h span within 21 days.").assertIsDisplayed()
+        rule.onNodeWithText("Next focus: beta").assertIsDisplayed()
+        rule.onNodeWithText("Familiarity is not mastery.", substring = true).assertIsDisplayed()
+        rule.onNodeWithText(focus.reason).assertDoesNotExist()
+        rule.onNodeWithText("Group: beta.", substring = true).assertDoesNotExist()
+        rule.onNodeWithText("Show focus details").performScrollTo().performClick()
+        rule.onNodeWithText(focus.reason).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Group: beta. Recommendation priority: 3/3 (maximum, not sum).").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("From foundation (foundation), importance 3: Compare foundation with beta.").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Supported source facet a: 2 positive contexts, 1 typed, 24h span within 21 days.").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Supported source facet b: 2 positive contexts, 1 typed, 24h span within 21 days.").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Hide focus details").performScrollTo().performClick()
+        rule.onNodeWithText(focus.reason).assertDoesNotExist()
+        rule.onNodeWithText("Next focus: beta").performScrollTo().assertIsDisplayed()
     }
 
     @Test

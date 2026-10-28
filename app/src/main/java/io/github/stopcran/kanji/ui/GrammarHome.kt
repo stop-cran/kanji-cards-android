@@ -11,9 +11,11 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.content.GrammarSet
 import io.github.stopcran.kanji.core.grammar.GRAMMAR_LEVEL_SYNC_NEEDED
 import io.github.stopcran.kanji.core.grammar.GrammarScope
@@ -139,11 +141,11 @@ private fun GrammarStudyControls(app: KanjiApp, home: GrammarHome, onStart: (Boo
     )
     if (!preferences.levelsReady && preferences.newScope != GrammarScope.All) Text(GRAMMAR_LEVEL_SYNC_NEEDED)
     ModeRow("Choose or type the construction", home.mode, onStart = onStart)
-    GrammarFocusControls(app, home)
+    GrammarFocusControls(app.services, home)
 }
 
 @Composable
-private fun GrammarFocusControls(app: KanjiApp, home: GrammarHome) {
+internal fun GrammarFocusControls(app: Services, home: GrammarHome) {
     val scope = rememberCoroutineScope()
     var choosing by remember(home.sourceId) { mutableStateOf(false) }
     var error by remember(home.sourceId) { mutableStateOf<String?>(null) }
@@ -168,31 +170,11 @@ private fun GrammarFocusControls(app: KanjiApp, home: GrammarHome) {
         )
     }
     if (!home.preferences.guided) return
-    Text("New material stays on one contrast. Familiarity is not mastery. Practice more remains unguided.", style = MaterialTheme.typography.bodySmall)
-    home.notice?.let { Text(it) }
     val focus = home.focus
     val current = focus?.current
-    if (current != null) {
-        Text(if (focus.continuing) "Focus: ${current.group.label}" else "Next focus (not committed): ${current.group.label}")
-        GrammarRecommendationReadout(current)
-        current.group.facets.forEach { facet ->
-            val evidence = current.evidence.facets.getValue(facet.id)
-            val introduced = focus.activation?.introduced.orEmpty().count { it.facetId == facet.id }
-            Text(
-                "${facet.label}: $introduced/2 new this activation; ${evidence.startedKeys} started contexts; " +
-                    "${evidence.positiveKeys} positive contexts, ${evidence.typedPositives} typed, ${evidence.spanMs / 3_600_000}h span.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-        Text(
-            when {
-                !current.group.authored -> "Legacy contrast: no familiarity or prerequisite claim. Focus releases at its quota or exhaustion."
-                current.evidence.familiar -> "Supported familiarity (not mastery)."
-                else -> "Familiarity not yet supported."
-            },
-        )
-        current.evidence.diagnostics.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
-    }
+    if (current != null) GrammarFocusSummary(focus)
+    else Text(stringResource(R.string.grammar_focus_guidance), style = MaterialTheme.typography.bodySmall)
+    home.notice?.let { Text(it) }
     if (focus != null) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { choosing = true }) { Text("Change focus") }
@@ -225,6 +207,41 @@ private fun GrammarFocusControls(app: KanjiApp, home: GrammarHome) {
             confirmButton = { TextButton(onClick = { choosing = false }) { Text("Close") } },
         )
     }
+}
+
+@Composable
+internal fun GrammarFocusSummary(focus: GrammarFocusDecision, activeSession: Boolean = false) {
+    val current = focus.current ?: return
+    var details by rememberSaveable(current.group.id, activeSession) { mutableStateOf(false) }
+    Text(stringResource(
+        if (activeSession || focus.continuing) R.string.grammar_focus_current else R.string.grammar_focus_next,
+        current.group.label,
+    ), style = MaterialTheme.typography.titleMedium)
+    Text(stringResource(R.string.grammar_focus_guidance), style = MaterialTheme.typography.bodySmall)
+    TextButton(onClick = { details = !details }) {
+        Text(stringResource(if (details) R.string.grammar_focus_hide_details else R.string.grammar_focus_show_details))
+    }
+    if (!details) return
+    if (activeSession) Text(stringResource(R.string.grammar_focus_snapshot), style = MaterialTheme.typography.bodySmall)
+    Text(focus.reason, style = MaterialTheme.typography.bodySmall)
+    GrammarRecommendationReadout(current)
+    current.group.facets.forEach { facet ->
+        val evidence = current.evidence.facets.getValue(facet.id)
+        val introduced = focus.activation?.introduced.orEmpty().count { it.facetId == facet.id }
+        Text(
+            "${facet.label}: $introduced/2 new this activation; ${evidence.startedKeys} started contexts; " +
+                "${evidence.positiveKeys} positive contexts, ${evidence.typedPositives} typed, ${evidence.spanMs / 3_600_000}h span.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+    Text(
+        when {
+            !current.group.authored -> "Legacy contrast: no familiarity or prerequisite claim. Focus releases at its quota or exhaustion."
+            current.evidence.familiar -> "Supported familiarity (not mastery)."
+            else -> "Familiarity not yet supported."
+        },
+    )
+    current.evidence.diagnostics.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
 }
 
 @Composable

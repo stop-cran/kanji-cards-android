@@ -361,6 +361,8 @@ class GrammarQuizViewModelTest {
         }
         assertEquals(ModeState.Start(4, 4), mode())
         val vm = launch()
+        assertEquals("beta", vm.focus!!.current!!.group.id)
+        assertFalse(vm.focusNotice.orEmpty().contains(vm.focus!!.reason))
         val asked = mutableListOf<String>()
         repeat(8) {
             asked += when (val question = vm.ui) {

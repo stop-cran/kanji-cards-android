@@ -101,6 +101,8 @@ class GrammarQuizViewModel(
     private var started = false
     private var emptyMessage = GRAMMAR_NOT_DUE
     private var focusTicket: GrammarFocusTicket? = null
+    var focus: io.github.stopcran.kanji.core.grammar.GrammarFocusDecision? by mutableStateOf(null)
+        private set
     var focusNotice: String? by mutableStateOf(null)
         private set
     var approvedPractice: GrammarPracticePreview? by mutableStateOf(null)
@@ -236,6 +238,7 @@ class GrammarQuizViewModel(
         }
         states += study.states
         focusTicket = study.ticket
+        focus = if (!extra && study.preferences.guided) study.focus else null
         focusNotice = if (!extra && study.preferences.guided) study.notice else null
         emptyMessage = study.notice ?: GRAMMAR_NOT_DUE
         session = trackSession(QuizSession(queue.map { it.kanji }, { it }), sourceId, GRAMMAR_STACK, StudyMode.Grammar.name, extra)

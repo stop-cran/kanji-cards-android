@@ -125,6 +125,7 @@ private fun GrammarSessionBody(
     ) {
         vm.approvedPractice?.let { Text(stringResource(R.string.grammar_practising_topic, it.label)) }
         if (vm.practiceOverride) Text(stringResource(R.string.grammar_session_exception), style = MaterialTheme.typography.bodySmall)
+        vm.focus?.let { GrammarFocusSummary(it, activeSession = true) }
         vm.focusNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         when (val state = vm.ui) {
             GrammarUi.Loading -> Text("Loading…", Modifier.semantics { liveRegion = LiveRegionMode.Polite })

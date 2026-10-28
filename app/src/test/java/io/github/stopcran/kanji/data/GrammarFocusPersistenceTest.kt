@@ -84,6 +84,19 @@ class GrammarFocusPersistenceTest {
     }
 
     @Test
+    fun selectionDetailsDoNotReplaceVisibleReadinessAndEmptyIntakeNotices() = runBlocking {
+        val preview = study()
+        assertTrue(preview.focus!!.selected.isNotEmpty())
+        assertFalse(preview.notice.orEmpty().contains(preview.focus.reason))
+        assertTrue(preview.notice.orEmpty().contains("Rebuilding prerequisite readiness"))
+        settings.setDailyNewCards(0)
+        val empty = study()
+        assertTrue(empty.focus!!.selected.isEmpty())
+        assertTrue(empty.notice.orEmpty().contains(empty.focus.reason))
+        assertNull(cursor())
+    }
+
+    @Test
     fun previewsZeroBudgetAndExtraPracticeNeverReserveOrConsumeAutomaticSlots() = runBlocking {
         repeat(3) { assertEquals(4, study().focus!!.selected.size) }
         assertNull(cursor())
