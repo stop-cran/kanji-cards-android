@@ -122,6 +122,7 @@ class ListeningTaskFlowTest {
                 rule.onNodeWithText("N5").assertIsSelected()
                 rule.onNodeWithText(n4.task.title).assertDoesNotExist()
                 rule.onNodeWithText("N4").performScrollTo().performClick()
+                rule.waitUntil(10_000) { rule.onAllNodesWithText(n4.task.title).fetchSemanticsNodes().isNotEmpty() }
                 val quick = hasText("Quick response") and hasClickAction()
                 rule.onNode(quick).performScrollTo().performClick()
                 rule.waitUntil(10_000) { rule.onAllNodesWithText("Study without scoring").fetchSemanticsNodes().size == 2 }
@@ -154,6 +155,51 @@ class ListeningTaskFlowTest {
                 screenshot("N4-B-unscored-capture-outside-scope.png")
             } finally { vm?.let(::finish) }
         }
+    }
+
+    @Test fun allFormatsWrapReadablyAndKeepTheirSelectionAndDisabledState() {
+        val scale = mutableStateOf(1f)
+        val selected = mutableStateOf("all")
+        val enabled = mutableStateOf(true)
+        rule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, scale.value)) {
+                KanjiTheme {
+                    Page("Format layout") {
+                        Box(Modifier.width(320.dp)) {
+                            ListeningFormatFilter(selected.value, enabled.value) { selected.value = it }
+                        }
+                    }
+                }
+            }
+        }
+        val formats = listOf("All formats", "English listen-first") + ListeningTaskType.entries.map { it.label }
+        for (size in listOf(1f, 1.5f, 2f)) {
+            rule.runOnIdle { scale.value = size }
+            for (label in formats) {
+                val chip = rule.onNode(hasText(label) and hasClickAction()).performScrollTo().assertIsDisplayed()
+                val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+                chip.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+                val layout = layouts.single()
+                // The reused paragraph box can exceed the tight text width; check rendered lines instead.
+                assertFalse("$label at $size must fit vertically", layout.didOverflowHeight)
+                for (line in 0 until layout.lineCount) {
+                    assertFalse("$label at $size must not be ellipsized", layout.isLineEllipsized(line))
+                    assertTrue("$label at $size must fit horizontally",
+                        layout.getLineLeft(line) >= -1f && layout.getLineRight(line) <= layout.size.width + 1f)
+                }
+                val bounds = chip.getUnclippedBoundsInRoot()
+                assertTrue("$label must fit the selector width", bounds.right - bounds.left <= 320.dp)
+            }
+            rule.onNodeWithText("All formats").performScrollTo()
+            val name = "ux105-formats-$size.png"
+            screenshot(name)
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            File(context.cacheDir, name).copyTo(File(context.getExternalFilesDir(null), name), overwrite = true)
+        }
+        rule.onNodeWithText("Quick response").performScrollTo().performClick().assertIsSelected()
+        rule.runOnIdle { assertEquals(ListeningTaskType.QuickResponse.wire, selected.value); enabled.value = false }
+        rule.onNodeWithText("All formats").performScrollTo().assertIsNotEnabled().performClick()
+        rule.onNodeWithText("Quick response").performScrollTo().assertIsSelected()
     }
 
     @Test fun taskBasedVisualHostPlaysChecksAndReturnsThroughCapturedArticle() {

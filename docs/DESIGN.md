@@ -503,6 +503,9 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
 
 ## 5. Words, levels and advancement
 
+- **Listening formats (#105):** all six existing format chips wrap in the page's ordinary vertical flow, rather than hiding later
+  choices in a separate horizontal strip. Long labels may wrap at enlarged font sizes. Membership, source-keyed saved selection,
+  busy gating, level filtering, budgets and cooldowns are unchanged.
 - **Level selectors (#80):** Kanji, Words, Numbers & counters, Grammar (new material and browsing), and Listening
   (practice and diagnostics) share horizontally scrollable filter chips. Show only offered choices, ordered N5 to N1,
   then All, then named thematic/unclassified choices. Chip labels omit "JLPT", counts and cumulative suffixes.

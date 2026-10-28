@@ -1,11 +1,10 @@
 package io.github.stopcran.kanji.ui
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -58,13 +57,7 @@ internal fun ListeningBrowser(
             description = if (level == ListeningScope.N4)
                 stringResource(R.string.level_filter_includes_easier) else null,
             enabled = !busy)
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val filters = listOf("all" to "All formats", "legacy" to "English listen-first") +
-                ListeningTaskPolicy.supportedTypes.map { it.wire to it.label }
-            filters.forEach { (id, label) ->
-                FilterChip(selected = filter == id, enabled = !busy, onClick = { filter = id; error = null }, label = { Text(label) })
-            }
-        }
+        ListeningFormatFilter(filter, !busy) { filter = it; error = null }
         (error ?: home.error)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         val data = home.overview
         val queue = home.queue
@@ -120,6 +113,18 @@ internal fun ListeningBrowser(
             queue.tasks.forEach { row ->
                 ListeningTaskEntry(row, queue, !occupied && !busy) { described -> start(row.id, true, true, described = described) }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun ListeningFormatFilter(selected: String, enabled: Boolean, onSelect: (String) -> Unit) {
+    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        val filters = listOf("all" to "All formats", "legacy" to "English listen-first") +
+            ListeningTaskPolicy.supportedTypes.map { it.wire to it.label }
+        filters.forEach { (id, label) ->
+            FilterChip(selected = selected == id, enabled = enabled, onClick = { onSelect(id) }, label = { Text(label) })
         }
     }
 }
