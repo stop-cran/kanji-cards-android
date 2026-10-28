@@ -62,8 +62,8 @@ internal fun SessionRemaining(count: Int) {
 }
 
 @Composable
-fun DontKnowButton(onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.i_don_t_know)) }
+fun DontKnowButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
+    TextButton(onClick = onClick, modifier = modifier.fillMaxWidth()) { Text(stringResource(R.string.i_don_t_know)) }
 }
 
 /** The article behind a tap after a miss, so the feedback is read before the page; [key] resets the state for each question. */

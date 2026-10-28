@@ -1,12 +1,15 @@
 package io.github.stopcran.kanji.ui
 
 import android.content.ContextWrapper
+import android.graphics.Bitmap
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -52,6 +55,7 @@ class CounterFlowTest {
 
     @Test fun realReadingAndArticleBack() = exercise(CounterMode.Reading)
     @Test fun realWritingAndExtraContinuation() = exercise(CounterMode.Expression)
+    @Test fun realLegacyTypingActionsStayTogether() = exercise(CounterMode.Type, group = CounterGroup.Everyday)
     @Test fun realN4EverydayReading() = exercise(CounterMode.Reading, CounterScope.N4, CounterGroup.Everyday)
     @Test fun realN4TimeWriting() = exercise(CounterMode.Expression, CounterScope.N4)
     @Test fun realN4PracticalReading() = exercise(CounterMode.Reading, CounterScope.N4,
@@ -91,8 +95,9 @@ class CounterFlowTest {
                 db.content().insertCounters(parsed.counters.mapIndexed { i, file ->
                     CounterEntity(source, file.id, Json.encodeToString(CounterFile.serializer(), file), i)
                 })
-                if (scope == CounterScope.N4) {
-                    val known = SrsState(CardPhase.Review, 30.0, 5.0, Instant.now().plus(30, ChronoUnit.DAYS),
+                if (scope == CounterScope.N4 || mode == CounterMode.Type) {
+                    val due = Instant.now().plus(if (mode == CounterMode.Type) -1 else 30, ChronoUnit.DAYS)
+                    val known = SrsState(CardPhase.Review, 30.0, 5.0, due,
                         Instant.now().minus(2, ChronoUnit.DAYS), 3, 0)
                     db.withTransaction {
                         CounterIndex(knownFiles).ids(mode).forEach { id ->
@@ -120,11 +125,20 @@ class CounterFlowTest {
                     }
                 }
             }
-            rule.waitUntil(10_000) { vm.value.ui is CounterUi.ExpressionQuestion }
+            rule.waitUntil(10_000) { vm.value.ui is CounterUi.ExpressionQuestion || vm.value.ui is CounterUi.TypeQuestion }
             rule.onNodeWithText("Extra practice updates review history and scheduling.").assertDoesNotExist()
             assertQuestionScope(vm.value, scope, group, focusFiles)
+            rule.onNodeWithText("Check").assertIsNotEnabled()
             rule.onNode(hasSetTextAction()).performScrollTo().performClick()
             rule.onNode(hasSetTextAction()).performTextReplacement(if (mode == CounterMode.Reading) "さい" else "時")
+            captureKeyboard(mode)
+            assertTypedActionsTogether()
+            if (mode == CounterMode.Type) {
+                rule.onNodeWithText("I don't know").performClick()
+                assertTrue((vm.value.ui as CounterUi.TypeAnswer).gaveUp)
+                assertEquals(0, runBlocking { db.reviews().allLog().size })
+                return
+            }
             rule.onNodeWithText("Check").performScrollTo().performClick()
             assertFalse((vm.value.ui as CounterUi.ExpressionAnswer).correct)
             rule.onNodeWithText("Not quite").performScrollTo().assertIsDisplayed()
@@ -177,12 +191,34 @@ class CounterFlowTest {
 
     private fun assertQuestionScope(vm: CounterQuizViewModel, scope: CounterScope,
                                     group: CounterGroup, focusFiles: Set<String>) {
-        val id = (vm.ui as CounterUi.ExpressionQuestion).item.id
+        val id = when (val question = vm.ui) {
+            is CounterUi.ExpressionQuestion -> question.item.id
+            is CounterUi.TypeQuestion -> question.card.id
+            else -> error("Expected a typed question")
+        }
         val owner = vm.index.files.single { f -> f.cards.any { it.id == id } || f.expressions.any { it.id == id } }
         assertEquals(if (scope == CounterScope.N4) 4 else 5, owner.level)
         assertTrue("Expected a focused practical family, got ${owner.id}", focusFiles.isEmpty() || owner.id in focusFiles)
         assertEquals(setOf(group.code), vm.index.files.map { it.group }.toSet())
         assertEquals(if (scope == CounterScope.N4) setOf(4, 5) else setOf(5), vm.index.files.map { it.level }.toSet())
+    }
+
+    private fun assertTypedActionsTogether() {
+        val check = rule.onNodeWithText("Check").performScrollTo().assertIsDisplayed().assertIsEnabled()
+        val unsure = rule.onNodeWithText("I don't know").assertIsDisplayed().assertIsEnabled()
+        assertEquals(check.fetchSemanticsNode().boundsInRoot.center.y, unsure.fetchSemanticsNode().boundsInRoot.center.y, 1f)
+    }
+
+    private fun captureKeyboard(mode: CounterMode) {
+        rule.waitForIdle()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val image = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+        try {
+            File(instrumentation.targetContext.getExternalFilesDir(null), "counter-${mode.name}-keyboard.png")
+                .outputStream().use { assertTrue(image.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        } finally {
+            image.recycle()
+        }
     }
 
     @Composable

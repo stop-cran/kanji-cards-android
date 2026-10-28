@@ -214,6 +214,8 @@ private fun CounterInput(vm: CounterQuizViewModel) {
         keyboardActions = KeyboardActions(onDone = { vm.submit() }),
         modifier = Modifier.fillMaxWidth().focusRequester(focus),
     )
-    Button(onClick = { vm.submit() }, enabled = vm.draft.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Check") }
-    DontKnowButton { vm.submit(giveUp = true) }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Button(onClick = { vm.submit() }, enabled = vm.draft.isNotBlank(), modifier = Modifier.weight(1f)) { Text("Check") }
+        DontKnowButton(Modifier.weight(1f)) { vm.submit(giveUp = true) }
+    }
 }

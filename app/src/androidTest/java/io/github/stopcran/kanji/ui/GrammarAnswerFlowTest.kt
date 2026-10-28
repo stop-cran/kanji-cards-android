@@ -7,6 +7,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -189,6 +191,7 @@ class GrammarAnswerFlowTest {
             is GrammarUi.Type -> {
                 assertTrue(state.exercise.id in selected)
                 rule.onNodeWithText("Type the missing text. Follow the task instructions.").performScrollTo().assertIsDisplayed()
+                rule.onNodeWithText("Check").assertIsNotEnabled()
                 val wrong = wrongModes.add("type")
                 val response = if (wrong) "not-an-accepted-answer" else state.exercise.acceptedAnswers.last()
                 assertTrue(response.length <= 80)
@@ -205,7 +208,10 @@ class GrammarAnswerFlowTest {
                         image.recycle()
                     }
                 }
-                rule.onNodeWithText("Check").performScrollTo().assertIsDisplayed().performClick()
+                val check = rule.onNodeWithText("Check").performScrollTo().assertIsDisplayed().assertIsEnabled()
+                val unsure = rule.onNodeWithText("I don't know").assertIsDisplayed().assertIsEnabled()
+                assertEquals(check.fetchSemanticsNode().boundsInRoot.center.y, unsure.fetchSemanticsNode().boundsInRoot.center.y, 1f)
+                check.performClick()
                 assertEquals(!wrong, (vm.ui as GrammarUi.Answer).correct)
                 assertEquals(GrammarChoices.normalizeAnswer(response), (vm.ui as GrammarUi.Answer).responseLabel)
                 "type"

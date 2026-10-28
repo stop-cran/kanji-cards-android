@@ -244,6 +244,9 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - **Word typing:** the question asks for the Japanese spelling, with a reading-only partial-recall notice when written form and reading differ.
   Partial feedback neutrally describes recalled reading and directs the learner to review the revealed spelling, then Next; it does not
   demand a missing retry or assume kanji. Kana-only spellings, accepted variants, grading, re-asks and record-on-advance are unchanged.
+- **Typed answer controls:** Numbers Type/Write/Read and Grammar place Check and I don't know side by side, so scrolling to the primary
+  action also reveals the uncertainty action. Long prompts still scroll at the chosen font size; input focus, IME behavior, enabled states,
+  grading and save timing are unchanged. This is discoverability polish, not a one-viewport guarantee or an inset-policy change.
 - **Word reading assistance:** natural vocabulary spelling and independent word JLPT eligibility stay unchanged. In cumulative level decks,
   kanji beyond the selected word deck's level are bold-underlined; missing cards/levels are underlined and explicitly unclassified.
   All/thematic decks have no new highlighting or help. Japanese-to-English and word-to-picture prompts offer character links plus a large
