@@ -121,6 +121,7 @@ class CounterFlowTest {
                 }
             }
             rule.waitUntil(10_000) { vm.value.ui is CounterUi.ExpressionQuestion }
+            rule.onNodeWithText("Extra practice updates review history and scheduling.").assertDoesNotExist()
             assertQuestionScope(vm.value, scope, group, focusFiles)
             rule.onNode(hasSetTextAction()).performScrollTo().performClick()
             rule.onNode(hasSetTextAction()).performTextReplacement(if (mode == CounterMode.Reading) "さい" else "時")
@@ -157,6 +158,7 @@ class CounterFlowTest {
             assertEquals(group, CounterGroup.fromRoute(route.value))
             assertEquals(scope, CounterScope.fromRoute(route.value))
             assertTrue(route.value.endsWith(":extra"))
+            rule.onNodeWithText("Extra practice updates review history and scheduling.").performScrollTo().assertIsDisplayed()
             assertQuestionScope(vm.value, scope, group, focusFiles)
             runBlocking {
                 db.withTransaction {}

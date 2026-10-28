@@ -44,6 +44,9 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   ordinary sessions under the existing navigation policy, while the source's saved level remains.
   Choose/Type/Noun keep their original gates and grading. Direct Write/Read modes use distinct
   `CounterExpression` / `CounterReading` keys in the existing `counters` stack and ordinary shared allowances.
+  All five extra-practice modes disclose normal review-history and scheduling effects in their shared session chrome.
+  This describes the existing mode, not an immediate save on entry/feedback or a separate record for every re-ask;
+  selection, allowances and record-on-advance remain unchanged.
   Home shows due reviews separately from the shared allowance, never sums alternative modes' new opportunities.
   New writing uses exact authored NFKC/whitespace-normalized forms, not legacy numeral arithmetic;
   reading additionally folds kana script and grades a correct complete reading Good. Preserve small kana and vowels.

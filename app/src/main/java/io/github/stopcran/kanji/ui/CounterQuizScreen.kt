@@ -45,11 +45,15 @@ fun CounterQuizScreen(
     vm: CounterQuizViewModel = serviceViewModel(sessionKey) { CounterQuizViewModel(it) },
 ) {
     val mode = CounterMode.fromCode(sessionKey.split(':').getOrNull(2))
+    val extra = sessionKey.endsWith(":extra")
     LaunchedEffect(sessionKey) {
-        vm.ensureStarted(mode, sessionKey.endsWith(":extra"), CounterGroup.fromRoute(sessionKey), CounterScope.fromRoute(sessionKey))
+        vm.ensureStarted(mode, extra, CounterGroup.fromRoute(sessionKey), CounterScope.fromRoute(sessionKey))
     }
     Page("Numbers: ${mode.label}", onBack,
         ime = mode in listOf(CounterMode.Type, CounterMode.Expression, CounterMode.Reading), scrollToTopOnBack = true) {
+        if (extra) {
+            Text("Extra practice updates review history and scheduling.", style = MaterialTheme.typography.bodySmall)
+        }
         when (val s = vm.ui) {
             CounterUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             is CounterUi.Empty -> Text(s.message)
