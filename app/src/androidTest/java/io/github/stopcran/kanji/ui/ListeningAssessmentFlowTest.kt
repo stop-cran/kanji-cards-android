@@ -147,6 +147,18 @@ class ListeningAssessmentFlowTest {
                 }
                 assertEquals(expected, player.hashes)
                 rule.onNodeWithText("${profile.scoredCount} / ${profile.scoredCount} correct").performScrollTo().assertIsDisplayed()
+                val result = requireNotNull(vm.snapshot!!.result)
+                val firstScored = result.responses.indexOfFirst { !it.example }
+                val response = result.responses[firstScored]
+                val label = "Scored item 1/${profile.scoredCount} - ${response.type.label}"
+                rule.onNodeWithText("$label: Correct").performScrollTo().assertIsDisplayed()
+                rule.onAllNodesWithText("Feedback and captured transcript")[firstScored].performScrollTo().performClick()
+                rule.waitUntil(10_000) { !vm.busy && vm.detail?.id == response.encounterId }
+                ready(vm)
+                rule.onNodeWithText(label).performScrollTo().assertIsDisplayed()
+                rule.onNodeWithText("Back to results").performScrollTo().performClick()
+                ready(vm)
+                assertNull(vm.detail)
                 assertTrue(runBlocking { fixture.db.reviews().allLog().isEmpty() })
                 screenshot("N${profile.jlpt}-simulated-full-result.png")
                 File(fixture.context.filesDir, "N${profile.jlpt}-simulated-full-result.json").writeText(

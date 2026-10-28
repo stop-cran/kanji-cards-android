@@ -45,6 +45,10 @@ import io.github.stopcran.kanji.data.WordEntity
 import io.github.stopcran.kanji.data.ListeningOverview
 import io.github.stopcran.kanji.data.ListeningEncounterEntity
 import io.github.stopcran.kanji.core.listening.ListeningAllowance
+import io.github.stopcran.kanji.core.listening.AssessmentOutcome
+import io.github.stopcran.kanji.core.listening.AssessmentResponse
+import io.github.stopcran.kanji.core.listening.AssessmentResult
+import io.github.stopcran.kanji.core.listening.ListeningTaskType
 import io.github.stopcran.kanji.core.srs.NewAllowance
 import io.github.stopcran.kanji.core.srs.PacingNote
 import io.github.stopcran.kanji.core.grammarFixture
@@ -71,6 +75,39 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [28], application = Application::class)
 class ComposeUiTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test
+    fun diagnosticResultsKeepScoredOrdinalsAndOriginalFeedbackIndexes() {
+        val outcomes = listOf(AssessmentOutcome.Correct, AssessmentOutcome.Incorrect,
+            AssessmentOutcome.Unanswered, AssessmentOutcome.NotAssessed)
+        val responses = ListeningTaskType.entries.flatMapIndexed { index, type ->
+            listOf(true, false).map { example ->
+                AssessmentResponse("$index-$example", "task-$index-$example", type, example,
+                    false, true, false, null, if (example) AssessmentOutcome.Correct else outcomes[index],
+                    emptySet(), true, 1)
+            }
+        }
+        val result = mutableStateOf(AssessmentResult(completedFullForm = false, interrupted = true,
+            interruptions = setOf("Ended early"), planned = 4, examples = 4, responses = responses))
+        var opened: Int? = null
+        rule.setContent { MaterialTheme { Page("Results") { ListeningAssessmentResults(result.value) { opened = it } } } }
+        rule.onNodeWithText("1 / 3 correct").assertIsDisplayed()
+        ListeningTaskType.entries.forEachIndexed { index, type ->
+            val outcome = if (outcomes[index] == AssessmentOutcome.NotAssessed) "Not assessed" else outcomes[index].name
+            rule.onNodeWithText("Worked example (not scored) - ${type.label}: Correct").performScrollTo().assertIsDisplayed()
+            rule.onNodeWithText("Scored item ${index + 1}/4 - ${type.label}: $outcome").performScrollTo().assertIsDisplayed()
+            rule.onAllNodesWithText("Feedback and captured transcript")[index * 2 + 1].performScrollTo().performClick()
+            rule.runOnIdle { assertEquals(index * 2 + 1, opened) }
+        }
+        rule.onNodeWithText("${ListeningTaskType.entries.last().label}: 0 correct out of 0 assessed").performScrollTo().assertIsDisplayed()
+        rule.runOnIdle {
+            result.value = result.value.copy(responses = responses.map { it.copy(outcome = AssessmentOutcome.NotAssessed, exposed = false) })
+        }
+        rule.onNodeWithText("0 / 0 correct").performScrollTo().assertIsDisplayed()
+        ListeningTaskType.entries.forEach { type ->
+            rule.onNodeWithText("${type.label}: 0 correct out of 0 assessed").performScrollTo().assertIsDisplayed()
+        }
+    }
 
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)

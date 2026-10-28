@@ -419,6 +419,9 @@ for resume/discard. Closing study retains exposure/cooldown without an SRS answe
 Back likewise closes finalized results but preserves its separate interruption policy before results.
 Use a state-capturing lambda, not a local function reference: reference equality can retain the
 initial loading snapshot in BackHandler even after the encounter/result loads.
+Diagnostic results and captured-item review retain the live scored ordinal, excluding worked examples from that numbering.
+Examples are explicitly not scored; each kind reports correct out of assessed, including zero-assessed partial results.
+Display ordinals never replace the original response-list index used to open captured feedback.
 
 Playback is sequential and explicitly cancellable between stages. Lifecycle/Back interruption preserves
 the native position before closing the player; premature close would reset that position to zero.

@@ -98,6 +98,10 @@ internal fun ListeningAssessmentView(vm: ListeningAssessmentViewModel, onBack: (
                     }
                 }) {
                     if (vm.detail != null) {
+                        current.result?.let { result ->
+                            val index = result.responses.indexOfFirst { it.encounterId == vm.detail?.id }
+                            if (index >= 0) Text("${result.itemLabel(index)} - ${task.taskType.label}")
+                        }
                         Text(task.title, style = MaterialTheme.typography.titleLarge)
                         ListeningTaskFeedbackBody(task, current.result?.responses?.find { it.encounterId == vm.detail?.id }?.answer,
                             evidence, vm.words, { vm.pause("Reading captured word"); article = it }, { vm.replay(it) }, !vm.busy && !vm.playing)
@@ -176,7 +180,7 @@ private fun ListeningAssessmentItem(vm: ListeningAssessmentViewModel, evidence: 
 }
 
 @Composable
-private fun ListeningAssessmentResults(result: AssessmentResult, detail: (Int) -> Unit) {
+internal fun ListeningAssessmentResults(result: AssessmentResult, detail: (Int) -> Unit) {
     Text(if (result.completedFullForm) "Completed full-form diagnostic" else "Partial / interrupted diagnostic", style = MaterialTheme.typography.headlineSmall)
     Text("N${result.jlpt} - ${result.blueprint}", style = MaterialTheme.typography.bodySmall)
     Text("${result.correct} / ${result.assessed} correct", style = MaterialTheme.typography.titleLarge)
@@ -186,13 +190,13 @@ private fun ListeningAssessmentResults(result: AssessmentResult, detail: (Int) -
     if (result.interrupted) Text("Interruptions: ${result.interruptions.joinToString()}")
     ListeningTaskType.entries.forEach { type ->
         val responses = result.scored.filter { it.type == type }
-        Text("${type.label}: ${responses.count { it.outcome == AssessmentOutcome.Correct }} / " +
+        Text("${type.label}: ${responses.count { it.outcome == AssessmentOutcome.Correct }} correct out of " +
             "${responses.count { it.outcome != AssessmentOutcome.NotAssessed }} assessed")
     }
     result.responses.forEachIndexed { index, response ->
         HorizontalDivider()
         val outcome = if (response.outcome == AssessmentOutcome.NotAssessed) "Not assessed" else response.outcome.name
-        Text("${index + 1}. ${response.type.label}${if (response.example) " - worked example" else ""}: $outcome")
+        Text("${result.itemLabel(index)} - ${response.type.label}: $outcome")
         Text("${if (response.familiar) "Familiar at capture" else "Unseen at capture"}; " +
             "${if (response.exposed) "exposed during section" else "not exposed during section"}; picture: ${response.visual}.")
         if (response.assistance.isNotEmpty()) Text("Help: ${response.assistance.joinToString()}")
@@ -200,6 +204,10 @@ private fun ListeningAssessmentResults(result: AssessmentResult, detail: (Int) -
         TextButton(onClick = { detail(index) }) { Text("Feedback and captured transcript") }
     }
 }
+
+private fun AssessmentResult.itemLabel(index: Int): String =
+    if (responses[index].example) "Worked example (not scored)"
+    else "Scored item ${responses.take(index).count { !it.example } + 1}/$planned"
 
 @Composable
 private fun AssessmentLifecycle(vm: ListeningAssessmentViewModel) {
