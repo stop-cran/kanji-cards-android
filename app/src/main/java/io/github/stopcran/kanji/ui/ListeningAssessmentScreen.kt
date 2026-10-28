@@ -40,7 +40,7 @@ internal fun ListeningAssessmentView(vm: ListeningAssessmentViewModel, onBack: (
     val state = current?.state
     val task = vm.displayTask
     val scroll = key(current?.row?.id, state?.index, state?.phase, vm.detail?.id) { rememberScrollState() }
-    fun leave() {
+    val leave: () -> Unit = {
         when {
             article != null -> article = null
             vm.detail != null -> vm.hideDetail()
@@ -48,7 +48,7 @@ internal fun ListeningAssessmentView(vm: ListeningAssessmentViewModel, onBack: (
             else -> { vm.pause("Left assessment", leave = true); onBack() }
         }
     }
-    BackHandler(onBack = ::leave)
+    BackHandler(onBack = leave)
     val body = vm.words[article]
     if (body != null && current != null) {
         Page(requireNotNull(article), { article = null }, scrollable = false) {
@@ -56,7 +56,7 @@ internal fun ListeningAssessmentView(vm: ListeningAssessmentViewModel, onBack: (
         }
         return
     }
-    Page("Japanese diagnostic section", ::leave, scrollable = false, maxWidth = 1100.dp) {
+    Page("Japanese diagnostic section", leave, scrollable = false, maxWidth = 1100.dp) {
         if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         val unavailable = vm.error != null || !vm.ready
         if (current?.row?.closedAtMs != null) {

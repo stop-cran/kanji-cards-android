@@ -6,6 +6,7 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.graphics.Bitmap
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.Text
@@ -60,6 +61,31 @@ class ListeningAssessmentFlowTest {
 
     @Test fun fullFixtureHostKeepsSpokenChoicesHiddenAndMatchesExactSimulatedTimeline() =
         fullFixtureTimeline(ListeningAssessmentProfile.N5)
+
+    @Test fun androidBackClosesPartialResultAfterAsynchronousLoad() {
+        ListeningUiFixture().use { fixture ->
+            fixture.assessmentPool()
+            val id = runBlocking {
+                fixture.services.listeningAssessments.start(fixture.services.listeningAssessments.preview(42))
+            }
+            val vm = ListeningAssessmentViewModel(fixture.services, id)
+            val returned = mutableStateOf(false)
+            rule.setContent { KanjiTheme {
+                if (returned.value) Text("Returned") else ListeningAssessmentView(vm, { returned.value = true }) { _, _ -> }
+            } }
+            try {
+                ready(vm)
+                rule.onNodeWithText("End with partial results").performScrollTo().performClick()
+                rule.onNodeWithText("End section").performClick()
+                rule.waitUntil(10_000) { vm.snapshot?.result != null && !vm.busy }
+                rule.onNodeWithText("Partial / interrupted diagnostic").assertIsDisplayed()
+                InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+                rule.waitUntil(5_000) { returned.value && !vm.busy }
+                assertNotNull(runBlocking { fixture.db.listeningTasks().assessment(id)?.closedAtMs })
+                assertTrue(runBlocking { fixture.db.reviews().allLog().isEmpty() })
+            } finally { finish(vm) { returned.value = true } }
+        }
+    }
 
     @Test fun n4FullFixtureUsesCapturedTwentyEightItemTotalsAndExactSimulatedTimeline() =
         fullFixtureTimeline(ListeningAssessmentProfile.N4)

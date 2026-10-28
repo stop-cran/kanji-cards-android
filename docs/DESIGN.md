@@ -404,6 +404,12 @@ Text options are readable previews; numbered pictures keep their authored orderi
 labels until help/feedback. All required stages must finish before answer selection. Feedback begins
 with the immutable result; captured word articles retain their source and return to the feedback scroll.
 Scroll ownership sits outside the article and portrait/landscape branches, keyed by encounter/phase.
+App and Android Back use the same current-state callback: captured articles return locally,
+unscored study and submitted feedback close the encounter, and unfinished scored work pauses
+for resume/discard. Closing study retains exposure/cooldown without an SRS answer. Diagnostic
+Back likewise closes finalized results but preserves its separate interruption policy before results.
+Use a state-capturing lambda, not a local function reference: reference equality can retain the
+initial loading snapshot in BackHandler even after the encounter/result loads.
 
 Playback is sequential and explicitly cancellable between stages. Lifecycle/Back interruption preserves
 the native position before closing the player; premature close would reset that position to zero.

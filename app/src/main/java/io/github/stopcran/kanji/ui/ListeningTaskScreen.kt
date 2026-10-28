@@ -45,12 +45,12 @@ internal fun ListeningTaskEncounterView(vm: ListeningTaskViewModel, onBack: () -
     val state = vm.attempt
     val words = vm.vocabularyBodies
     val scroll = key(row?.id, state?.phase) { rememberScrollState() }
-    fun leave() {
+    val leave: () -> Unit = {
         if (article != null) article = null
         else if (row?.kind == "study" || row?.reviewLogId != null) vm.close(false, onBack)
         else { vm.pause(release = true); onBack() }
     }
-    BackHandler(onBack = ::leave)
+    BackHandler(onBack = leave)
     val body = words[article]
     if (body != null && row != null) {
         pages.SaveableStateProvider("article:$article") {
@@ -61,7 +61,7 @@ internal fun ListeningTaskEncounterView(vm: ListeningTaskViewModel, onBack: () -
         return
     }
     pages.SaveableStateProvider("task:${row?.id}:${state?.phase}") {
-        Page(task?.title ?: "Japanese listening task", ::leave, scrollable = false, maxWidth = 1100.dp) {
+        Page(task?.title ?: "Japanese listening task", leave, scrollable = false, maxWidth = 1100.dp) {
             if (vm.busy && !vm.playing) LinearProgressIndicator(Modifier.fillMaxWidth())
             when {
                 row?.closedAtMs != null -> {

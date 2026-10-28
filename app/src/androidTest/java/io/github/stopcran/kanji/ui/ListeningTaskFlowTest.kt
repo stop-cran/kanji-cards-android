@@ -3,7 +3,9 @@ package io.github.stopcran.kanji.ui
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Bitmap
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
@@ -47,6 +49,42 @@ class ListeningTaskFlowTest {
         rule.activityRule.scenario.onActivity { it.requestedOrientation = request }
         rule.waitUntil(10_000) { rule.activity.resources.configuration.orientation == expected }
         rule.activityRule.scenario.onActivity { it.enableEdgeToEdge() }
+    }
+
+    @Test fun androidBackClosesLoadedUnscoredStudy() = closeStudyWithAndroidBack(described = false)
+
+    @Test fun androidBackClosesLoadedDescribedStudy() = closeStudyWithAndroidBack(described = true)
+
+    private fun closeStudyWithAndroidBack(described: Boolean) {
+        ListeningUiFixture().use { fixture ->
+            val record = fixture.records.single { it.task.taskType == ListeningTaskType.TaskBased }
+            val id = runBlocking {
+                fixture.services.listeningTasks.start(fixture.source, record.task.id, study = true, described = described)
+            }
+            val vm = ListeningTaskViewModel(fixture.services, id)
+            val returned = mutableStateOf(false)
+            var fallbackCalls = 0
+            rule.setContent { KanjiTheme {
+                BackHandler(enabled = !returned.value) { fallbackCalls++; returned.value = true }
+                if (returned.value) Text("Returned to Listening")
+                else ListeningTaskEncounterView(vm, { returned.value = true }) { _, _ -> }
+            } }
+            try {
+                awaitReady(vm)
+                rule.waitUntil(5_000) { runBlocking { fixture.db.listeningTasks().encounter(id)?.exposedAtMs != null } }
+                InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+                rule.waitUntil(5_000) { returned.value && !vm.busy }
+                assertEquals("The encounter must handle Back before the route fallback", 0, fallbackCalls)
+                runBlocking {
+                    val closed = requireNotNull(fixture.db.listeningTasks().encounter(id))
+                    assertNotNull("Android Back must close unscored study after asynchronous loading", closed.closedAtMs)
+                    assertNotNull(closed.exposedAtMs)
+                    assertNull(closed.reviewLogId)
+                    assertTrue(fixture.db.reviews().allLog().isEmpty())
+                    assertEquals(1, fixture.db.listeningTasks().allExposures().size)
+                }
+            } finally { finish(vm) }
+        }
     }
 
     @Test fun n4ScopeAndFormatStayUsableInNarrowLargeThemesAndOpenOnlyUnscoredFixtureStudy() {
@@ -139,12 +177,13 @@ class ListeningTaskFlowTest {
                 screenshot("C-task-based-result.png")
                 rule.onNodeWithText("Read captured word article: 窓").performScrollTo().performClick()
                 rule.onNodeWithText("Captured window article").assertIsDisplayed()
-                rule.onNodeWithContentDescription("Back").performClick()
+                InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
                 rule.onNodeWithText("Read captured word article: 窓").assertIsDisplayed()
-                rule.onNodeWithText("Done").performScrollTo().performClick()
+                InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
                 rule.waitUntil(5_000) { returned.value && !vm.busy }
                 rule.onNodeWithText("Returned to Listening").assertIsDisplayed()
                 assertEquals(1, runBlocking { fixture.db.reviews().allLog().size })
+                assertNotNull(runBlocking { fixture.db.listeningTasks().encounter(id)?.closedAtMs })
             } finally { finish(vm) }
         }
     }

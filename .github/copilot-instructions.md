@@ -45,6 +45,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   resize mode for edge-to-edge IME insets; default panning clips short exercises without creating a scroll range. Search pickers with
   bounded nested lists need it too: check that the final search result is selectable without dismissing the keyboard. Check API 29 and 35.
 - **System back:** `BackHandler` in `AppNav` pops the route stack; without it back closes the app.
+- Stateful Back callbacks must be lambdas, not references to local functions capturing snapshots.
+  Function-reference equality can hide changed captures from `rememberUpdatedState`, retaining a null loading row.
+  Exercise Android key dispatch after asynchronous loading, feedback and nested article navigation.
 - **Screen state across navigation:** `AppNav` composes only the top route, wrapped in `SaveableStateProvider` keyed by stack position
   and route (logical target for consolidated Grammar details); `pop()` removes the state. Without the holder, search/scroll is
   lost when another screen is pushed. Lists that must keep scroll use an explicit `rememberLazyListState()`.
