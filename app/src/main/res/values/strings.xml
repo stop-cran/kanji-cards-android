@@ -158,6 +158,7 @@
     <string name="not_yet">Not yet</string>
     <string name="of_answers_correct">%1$s of %2$s answers correct.</string>
     <string name="pick_the">Pick the %1$s</string>
+    <string name="correct_reading_kind">Correct! — %1$s</string>
     <string name="i_guessed">I guessed</string>
     <string name="back">← Back</string>
     <string name="what_does_it_mean">What does it mean?</string>

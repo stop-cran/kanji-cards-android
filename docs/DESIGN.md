@@ -228,6 +228,8 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - **Tracing before drawing:** the first time a kanji with no Draw state is asked (setting "Trace new kanji first", on by default) the pad shows a light numbered reference to trace (`DrawGate.shouldTrace`). That attempt is practice only: checked and shown, but not graded, logged, saved as a diagnostic drawing or counted, and it creates no FSRS state. "Next" re-queues the kanji 3 cards later (`QuizSession.defer`) and that attempt is from memory and graded. Nothing is persisted, so an unfinished session traces again.
   Kana and Kanji tracing questions share a localized notice before the canvas: ungraded practice, followed by a later memory attempt.
   It is absent from graded recall and does not promise the next question or a fixed queue distance (#98).
+- **Reading feedback (#99):** successful Kanji Readings feedback retains the requested on'yomi/kun'yomi kind beside "Correct!".
+  This is task context, not a claim that the checked choice is the kanji's only valid reading; answer markers, other readings and actions are unchanged.
 - **Exposure before testing:** a kanji with no review state is first shown on a study view (`QuizUi.Study`: kanji, title, main readings, the article, "Got it — quiz me"), then
   asked. Showing it is not a review and records nothing; it is skipped for cards already started and not repeated after an "Again". **Drawing is gated behind
   recognition** (`DrawGate`): a kanji enters Draw once its meaning was answered well on two days (the readings' unlock) or was already drawn; home counts, the session

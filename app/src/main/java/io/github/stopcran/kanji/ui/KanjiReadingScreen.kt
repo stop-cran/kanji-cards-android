@@ -61,7 +61,7 @@ private fun AnswerState(s: ReadingUi.Answer, vm: KanjiReadingViewModel, onOpenDo
     Text(s.card.kanji, fontSize = bigKanjiSize(96), fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Text(
         when {
-            s.correct -> "Correct!"
+            s.correct -> stringResource(R.string.correct_reading_kind, kind.label)
             s.picked == NO_ANSWER -> "No problem — a ${kind.label} of ${s.card.kanji} is “$right”"
             else -> "Not quite — a ${kind.label} of ${s.card.kanji} is “$right”"
         },
