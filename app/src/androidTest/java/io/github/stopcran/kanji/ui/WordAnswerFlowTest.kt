@@ -4,17 +4,22 @@ import android.content.ContextWrapper
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.ViewModelStore
 import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.stopcran.kanji.Services
+import io.github.stopcran.kanji.core.srs.CardPhase
+import io.github.stopcran.kanji.core.srs.StudyMode
 import io.github.stopcran.kanji.core.words.WordStacks
 import io.github.stopcran.kanji.data.AppDatabase
+import io.github.stopcran.kanji.data.ReviewStateEntity
 import io.github.stopcran.kanji.data.Settings
 import io.github.stopcran.kanji.data.WordEntity
 import kotlinx.coroutines.delay
@@ -75,6 +80,37 @@ class WordAnswerFlowTest {
         assertEquals(listOf(2, 3), runBlocking { db.reviews().allLog().sortedBy { it.id }.map { it.grade } })
     }
 
+    @Test fun typingDisclosesPartialRecallWithoutRequiringKanjiForKanaWords() = session(2, typing = true) { vm, db ->
+        val grades = mutableListOf<Int>()
+        repeat(2) { index ->
+            rule.waitUntil(10_000) { vm.ui is WordQuizUi.TypeQuestion }
+            val question = rule.runOnIdle { vm.ui as WordQuizUi.TypeQuestion }
+            val partial = question.word.word != question.word.reading
+            rule.onNodeWithText("Type the word's Japanese spelling.").performScrollTo().assertIsDisplayed()
+            val guidance = rule.onNodeWithText("Reading alone counts as partial recall.")
+            if (partial) guidance.performScrollTo().assertIsDisplayed() else guidance.assertDoesNotExist()
+            rule.onNodeWithText(question.word.word).assertDoesNotExist()
+            rule.onNode(hasSetTextAction()).performScrollTo().performTextInput(question.word.reading)
+            rule.onNodeWithText("Check").performScrollTo().performClick()
+            rule.onNodeWithText(question.word.word).assertIsDisplayed()
+            if (partial) {
+                rule.onNodeWithText("Reading recalled — spelling needs practice").performScrollTo().assertIsDisplayed()
+                rule.onNodeWithText("Review the spelling above, then choose Next.").performScrollTo().assertIsDisplayed()
+                rule.onNodeWithText("Correct!").assertDoesNotExist()
+            } else {
+                rule.onNodeWithText("Correct!").performScrollTo().assertIsDisplayed()
+                rule.onNodeWithText("Review the spelling above, then choose Next.").assertDoesNotExist()
+            }
+            rule.onNode(hasSetTextAction()).assertDoesNotExist()
+            assertEquals(index, recorded(db))
+            grades += if (partial) 2 else 3
+            rule.onNodeWithText("Next").performScrollTo().performClick()
+            rule.waitUntil(10_000) { vm.ui !is WordQuizUi.TypeAnswer && recorded(db) == index + 1 }
+        }
+        assertEquals(setOf(2, 3), grades.toSet())
+        assertEquals(grades, runBlocking { db.reviews().allLog().sortedBy { it.id }.map { it.grade } })
+    }
+
     private fun question(vm: WordQuizViewModel): WordQuizUi.Question {
         rule.waitUntil(10_000) { vm.ui is WordQuizUi.Question }
         return rule.runOnIdle { vm.ui as WordQuizUi.Question }
@@ -88,7 +124,7 @@ class WordAnswerFlowTest {
         }
     }
 
-    private fun session(limit: Int, exercise: (WordQuizViewModel, AppDatabase) -> Unit) {
+    private fun session(limit: Int, typing: Boolean = false, exercise: (WordQuizViewModel, AppDatabase) -> Unit) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val preferences = "word-answer-${UUID.randomUUID()}"
         val isolated = object : ContextWrapper(context) {
@@ -102,17 +138,26 @@ class WordAnswerFlowTest {
             it.setWordStack(WordStacks.n5.id)
         }
         val models = ViewModelStore()
-        val route = "wquiz:${UUID.randomUUID()}:jp"
+        val route = "wquiz:${UUID.randomUUID()}:${if (typing) "ty" else "jp"}"
         val vm = WordQuizViewModel(Services(db, settings, context)).also { models.put(route, it) }
         try {
             runBlocking {
-                val words = listOf(
+                val words = if (typing) listOf(
+                    Triple("猫", "ねこ", "cat"), Triple("すぐ", "すぐ", "immediately"),
+                ) else listOf(
                     Triple("猫", "ねこ", "cat"), Triple("犬", "いぬ", "dog"), Triple("鳥", "とり", "bird"),
                     Triple("魚", "さかな", "fish"), Triple("馬", "うま", "horse"), Triple("牛", "うし", "cow"),
                 )
                 db.content().insertWords(words.map { (word, reading, title) ->
                     WordEntity(settings.source.value.id, word, reading, title, "wago", word, "", "Fixture word reference", 5)
                 })
+                if (typing) {
+                    val now = System.currentTimeMillis()
+                    for ((word) in words) db.reviews().putState(ReviewStateEntity(
+                        settings.source.value.id, WordStacks.n5.id, word, StudyMode.WordEnJp.name, CardPhase.Review.name,
+                        2.0, 5.0, now - 60_000, now - 86_400_000, 2, 0,
+                    ))
+                }
             }
             rule.setContent { MaterialTheme { WordQuizScreen(route, {}, {}, {}, vm) } }
             exercise(vm, db)

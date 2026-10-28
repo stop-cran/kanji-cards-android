@@ -187,7 +187,10 @@ private fun TypeQuestion(s: WordQuizUi.TypeQuestion, vm: WordQuizViewModel) {
     LaunchedEffect(s) { runCatching { focus.requestFocus() } }
     SessionRemaining(s.remaining)
     WordQuizPrompt(s.word, WordDirection.Type, s.font, big = true)
-    Text("Type it in Japanese", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    Text("Type the word's Japanese spelling.", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    if (s.word.word != s.word.reading) {
+        Text("Reading alone counts as partial recall.", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    }
     androidx.compose.material3.OutlinedTextField(
         value = vm.draft,
         onValueChange = vm::onDraft,
@@ -212,14 +215,21 @@ private fun TypeAnswer(s: WordQuizUi.TypeAnswer, vm: WordQuizViewModel, onOpenDo
         when {
             s.gaveUp -> "No problem — here it is"
             verdict == TypedVerdict.Exact -> "Correct!"
-            verdict == TypedVerdict.KanaOnly -> "Right word — now recall the kanji"
+            verdict == TypedVerdict.KanaOnly -> "Reading recalled — spelling needs practice"
             else -> "Not quite"
         },
-        color = if (verdict == TypedVerdict.Wrong) wrongTextColor() else correctTextColor(),
+        color = when (verdict) {
+            TypedVerdict.Wrong -> wrongTextColor()
+            TypedVerdict.KanaOnly -> MaterialTheme.colorScheme.onSurface
+            TypedVerdict.Exact -> correctTextColor()
+        },
         style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.fillMaxWidth(),
         textAlign = TextAlign.Center,
     )
+    if (verdict == TypedVerdict.KanaOnly) {
+        Text("Review the spelling above, then choose Next.", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    }
     if (!s.gaveUp) {
         val matched = s.result.matched?.takeIf { verdict == TypedVerdict.Wrong }
         val text = if (matched != null) "You typed ${s.typed} — ${matched.reading}, ${matched.title}" else "You typed ${s.typed}"

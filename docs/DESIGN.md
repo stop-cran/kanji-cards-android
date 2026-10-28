@@ -238,6 +238,9 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   Options deduplicate exact titles and written forms. A curated `quiz_exclusions` declaration on either word keeps the pair apart,
   both against the target and among chosen options, in both directions; exclusions are not transitive and do not infer synonyms.
   Scoring applies only to eligible candidates. A small pool yields fewer options, possibly only the target, rather than restoring an excluded word.
+- **Word typing:** the question asks for the Japanese spelling, with a reading-only partial-recall notice when written form and reading differ.
+  Partial feedback neutrally describes recalled reading and directs the learner to review the revealed spelling, then Next; it does not
+  demand a missing retry or assume kanji. Kana-only spellings, accepted variants, grading, re-asks and record-on-advance are unchanged.
 - **Word reading assistance:** natural vocabulary spelling and independent word JLPT eligibility stay unchanged. In cumulative level decks,
   kanji beyond the selected word deck's level are bold-underlined; missing cards/levels are underlined and explicitly unclassified.
   All/thematic decks have no new highlighting or help. Japanese-to-English and word-to-picture prompts offer character links plus a large
