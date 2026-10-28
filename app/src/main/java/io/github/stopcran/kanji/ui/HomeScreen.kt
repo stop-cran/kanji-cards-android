@@ -116,7 +116,14 @@ private fun MainPage(app: KanjiApp, source: RepoSource, data: HomeData, a: HomeA
     val kana = rememberKanaOverview(app)
     val content = rememberHomeContent(app.db, app.contentSync, source)
     val scope = rememberCoroutineScope()
-    Page("Ensō Nihongo", actions = { IconButton(onClick = a.onSettings) { Image(painterResource(R.drawable.settings_brush), "Settings", Modifier.size(27.dp)) } }) {
+    Page(
+        "Ensō Nihongo", scrollable = !data.loading && content.ready != null,
+        actions = {
+            IconButton(onClick = a.onSettings) {
+                Image(painterResource(R.drawable.settings_brush), "Settings", Modifier.size(27.dp))
+            }
+        },
+    ) {
         HomeContentNotice(content) { scope.launch { app.contentSync.sync(source) } }
         if (content.usable) LoadingBar(data)
         val defaultId = remember { RepoSource.parse(Defaults.CONTENT_REPO_URL, Defaults.CONTENT_BRANCH)?.id }

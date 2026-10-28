@@ -703,6 +703,8 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   catalog labels/new starts, while retaining captured current/foreign-source encounter recovery independently
   of the selected repository's cache. An observed empty cache with no sync activity is idle, not downloading:
   show a neutral not-downloaded notice and Retry, including when Listening is restored after process death.
+  Home also defers scrolling until its cache observation and data projection are known, so a shorter transient
+  notice does not clamp its saved landing position when returning from a section.
 - **Settings order: basic to advanced, grouped with dividers.** Groups: Studying (new items per day and weekly rhythm, fonts, reminder), Drawing (brush), then Advanced
   (content repository, handwriting data), then About. Put new settings in the group they belong to by how often a typical learner needs them;
   anything that can break or reset the user's content or privacy posture goes under Advanced. Settings that are a single value apply
