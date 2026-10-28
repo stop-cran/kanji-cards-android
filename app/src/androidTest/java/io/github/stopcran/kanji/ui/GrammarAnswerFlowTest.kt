@@ -143,6 +143,7 @@ class GrammarAnswerFlowTest {
             while (vm.ui !is GrammarUi.Done && steps++ < selected.size * 3 + 6) {
                 val mode = answerQuestion(vm, selected, wrongModes)
                 val answer = vm.ui as GrammarUi.Answer
+                rule.onNodeWithText("Next").assertIsDisplayed()
                 rule.onNodeWithText(if (answer.correct) "Correct!" else "Not quite").performScrollTo().assertIsDisplayed()
                 if (answer.correct) correctModes += mode
                 if (!openedArticle) {
@@ -154,7 +155,7 @@ class GrammarAnswerFlowTest {
                     assertEquals(before, runBlocking { db.reviews().allLog() })
                     openedArticle = true
                 }
-                rule.onNodeWithText("Next").performScrollTo().performClick()
+                rule.onNodeWithText("Next").assertIsDisplayed().performClick()
                 rule.waitUntil(10_000) { vm.ui is GrammarUi.Choose || vm.ui is GrammarUi.Type || vm.ui is GrammarUi.Done }
                 rule.waitForIdle()
             }

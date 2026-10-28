@@ -108,7 +108,7 @@ class GrammarBrowserFlowTest {
                     }
                     else -> error("Expected a question: $state")
                 }
-                rule.onNodeWithText("Next").performScrollTo().performClick()
+                rule.onNodeWithText("Next").assertIsDisplayed().performClick()
                 rule.waitForIdle()
             }
             rule.onNodeWithText("Session complete").performScrollTo().assertIsDisplayed()

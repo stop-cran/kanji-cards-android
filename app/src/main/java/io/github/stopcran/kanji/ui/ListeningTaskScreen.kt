@@ -99,9 +99,11 @@ internal fun ListeningTaskEncounterView(vm: ListeningTaskViewModel, onBack: () -
                         } else {
                             ListeningTaskFeedback(vm) { word -> vm.pause(); article = word }
                             ListeningTaskControls(vm)
-                            Button(onClick = { vm.close(false, onBack) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) { Text("Done") }
                         }
                         if (row.reviewLogId == null) TextButton(onClick = { discard = true }, enabled = !vm.busy) { Text("Discard encounter") }
+                    }
+                    if (feedback) {
+                        Button(onClick = { vm.close(false, onBack) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) { Text("Done") }
                     }
                 }
             }

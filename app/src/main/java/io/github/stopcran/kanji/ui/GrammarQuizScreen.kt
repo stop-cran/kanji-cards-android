@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -119,7 +118,11 @@ private fun GrammarSessionBody(
     onPracticeMore: () -> Unit,
 ) {
     GrammarVocabularyHelp(vm)
-    Page(if (vm.target == null) "Grammar" else stringResource(R.string.grammar_topic_practice), onBack, ime = true, scrollToTopOnBack = true) {
+    val answer = vm.ui as? GrammarUi.Answer
+    Page(if (vm.target == null) "Grammar" else stringResource(R.string.grammar_topic_practice), onBack,
+        ime = true, scrollToTopOnBack = true,
+        footer = if (answer != null) { { GrammarAnswerActions(answer, vm) } } else null,
+    ) {
         vm.approvedPractice?.let { Text(stringResource(R.string.grammar_practising_topic, it.label)) }
         if (vm.practiceOverride) Text(stringResource(R.string.grammar_session_exception), style = MaterialTheme.typography.bodySmall)
         vm.focusNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
@@ -173,17 +176,17 @@ private fun GrammarSessionBody(
                 OutlinedButton(onClick = { onOpenDoc(vm.sourceId, reference.path, reference.topic) }, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.grammar_read_topic, reference.topic))
                 }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 4.dp),
-                ) {
-                    Button(onClick = { vm.next(origin = state) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.next)) }
-                    if (state.correct && state.type == "choose") {
-                        OutlinedButton(onClick = { vm.next(guessed = true, origin = state) }) { Text("I guessed") }
-                    }
-                }
             }
+        }
+    }
+}
+
+@Composable
+private fun GrammarAnswerActions(answer: GrammarUi.Answer, vm: GrammarQuizViewModel) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Button(onClick = { vm.next(origin = answer) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.next)) }
+        if (answer.correct && answer.type == "choose") {
+            OutlinedButton(onClick = { vm.next(guessed = true, origin = answer) }) { Text("I guessed") }
         }
     }
 }

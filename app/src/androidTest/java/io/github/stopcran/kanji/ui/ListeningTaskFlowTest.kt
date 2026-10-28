@@ -51,11 +51,13 @@ class ListeningTaskFlowTest {
         rule.activityRule.scenario.onActivity { it.enableEdgeToEdge() }
     }
 
-    @Test fun androidBackClosesLoadedUnscoredStudy() = closeStudyWithAndroidBack(described = false)
+    @Test fun androidBackClosesLoadedUnscoredStudy() = closeStudy(described = false)
 
-    @Test fun androidBackClosesLoadedDescribedStudy() = closeStudyWithAndroidBack(described = true)
+    @Test fun androidBackClosesLoadedDescribedStudy() = closeStudy(described = true)
 
-    private fun closeStudyWithAndroidBack(described: Boolean) {
+    @Test fun unscoredStudyDoneStaysVisibleBesideScrolledFeedback() = closeStudy(described = false, useDone = true)
+
+    private fun closeStudy(described: Boolean, useDone: Boolean = false) {
         ListeningUiFixture().use { fixture ->
             val record = fixture.records.single { it.task.taskType == ListeningTaskType.TaskBased }
             val id = runBlocking {
@@ -72,7 +74,13 @@ class ListeningTaskFlowTest {
             try {
                 awaitReady(vm)
                 rule.waitUntil(5_000) { runBlocking { fixture.db.listeningTasks().encounter(id)?.exposedAtMs != null } }
-                InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+                if (useDone) {
+                    val done = rule.onNodeWithText("Done").assertIsDisplayed()
+                    val position = done.fetchSemanticsNode().boundsInRoot
+                    rule.onNodeWithText(record.task.explanation).performScrollTo().assertIsDisplayed()
+                    assertEquals(position, done.assertIsDisplayed().fetchSemanticsNode().boundsInRoot)
+                    done.performClick()
+                } else InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
                 rule.waitUntil(5_000) { returned.value && !vm.busy }
                 assertEquals("The encounter must handle Back before the route fallback", 0, fallbackCalls)
                 runBlocking {
@@ -320,7 +328,7 @@ class ListeningTaskFlowTest {
                 awaitReady(vm)
                 assertTrue(vm.attempt?.describedStudy == true)
                 assertEquals(fixture.source, vm.encounter?.sourceId)
-                rule.onNodeWithText("Done").performScrollTo().performClick()
+                rule.onNodeWithText("Done").assertIsDisplayed().performClick()
                 rule.waitUntil(5_000) { returned.value && !vm.busy }
                 assertTrue(runBlocking { fixture.db.reviews().allLog().isEmpty() })
             } finally { finish(vm) }

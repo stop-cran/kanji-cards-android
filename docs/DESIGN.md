@@ -422,6 +422,10 @@ initial loading snapshot in BackHandler even after the encounter/result loads.
 Diagnostic results and captured-item review retain the live scored ordinal, excluding worked examples from that numbering.
 Examples are explicitly not scored; each kind reports correct out of assessed, including zero-assessed partial results.
 Display ordinals never replace the original response-list index used to open captured feedback.
+Grammar feedback keeps its single Next/I guessed row in Page's optional non-scrolling footer; Listening dialogue and focused-task
+feedback/study similarly anchor their single Done action. Full explanations, transcripts and references still scroll independently.
+No footer is added to questions, loading/error-only views or articles, and existing advancement, grading and close/discard callbacks
+are retained. Pages without a footer keep their previous layout.
 
 Playback is sequential and explicitly cancellable between stages. Lifecycle/Back interruption preserves
 the native position before closing the player; premature close would reset that position to zero.

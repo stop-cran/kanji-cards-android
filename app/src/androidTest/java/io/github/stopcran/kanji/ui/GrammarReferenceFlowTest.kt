@@ -111,7 +111,7 @@ class GrammarReferenceFlowTest {
             rule.onNodeWithContentDescription("Back").performClick()
             assertSame(answer, vm.ui)
             assertEquals(0, fixture.recorded())
-            rule.onNodeWithText("Next").performScrollTo().performClick()
+            rule.onNodeWithText("Next").assertIsDisplayed().performClick()
             rule.waitUntil(10_000) { vm.ui is GrammarUi.Type && fixture.recorded() == 1 }
             rule.onNode(hasSetTextAction()).performScrollTo().performTextReplacement("kept response")
             rule.onNodeWithText("Check").performScrollTo().performClick()

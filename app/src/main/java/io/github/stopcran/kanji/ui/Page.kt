@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
 
-/** Scrollable page that respects system bars (the app draws edge-to-edge), with an optional top bar; [ime] lifts it above the keyboard. */
+/** Scrollable page respecting system bars, with optional fixed footer actions; [ime] lifts it above the keyboard. */
 @Composable
 fun Page(
     title: String,
@@ -39,6 +39,7 @@ fun Page(
     maxWidth: Dp = 720.dp,
     ime: Boolean = false,
     scrollToTopOnBack: Boolean = false,
+    footer: (@Composable ColumnScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val scroll = rememberScrollState()
@@ -58,5 +59,12 @@ fun Page(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             content = content,
         )
+        footer?.let {
+            Column(
+                Modifier.widthIn(max = maxWidth).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                content = it,
+            )
+        }
     }
 }

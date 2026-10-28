@@ -95,13 +95,14 @@ class ListeningSpokenChoiceFlowTest {
                 rule.waitUntil(5_000) { !vm.busy }
                 rule.onNodeWithText("Check answer").performScrollTo().performClick()
                 rule.waitUntil(10_000) { vm.response != null && !vm.busy }
+                rule.onNodeWithText("Done").assertIsDisplayed()
                 assertEquals(task.answer, vm.response?.answer)
                 assertEquals(Grade.Good.value, vm.response?.grade)
                 rule.onNodeWithText("Correct - Good").assertIsDisplayed()
                 rule.onNodeWithText("Correct: ${correct.number}. ${correct.label}").performScrollTo().assertIsDisplayed()
                 task.options.forEach { rule.onNodeWithText(it.rationale).assertExists() }
                 screenshot("D-${type.wire}-result.png")
-                rule.onNodeWithText("Done").performScrollTo().performClick()
+                rule.onNodeWithText("Done").assertIsDisplayed().performClick()
                 rule.waitUntil(5_000) { returned.value && !vm.busy }
                 assertEquals(1, runBlocking { fixture.db.reviews().allLog().size })
             } finally { finish(vm) }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
@@ -75,6 +76,26 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [28], application = Application::class)
 class ComposeUiTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test
+    fun pageFooterRemainsVisibleWhileLongDetailsScroll() {
+        var advances = 0
+        rule.setContent {
+            MaterialTheme {
+                Page("Feedback", footer = {
+                    androidx.compose.material3.Button(onClick = { advances++ }) { Text("Continue") }
+                }) {
+                    repeat(40) { Text("Detailed explanation $it") }
+                }
+            }
+        }
+        val action = rule.onNodeWithText("Continue").assertIsDisplayed()
+        val position = action.fetchSemanticsNode().boundsInRoot
+        rule.onNodeWithText("Detailed explanation 39").performScrollTo().assertIsDisplayed()
+        assertEquals(position, action.assertIsDisplayed().fetchSemanticsNode().boundsInRoot)
+        action.performClick()
+        rule.runOnIdle { assertEquals(1, advances) }
+    }
 
     @Test
     fun diagnosticResultsKeepScoredOrdinalsAndOriginalFeedbackIndexes() {

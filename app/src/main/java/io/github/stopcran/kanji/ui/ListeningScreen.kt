@@ -140,7 +140,13 @@ internal fun ListeningEncounterView(vm: ListeningViewModel, onBack: () -> Unit, 
         }
         return
     }
-    key(row?.id, attempt?.phase) { Page(passage?.title ?: "Listening", ::leave) {
+    val finished = row?.kind == "study" || row?.reviewLogId != null
+    val canFinish = finished && row?.closedAtMs == null && passage != null && attempt != null
+    key(row?.id, attempt?.phase) { Page(passage?.title ?: "Listening", ::leave,
+        footer = if (canFinish) { {
+            Button(onClick = { vm.close(false, onBack) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) { Text("Done") }
+        } } else null,
+    ) {
         if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         vm.error?.let {
             Text(it, color = MaterialTheme.colorScheme.error)
@@ -222,7 +228,6 @@ internal fun ListeningEncounterView(vm: ListeningViewModel, onBack: () -> Unit, 
                         Text("${word.surface} - ${word.reading}")
                     }
                 }
-                Button(onClick = { vm.close(false, onBack) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) { Text("Done") }
             }
             if (row.reviewLogId == null) TextButton(onClick = { discard = true }, enabled = !vm.busy) { Text("Discard encounter") }
         }
