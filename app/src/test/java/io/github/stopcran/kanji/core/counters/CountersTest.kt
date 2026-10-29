@@ -251,26 +251,49 @@ class CountersTest {
 
     @Test
     fun levelsIntersectGroupsForEveryModeIncludingAlreadyDueAndExtraItems() {
-        val files = listOf(
-            hon.copy(group = "time"), hiki.copy(level = 4),
-            expressions(group = "time").copy(level = 4),
-            expressions(age.copy(id = "price-expression-1")).copy(id = "price", level = 3),
-        )
+        val files = (1..5).flatMap { level ->
+            listOf(CounterGroup.Everyday, CounterGroup.Time).flatMap { group ->
+                val prefix = "level$level-${group.code}"
+                val cards = hon.cards.mapIndexed { i, card -> card.copy(id = "$prefix-card-$i") }
+                listOf(
+                    hon.copy(id = "$prefix-legacy", level = level, group = group.code, cards = cards,
+                        reverse = listOf(CounterReverse("$prefix-noun-1", cards.first().id,
+                            cards.map { it.id } + cat.id))),
+                    expressions(age.copy(id = "$prefix-expression-1"), group.code).copy(id = "$prefix-expression", level = level),
+                )
+            }
+        } + hiki.copy(level = 1)
         val all = CounterIndex(files)
         for (scope in CounterScope.entries) for (group in CounterGroup.entries) {
             val selected = all.inScope(group, scope)
-            val expected = files.filter {
-                it.level >= when (scope) { CounterScope.N5 -> 5; CounterScope.N4 -> 4; CounterScope.All -> 1 } &&
-                    (group == CounterGroup.All || it.group == group.code)
+            val levels = when (scope) {
+                CounterScope.N5 -> setOf(5)
+                CounterScope.N4 -> setOf(4, 5)
+                CounterScope.N3 -> setOf(3, 4, 5)
+                CounterScope.All -> (1..5).toSet()
             }
+            val expected = files.filter {
+                it.level in levels && (group == CounterGroup.All || it.group == group.code)
+            }
+            assertEquals(levels, selected.files.map { it.level }.toSet())
             assertEquals(expected.map { it.id }, selected.files.map { it.id })
             assertScopedQueues(all, selected, expected)
+            selected.reverse.values.flatMap { it.options }.forEach { selected.nounLabel(selected.referenceCard(it)) }
         }
-        val beginnerTime = all.inScope(CounterGroup.Time, CounterScope.N5)
-        assertEquals(cat, beginnerTime.referenceCard(cat.id))
-        assertFalse(cat.id in beginnerTime.ids(CounterMode.Choose))
-        assertTrue(all.inScope(CounterGroup.Everyday, CounterScope.N5).files.isEmpty())
-        assertEquals(files, beginnerTime.inScope().files)
+        val n3Time = all.inScope(CounterGroup.Time, CounterScope.N3)
+        assertEquals(cat, n3Time.referenceCard(cat.id))
+        assertFalse(cat.id in n3Time.ids(CounterMode.Choose))
+        assertEquals(files, n3Time.inScope().files)
+    }
+
+    @Test
+    fun emptyLevelAndGroupIntersectionsDoNotRecoverStartedOrForeignItems() {
+        val all = CounterIndex(listOf(expressions(group = "time").copy(level = 3)))
+        for ((group, scope) in listOf(CounterGroup.Time to CounterScope.N4, CounterGroup.Everyday to CounterScope.N3)) {
+            val selected = all.inScope(group, scope)
+            assertTrue(selected.files.isEmpty())
+            assertScopedQueues(all, selected, emptyList())
+        }
     }
 
     private fun assertScopedQueues(all: CounterIndex, selected: CounterIndex, expected: List<CounterFile>) {
@@ -278,12 +301,18 @@ class CountersTest {
         for (mode in CounterMode.entries) {
             val ids = CounterIndex(expected).ids(mode)
             assertEquals(ids, selected.ids(mode))
-            val states = all.ids(mode).associateWith { solid() }
-            for (extra in listOf(null, 10)) {
+            val states = all.ids(mode).mapIndexed { i, id ->
+                id to solid().let { if (i % 2 == 0) it else it.copy(phase = CardPhase.Learning) }
+            }.toMap()
+            for (extra in listOf(null, all.ids(mode).size + 1)) {
                 val queue = CounterQueues.build(selected, CounterQueueRequest(mode, states, choose, Instant.EPOCH, 0, extra))
                 assertEquals(ids.toSet(), queue.map { it.kanji }.toSet())
                 assertTrue(queue.none { it.isNew })
             }
+            val fresh = CounterQueues.build(selected, CounterQueueRequest(mode, emptyMap(), choose, Instant.EPOCH, 2))
+            assertEquals(minOf(2, ids.size), fresh.size)
+            assertTrue(fresh.all { it.isNew && it.kanji in ids })
+            assertTrue(CounterQueues.build(selected, CounterQueueRequest(mode, emptyMap(), choose, Instant.EPOCH, 0)).isEmpty())
         }
     }
 
@@ -297,7 +326,8 @@ class CountersTest {
             assertEquals(scope, CounterScope.fromRoute(extra))
             assertTrue(extra.endsWith(":extra"))
         }
-        for (old in listOf("cquiz:1:ty", "cquiz:1:ty:extra", "cquiz:1:ty:time", "cquiz:1:ty:time:extra")) {
+        for (old in listOf("cquiz:1:ty", "cquiz:1:ty:extra", "cquiz:1:ty:time", "cquiz:1:ty:time:extra",
+            "cquiz:1:ty:time:future")) {
             assertEquals(CounterScope.All, CounterScope.fromRoute(old))
             assertEquals(CounterScope.All, CounterScope.fromRoute(CounterRoutes.extra(old)))
             assertEquals(CounterGroup.fromRoute(old), CounterGroup.fromRoute(CounterRoutes.extra(old)))

@@ -2,6 +2,9 @@ package io.github.stopcran.kanji.ui
 
 import android.content.ContextWrapper
 import android.graphics.Bitmap
+import android.view.WindowManager
+import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.mutableStateOf
@@ -9,13 +12,18 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsAnimationCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.room.Room
 import androidx.room.withTransaction
 import androidx.test.platform.app.InstrumentationRegistry
@@ -43,18 +51,41 @@ import io.github.stopcran.kanji.data.SyncMetaEntity
 import io.github.stopcran.kanji.data.toEntity
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import java.io.File
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 
 /** Production answer UI; all content/history and preferences are isolated from learner data. */
 class GrammarAnswerFlowTest {
-    @get:Rule val rule = createComposeRule()
+    @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
+    private val imeAnimations = AtomicInteger()
+    private lateinit var nativeEvidence: File
+
+    @Before fun prepareWindow() {
+        rule.activityRule.scenario.onActivity {
+            it.enableEdgeToEdge()
+            it.window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            ViewCompat.setWindowInsetsAnimationCallback(it.window.decorView,
+                object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                    override fun onPrepare(animation: WindowInsetsAnimationCompat) {
+                        if ((animation.typeMask and WindowInsetsCompat.Type.ime()) != 0) imeAnimations.incrementAndGet()
+                    }
+                    override fun onProgress(insets: WindowInsetsCompat, running: MutableList<WindowInsetsAnimationCompat>) = insets
+                    override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                        if ((animation.typeMask and WindowInsetsCompat.Type.ime()) != 0) imeAnimations.decrementAndGet()
+                    }
+                })
+        }
+    }
 
     @Test fun legacyFragmentsRemainUsable() = exercise(listOf(fixture(false)), fixtureArticles())
     @Test fun wholeSentenceBlanksRemainUsable() = exercise(listOf(fixture(true)), fixtureArticles())
@@ -92,6 +123,7 @@ class GrammarAnswerFlowTest {
         require(selected.size in 4..50)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
+        nativeEvidence = File(context.getExternalFilesDir(null), "grammar-answer-evidence.jsonl").apply { writeText("") }
         val preferencesName = "grammar-answer-${UUID.randomUUID()}"
         val isolated = object : ContextWrapper(context) {
             override fun getSharedPreferences(name: String, mode: Int) = context.getSharedPreferences(preferencesName, mode)
@@ -151,6 +183,12 @@ class GrammarAnswerFlowTest {
             while (vm.ui !is GrammarUi.Done && steps++ < selected.size * 3 + 6) {
                 val mode = answerQuestion(vm, selected, wrongModes)
                 val answer = vm.ui as GrammarUi.Answer
+                nativeEvidence.appendText(buildJsonObject {
+                    put("event", "answer")
+                    put("exercise", answer.exercise.id)
+                    put("mode", mode)
+                    put("correct", answer.correct)
+                }.toString() + "\n")
                 rule.onNodeWithText("Next").assertIsDisplayed()
                 rule.onNodeWithText(if (answer.correct) "Correct!" else "Not quite").assertIsDisplayed()
                 if (answer.correct) correctModes += mode
@@ -211,6 +249,33 @@ class GrammarAnswerFlowTest {
                 assertTrue(response.length <= 80)
                 rule.onNode(hasSetTextAction()).performScrollTo().performClick()
                 rule.onNode(hasSetTextAction()).performTextReplacement(response)
+                rule.waitUntil(10_000) {
+                    val insets = ViewCompat.getRootWindowInsets(rule.activity.window.decorView)
+                    insets?.isVisible(WindowInsetsCompat.Type.ime()) == true &&
+                        insets.getInsets(WindowInsetsCompat.Type.ime()).bottom > 0 && imeAnimations.get() == 0
+                }
+                val check = rule.onNodeWithText("Check").performScrollTo().assertIsDisplayed().assertIsEnabled()
+                val unsure = rule.onNodeWithText("I don't know").assertIsDisplayed().assertIsEnabled()
+                val keyboardTop = rule.runOnIdle {
+                    val decor = rule.activity.window.decorView
+                    val insets = requireNotNull(ViewCompat.getRootWindowInsets(decor))
+                    assertTrue(insets.isVisible(WindowInsetsCompat.Type.ime()))
+                    assertEquals(0, imeAnimations.get())
+                    decor.height - insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+                }
+                val checkBounds = check.fetchSemanticsNode().boundsInWindow
+                val unsureBounds = unsure.fetchSemanticsNode().boundsInWindow
+                assertEquals(checkBounds.center.y, unsureBounds.center.y, 1f)
+                assertTrue("Check is covered by the keyboard", checkBounds.bottom <= keyboardTop)
+                assertTrue("Uncertainty is covered by the keyboard", unsureBounds.bottom <= keyboardTop)
+                nativeEvidence.appendText(buildJsonObject {
+                    put("event", "typed-controls")
+                    put("exercise", state.exercise.id)
+                    put("imeAnimations", imeAnimations.get())
+                    put("keyboardTopPx", keyboardTop)
+                    put("checkBounds", checkBounds.toString())
+                    put("unsureBounds", unsureBounds.toString())
+                }.toString() + "\n")
                 if (wrong) {
                     rule.waitForIdle()
                     val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -222,12 +287,11 @@ class GrammarAnswerFlowTest {
                         image.recycle()
                     }
                 }
-                val check = rule.onNodeWithText("Check").performScrollTo().assertIsDisplayed().assertIsEnabled()
-                val unsure = rule.onNodeWithText("I don't know").assertIsDisplayed().assertIsEnabled()
-                assertEquals(check.fetchSemanticsNode().boundsInRoot.center.y, unsure.fetchSemanticsNode().boundsInRoot.center.y, 1f)
-                check.performClick()
-                assertEquals(!wrong, (vm.ui as GrammarUi.Answer).correct)
-                assertEquals(GrammarChoices.normalizeAnswer(response), (vm.ui as GrammarUi.Answer).responseLabel)
+                check.performTouchInput { click() }
+                rule.waitUntil(10_000) { (vm.ui as? GrammarUi.Answer)?.exercise?.id == state.exercise.id }
+                val answer = rule.runOnIdle { vm.ui as GrammarUi.Answer }
+                assertEquals(!wrong, answer.correct)
+                assertEquals(GrammarChoices.normalizeAnswer(response), answer.responseLabel)
                 "type"
             }
             else -> error("Expected a question, got ${vm.ui}")

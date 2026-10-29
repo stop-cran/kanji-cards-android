@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.counters.CounterMode
 import io.github.stopcran.kanji.core.counters.CounterGroup
@@ -50,7 +51,11 @@ class CounterHome(
 }
 
 @Composable
-fun rememberCounterHome(app: KanjiApp, group: CounterGroup = CounterGroup.All): CounterHome {
+fun rememberCounterHome(app: KanjiApp, group: CounterGroup = CounterGroup.All): CounterHome =
+    rememberCounterHome(app.services, group)
+
+@Composable
+internal fun rememberCounterHome(app: Services, group: CounterGroup = CounterGroup.All): CounterHome {
     val source = app.settings.source.collectAsState().value
     val scope = app.settings.counterScopes.collectAsState().value[source.id] ?: CounterScope.N5
     val daily = app.settings.dailyNewCards.collectAsState().value
@@ -71,7 +76,16 @@ fun rememberCounterHome(app: KanjiApp, group: CounterGroup = CounterGroup.All): 
 }
 
 @Composable
-fun CountersPage(app: KanjiApp, onBack: () -> Unit, a: HomeActions) {
+fun CountersPage(app: KanjiApp, onBack: () -> Unit, a: HomeActions) =
+    CountersPage(app.services, onBack, a.onCounters, a.onOpenDoc)
+
+@Composable
+internal fun CountersPage(
+    app: Services,
+    onBack: () -> Unit,
+    onCounters: (CounterMode, Boolean, CounterGroup, CounterScope) -> Unit,
+    onOpenDoc: (String) -> Unit,
+) {
     val source = app.settings.source.collectAsState().value
     val scope = app.settings.counterScopes.collectAsState().value[source.id] ?: CounterScope.N5
     var selected by rememberSaveable(source.id, source.branch) { mutableStateOf(CounterGroup.All.code) }
@@ -79,7 +93,7 @@ fun CountersPage(app: KanjiApp, onBack: () -> Unit, a: HomeActions) {
     val home = rememberCounterHome(app, group)
     Page("Numbers & counters", onBack, scrollable = home.cards != null) {
         LevelFilter(CounterScope.entries, scope, { app.settings.setCounterScope(source.id, it) }, { it.label },
-            description = if (scope == CounterScope.N4)
+            description = if (scope == CounterScope.N4 || scope == CounterScope.N3)
                 stringResource(R.string.level_filter_includes_easier) else null)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CounterGroup.entries.forEach { item ->
@@ -91,10 +105,10 @@ fun CountersPage(app: KanjiApp, onBack: () -> Unit, a: HomeActions) {
         Text(stringResource(R.string.counter_shared_allowance, home.allowance))
         Text("Choose a counter, write a complete expression, or recall its complete kana reading. Each skill has its own review history.")
         home.modes.forEach { (mode, state) ->
-            ModeRow(mode.label, state, onStart = { a.onCounters(mode, it, group, scope) })
+            ModeRow(mode.label, state, onStart = { onCounters(mode, it, group, scope) })
         }
         home.articles.forEach { (path, label) ->
-            TextButton(onClick = { a.onOpenDoc(path) }) { Text(label) }
+            TextButton(onClick = { onOpenDoc(path) }) { Text(label) }
         }
     }
 }

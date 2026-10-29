@@ -35,7 +35,9 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - `counters/<id>.json` keeps legacy v1 suffix/reverse cards alongside separate v2 whole-expression files.
   **Numbers & counters** owns units and full readings; Grammar owns sentence constructions.
   All / Everyday counts / Time & dates is a saved filter, not a new stack or progress identity.
-  A source-persisted N5 (default), N4 + N5, or All levels choice intersects that group filter in one operation.
+  A source-persisted N5 (default), cumulative N4 (levels 4–5), cumulative N3 (levels 3–5), or All levels (1–5)
+  choice intersects that group filter in one operation. Unknown saved choices still fall back to N5;
+  adding N3 requires no parser epoch, schema or scheduling migration.
   Home summaries, all mode queues and reminder counts share the selected level, including already-started items;
   filtering never deletes progress, changes gates or divides the allowance. Reverse choices retain full-source reference
   data without admitting foreign items to the selected queue. Levels are provisional learning targets, not an official syllabus.
@@ -525,7 +527,7 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   (practice and diagnostics) share horizontally scrollable filter chips. Show only offered choices, ordered N5 to N1,
   then All, then named thematic/unclassified choices. Chip labels omit "JLPT", counts and cumulative suffixes.
   Counts live outside the chips; Kanji reports the selected stack's count. Scope explanations remain outside the row:
-  Kanji matches only the selected tag, Words/counters/Listening N4 includes easier levels, Grammar filters cumulative
+  Kanji matches only the selected tag, Words/Listening N4 and counters N4/N3 include easier levels, Grammar filters cumulative
   new material separately from exact-level browsing, and diagnostics select an exact level. IDs, saved selections,
   fallback behavior, unlock rules, membership and review schedules are unchanged.
 - Word stacks are cumulative in *membership* (`words-n4` includes N5 words) but keyed independently in SRS state, so switching from `words-n5`

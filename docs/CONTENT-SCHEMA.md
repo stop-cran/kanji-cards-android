@@ -10,7 +10,8 @@ V2 decoding rejects unknown fields; malformed/unsupported files produce diagnost
 IDs cannot collide across forward, reverse and expression records. Optional v1 `readingAnswers` refer only
 to that card's canonical phrase; omission means its canonical reading alone, not its alternate-counter `kana` list.
 Present `level` values must be unquoted integers 1-5; omitted v1 levels retain the legacy default of 5.
-V2 requires `level`. N5 / N4 + N5 / All levels is a source-persisted practice filter, not a separate deck.
+V2 requires `level`. N5 / N4 (levels 4–5) / N3 (levels 3–5) / All levels (1–5) is a source-persisted
+practice filter, not a separate deck. N3 uses the existing formats and parser epoch without a migration.
 Parser epoch 2 is source-scoped and forces an unchanged-content reimport after app upgrade.
 The new `CounterExpression` and `CounterReading` schedules use existing storage without resetting old modes.
 

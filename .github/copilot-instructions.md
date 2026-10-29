@@ -100,6 +100,15 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   and distinguish the shared allowance from summed per-mode new opportunities.
   Intersect counter level and group against the source once; sequential source-restoring filters can silently undo
   the first restriction. Retain foreign reverse-choice references without adding them to scoped queues.
+  Native cumulative-scope fixtures must retain easier content and isolate target-level questions with test-only due states.
+  Mount the real CountersPage to verify chip-to-route entry; a direct quiz mount cannot prove that handoff.
+  For target-level extra continuation, await the persisted session end marker, then make a reviewed target due in the test DB:
+  upcoming items rank by relative urgency with noise, so far-future easier cards can still precede freshly reviewed targets.
+  Native home-entry tests must await the matching rendered mode action as well as refreshed counts; a count-only wait
+  followed by a one-shot action lookup intermittently missed the N3 reverse Start action on API 35.
+  Typed native fixtures must mirror edge-to-edge/adjustResize, await a visible settled IME, and measure both controls above it.
+  Compose idleness and a keyboard-named screenshot do not prove this; at 200% font, wait for the same question's feedback
+  only after a real control touch, not an immediate off-thread ViewModel cast.
 - Grammar additional correct choices are authored, not derived from typed spellings. Use the captured presentation for grading,
   both correct highlights, rationales and response export; bind callbacks to its instance because different exercises can reuse IDs.
   Advance `ContentParser.GRAMMAR_PARSER_EPOCH` for newly retained Grammar metadata, not the historical level/group readiness thresholds.

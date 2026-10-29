@@ -26,6 +26,16 @@ suspend fun AppDatabase.counterIndex(sourceId: String): CounterIndex =
 suspend fun AppDatabase.counterStates(sourceId: String, mode: CounterMode): Map<String, SrsState> =
     reviews().states(sourceId, COUNTER_STACK, mode.mode.name).associate { it.kanji to it.toSrs() }
 
+/** Reminder opportunities include due and permitted new cards, under the source's saved level. */
+suspend fun AppDatabase.counterWaitingCount(settings: Settings, sourceId: String, now: Instant, newBudget: Int): Int {
+    val index = counterIndex(sourceId).inScope(scope = settings.counterScopeFor(sourceId))
+    val choose = counterStates(sourceId, CounterMode.Choose)
+    return CounterMode.entries.sumOf { mode ->
+        val own = if (mode == CounterMode.Choose) choose else counterStates(sourceId, mode)
+        CounterQueues.build(index, CounterQueueRequest(mode, own, choose, now, newBudget)).size
+    }
+}
+
 /** Home rows of the Counters page, computed from the same queue builder the quiz uses. */
 suspend fun AppDatabase.counterModeStates(sourceId: String, index: CounterIndex, newBudget: Int, now: Instant): Map<CounterMode, ModeState> {
     val choose = counterStates(sourceId, CounterMode.Choose)
