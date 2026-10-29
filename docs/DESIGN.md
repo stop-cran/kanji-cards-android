@@ -251,6 +251,8 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - **Word typing:** the question asks for the Japanese spelling, with a reading-only partial-recall notice when written form and reading differ.
   Partial feedback neutrally describes recalled reading and directs the learner to review the revealed spelling, then Next; it does not
   demand a missing retry or assume kanji. Kana-only spellings, accepted variants, grading, re-asks and record-on-advance are unchanged.
+- **Extra word practice:** all extra-session modes retain an explicit question/feedback notice that saved answers update review history
+  and scheduling. Ordinary sessions omit it. Checking or revealing feedback alone still does not save an answer; advancement does.
 - **Typed answer controls:** Numbers Type/Write/Read and Grammar place Check and I don't know side by side, so scrolling to the primary
   action also reveals the uncertainty action. Long prompts still scroll at the chosen font size; input focus, IME behavior, enabled states,
   grading and save timing are unchanged. This is discoverability polish, not a one-viewport guarantee or an inset-policy change.

@@ -16,6 +16,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.ViewModelStore
 import androidx.room.Room
@@ -40,6 +41,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 
 @RunWith(AndroidJUnit4::class)
 class WordAnswerFlowTest {
@@ -81,6 +83,7 @@ class WordAnswerFlowTest {
 
     @Test fun ordinaryWordGuessDoesNotPromiseOrInsertARetry() = session(2) { vm, db ->
         val first = question(vm)
+        rule.onNodeWithText("Extra practice: saved answers update review history and scheduling.").assertDoesNotExist()
         rule.onNodeWithText(first.word.title).performScrollTo().performClick()
         assertEquals(0, recorded(db))
         rule.onNodeWithText("I guessed").performScrollTo().performClick()
@@ -94,6 +97,19 @@ class WordAnswerFlowTest {
         rule.onNodeWithText("Session complete").assertIsDisplayed()
         finished(db)
         assertEquals(listOf(2, 3), runBlocking { db.reviews().allLog().sortedBy { it.id }.map { it.grade } })
+    }
+
+    @Test fun extraPracticeRetainsContextWithoutSavingOnFeedback() = session(2, extra = true) { vm, db ->
+        question(vm)
+        val notice = rule.onNodeWithText("Extra practice: saved answers update review history and scheduling.")
+        notice.assertIsDisplayed()
+        rule.onNodeWithText("I don't know").performScrollTo().performClick()
+        assertTrue(vm.ui is WordQuizUi.Answer)
+        notice.performScrollTo().assertIsDisplayed()
+        assertEquals(0, recorded(db))
+        rule.onNodeWithText("Next").performScrollTo().performClick()
+        rule.waitUntil(10_000) { recorded(db) == 1 }
+        assertTrue(runBlocking { db.reviews().allSessions().single().extra })
     }
 
     @Test fun typingDisclosesPartialRecallWithoutRequiringKanjiForKanaWords() = session(2, typing = true) { vm, db ->
@@ -129,10 +145,25 @@ class WordAnswerFlowTest {
 
     @Test fun typingKeepsBothActionsReachableAboveKeyboardForLongCue() = session(2, typing = true, longCue = true) { vm, db ->
         rule.waitUntil(10_000) { vm.ui is WordQuizUi.TypeQuestion }
+        val imeAnimations = AtomicInteger()
+        rule.runOnIdle {
+            ViewCompat.setWindowInsetsAnimationCallback(rule.activity.window.decorView,
+                object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                    override fun onPrepare(animation: WindowInsetsAnimationCompat) {
+                        if ((animation.typeMask and WindowInsetsCompat.Type.ime()) != 0) imeAnimations.incrementAndGet()
+                    }
+                    override fun onProgress(insets: WindowInsetsCompat, running: MutableList<WindowInsetsAnimationCompat>) = insets
+                    override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                        if ((animation.typeMask and WindowInsetsCompat.Type.ime()) != 0) imeAnimations.decrementAndGet()
+                    }
+                })
+        }
         rule.onNode(hasSetTextAction()).performScrollTo().performClick()
         try {
+            // IME visibility precedes animation completion, which Compose idleness does not await.
             rule.waitUntil(10_000) {
-                ViewCompat.getRootWindowInsets(rule.activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+                ViewCompat.getRootWindowInsets(rule.activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true &&
+                    imeAnimations.get() == 0
             }
         } catch (error: Throwable) {
             captureTypingKeyboard()
@@ -183,7 +214,10 @@ class WordAnswerFlowTest {
         }
     }
 
-    private fun session(limit: Int, typing: Boolean = false, longCue: Boolean = false, exercise: (WordQuizViewModel, AppDatabase) -> Unit) {
+    private fun session(
+        limit: Int, typing: Boolean = false, longCue: Boolean = false, extra: Boolean = false,
+        exercise: (WordQuizViewModel, AppDatabase) -> Unit,
+    ) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val preferences = "word-answer-${UUID.randomUUID()}"
         val isolated = object : ContextWrapper(context) {
@@ -197,7 +231,7 @@ class WordAnswerFlowTest {
             it.setWordStack(WordStacks.n5.id)
         }
         val models = ViewModelStore()
-        val route = "wquiz:${UUID.randomUUID()}:${if (typing) "ty" else "jp"}"
+        val route = "wquiz:${UUID.randomUUID()}:${if (typing) "ty" else "jp"}" + if (extra) ":extra" else ""
         val vm = WordQuizViewModel(Services(db, settings, context)).also { models.put(route, it) }
         try {
             runBlocking {

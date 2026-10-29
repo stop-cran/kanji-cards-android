@@ -55,7 +55,8 @@ private val originTags = setOf("wago", "kango", "gairaigo")
 fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit, onPracticeMore: (WordDirection?) -> Unit, vm: WordQuizViewModel = serviceViewModel(sessionKey) { WordQuizViewModel(it) }) {
     val parts = sessionKey.split(':')
     val direction = WordDirection.fromCode(parts.getOrNull(2))
-    LaunchedEffect(sessionKey) { vm.ensureStarted(direction, sessionKey.endsWith(":extra")) }
+    val extra = sessionKey.endsWith(":extra")
+    LaunchedEffect(sessionKey) { vm.ensureStarted(direction, extra) }
     vm.readingTip?.let { tip ->
         WordReadingTipDialog(tip) { vm.closeReadingTip(tip) }
     }
@@ -72,6 +73,9 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
         ime = direction == WordDirection.Type,
         scrollToTopOnBack = true,
     ) {
+        if (extra) {
+            Text("Extra practice: saved answers update review history and scheduling.", style = MaterialTheme.typography.bodySmall)
+        }
         vm.pictureNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         when (val s = vm.ui) {
             WordQuizUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })

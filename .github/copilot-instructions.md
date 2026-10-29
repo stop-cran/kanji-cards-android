@@ -25,6 +25,8 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
 - Check the exit status/test results before committing; a chained `test; commit; push` publishes a red build.
 - Native `OK (N tests)` can include `assumeTrue` skips. Use raw instrumentation output (`-w -r`) and require a
   status-code 0 for each selected case; provide the external acceptance archives those cases require.
+- IME visibility can precede the end of its native inset animation. Await that completion before scrolling/tapping in keyboard
+  reachability tests; Compose idleness alone does not wait for the platform animation.
 
 ## Work flow
 
