@@ -84,6 +84,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   Never infer membership or saved identity from a chip's text or position; concise labels do not unify scope semantics.
 - Native browser tests must reveal the outer Page's chip row/list before scrolling the inner viewport.
   Returning from a vocabulary article restores its lookup dialog; close that dialog before testing question controls.
+- Candidate Grammar chapters can span several article sets. Derive expected membership from the catalog and authored groups;
+  select the exercised group from the requested set. Seed a disclosed due item on the disposable source when a linked alternative
+  must appear first; shuffled fresh intake is not a deterministic coverage guarantee.
 - Built-in Kana intake counts first recorded practice per script/kana/mode, matching its per-mode new queues.
   Keep this exception source-scoped; other sections retain their existing item/reading accounting.
 - Daily-count copy must distinguish the Kana pool from the selected-repository pool, and allowance ceilings from eligible opportunities.

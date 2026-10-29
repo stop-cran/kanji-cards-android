@@ -25,16 +25,22 @@ import androidx.lifecycle.ViewModelStore
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.core.content.ContentParser
+import io.github.stopcran.kanji.core.content.GrammarCurriculumState
 import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.content.SafeZip
 import io.github.stopcran.kanji.core.grammar.GrammarPracticeTarget
 import io.github.stopcran.kanji.core.grammar.GrammarScope
 import io.github.stopcran.kanji.core.grammar.GrammarTargetKind
+import io.github.stopcran.kanji.core.srs.CardPhase
+import io.github.stopcran.kanji.core.srs.SrsState
+import io.github.stopcran.kanji.core.srs.StudyMode
 import io.github.stopcran.kanji.data.ContentHttp
 import io.github.stopcran.kanji.data.ContentResponse
 import io.github.stopcran.kanji.data.ContentSync
+import io.github.stopcran.kanji.data.GRAMMAR_STACK
 import io.github.stopcran.kanji.data.GrammarBrowserPreferences
 import io.github.stopcran.kanji.data.SyncResult
+import io.github.stopcran.kanji.data.toEntity
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
@@ -46,6 +52,8 @@ import org.junit.Rule
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import kotlin.random.Random
 
@@ -65,8 +73,23 @@ class GrammarPilotAcceptanceTest {
         assertTrue("Provide the complete candidate archive", archive.isFile)
         val parsed = archive.inputStream().use { ContentParser.parse(SafeZip.read(it)) }
         assertTrue(parsed.problems.toString(), parsed.problems.isEmpty())
+        assertTrue(parsed.grammarProblems.toString(), parsed.grammarProblems.isEmpty())
         val set = parsed.grammar.single { it.id == setId }
         assertTrue(set.exercises.all { it.jlpt == null })
+        val catalog = (parsed.curriculum as GrammarCurriculumState.Ready).curriculum
+        val catalogChapter = catalog.chapters.single { it.id == chapterId }
+        val authoredGroups = parsed.grammar.flatMap { it.introductionGroups }.associateBy { it.id }
+        val expectedChapterIds = catalogChapter.groups.flatMap { group ->
+            authoredGroups.getValue(group).members.map { it.exerciseId }
+        }.toSet()
+        assertTrue(expectedChapterIds.containsAll(set.exercises.map { it.id }))
+        val alternativeExample = set.exercises.first {
+            it.additionalCorrectOptions.isNotEmpty() &&
+                it.vocabulary?.spans.orEmpty().any { span -> span.word != null && span.text != span.reading }
+        }
+        val exampleGroup = set.introductionGroups.single { group ->
+            group.members.any { it.exerciseId == alternativeExample.id }
+        }
         val original = app.settings.source.value
         val oldDaily = app.settings.dailyNewCards.value
         val oldWeek = app.settings.weekPlan.value
@@ -147,13 +170,13 @@ class GrammarPilotAcceptanceTest {
             rule.waitUntil(15_000) {
                 rule.onAllNodesWithText("Browse Grammar").fetchSemanticsNodes().isNotEmpty()
             }
-            rule.onNodeWithText(set.title).assertDoesNotExist()
+            rule.onNodeWithText(catalogChapter.label).assertDoesNotExist()
             rule.onNodeWithText("Unclassified").onParent().performScrollTo()
             click("Unclassified")
             rule.waitUntil(10_000) {
                 app.settings.grammarPreferences.value[source.id]?.newScope == GrammarScope.Unclassified
             }
-            rule.onNodeWithText(set.title).assertDoesNotExist()
+            rule.onNodeWithText(catalogChapter.label).assertDoesNotExist()
             click("Filters and next topic")
             val browseScope = rule.onAllNodesWithText("Unclassified")[1]
             browseScope.onParent().performScrollTo()
@@ -161,24 +184,35 @@ class GrammarPilotAcceptanceTest {
             rule.waitUntil(15_000) {
                 rule.onAllNodesWithText("Browse: Unclassified").fetchSemanticsNodes().isNotEmpty()
             }
-            clickTopic(set.title)
+            clickTopic(catalogChapter.label)
             val chapter = awaitPreview(GrammarTargetKind.Chapter).preview
             assertEquals(chapterId, chapter.target.id)
-            assertEquals(set.exercises.map { it.id }.toSet(), chapter.ids(false).toSet())
+            assertEquals(expectedChapterIds, chapter.ids(false).toSet())
             assertTrue(chapter.members.none { it.started || it.outOfScope || it.missingPrerequisites.isNotEmpty() })
             evidence.put("chapterEligible", JSONArray(chapter.ids(false))).put("independentBrowseFilter", true)
-            val groupId = chapter.members.groupBy { it.groupId }.entries.first { (_, members) ->
-                members.count { it.exercise.additionalCorrectOptions.isNotEmpty() } > members.size / 2
-            }.key
+            val groupId = exampleGroup.id
+            assertTrue(groupId in catalogChapter.groups)
+            // Make one actual candidate due so shuffled fresh intake cannot hide the linked alternative.
+            val now = Instant.now()
+            runBlocking {
+                app.db.reviews().putState(
+                    SrsState(CardPhase.Review, 30.0, 5.0, now.minus(1, ChronoUnit.DAYS),
+                        now.minus(2, ChronoUnit.DAYS), 3, 0)
+                        .toEntity(source.id, GRAMMAR_STACK, alternativeExample.id, StudyMode.Grammar),
+                )
+            }
+            evidence.put("fixtureDueExercise", alternativeExample.id)
             rule.onNodeWithText("Accessible list").onParent().performScrollTo()
             click("Accessible list")
             clickTopic(chapter.groups.getValue(groupId))
             val group = awaitPreview(GrammarTargetKind.Group).preview
             assertEquals(groupId, group.target.id)
+            assertEquals(exampleGroup.members.map { it.exerciseId }.toSet(), group.ids(false).toSet())
             evidence.put("group", groupId).put("groupEligible", JSONArray(group.ids(false)))
             click("Practice")
             rule.waitUntil(10_000) { active.value?.second?.ui is GrammarUi.Choose }
             val vm = active.value!!.second
+            assertEquals(alternativeExample.id, vm.currentExercise!!.id)
             val before = vm.ui
             val span = vm.currentExercise!!.vocabulary!!.spans.first { it.word != null && it.text != it.reading }
             click("Vocabulary")
