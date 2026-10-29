@@ -697,10 +697,10 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   tappable button never leads to an empty session. The reason for a disabled button is visible text and part of the row's accessibility state.
   Kanji/word counts come from one `HomeData` (`rememberHomeData`), shared by the main screen and both pages, built from strict noise-free queues; a one-minute
   tick makes newly due cards and the day rollover show up. Rows stay in `Loading` until content, review states and introduced-today counts are all known.
-  Card browsing lives on each page, since the sets differ: the Kanji page shows the card count and "Browse cards" (route `cards`, `CardSearch`), the
+  Card browsing lives on each page, since the sets differ: the Kanji page shows the study-stack card count and "Browse all kanji" (route `cards`, `CardSearch`), the
   Words page shows the study-deck word count and "Browse all words" (route `word-cards`, `WordSearch`: written form, kana in either script, romaji ranked below kana,
-  English title words). The "All words" heading describes the selected source's complete reference collection, with filtered-of-total counts
-  during search; browsing does not change or inherit the study deck. Both browsers open the card's article; the main screen only notes the source when it is not the default repo.
+  English title words). The "All kanji" and "All words" headings describe the selected source's complete reference collections, with filtered-of-total counts
+  during search; browsing does not change or inherit the study selection. Both browsers open the card's article; the main screen only notes the source when it is not the default repo.
   After process death ephemeral session routes are dropped from the restored back stack and the user lands on the page they started from.
   Durable listening encounter routes are retained and restore their captured package and playback/answer state.
 - **Starting guide (#88):** Home offers optional short guidance to existing Kana, Words and Grammar pages, without

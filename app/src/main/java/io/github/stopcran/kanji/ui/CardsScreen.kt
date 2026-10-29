@@ -44,7 +44,7 @@ fun CardsScreen(app: KanjiApp, onBack: () -> Unit, onOpen: (String) -> Unit, onO
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-    Page("Cards ($count)", onBack, scrollable = false, maxWidth = if (wide) 1400.dp else 720.dp, ime = true) {
+    Page(stringResource(R.string.all_kanji_count, count), onBack, scrollable = false, maxWidth = if (wide) 1400.dp else 720.dp, ime = true) {
       Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
        Column(Modifier.weight(if (wide) 0.4f else 1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
