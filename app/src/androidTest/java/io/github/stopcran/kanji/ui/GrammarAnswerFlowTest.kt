@@ -59,6 +59,14 @@ class GrammarAnswerFlowTest {
     @Test fun legacyFragmentsRemainUsable() = exercise(listOf(fixture(false)), fixtureArticles())
     @Test fun wholeSentenceBlanksRemainUsable() = exercise(listOf(fixture(true)), fixtureArticles())
 
+    @Test fun feedbackStartsAtOutcomeAndRetainsReferenceScroll() {
+        val longContext = (1..12).joinToString("\n\n") { "Context $it for this synthetic navigation fixture." }
+        val set = fixture(false)
+        exercise(listOf(set.copy(exercises = set.exercises.map {
+            it.copy(translation = longContext, explanation = longContext)
+        })), fixtureArticles())
+    }
+
     @Test fun realContentQuestionsAndFeedback() {
         val args = InstrumentationRegistry.getArguments()
         val setId = args.getString("grammarSet")
@@ -144,14 +152,19 @@ class GrammarAnswerFlowTest {
                 val mode = answerQuestion(vm, selected, wrongModes)
                 val answer = vm.ui as GrammarUi.Answer
                 rule.onNodeWithText("Next").assertIsDisplayed()
-                rule.onNodeWithText(if (answer.correct) "Correct!" else "Not quite").performScrollTo().assertIsDisplayed()
+                rule.onNodeWithText(if (answer.correct) "Correct!" else "Not quite").assertIsDisplayed()
                 if (answer.correct) correctModes += mode
                 if (!openedArticle) {
                     val before = runBlocking { db.reviews().allLog() }
-                    rule.onNodeWithText("Read about: ${vm.articleReference(answer.exercise.id).topic}").performScrollTo().performClick()
+                    val reference = rule.onNodeWithText("Read about: ${vm.articleReference(answer.exercise.id).topic}")
+                        .performScrollTo().assertIsDisplayed()
+                    val referenceTop = reference.fetchSemanticsNode().boundsInRoot.top
+                    reference.performClick()
                     rule.onNodeWithText("Grammar reference").assertIsDisplayed()
                     rule.onNodeWithContentDescription("Back").performClick()
                     assertSame(answer, vm.ui)
+                    reference.assertIsDisplayed()
+                    assertEquals(referenceTop, reference.fetchSemanticsNode().boundsInRoot.top, 1f)
                     assertEquals(before, runBlocking { db.reviews().allLog() })
                     openedArticle = true
                 }

@@ -431,6 +431,9 @@ Examples are explicitly not scored; each kind reports correct out of assessed, i
 Display ordinals never replace the original response-list index used to open captured feedback.
 Grammar feedback keeps its single Next/I guessed row in Page's optional non-scrolling footer; Listening dialogue and focused-task
 feedback/study similarly anchor their single Done action. Full explanations, transcripts and references still scroll independently.
+Grammar starts each question/answer state at the top, with the overall result before optional focus/topic guidance in feedback.
+Its state-keyed Page remains inside the session's saveable holder: article Back restores the existing feedback offset, and typing
+does not recreate the page because the draft is separate from the immutable question state.
 No footer is added to questions, loading/error-only views or articles, and existing advancement, grading and close/discard callbacks
 are retained. Pages without a footer keep their previous layout.
 

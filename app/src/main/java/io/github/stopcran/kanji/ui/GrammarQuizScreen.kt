@@ -16,6 +16,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -118,16 +119,26 @@ private fun GrammarSessionBody(
     onPracticeMore: () -> Unit,
 ) {
     GrammarVocabularyHelp(vm)
-    val answer = vm.ui as? GrammarUi.Answer
-    Page(if (vm.target == null) "Grammar" else stringResource(R.string.grammar_topic_practice), onBack,
+    val state = vm.ui
+    val answer = state as? GrammarUi.Answer
+    key(state) { Page(if (vm.target == null) "Grammar" else stringResource(R.string.grammar_topic_practice), onBack,
         ime = true, scrollToTopOnBack = true,
         footer = if (answer != null) { { GrammarAnswerActions(answer, vm) } } else null,
     ) {
+        if (answer != null) {
+            Text(
+                if (answer.correct) "Correct!" else "Not quite",
+                color = if (answer.correct) correctTextColor() else wrongTextColor(),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+            )
+        }
         vm.approvedPractice?.let { Text(stringResource(R.string.grammar_practising_topic, it.label)) }
         if (vm.practiceOverride) Text(stringResource(R.string.grammar_session_exception), style = MaterialTheme.typography.bodySmall)
         vm.focus?.let { GrammarFocusSummary(it, activeSession = true) }
         vm.focusNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-        when (val state = vm.ui) {
+        when (state) {
             GrammarUi.Loading -> Text("Loading…", Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             is GrammarUi.Preview -> GrammarPracticePreviewContent(state, sessionKey) { vm.startTargeted(it, state) }
             is GrammarUi.Empty -> Text(state.message)
@@ -159,13 +170,6 @@ private fun GrammarSessionBody(
                 TypeAnswer(vm)
             }
             is GrammarUi.Answer -> {
-                Text(
-                    if (state.correct) "Correct!" else "Not quite",
-                    color = if (state.correct) correctTextColor() else wrongTextColor(),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                )
                 GrammarPrompt(vm, state.exercise, state.completion)
                 if (state.response.isNotEmpty()) {
                     Text("Your answer: ${state.responseLabel}", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
@@ -179,7 +183,7 @@ private fun GrammarSessionBody(
                 }
             }
         }
-    }
+    } }
 }
 
 @Composable
