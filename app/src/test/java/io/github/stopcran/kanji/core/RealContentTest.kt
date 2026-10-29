@@ -9,6 +9,8 @@ import io.github.stopcran.kanji.core.content.GrammarSet
 import io.github.stopcran.kanji.core.content.Manifest
 import io.github.stopcran.kanji.core.content.SceneCatalog
 import io.github.stopcran.kanji.core.content.SafeZip
+import io.github.stopcran.kanji.core.counters.CounterGrader
+import io.github.stopcran.kanji.core.counters.CounterVerdict
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -25,6 +27,19 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 class RealContentTest {
+    @Test
+    fun hotelBookingDoesNotAcceptTheSchoolClassReadingWhenRepoPresent() {
+        val root = File("../../learning-japanese")
+        assumeTrue(File(root, "counters/casesken.json").exists())
+        val file = Json.decodeFromString(CounterFile.serializer(), File(root, "counters/casesken.json").readText())
+        val card = file.cards.single { it.id == "casesken-reservations-1" }
+        assertEquals(CounterVerdict.Wrong, CounterGrader.grade("いちくみ", card, file.reading).verdict)
+        assertEquals(CounterVerdict.Yellow, CounterGrader.grade("ひとくみ", card, file.reading).verdict)
+        listOf("件", "一件", "組", "一組").forEach { answer ->
+            assertEquals(answer, CounterVerdict.Good, CounterGrader.grade(answer, card, file.reading).verdict)
+        }
+    }
+
     @Test
     fun completeMixedArchiveKeepsShortTaskAudioOutOfTheLegacyReaderWhenRepoPresent() {
         val root = File("../../learning-japanese")
