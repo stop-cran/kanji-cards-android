@@ -255,7 +255,8 @@ class GrammarAnswerFlowTest {
                         insets.getInsets(WindowInsetsCompat.Type.ime()).bottom > 0 && imeAnimations.get() == 0
                 }
                 val check = rule.onNodeWithText("Check").performScrollTo().assertIsDisplayed().assertIsEnabled()
-                val unsure = rule.onNodeWithText("I don't know").assertIsDisplayed().assertIsEnabled()
+                // The uncertainty label can wrap at large font sizes; reveal its taller button too.
+                val unsure = rule.onNodeWithText("I don't know").performScrollTo().assertIsDisplayed().assertIsEnabled()
                 val keyboardTop = rule.runOnIdle {
                     val decor = rule.activity.window.decorView
                     val insets = requireNotNull(ViewCompat.getRootWindowInsets(decor))

@@ -82,6 +82,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   size floor. Preserve annotated reading links and test their bold metrics/clicks under narrow widths and enlarged text.
 - Level chips use bare N5-N1/All labels; explain cumulative versus exact scope outside the shared `LevelFilter` row.
   Never infer membership or saved identity from a chip's text or position; concise labels do not unify scope semantics.
+- Native browser tests must reveal the outer Page's chip row/list before scrolling the inner viewport.
+  Returning from a vocabulary article restores its lookup dialog; close that dialog before testing question controls.
 - Built-in Kana intake counts first recorded practice per script/kana/mode, matching its per-mode new queues.
   Keep this exception source-scoped; other sections retain their existing item/reading accounting.
 - Daily-count copy must distinguish the Kana pool from the selected-repository pool, and allowance ceilings from eligible opportunities.
