@@ -333,6 +333,9 @@ is Again; two including the main point is Hard; all three is Good unless extra r
 at Hard. The first complete replay is normal. There is no Easy or response-time grade. Only Listening uses a 24-hour Again step;
 first success keeps the existing one-day multiple-choice cap. Submission atomically writes one state, canonical log and immutable
 response snapshot. Subsequent feedback replay cannot rewrite the submitted assistance or answers.
+Feedback and unscored study quote the referenced captured transcript turns and their translations beside each question's explanation.
+Authored evidence IDs remain as provenance, deduplicated in their original order; an unavailable reference is explicit rather than
+silently replaced by unrelated text. This does not reveal evidence before feedback or replace the full transcript and replay controls.
 
 Room v13 keeps durable exposure independently from SRS. Opening neutral context is not exposure; actual playback or revealing
 study text is. Study and discarding do not debit introductions or invent reviews. After unscored study/discard, fresh scored entry

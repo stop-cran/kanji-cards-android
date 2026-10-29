@@ -41,6 +41,20 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @Composable
+internal fun ListeningPassageEvidence(turns: List<ListeningTurn>, references: List<String>) {
+    references.distinct().forEach { id ->
+        val turn = turns.find { it.id == id }
+        Text("Evidence: $id", style = MaterialTheme.typography.bodySmall)
+        if (turn != null) {
+            Text(turn.text)
+            Text(turn.translation, style = MaterialTheme.typography.bodySmall)
+        } else {
+            Text("This transcript reference is unavailable.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
 internal fun rememberListeningHome(app: KanjiApp): State<ListeningHomeState> {
     return rememberListeningHome(app.services)
 }
@@ -214,7 +228,7 @@ internal fun ListeningEncounterView(vm: ListeningViewModel, onBack: () -> Unit, 
                         Text(option.rationale, style = MaterialTheme.typography.bodySmall)
                     }
                     Text(question.explanation)
-                    Text("Evidence: ${question.evidence.joinToString()}", style = MaterialTheme.typography.bodySmall)
+                    ListeningPassageEvidence(passage.turns, question.evidence)
                 }
                 Text("Transcript and translation", style = MaterialTheme.typography.titleLarge)
                 passage.turns.forEach { turn ->
