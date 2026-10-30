@@ -122,6 +122,38 @@ class KanaPacingTest {
         assertEquals(1, db.observeWeekProgress(settings, source, current.plusSeconds(7 * 86_400), tokyo).first().studied)
     }
 
+    @Test fun homeSnapshotUsesCapturedPreferencesAndLocalDatesForAllowanceUnlockAndFocus() = runBlocking {
+        settings.setSource("https://github.com/fixture/content", "main")
+        settings.setStack("jlpt-n5")
+        settings.setFocusEnabled(true)
+        settings.setFocusSize(5)
+        val source = settings.source.value.id
+        val current = Instant.parse("2026-01-05T15:01:00Z")
+        val tokyo = ZoneId.of("Asia/Tokyo")
+        db.content().insertKanji(listOf("日", "月").mapIndexed { index, kanji ->
+            KanjiEntity(source, kanji, kanji, 5, "jlpt-n5", null, null, null, "", "", "", "Large body", "{}", index)
+        })
+        record(log("jlpt-n5", "日", "Quiz", Instant.parse("2026-01-05T14:59:00Z")).copy(sourceId = source))
+        record(log("jlpt-n5", "日", "Quiz", Instant.parse("2026-01-05T15:00:00Z")).copy(sourceId = source))
+        record(log("jlpt-n5", "月", "Quiz", current).copy(sourceId = source))
+        record(log("jlpt-n5", "火", "Quiz", current).copy(sourceId = "fixture/unrelated"))
+        val repository = RoomHomeRepository(db, settings)
+        val captured = repository.selection.first()
+        settings.setDailyNewCards(9)
+        settings.setWeekPlan("OOOOOOO")
+        settings.setFocusSize(9)
+        val snapshot = repository.observe(captured, current, tokyo).first()
+        assertEquals(3, snapshot.allowance.total)
+        assertEquals(2, snapshot.allowance.remaining)
+        assertEquals(setOf("日"), snapshot.learned)
+        assertEquals(2, snapshot.week.studied)
+        assertEquals(5, snapshot.week.goal)
+        assertEquals(5, snapshot.focus?.size)
+        assertEquals(current.toEpochMilli(), settings.focusSince(source, "jlpt-n5", 0))
+        assertEquals(listOf("", ""), snapshot.inventory.kanji.map { it.body })
+        assertEquals(3, repository.observe(captured, current.plusSeconds(86_400), tokyo).first().allowance.remaining)
+    }
+
     private fun log(stack: String, kana: String, mode: String, at: Instant = now) =
         ReviewLogEntity(0, KANA_SOURCE_ID, stack, kana, mode, Grade.Good.value, at.toEpochMilli())
 

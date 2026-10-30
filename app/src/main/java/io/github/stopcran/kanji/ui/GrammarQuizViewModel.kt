@@ -76,7 +76,7 @@ class GrammarQuizViewModel(
     private val app: Services,
     private val choiceRandom: Random = Random.Default,
     val target: GrammarPracticeTarget? = null,
-) : StudyViewModel(app) {
+) : StudyViewModel(app.sessionStore) {
     private val fsrs = Fsrs()
     var ui: GrammarUi by mutableStateOf(GrammarUi.Loading)
         private set

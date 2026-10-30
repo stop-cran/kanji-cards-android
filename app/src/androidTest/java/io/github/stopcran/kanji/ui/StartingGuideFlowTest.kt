@@ -4,6 +4,8 @@ import android.content.ContextWrapper
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.platform.LocalDensity
@@ -51,7 +53,8 @@ class StartingGuideFlowTest {
                         if (target != null) Page(target, onBack = { destination.value = null }) { Text("Callback destination") }
                         else saved.SaveableStateProvider("home") {
                             Page("Home") {
-                                StartingGuide(settings.value, { open("Kana") }, { open("Words") }, { open("Grammar") })
+                                val guideVisible by settings.value.startingGuideVisible.collectAsState()
+                                StartingGuide(guideVisible, settings.value::setStartingGuideVisible, { open("Kana") }, { open("Words") }, { open("Grammar") })
                             }
                         }
                     }

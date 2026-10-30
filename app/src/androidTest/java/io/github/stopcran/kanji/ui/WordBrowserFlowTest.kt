@@ -96,7 +96,7 @@ class WordBrowserFlowTest {
                     saved.SaveableStateProvider(route) {
                         if (route == "browser") {
                             WordCardsScreen(fixture.app, {}, { routes += "words/$it.md" }, { routes += it })
-                        } else DocScreen(fixture.app, route, { pop() }, { routes += it })
+                        } else DocRoute(fixture.app.services.documents, fixture.app.settings.source.value.id, route, { pop() }, { routes += it })
                     }
                 }
             }

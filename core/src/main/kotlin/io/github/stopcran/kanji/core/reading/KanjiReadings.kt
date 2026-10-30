@@ -218,7 +218,7 @@ object KanjiReadingQueue {
      * first remaining one. Nothing is dropped and each kanji's own order is kept; a new card never jumps ahead of a due card
      * that was only skipped because of spacing. Readings of one kanji would otherwise cue each other.
      */
-    internal fun interleave(items: List<ReadingItem>, gap: Int = SIBLING_GAP): List<ReadingItem> {
+    fun interleave(items: List<ReadingItem>, gap: Int = SIBLING_GAP): List<ReadingItem> {
         val rest = items.toMutableList()
         val out = ArrayList<ReadingItem>(items.size)
         while (rest.isNotEmpty()) {
@@ -227,7 +227,10 @@ object KanjiReadingQueue {
             var pick = -1
             for (i in rest.indices) {
                 val c = rest[i]
-                if (c.kanji in recent) { if (!c.isNew) skippedDue = true; continue }
+                if (c.kanji in recent) {
+                    skippedDue = skippedDue || !c.isNew
+                    continue
+                }
                 if (c.isNew && skippedDue) continue
                 pick = i
                 break

@@ -182,7 +182,7 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 
 ## 4. Quiz mechanics
 
-- **Architecture:** the Grammar, Quiz, Word, Reading and Draw session ViewModels share the pure `core/quiz/QuizSession` (queue, tallies, grade choice, `Relearn` reinsertion; Draw uses `confirm = false`). They receive `Services(db, settings, context)` through `serviceViewModel(key) { … }` instead of casting `Application`. `HomeData` loads the seven state maps as one non-null `StateSet`; the N4 offer is the pure `shouldOfferN4`. `InkRecognizer` and `ContentSync` rethrow `CancellationException` and turn any other failure into a fallback / `SyncResult.Failed`.
+- **Architecture:** the Grammar, Quiz, Word, Reading and Draw session ViewModels share the pure `core/quiz/QuizSession` (queue, tallies, grade choice, `Relearn` reinsertion; Draw uses `confirm = false`). Factories supply dependencies instead of casting `Application`; legacy feature ViewModels still receive `Services`, while Counter uses narrow repository/session stores. Home uses a separate snapshot/producer boundary; the N4 offer remains the pure `shouldOfferN4`. Recognition and sync retain their own platform-error and cancellation policies.
 - **Grammar questions:** a session starts with a shuffled choice question and alternates choose/type, including re-asks. Both show the
   complete Japanese prompt and authored English meaning or task instructions; checking reveals evidence, explanation and all option rationales.
   Answer instructions refer to the missing text, not exclusively a construction fragment: a whole sentence can fill one blank.
@@ -697,12 +697,12 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   `third_party/fonts`). `RareHanTest` fails when the content uses a rare character the subset does not cover; regenerate and update its list.
   Run it against the sibling corpus before publishing new components: N2 introduced the silk radical U+2EAF even though archive budgets passed.
   The subset includes that glyph; the prior glyph outlines/metrics and plane-B asset are preserved. Licence provenance is in `third_party/fonts`.
-- **Home structure: a short main screen with study-section entries**, including Kanji/Words pages (`HomePages`: routes `home`, `kanji-home`, `words-home`)
+- **Home structure: a short main screen with study-section entries**, including Kanji/Words pages (`HomeRoute`: routes `home`, `kanji-home`, `words-home`)
   and the Grammar pilot. The main screen shows status, the N4 offer and study entries with summaries; each section exposes its modes. **One button per mode**, never a disabled
   "Start" next to an enabled "Extra practice": `ModeState` (`core/home`) is `Loading | Start(due,new) | PracticeMore | Locked(reason) | Unavailable(reason)`,
   computed from the same eligibility predicates the session view models enforce (a quiz needs two cards, drawing one stroke card, ...) so a
   tappable button never leads to an empty session. The reason for a disabled button is visible text and part of the row's accessibility state.
-  Kanji/word counts come from one `HomeData` (`rememberHomeData`), shared by the main screen and both pages, built from strict noise-free queues; a one-minute
+  Kanji/word counts come from one `HomeStateProducer`, shared by the main screen and both pages, built from strict noise-free queues; a one-minute
   tick makes newly due cards and the day rollover show up. Rows stay in `Loading` until content, review states and introduced-today counts are all known.
   Card browsing lives on each page, since the sets differ: the Kanji page shows the study-stack card count and "Browse all kanji" (route `cards`, `CardSearch`), the
   Words page shows the study-deck word count and "Browse all words" (route `word-cards`, `WordSearch`: written form, kana in either script, romaji ranked below kana,
@@ -727,9 +727,14 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   consume the same allowance; exhausting it stops new-mode batches from refilling. Due reviews stay available, and explicit
   Practice more may exceed the allowance. Accounting reads existing history, so today's earlier first-time exercises count
   immediately without rewriting progress or schedules. Other sources retain their existing cross-mode item/reading rules.
-- Home loads asynchronously. The nine main flows (kanji, words, seven review-state sets) start as null = "not yet" and the screen shows a progress
-  bar until all emit; empty means "no data". The new-card-introduced counts still start at 0 (meaning "none today") and settle a moment later.
-- Home reads only slim rows (`observeKanjiLite`/`observeWordsLite`: no article body, `strokesJson` reduced to `''` or NULL). Screens that need bodies
+- Home loads asynchronously through a cold, selection-bound producer. `RoomHomeRepository` observes relevant content/review/reservation
+  invalidations and reads a transactional snapshot of inventory, mode states, allowances, unlocks, focus and week progress.
+  Counts stay in Loading until that snapshot is complete; an empty loaded snapshot is not a failure. Pure projection runs off composition.
+  Source/branch, kanji stack, word stack and captured preferences bind each calculation; cancellation rejects obsolete results and errors.
+  Each tick passes one Clock instant and zone through the queries and projection, including local-day rollover and N4 dismissal expiry.
+  Focus cutoff initialization remains an explicit repository-owned preference write, not a supposedly pure projection.
+  Programming/database failures remain observable; only the existing named sync failures/interruption are presented as operational states.
+- Home reads only slim rows (`kanjiLite`/`wordsLite`: no article body, `strokesJson` reduced to `''` or NULL). Screens that need bodies
   or strokes load a single card (`kanjiCard`, `word`). Slim word rows retain `jlpt` and `quizExclusions`; omitting metadata from a projection must
   not turn explicit levels into the legacy fallback or drop curated exclusions. Never observe whole content rows in a list that recomposes on every state change.
 - **Initial content presentation (#93):** Home waits for a source-bound cache observation before choosing loading,
@@ -768,7 +773,37 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
 8. Room schema changes need a migration; there is no destructive fallback and `exportSchema` is on (schemas in `app/schemas`), so a missing migration crashes.
 9. Source files have mixed LF/CRLF: check before multi-line text replacements.
 
-Testing seams: network goes through `ContentHttp` (tests use a fake), view models are built with `serviceViewModel` over in-memory Room, and Compose
+The Kotlin/JVM `:core` module enforces the platform-independent boundary; `:app` owns Android, Room/KSP and UI.
+Existing Kotlin package names are unchanged. Shared test builders and media use JVM test fixtures rather than a core-to-app dependency.
+`-PcoreOnly :core:check` excludes Android project configuration and checks without an SDK; normal CI also runs the app suite.
+Live module/build inventories are owned by `settings.gradle.kts` and `.github/workflows/ci.yml`.
+
+`Settings` owns learner choices; `SyncPreferences` owns legacy parser epochs, SHA/ETag/fallback hints and launch throttling.
+The backing SharedPreferences file/keys, export snapshot and Android backup are unchanged. Grammar preferences expose a read-only
+projection of choices plus parser readiness, updated by the sync owner; that projection is not another persisted authority.
+Network hints take a typed `RepoSource` (source plus branch); parser epochs and progress remain source-keyed, and the historical launch
+throttle remains global. Accepted content is still committed with `sync_meta` in Room. Listening task acceptance keeps its own
+accepted/attempted metadata and can retain an older catalog when other content advances. No cross-store migration or universal
+accepted-revision claim is introduced.
+
+`SyncCoordinator` owns manual Settings, launch and Home first-cache/retry work for the application lifetime. Admission captures the
+validated source/branch immediately. Settings remains forced, launch retains the global throttle, and Home requests remain ordinary.
+Only adjacent identical requests coalesce: a forced request follows an ordinary no-op, and a request cannot join older work across
+an intervening branch replacement. The engine mutex serializes all imports, including periodic WorkManager calls, because the active
+content snapshot is source-keyed rather than branch-keyed. Periodic work still chooses the current source at execution and retains
+WorkManager's own cancellation/durability; it is not replaced by the in-process queue.
+
+Settings and Home observe the same source/branch-specific detailed outcomes, with queued work included in Running. Leaving a screen,
+cancelling a waiter or recreating an Activity does not cancel admitted work. Manual work is not process-durable: a new process starts
+without invented activity, and a saved Settings syncing marker becomes interrupted only when no live operation supplies its state.
+Saved diagnostics are source-guarded, and local URL validation remains visible independently of earlier sync outcomes.
+
+`HomeRoute` supplies state/actions to the main, Kanji and Words presentation, including the starting guide and preference callbacks.
+Other section overview producers remain explicit at that route boundary. Home's model still carries the existing slim entity-shaped
+rows; this is not an all-feature Room-model migration. Settings has an injected sync owner but retains its other direct settings/data
+APIs. The broad navigation and presentation rollouts (#115/#116) remain open; storage migration and package reshuffling are deferred.
+
+Testing seams: network goes through `ContentHttp` (tests use a fake), feature stores/Home/sync admission have isolated fakes, remaining view models use in-memory Room, and Compose
 UI tests (`ComposeUiTest`) run on Robolectric for the stateless pieces (answer feedback, article toggle, page chrome). Static analysis is Detekt
 with a baseline (`config/detekt`); new code must add no findings, and the baseline should only shrink.
 
@@ -785,6 +820,36 @@ The local focus readout contains aggregate evidence and decision reasons, never 
 
 Room v11 adds `study_sessions` and nullable `review_log.sessionId`; export v3 adds the sixth member `study_sessions.json`.
 Ephemeral study ViewModels use `StudyViewModel` for start/end tracking and ordered review persistence, without changing `QuizSession` or FSRS.
+`StudyViewModel` receives a narrow `StudySessionStore`, not the database/application. Counter sessions receive only
+`CounterRepository` and that session store; the repository owns preference access, index/state/allowance queries and the atomic
+review sink. Room entities/encodings do not cross those interfaces. Counter Home/reminders and other feature data access remain
+intentionally direct pending their own slices; shared session-store injection does not claim those features are fully isolated.
+Quiz and all Word directions share the pure `ReviewRecording` confirmation boundary. It reads one injected Clock instant,
+uses the previous repetition count for deterministic fuzz, updates the in-memory state immediately, and returns an immutable
+review event with captured source/owner/item/mode/session identity. The ordered session writer sends that event to the atomic
+Room state/log sink. Choice caps and uncapped typing remain caller policy; queues, weak/practice-only decisions and confusion
+nudges stay mode-owned. Counter shares only the event/sink contract, not this scheduling helper; Grammar/Listening remain separate.
+Document screens/bodies, scene galleries and image presentation accept state/actions only. `DocRoute`/`DocBodyRoute` are the
+explicit loading boundary, supplied a `DocumentRepository` and resolved source/path by their host. A single transactional
+document projection owns title/body/ordered scenes; image loading remains hash-checked and invalidated by scene/revision.
+Current-source and source-captured hosts remain distinct. Load state is keyed by source/path so obsolete results cannot replace
+a later selection; saved scene identity uses stable source/path, never repository-object identity. Captured Grammar topics,
+relative links and independent nested-document browsing state retain their existing contracts. Other screen APIs are not yet
+claimed as migrated.
+The first typed navigation slice uses `AppDestination.Draw`/`Document` and `NavigationEntry`, with one authoritative stack in
+`AppNav`. Draw accepts typed session/extra arguments; only the compatibility adapter parses old Draw/document strings.
+Entry IDs distinguish duplicate documents and survive saving/restoration independently of position. `RouteOwners` retains
+their ViewModel stores across Activity recreation and document coverage; a covered entry is CREATED, the visible entry follows
+the host, and actual removal destroys its lifecycle and clears its store/recognizer. Ordered pending session writes still finish.
+Legacy Grammar retains its separate logical browsing key and fresh session/consent UUID. The existing process-death policy
+still filters ordinary sessions beneath retained documents, restarts targeted previews and retains durable Listening.
+
+Navigation Compose's typed routes and entry-owned stores were evaluated. Adopting `NavHost` now would also require replacing
+the unmigrated Grammar saveable-state handoff (logical browser identity across a fresh session) and filtering/restoring mixed
+back-stack entries under surviving documents. That is a broader state-ownership migration than this resource-owning first slice,
+not a claim that Navigation Compose cannot support the eventual design. This slice therefore retains the existing stack/holder,
+adds typed entries and Android lifecycle/store ownership, and leaves #115 open. Home/Settings/About, browsers, Quiz, Word,
+Counters, Grammar, readings, Kana and durable Listening remain explicit legacy adapters; no parallel NavController stack exists.
 Listening uses its separate durable `ListeningStudy` orchestration and records the same canonical session/review tables.
 The route registry closes sessions on actual navigation removal, not composition disposal (article links/rotation).
 Completion and early exit store the UI answer totals, including practice-only confirmations; process death leaves an unknown ending.

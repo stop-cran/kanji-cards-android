@@ -73,7 +73,7 @@ fun CardsScreen(app: KanjiApp, onBack: () -> Unit, onOpen: (String) -> Unit, onO
        if (wide) {
         val s = selected
         if (s == null) Text(stringResource(R.string.select_a_card), Modifier.weight(0.6f), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        else DocBody(app, "kanji/$s.md", { onOpenDoc(it) }, Modifier.weight(0.6f))
+        else DocBodyRoute(app.services.documents, source.id, "kanji/$s.md", { onOpenDoc(it) }, Modifier.weight(0.6f))
        }
       }
     }

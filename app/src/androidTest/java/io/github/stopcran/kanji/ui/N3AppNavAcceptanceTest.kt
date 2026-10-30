@@ -312,10 +312,10 @@ class N3AppNavAcceptanceTest {
                 override fun close() = input.close()
             }
         }
-        val synced = runBlocking { ContentSync(app.db, app.settings, http).sync(source, force = true) }
+        val synced = runBlocking { ContentSync(app.db, app.settings.sync, http).sync(source, force = true) }
         assertTrue(synced.toString(), synced is SyncResult.Updated)
         assertTrue((synced as SyncResult.Updated).problems.isEmpty())
-        app.settings.lastCheckMs = System.currentTimeMillis()
+        app.settings.sync.lastCheckMs = System.currentTimeMillis()
         app.settings.setStartingGuideVisible(false)
         app.settings.setDailyNewCards(50)
         app.settings.setWeekPlan("FFFFFFF")

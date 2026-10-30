@@ -323,7 +323,7 @@ class ListeningTaskFlowTest {
 
     @Test fun filtersDoNotRetargetAnOpenCaptureAndNonvisualChoiceIsExplicitStudy() {
         ListeningUiFixture().use { fixture ->
-            val sync = io.github.stopcran.kanji.data.ContentSync(fixture.db, fixture.services.settings)
+            val sync = io.github.stopcran.kanji.data.ContentSync(fixture.db, fixture.services.settings.sync)
             val id = fixture.start(ListeningTaskType.TaskBased, described = true)
             val before = runBlocking { requireNotNull(fixture.db.listeningTasks().encounter(id)) }
             var selected: String? = null

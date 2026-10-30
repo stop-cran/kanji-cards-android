@@ -1,5 +1,7 @@
 package io.github.stopcran.kanji.data
 
+import io.github.stopcran.kanji.core.srs.ReviewRecord
+
 import io.github.stopcran.kanji.core.content.CounterFile
 import io.github.stopcran.kanji.core.counters.CounterIndex
 import io.github.stopcran.kanji.core.counters.CounterMode
@@ -14,6 +16,28 @@ import java.time.Instant
 const val COUNTER_STACK = "counters"
 
 private val counterJson = Json { ignoreUnknownKeys = true }
+
+interface CounterRepository {
+    val sourceId: String
+    fun practiceMinimum(): Int
+    suspend fun index(sourceId: String): CounterIndex
+    suspend fun states(sourceId: String, mode: CounterMode): Map<String, SrsState>
+    suspend fun newBudget(sourceId: String, now: Instant): Int
+    suspend fun record(value: ReviewRecord)
+}
+
+class RoomCounterRepository(
+    private val db: AppDatabase,
+    private val settings: Settings,
+    private val reviews: ReviewStore,
+) : CounterRepository {
+    override val sourceId get() = settings.source.value.id
+    override fun practiceMinimum(): Int = settings.practiceMinimum()
+    override suspend fun index(sourceId: String): CounterIndex = db.counterIndex(sourceId)
+    override suspend fun states(sourceId: String, mode: CounterMode): Map<String, SrsState> = db.counterStates(sourceId, mode)
+    override suspend fun newBudget(sourceId: String, now: Instant): Int = db.newAllowance(settings, sourceId, now).remaining
+    override suspend fun record(value: ReviewRecord) = reviews.record(value)
+}
 
 /** Decodes the stored counter files; a file that fails to decode is skipped rather than breaking the others. */
 suspend fun AppDatabase.counterIndex(sourceId: String): CounterIndex =

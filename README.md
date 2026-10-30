@@ -24,16 +24,22 @@ Status: working on an emulator; preparing for a real-device trial and Google Pla
 Requirements: JDK 17 (`JAVA_HOME`), the Android SDK (`ANDROID_HOME`, or `sdk.dir` in `local.properties`) with platform 36. Gradle comes from the wrapper.
 
 ```
-./gradlew testDebugUnitTest      # JVM tests: parser, FSRS, matcher, sync (fake HTTP), Room migrations and view models and Compose UI tests on Robolectric
+./gradlew :core:test testDebugUnitTest  # Pure JVM core plus Android/Room/ViewModel/Compose tests on Robolectric
 ./gradlew lintDebug              # Android lint; must be clean of errors
 ./gradlew detekt                 # static analysis; existing findings are in config/detekt/detekt-baseline.xml, new code must add none
 ./gradlew installDebug           # build and install on a connected device/emulator (API 26+)
 ./gradlew assembleRelease        # R8-minified build; signing is optional, see docs/RELEASE.md
 ```
 
-Some tests read the content repo when it is cloned next to this one (`../learning-japanese`, relative to `app/`) and skip otherwise;
-CI clones it. After editing that clone, re-run with `./gradlew cleanTestDebugUnitTest testDebugUnitTest`, because Gradle does not see
+Some tests read the content repo when it is cloned next to this one (`../learning-japanese` from the repository root,
+or `../../learning-japanese` from `app/` or `core/`) and skip otherwise;
+CI clones it. After editing that clone, re-run with `./gradlew :core:cleanTest :core:test cleanTestDebugUnitTest testDebugUnitTest`, because Gradle does not see
 the sibling directory as an input. On Windows use `gradlew.bat`.
+
+The Kotlin/JVM `:core` module has no Android dependencies. With only JDK 17 installed, run
+`./gradlew -PcoreOnly :core:check` (PowerShell: `.\gradlew.bat -PcoreOnly :core:check`).
+This entry excludes `:app` configuration and needs no Android SDK. Shared JVM test fixtures live
+in `core/src/testFixtures`; Room, UI and Android-specific tests remain in `app`.
 
 Code layout and the reasons behind it: [docs/DESIGN.md](docs/DESIGN.md). Contributor notes: [.github/copilot-instructions.md](.github/copilot-instructions.md).
 

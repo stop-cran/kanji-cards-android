@@ -33,32 +33,43 @@ import io.github.stopcran.kanji.core.srs.DayLevel
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
+internal fun SettingsScreen(
+    app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit,
+    sync: io.github.stopcran.kanji.data.SyncCoordinator = app.syncCoordinator,
+) {
     val source by app.settings.source.collectAsState()
     val meta by remember(source) { app.db.content().observeMeta(source.id) }.collectAsState(null)
     var url by rememberSaveable { mutableStateOf(app.settings.repoUrl) }
     var branch by rememberSaveable { mutableStateOf(app.settings.branch) }
     var dailyNew by rememberSaveable { mutableStateOf(app.settings.dailyNewCards.value.toString()) }
     var status by rememberSaveable(stateSaver = SyncStatus.Saver) { mutableStateOf(SyncStatus()) }
-    var syncing by remember { mutableStateOf(false) }
+    var sourceError by rememberSaveable { mutableStateOf<String?>(null) }
+    var statusSource by rememberSaveable { mutableStateOf("${source.id}@${source.branch}") }
+    val activities by sync.activity.collectAsState()
+    val activity = activities[source]
+    val sourceKey = "${source.id}@${source.branch}"
+    val displayedStatus = sourceError?.let { SyncStatus(it) } ?: SyncStatus.fromActivity(activity) ?:
+        status.takeIf { statusSource == sourceKey } ?: SyncStatus()
+    val syncing = activity == io.github.stopcran.kanji.data.SyncActivity.Running
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) { status = status.afterRecreation() }
+    LaunchedEffect(Unit) {
+        if (activity == null) status = status.afterRecreation()
+    }
+    LaunchedEffect(source, activity) {
+        SyncStatus.fromActivity(activity)?.let { status = it; statusSource = sourceKey }
+    }
 
     fun saveAndSync() {
+        sourceError = null
         status = SyncStatus()
         if (!app.settings.setSource(url, branch)) {
-            status = SyncStatus("Invalid repository URL (expected https://github.com/<owner>/<repo>) or branch")
+            sourceError = "Invalid repository URL (expected https://github.com/<owner>/<repo>) or branch"
             return
         }
+        val requestedSource = app.settings.source.value
         status = SyncStatus(SyncStatus.SYNCING)
-        syncing = true
-        scope.launch {
-            try {
-                status = SyncStatus.from(app.contentSync.sync(app.settings.source.value, force = true))
-            } finally {
-                syncing = false
-            }
-        }
+        statusSource = "${requestedSource.id}@${requestedSource.branch}"
+        sync.request(requestedSource, io.github.stopcran.kanji.data.SyncKind.Forced)
     }
 
     Page("Settings", onBack, ime = true) {
@@ -218,7 +229,7 @@ fun SettingsScreen(app: KanjiApp, onBack: () -> Unit, onAbout: () -> Unit) {
             Button(onClick = ::saveAndSync, enabled = !syncing) { Text(stringResource(R.string.save_sync)) }
             OutlinedButton(onClick = { url = Defaults.CONTENT_REPO_URL; branch = Defaults.CONTENT_BRANCH }) { Text(stringResource(R.string.use_default_repo)) }
         }
-        SyncStatusText(status)
+        SyncStatusText(displayedStatus)
         HorizontalDivider()
         Text(stringResource(R.string.voice_input), style = MaterialTheme.typography.titleSmall)
         val voiceOn by app.settings.voiceInput.collectAsState()

@@ -50,7 +50,7 @@ class GrammarFocusPersistenceTest {
         context.getSharedPreferences("settings", 0).edit().clear().commit()
         settings = Settings(context)
         settings.setWeekPlan("FFFFFFF")
-        settings.setGrammarParserEpoch(source, ContentParser.GRAMMAR_PARSER_EPOCH)
+        settings.sync.setGrammarParserEpoch(source, ContentParser.GRAMMAR_PARSER_EPOCH)
         db = open()
         db.changeGrammarGuided(settings, source, true)
         install(grammarFixture(), grammarFixture("beta"))
@@ -205,11 +205,11 @@ class GrammarFocusPersistenceTest {
 
     @Test
     fun pendingMetadataAndMalformedCursorOrContentBlockOnlyGuidedNewIntake() = runBlocking {
-        settings.setGrammarParserEpoch(source, GRAMMAR_LEVEL_EPOCH)
+        settings.sync.setGrammarParserEpoch(source, GRAMMAR_LEVEL_EPOCH)
         assertTrue(study().ordinaryIds.isEmpty())
         assertTrue(study().notice!!.contains("Sync needed"))
         assertEquals(12, db.grammarStudy(settings, source, now, extra = true).extraIds.size)
-        settings.setGrammarParserEpoch(source, ContentParser.GRAMMAR_PARSER_EPOCH)
+        settings.sync.setGrammarParserEpoch(source, ContentParser.GRAMMAR_PARSER_EPOCH)
         db.reviews().putGrammarFocus(GrammarFocusEntity(source, 0, """{"automaticOrdinal":-1}"""))
         assertTrue(study().ordinaryIds.isEmpty())
         assertTrue(study().notice!!.contains("Stored Grammar focus is invalid"))
@@ -247,7 +247,7 @@ class GrammarFocusPersistenceTest {
         assertEquals(1, cursor()!!.active!!.introduced.size)
         val firstSource = db.reviews().grammarFocus(source)
         val other = "other/repo"
-        settings.setGrammarParserEpoch(other, ContentParser.GRAMMAR_PARSER_EPOCH)
+        settings.sync.setGrammarParserEpoch(other, ContentParser.GRAMMAR_PARSER_EPOCH)
         db.content().insertGrammar(db.content().grammar(source).map { it.copy(sourceId = other) })
         db.changeGrammarGuided(settings, other, true)
         val otherStudy = db.grammarStudy(settings, other, now, reserve = true)

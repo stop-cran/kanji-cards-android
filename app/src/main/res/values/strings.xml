@@ -123,6 +123,8 @@
     <string name="select_a_card">Select a card.</string>
     <string name="not_found_in_the_current">Not found in the current content.</string>
     <string name="loading">Loading…</string>
+    <string name="destination_unavailable">Destination unavailable</string>
+    <string name="destination_unavailable_detail">Go back and open this destination again.</string>
     <string name="session_complete">Session complete</string>
     <string name="of_drawn_cleanly">%1$s of %2$s drawn cleanly.</string>
     <string name="done">Done</string>

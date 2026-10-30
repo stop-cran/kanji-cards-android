@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
-import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.content.CounterCard
 import io.github.stopcran.kanji.core.content.CounterFile
 import io.github.stopcran.kanji.core.content.CounterExpression
@@ -24,12 +23,9 @@ import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.data.COUNTER_STACK
-import io.github.stopcran.kanji.data.ReviewLogEntity
-import io.github.stopcran.kanji.data.counterIndex
-import io.github.stopcran.kanji.data.counterStates
-import io.github.stopcran.kanji.data.newAllowance
-import io.github.stopcran.kanji.data.practiceMinimum
-import io.github.stopcran.kanji.data.toEntity
+import io.github.stopcran.kanji.data.CounterRepository
+import io.github.stopcran.kanji.core.srs.ReviewRecord
+import io.github.stopcran.kanji.data.StudySessionStore
 import kotlinx.coroutines.launch
 import java.time.Instant
 
@@ -65,7 +61,7 @@ sealed interface CounterUi {
 }
 
 /** One counter quiz session in a single [CounterMode]; answers are saved under the shared "counters" stack. */
-class CounterQuizViewModel(private val app: Services) : StudyViewModel(app) {
+class CounterQuizViewModel(private val data: CounterRepository, sessions: StudySessionStore) : StudyViewModel(sessions) {
     private val fsrs = Fsrs()
 
     var ui: CounterUi by mutableStateOf(CounterUi.Loading)
@@ -94,16 +90,16 @@ class CounterQuizViewModel(private val app: Services) : StudyViewModel(app) {
     }
 
     private suspend fun start(extra: Boolean, group: CounterGroup, scope: CounterScope) {
-        sourceId = app.settings.source.value.id
-        index = app.db.counterIndex(sourceId).inScope(group, scope)
+        sourceId = data.sourceId
+        index = data.index(sourceId).inScope(group, scope)
         if (index.ids(mode).isEmpty()) {
             ui = CounterUi.Empty("No cards in this selection. Choose another level or group, or sync the content (⚙ settings).")
             return
         }
-        states += app.db.counterStates(sourceId, mode)
-        val choose = if (mode == CounterMode.Choose) states else app.db.counterStates(sourceId, CounterMode.Choose)
-        val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
-        val limit = if (extra) app.settings.practiceMinimum() else null
+        states += data.states(sourceId, mode)
+        val choose = if (mode == CounterMode.Choose) states else data.states(sourceId, CounterMode.Choose)
+        val budget = data.newBudget(sourceId, Instant.now())
+        val limit = if (extra) data.practiceMinimum() else null
         val queue = CounterQueues.build(index, CounterQueueRequest(mode, states, choose, Instant.now(), budget, limit))
         session = trackSession(QuizSession(queue.map { it.kanji }, { it }), sourceId, COUNTER_STACK, mode.mode.name, extra)
         showNext()
@@ -207,9 +203,7 @@ class CounterQuizViewModel(private val app: Services) : StudyViewModel(app) {
             firstSuccessCapDays = cap, fuzzSeed = Fsrs.seed(id, mode.mode.name, states[id]?.reps ?: 0),
         )
         states[id] = updated
-        recordSession {
-            val log = ReviewLogEntity(0, sourceId, COUNTER_STACK, id, mode.mode.name, grade.value, now.toEpochMilli(), sessionId = reviewSessionId)
-            app.db.reviews().record(updated.toEntity(sourceId, COUNTER_STACK, id, mode.mode), log)
-        }
+        val record = ReviewRecord(updated, sourceId, COUNTER_STACK, id, mode.mode, grade, now, reviewSessionId)
+        recordSession { data.record(record) }
     }
 }

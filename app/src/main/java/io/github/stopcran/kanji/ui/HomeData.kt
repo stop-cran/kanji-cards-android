@@ -1,15 +1,8 @@
 package io.github.stopcran.kanji.ui
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
-import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
 import androidx.compose.ui.res.stringResource
-import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.R
-import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.core.draw.DrawGate
 import io.github.stopcran.kanji.core.reading.KanjiReadingQueue
@@ -27,23 +20,10 @@ import io.github.stopcran.kanji.core.words.WordQueues
 import io.github.stopcran.kanji.core.words.WordStack
 import io.github.stopcran.kanji.core.words.WordStacks
 import io.github.stopcran.kanji.data.KanjiEntity
+import io.github.stopcran.kanji.data.HomeSnapshot
 import io.github.stopcran.kanji.data.forDirection
-import io.github.stopcran.kanji.data.inStack
 import io.github.stopcran.kanji.data.inWordStack
-import io.github.stopcran.kanji.data.offeredStacks
-import io.github.stopcran.kanji.data.levels
-import io.github.stopcran.kanji.data.newAllowance
-import io.github.stopcran.kanji.data.focusStatus
-import io.github.stopcran.kanji.data.meaningLearned
-import io.github.stopcran.kanji.data.padCandidates
-import io.github.stopcran.kanji.data.padWordCandidates
-import io.github.stopcran.kanji.data.observeWeekProgress
-import io.github.stopcran.kanji.data.stacks
 import io.github.stopcran.kanji.data.toReadingCard
-import io.github.stopcran.kanji.data.toReadingStates
-import io.github.stopcran.kanji.data.toSrs
-import kotlinx.coroutines.delay
-import java.time.Clock
 import java.time.Instant
 
 enum class HomeMode { Meaning, Drawing, Readings, WordJp, WordEn, WordReading, WordType, WordPicture, WordToPicture }
@@ -83,6 +63,13 @@ class HomeData(
     val modes: Map<HomeMode, ModeState>,
     private val guidance: HomeGuidance,
 ) {
+    companion object {
+        fun loading(sourceId: String) = HomeData(
+            true, sourceId, emptyList(),
+            StackChoices(emptyList(), Stacks.everything, emptyList(), WordStacks.n5, 0),
+            emptyMap(), HomeGuidance(false),
+        )
+    }
     val stacks get() = choices.stacks
     val stack get() = choices.stack
     val wordStacks get() = choices.wordStacks
@@ -115,7 +102,7 @@ private class Unlocks(
 )
 
 private class Extras(
-    val stackId: String, val wordStackId: String, val allowance: NewAllowance, val unlocks: Unlocks,
+    val allowance: NewAllowance, val unlocks: Unlocks,
     val focus: io.github.stopcran.kanji.data.FocusStatus?,
 )
 
@@ -154,107 +141,31 @@ internal fun shouldOfferN4(
     )
     return Advancement.shouldOffer(ready, n4Unlocked, dismissedMs, nowMs)
 }
-/** Null until the first emission, so the screen can tell "still loading" from "nothing yet". */
-@Composable
-private fun rememberStates(app: Services, sourceId: String, stack: String, mode: StudyMode, byReading: Boolean = false): Map<String, SrsState>? {
-    val states by remember(sourceId, stack, mode) { app.db.reviews().observeStates(sourceId, stack, mode.name) }.collectAsState(null)
-    return remember(states) { if (byReading) states?.toReadingStates() else states?.associate { it.kanji to it.toSrs() } }
-}
-
-@Composable
-fun rememberHomeData(app: KanjiApp): HomeData = rememberHomeData(app.services)
-
-@Composable
-internal fun rememberHomeData(app: Services, clock: Clock = Clock.systemDefaultZone()): HomeData {
-    val source by app.settings.source.collectAsState()
-    val dailyNew by app.settings.dailyNewCards.collectAsState()
-    val weekPlan by app.settings.weekPlan.collectAsState()
-    val stackId by app.settings.stack.collectAsState()
-    val n4Unlocked by app.settings.n4Unlocked.collectAsState()
-    val dismissedMs by app.settings.advanceDismissedMs.collectAsState()
-    val wordStackId by app.settings.wordStack.collectAsState()
-    val kanjiOrNull by remember(source) { app.db.content().observeKanjiLite(source.id) }.collectAsState(null)
-    val wordsOrNull by remember(source) { app.db.content().observeWordsLite(source.id) }.collectAsState(null)
-    val kanji = kanjiOrNull ?: emptyList()
-    val words = wordsOrNull ?: emptyList()
-
-    val stacks = remember(kanji) { kanji.stacks() }
-    val stack = Stacks.find(stackId, stacks)
-    val inStack = remember(kanji, stack) { kanji.inStack(stack.id) }
-    val wordStacks = remember(words, n4Unlocked) { words.offeredStacks(n4Unlocked) }
-    val wordStack = WordStacks.find(wordStackId, wordStacks)
-    val levels = remember(kanji) { kanji.levels() }
-    val wordsInStack = remember(words, levels, wordStack) { words.inWordStack(wordStack, levels) }
-
-    // A clock tick makes cards that become due, and the day rollover, show up without leaving the page.
-    val tick by produceState(clock.instant(), clock) { while (true) { value = clock.instant(); delay(60_000) } }
-    val zone = clock.zone
-    val today = tick.atZone(zone).toLocalDate()
-    val startOfDay = remember(today, zone) { today.atStartOfDay(zone).toInstant().toEpochMilli() }
-    val week = key(app, source.id, startOfDay, zone) {
-        val progress = remember { app.db.observeWeekProgress(app.settings, source.id, tick, zone) }
-        val observed by progress.collectAsState(null)
-        observed
-    }
-
-    val quiz = rememberStates(app, source.id, stack.id, StudyMode.Quiz)
-    val draw = rememberStates(app, source.id, stack.id, StudyMode.Draw)
-    val on = rememberStates(app, source.id, stack.id, StudyMode.KanjiOn, byReading = true)
-    val kun = rememberStates(app, source.id, stack.id, StudyMode.KanjiKun, byReading = true)
-    val jp = rememberStates(app, source.id, wordStack.id, StudyMode.WordJpEn)
-    val en = rememberStates(app, source.id, wordStack.id, StudyMode.WordEnJp)
-    val rd = rememberStates(app, source.id, wordStack.id, StudyMode.WordReading)
-    val typedObserved = rememberStates(app, source.id, wordStack.id, StudyMode.WordType)
-    val pictureObserved = rememberStates(app, source.id, wordStack.id, StudyMode.WordPicture)
-    val wordPictureObserved = rememberStates(app, source.id, wordStack.id, StudyMode.WordToPicture)
-    val stateSet = remember(quiz, draw, on, kun, jp, en, rd) { StateSet.of(quiz, draw, on, kun, jp, en, rd) }
-    val statesReady = kanjiOrNull != null && wordsOrNull != null && stateSet != null
-    val unlockRule by app.settings.unlockRule.collectAsState()
-    val focusOn by app.settings.focusEnabled.collectAsState()
-    val focusSize by app.settings.focusSize.collectAsState()
-    // The 10-minute spacing and a freshly emptied batch both change with time, not only with review states.
-    val minuteKey = if (focusOn || unlockRule != io.github.stopcran.kanji.core.unlock.UnlockRule.NextDay) tick else null
-    val extras by produceState<Extras?>(null, source.id, stack.id, wordStack.id, startOfDay, dailyNew, weekPlan, statesReady, quiz, draw, on, kun, jp, en, rd, typedObserved, pictureObserved, wordPictureObserved, unlockRule, focusOn, focusSize, minuteKey) {
-        if (!statesReady) return@produceState
-        val r = app.db.reviews()
-        val allowance = app.db.newAllowance(app.settings, source.id, Instant.now())
-        val focus = app.db.focusStatus(app.settings, source.id, stack.id, inStack, System.currentTimeMillis())
-        val learned = app.db.meaningLearned(app.settings, source.id, stack.id)
-        val padModes = listOf(StudyMode.Quiz, StudyMode.Draw, StudyMode.KanjiOn, StudyMode.KanjiKun).filterTo(HashSet()) { m ->
-            val pool = if (m == StudyMode.Draw) kanji.filter { it.strokesJson != null } else kanji
-            app.db.padCandidates(source.id, stack.id, m, pool, inStack.mapTo(HashSet()) { it.kanji }).isNotEmpty()
-        }
-        val ownStates = mapOf(
-            StudyMode.WordJpEn to jp.orEmpty(), StudyMode.WordEnJp to en.orEmpty(), StudyMode.WordReading to rd.orEmpty(),
-            StudyMode.WordType to r.states(source.id, wordStack.id, StudyMode.WordType.name).associate { it.kanji to it.toSrs() },
-            StudyMode.WordPicture to r.states(source.id, wordStack.id, StudyMode.WordPicture.name).associate { it.kanji to it.toSrs() },
-            StudyMode.WordToPicture to r.states(source.id, wordStack.id, StudyMode.WordToPicture.name).associate { it.kanji to it.toSrs() },
-        )
-        for ((m, own) in ownStates) {
-            val d = WordDirection.entries.first { it.mode == m }
-            val ids = wordsInStack.forDirection(d).mapTo(HashSet()) { it.word }
-            if (app.db.padWordCandidates(source.id, wordStack.id, m, ids, own.keys).isNotEmpty()) padModes += m
-        }
-        val unlocks = Unlocks(
-            learned, unlockRule, r.readingCardsIntroducedSince(source.id, stack.id, startOfDay),
-            padModes, ownStates,
-        )
-        value = Extras(stack.id, wordStack.id, allowance, unlocks, focus)
-    }
-    val ex = extras?.takeIf { it.stackId == stack.id && it.wordStackId == wordStack.id }
-    val loading = !statesReady || ex == null
-
-    val projection = remember(loading, ex, tick, inStack, wordsInStack, stateSet) {
-        if (loading || ex == null || stateSet == null) HomeModes() else computeModes(inStack, wordsInStack, ex, tick, stateSet)
-    }
-
-    val n4Offer = remember(loading, stateSet, kanji, words, levels, wordStack, n4Unlocked, dismissedMs) {
-        stateSet != null && !loading && shouldOfferN4(inStack, words, levels, wordStack, stateSet, n4Unlocked, dismissedMs, Instant.now(), System.currentTimeMillis())
-    }
+internal fun projectHome(snapshot: HomeSnapshot, now: Instant): HomeData {
+    val inventory = snapshot.inventory
+    val selection = inventory.selection
+    val states = snapshot.states
+    val stateSet = StateSet(
+        states.getValue(StudyMode.Quiz), states.getValue(StudyMode.Draw),
+        states.getValue(StudyMode.KanjiOn), states.getValue(StudyMode.KanjiKun),
+        states.getValue(StudyMode.WordJpEn), states.getValue(StudyMode.WordEnJp), states.getValue(StudyMode.WordReading),
+    )
+    val extras = Extras(
+        snapshot.allowance,
+        Unlocks(snapshot.learned, selection.study.unlockRule, snapshot.introducedReadings, snapshot.padModes, states), snapshot.focus,
+    )
+    val projection = computeModes(inventory.inStack, inventory.wordsInStack, extras, now, stateSet)
+    val n4Offer = shouldOfferN4(
+        inventory.inStack, inventory.words, inventory.levels, inventory.wordStack, stateSet,
+        selection.n4Unlocked, selection.dismissedMs, now, now.toEpochMilli(),
+    )
     return HomeData(
-        loading, source.id, kanji,
-        StackChoices(stacks, stack, wordStacks, wordStack, wordsInStack.size, wordsInStack.count { it.quizImage != null }), projection.states,
-        HomeGuidance(n4Offer, ex?.allowance, week, ex?.focus, projection.wordReadiness),
+        false, selection.source.id, inventory.kanji,
+        StackChoices(
+            inventory.stacks, inventory.stack, inventory.wordStacks, inventory.wordStack,
+            inventory.wordsInStack.size, inventory.wordsInStack.count { it.quizImage != null },
+        ), projection.states,
+        HomeGuidance(n4Offer, snapshot.allowance, snapshot.week, snapshot.focus, projection.wordReadiness),
     )
 }
 

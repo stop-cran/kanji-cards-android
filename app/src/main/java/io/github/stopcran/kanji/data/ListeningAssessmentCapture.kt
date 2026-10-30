@@ -84,11 +84,12 @@ internal class ListeningAssessmentCapture(
         val id = "$parent:item:$index"
         val example = task.usage == TaskUsage.Example
         val state = ListeningTaskAttempt(stageIndex = if (example) 0 else 1, phase = "assessment")
+        val mediaHash = requireNotNull(record.mediaHash)
         db.listeningTasks().putEncounter(ListeningTaskEncounterEntity(id, preview.sourceId, task.id, task.exposureId,
             requireNotNull(preview.branch), preview.revision, requireNotNull(preview.contentVersion), record.json, record.contentHash,
-            requireNotNull(record.mediaHash), task.policyVersion, Json.encodeToString(preview.words.getValue(task.id)),
+            mediaHash, task.policyVersion, Json.encodeToString(preview.words.getValue(task.id)),
             Json.encodeToString(state), "assessment", parent, now, ListeningAssessmentBlueprint.durationMs(task), newReservation = false))
         db.listeningTasks().pin(record.assetHashes.map { ListeningAssetPinEntity(preview.sourceId, "assessment", parent, it) })
-        return AssessmentItem(id, task.id, task.taskType, example, candidate.lastExposureMs != null, record.contentHash, record.mediaHash)
+        return AssessmentItem(id, task.id, task.taskType, example, candidate.lastExposureMs != null, record.contentHash, mediaHash)
     }
 }

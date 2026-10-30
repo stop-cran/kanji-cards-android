@@ -87,9 +87,10 @@ internal fun GrammarMapCard(
 
 @Composable
 internal fun GrammarMapProgressText(progress: GrammarMapProgress, exerciseCounts: Boolean = true) {
+    val matching = progress.matching
     if (exerciseCounts) Text(
-        if (progress.matching == null) stringResource(R.string.grammar_map_unknown_matching)
-        else stringResource(R.string.grammar_map_matching, progress.matching, progress.total),
+        if (matching == null) stringResource(R.string.grammar_map_unknown_matching)
+        else stringResource(R.string.grammar_map_matching, matching, progress.total),
         style = MaterialTheme.typography.bodySmall,
     )
     if (exerciseCounts) Text(

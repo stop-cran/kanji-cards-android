@@ -320,7 +320,7 @@ class GrammarQuizViewModelTest {
     @Test
     fun repeatedNextCallbackCannotRecordOrCommitAFocusTwice() {
         install(4)
-        services.settings.setGrammarParserEpoch(sourceId, ContentParser.GRAMMAR_PARSER_EPOCH)
+        services.settings.sync.setGrammarParserEpoch(sourceId, ContentParser.GRAMMAR_PARSER_EPOCH)
         runBlocking { db.changeGrammarGuided(services.settings, sourceId, true) }
         val vm = launch()
         val question = vm.ui as GrammarUi.Choose
@@ -341,7 +341,7 @@ class GrammarQuizViewModelTest {
             set.copy(exercises = set.exercises.map { it.copy(jlpt = 3) })
         }
         val sets = listOf(foundation, grammarFixture("beta"), grammarFixture("alpha"))
-        services.settings.setGrammarParserEpoch(sourceId, ContentParser.GRAMMAR_PARSER_EPOCH)
+        services.settings.sync.setGrammarParserEpoch(sourceId, ContentParser.GRAMMAR_PARSER_EPOCH)
         services.settings.setGrammarNewScope(sourceId, GrammarScope.N4)
         runBlocking {
             db.content().insertGrammar(sets.mapIndexed { index, set ->
@@ -389,7 +389,7 @@ class GrammarQuizViewModelTest {
     @Test
     fun singleEligibleExerciseIsAskableAndChangingScopeDoesNotChangeTheSessionSnapshot() {
         install(3, levels = listOf(3, 4, null))
-        services.settings.setGrammarParserEpoch(sourceId, GRAMMAR_LEVEL_EPOCH)
+        services.settings.sync.setGrammarParserEpoch(sourceId, GRAMMAR_LEVEL_EPOCH)
         services.settings.setGrammarNewScope(sourceId, GrammarScope.N4)
         services.settings.setGrammarBrowseScope(sourceId, GrammarScope.N3)
         assertEquals(ModeState.Start(0, 1), mode())
@@ -407,7 +407,7 @@ class GrammarQuizViewModelTest {
     @Test
     fun emptyNewScopeStillOffersOutOfScopeDueReviews() {
         install(3, levels = listOf(3, 4, null))
-        services.settings.setGrammarParserEpoch(sourceId, GRAMMAR_LEVEL_EPOCH)
+        services.settings.sync.setGrammarParserEpoch(sourceId, GRAMMAR_LEVEL_EPOCH)
         services.settings.setGrammarNewScope(sourceId, GrammarScope.N5)
         assertTrue(mode() is ModeState.Locked)
         assertTrue((launch().ui as GrammarUi.Empty).message.contains("No unseen grammar exercises match N5"))
@@ -419,7 +419,7 @@ class GrammarQuizViewModelTest {
     @Test
     fun extraPracticeFiltersUnseenItemsButKeepsEarlyReviewsAndIgnoresTheDailyCap() {
         install(4, levels = listOf(4, 3, null, 5))
-        services.settings.setGrammarParserEpoch(sourceId, GRAMMAR_LEVEL_EPOCH)
+        services.settings.sync.setGrammarParserEpoch(sourceId, GRAMMAR_LEVEL_EPOCH)
         services.settings.setGrammarNewScope(sourceId, GrammarScope.N4)
         services.settings.setDailyNewCards(0)
         seedReview(1, Instant.now().plusSeconds(86_400))

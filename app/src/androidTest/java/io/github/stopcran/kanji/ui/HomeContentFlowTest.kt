@@ -223,7 +223,7 @@ class HomeContentFlowTest {
             it.setWeekPlan("FFFFFFF")
         }
         private val services = Services(db, settings, context)
-        private val sync = ContentSync(db, settings, http)
+        private val sync = ContentSync(db, settings.sync, http)
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         private val jobs = mutableListOf<Job>()
         val source = settings.source
@@ -267,7 +267,7 @@ class HomeContentFlowTest {
                             ) else actual
                             val availability = if (readingCache.value) HomeContentState(null, null) else current
                             ContentSection(availability, "Words", { home.value = false }, { start() }) {
-                                WordsPage(settings, displayed, { home.value = false }, { browsed = true }) { _, _ -> }
+                                WordsPage(homePreferences(settings), displayed, { home.value = false }, { browsed = true }) { _, _ -> }
                             }
                         } else Page("Home content fixture") {
                             HomeContentNotice(current) { start() }

@@ -42,7 +42,7 @@ class GrammarRoadmapDataTest {
         val context = RuntimeEnvironment.getApplication()
         context.getSharedPreferences("settings", 0).edit().clear().commit()
         settings = Settings(context)
-        settings.setGrammarParserEpoch(source.id, ContentParser.GRAMMAR_PARSER_EPOCH)
+        settings.sync.setGrammarParserEpoch(source.id, ContentParser.GRAMMAR_PARSER_EPOCH)
         settings.setGrammarBrowseScope(source.id, GrammarScope.N5)
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
         runBlocking {
@@ -103,7 +103,7 @@ class GrammarRoadmapDataTest {
         assertEquals(3, invalid.groups.size)
         db.content().putMeta(meta.copy(grammarCurriculumJson = null))
         assertEquals(GrammarCurriculumState.Absent, db.grammarRoadmap(settings, source, now).curriculum)
-        settings.setGrammarParserEpoch(source.id, 0)
+        settings.sync.setGrammarParserEpoch(source.id, 0)
         val pending = db.grammarRoadmap(settings, source, now)
         assertEquals(GrammarCurriculumState.PendingRefresh, pending.curriculum)
         assertTrue(pending.groups.values.all { it.matching == null })

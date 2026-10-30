@@ -141,7 +141,7 @@ class CounterFlowTest {
         val settings = Settings(isolated).apply { setDailyNewCards(2); setWeekPlan("FFFFFFF") }
         val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
         val services = Services(db, settings, context)
-        val vm = mutableStateOf(CounterQuizViewModel(services))
+        val vm = mutableStateOf(CounterQuizViewModel(services.counters, services.sessionStore))
         val route = mutableStateOf(if (viaHome) null else CounterRoutes.create(mode, group, scope))
         val document = mutableStateOf<String?>(null)
         val visible = mutableStateOf(true)
@@ -174,7 +174,7 @@ class CounterFlowTest {
                                 else -> CounterQuizScreen(requireNotNull(route.value), {}, {
                                     vm.value.leaveSession()
                                     route.value = CounterRoutes.extra(requireNotNull(route.value))
-                                    vm.value = CounterQuizViewModel(services)
+                                    vm.value = CounterQuizViewModel(services.counters, services.sessionStore)
                                 }, { owner, path -> assertEquals(source, owner); document.value = path }, vm.value)
                             }
                         }

@@ -19,12 +19,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -34,7 +29,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import io.github.stopcran.kanji.Defaults
-import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.core.srs.NewAllowance
 import io.github.stopcran.kanji.core.srs.PacingNote
 import io.github.stopcran.kanji.core.content.RepoSource
@@ -43,9 +37,7 @@ import io.github.stopcran.kanji.core.kana.KanaMode
 import io.github.stopcran.kanji.core.kana.KanaScript
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.WordStacks
-import io.github.stopcran.kanji.data.Settings
 import io.github.stopcran.kanji.data.inStack
-import kotlinx.coroutines.launch
 
 /** Where the user can go from the home pages; sessions are started by the caller. */
 @Suppress("LongParameterList")
@@ -74,48 +66,10 @@ class HomeActions(
     val onWords: (WordDirection, extra: Boolean) -> Unit,
 )
 
-/** The main screen and the Kanji / Words pages share one [HomeData], so every count agrees across them. */
 @Composable
-fun HomePages(app: KanjiApp, route: String, onBack: () -> Unit, actions: HomeActions) {
-    val source by app.settings.source.collectAsState()
-    key(source) {
-        val data = rememberHomeData(app)
-        LaunchedEffect(source) {
-            if (app.db.content().meta(source.id) == null) {
-                app.contentSync.sync(source)
-            }
-        }
-        val section = when (route) {
-            "kanji-home" -> "Kanji"
-            "words-home" -> "Words"
-            "counters-home" -> "Numbers & counters"
-            "grammar-home" -> "Grammar"
-            else -> null
-        }
-        if (section != null) {
-            val content = rememberHomeContent(app.db, app.contentSync, source)
-            val scope = rememberCoroutineScope()
-            ContentSection(content, section, onBack, { scope.launch { app.contentSync.sync(source) } }) {
-                when (route) {
-                    "kanji-home" -> KanjiPage(app, data, onBack, actions)
-                    "words-home" -> WordsPage(app.settings, data, onBack, actions.onWordCards, actions.onWords)
-                    "counters-home" -> CountersPage(app, onBack, actions)
-                    else -> GrammarPage(app, onBack, actions.onGrammarDoc, actions.onGrammar, actions.onGrammarTarget)
-                }
-            }
-        } else if (route == "kana-home") {
-            KanaPage(app, onBack, actions.onKanaStudy)
-        } else {
-            MainPage(app, source, data, actions)
-        }
-    }
-}
-
-@Composable
-private fun MainPage(app: KanjiApp, source: RepoSource, data: HomeData, a: HomeActions) {
-    val kana = rememberKanaOverview(app)
-    val content = rememberHomeContent(app.db, app.contentSync, source)
-    val scope = rememberCoroutineScope()
+internal fun MainPage(state: HomeState, overview: HomeOverview, preferences: HomePreferencesActions, a: HomeActions, onRetry: () -> Unit) {
+    val data = state.data
+    val content = state.content
     Page(
         "Ensō Nihongo", scrollable = !data.loading && content.ready != null,
         actions = {
@@ -124,35 +78,33 @@ private fun MainPage(app: KanjiApp, source: RepoSource, data: HomeData, a: HomeA
             }
         },
     ) {
-        HomeContentNotice(content) { scope.launch { app.contentSync.sync(source) } }
+        HomeContentNotice(content, onRetry)
         if (content.usable) LoadingBar(data)
         val defaultId = remember { RepoSource.parse(Defaults.CONTENT_REPO_URL, Defaults.CONTENT_BRANCH)?.id }
         if (data.sourceId != defaultId) Text(stringResource(R.string.cards_from, data.sourceId))
-        N4Offer(app.settings, data)
+        N4Offer(preferences, data)
         PacingHint(data)
-        StartingGuide(app.settings, a.onKanaPage, a.onWordsPage, a.onGrammarPage)
-        DailyCountsHelp(kana.allowance, data.pacing)
-        Entry("Kana", kana.summary(), R.drawable.kana_sumi, a.onKanaPage)
+        StartingGuide(overview.startingGuideVisible, preferences.showStartingGuide, a.onKanaPage, a.onWordsPage, a.onGrammarPage)
+        DailyCountsHelp(overview.kanaAllowance, data.pacing)
+        Entry("Kana", overview.kana, R.drawable.kana_sumi, a.onKanaPage)
         Entry("Kanji", content.summary(data.summary(HomeMode.Meaning, HomeMode.Drawing, HomeMode.Readings) ?: "Loading…"), ArtSet.current.kanji, a.onKanjiPage)
         val words = data.summary(
             HomeMode.WordJp, HomeMode.WordEn, HomeMode.WordReading, HomeMode.WordType, HomeMode.WordPicture, HomeMode.WordToPicture,
         ) ?: "Loading…"
         Entry("Words", content.summary(words), ArtSet.current.words, a.onWordsPage)
-        val counters = rememberCounterHome(app)
-        Entry("Numbers & counters", content.summary(counters.summary()), ArtSet.current.counters, a.onCountersPage)
-        val grammar = rememberGrammarHome(app).value
-        Entry("Grammar", content.summary(grammar.summary()), ArtSet.current.grammar, a.onGrammarPage)
-        Entry("Listening", content.summary(rememberListeningHome(app).value.summary()), ArtSet.current.listening, a.onListeningPage)
+        Entry("Numbers & counters", content.summary(overview.counters), ArtSet.current.counters, a.onCountersPage)
+        Entry("Grammar", content.summary(overview.grammar), ArtSet.current.grammar, a.onGrammarPage)
+        Entry("Listening", content.summary(overview.listening), ArtSet.current.listening, a.onListeningPage)
     }
 }
 
 @Composable
-private fun KanjiPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: HomeActions) {
+internal fun KanjiPage(data: HomeData, preferences: HomePreferencesActions, onBack: () -> Unit, a: HomeActions) {
     Page("Kanji", onBack, scrollable = !data.loading) {
         LoadingBar(data)
         Text(data.stack.label + " · " + stringResource(R.string.cards, data.kanji.inStack(data.stack.id).size))
         if (data.stacks.size > 1) {
-            LevelFilter(data.stacks, data.stack, { app.settings.setStack(it.id) }, { it.label },
+            LevelFilter(data.stacks, data.stack, { preferences.selectStack(it.id) }, { it.label },
                 description = if (data.stack.tag?.startsWith("jlpt-") == true)
                     stringResource(R.string.level_filter_kanji_exact, data.stack.label) else null)
             Text(stringResource(R.string.each_stack_keeps_its_own), style = MaterialTheme.typography.bodySmall)
@@ -166,7 +118,7 @@ private fun KanjiPage(app: KanjiApp, data: HomeData, onBack: () -> Unit, a: Home
 
 @Composable
 internal fun WordsPage(
-    settings: Settings,
+    preferences: HomePreferencesActions,
     data: HomeData,
     onBack: () -> Unit,
     onBrowse: () -> Unit,
@@ -175,9 +127,9 @@ internal fun WordsPage(
     Page("Words", onBack, scrollable = !data.loading) {
         LoadingBar(data)
         Text(data.wordStack.label + " · " + stringResource(R.string.words, data.wordCount))
-        N4Offer(settings, data)
+        N4Offer(preferences, data)
         if (data.wordStacks.size > 1) {
-            LevelFilter(data.wordStacks, data.wordStack, { settings.setWordStack(it.id) }, { it.label },
+            LevelFilter(data.wordStacks, data.wordStack, { preferences.selectWordStack(it.id) }, { it.label },
                 description = if (data.wordStack == WordStacks.n4) stringResource(R.string.level_filter_includes_easier) else null)
         }
         WordUnlockHelp()
@@ -259,15 +211,15 @@ internal fun pacingExplanation(p: NewAllowance): String? = when (p.note) {
 }
 
 @Composable
-private fun N4Offer(settings: Settings, data: HomeData) {
+private fun N4Offer(preferences: HomePreferencesActions, data: HomeData) {
     if (!data.n4Offer) return
     Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.you_know_n5_well), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.most_n5_kanji_and_words))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { settings.setN4Unlocked(true); settings.setWordStack(WordStacks.n4.id) }) { Text(stringResource(R.string.add_n4_words)) }
-                TextButton(onClick = { settings.dismissAdvance(System.currentTimeMillis()) }) { Text(stringResource(R.string.not_yet)) }
+                Button(onClick = preferences.acceptN4) { Text(stringResource(R.string.add_n4_words)) }
+                TextButton(onClick = preferences.dismissN4) { Text(stringResource(R.string.not_yet)) }
             }
         }
     }

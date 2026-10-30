@@ -9,11 +9,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.random.Random
 
-internal class GrammarChoiceRandom(private val bucket: Int = 0, private val alternative: Int = 0) : Random() {
-    override fun nextBits(bitCount: Int): Int = error("Unexpected random operation")
-    override fun nextInt(until: Int): Int = if (until == 5) bucket else alternative.coerceAtMost(until - 1)
-}
-
 class GrammarChoicesTest {
     private val exercise = grammarFixture().exercises.first().copy(
         acceptedAnswers = listOf("a", "alternate", "another"),

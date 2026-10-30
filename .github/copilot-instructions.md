@@ -6,22 +6,31 @@ Keep this file current: add a short note whenever you hit a gotcha, pitfall or n
 
 ## Layout
 
+The pure `core` packages live in the Kotlin/JVM `:core` module; Android `data` and `ui` packages remain in `:app`.
+Production package names are unchanged. Shared JVM test builders/media live in `core/src/testFixtures`.
+The current module inventory lives in `settings.gradle.kts`; build tasks and integration setup live in `.github/workflows/ci.yml`.
+
 - `core/` – pure Kotlin, no Android imports, unit-tested on the JVM. Packages: `content` (front matter, parser, safe zip, repo URL, search), `srs` (FSRS-5, queue builder, stacks, pacing, font policy, reminders),
   `quiz` (option builder, `QuizSession`), `words` (word queues/stacks/search), `kana` (built-in kana catalog and progression), `draw` (stroke matcher, grader, regularisation, brush geometry), `markdown` (own parser).
   Put new logic here whenever possible.
-- `data/` – Room entities/DAOs (`Database.kt`) and migrations, `Settings` (SharedPreferences), `ContentSync` (all network goes through the `ContentHttp` seam; tests use a fake), `SyncWorker`, `ReminderWorker`, `DrawingLog`.
-- `ui/` – Compose screens and view models. `MainActivity` holds a tiny string-route back stack (see Gotchas).
-- `KanjiApp` is the service locator (`db`, `settings`, `contentSync`, `services`). View models receive `Services` through `ui/ServiceViewModel.kt` (`serviceViewModel(key) { ... }`), never the Application.
+- `data/` – Room entities/DAOs (`Database.kt`) and migrations, learner `Settings` and legacy `SyncPreferences` bookkeeping
+  (same SharedPreferences persistence), `ContentSync` (network through `ContentHttp`), workers and `DrawingLog`.
+- `ui/` – Compose screens and view models. `MainActivity` owns navigation (see Gotchas).
+- `KanjiApp` is the composition root (`db`, `settings`, `contentSync`, application-lifetime `syncCoordinator`, `services`).
+  Factories provide dependencies; legacy ViewModels still receive `Services`, while Counter/session persistence uses narrow stores.
+  Home loading/projection lives in `HomeRepository`/`HomeStateProducer`; `HomeRoute` supplies state/actions to scoped presentation.
 
 ## Build and test (Windows)
 
 - Needs `JAVA_HOME` = JDK 17 and `ANDROID_HOME` (see `docs/PLAN.md`). Android Studio's Gradle JVM must be JDK 17 (this Gradle version rejects newer JDKs).
-- `./gradlew detekt testDebugUnitTest assembleDebug lintDebug assembleRelease` matches CI; lint alone does not run Detekt.
+- `.\gradlew.bat detekt :core:test testDebugUnitTest assembleDebug lintDebug assembleRelease` matches CI; lint alone does not run Detekt.
+  `.\gradlew.bat -PcoreOnly :core:check` excludes Android project configuration and needs only JDK 17, not the SDK.
   `RealContentTest.parsesRealContentRepoWhenPresent` reads `../../learning-japanese` if that
   clone sits next to this repo, and is skipped otherwise.
 - Emulator (Pixel 9, API 35), adb driving, screenshots and copying an APK to the phone: see the `android-emulator` skill in `.github/skills/`.
 - Gradle treats `RealContentTest.parsesRealContentRepoWhenPresent` as up to date when only the sibling content clone changed; re-run it with
-  `./gradlew cleanTestDebugUnitTest testDebugUnitTest --tests '*ContentTest*'` after pulling or editing `../../learning-japanese`.
+  `.\gradlew.bat :core:cleanTest :core:test cleanTestDebugUnitTest testDebugUnitTest --tests '*ContentTest*'` after pulling or editing the sibling
+  content checkout (`..\learning-japanese` from the repository root, `..\..\learning-japanese` from `app` or `core`).
 - Check the exit status/test results before committing; a chained `test; commit; push` publishes a red build.
 - Native `OK (N tests)` can include `assumeTrue` skips. Use raw instrumentation output (`-w -r`) and require a
   status-code 0 for each selected case; provide the external acceptance archives those cases require.
@@ -50,25 +59,26 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - Stateful Back callbacks must be lambdas, not references to local functions capturing snapshots.
   Function-reference equality can hide changed captures from `rememberUpdatedState`, retaining a null loading row.
   Exercise Android key dispatch after asynchronous loading, feedback and nested article navigation.
-- **Screen state across navigation:** `AppNav` composes only the top route, wrapped in `SaveableStateProvider` keyed by stack position
-  and route (logical target for consolidated Grammar details); `pop()` removes the state. Without the holder, search/scroll is
+- **Screen state across navigation:** `AppNav` composes only the top route, wrapped in `SaveableStateProvider` keyed by typed entry ID
+  or legacy stack position/route (logical target for consolidated Grammar details); `pop()` removes the state. Without the holder, search/scroll is
   lost when another screen is pushed. Lists that must keep scroll use an explicit `rememberLazyListState()`.
 - An asynchronous screen's short loading body can clamp a restored `ScrollState` to zero before real content arrives.
   Keep the same `Page` call but disable its scrolling while loading; test a measured loading frame on Back and process restoration,
   not only an isolated diagram/list saver. A conditional Ready subtree also unregisters its saveable values when it disappears:
   give its non-consent browser/evidence state a holder that survives loading, and keep exception consent outside that saved subtree.
   Exercise a rendered Start-loading frame before both stale-preview and fresh-session returns, with nonzero pan/list offsets.
-- **ViewModel scope:** `viewModel()` is scoped to the Activity, not to a route, so a quiz VM outlives leaving the screen and would resume
-  mid-answer. The quiz route is `quiz:<timestamp>` and the VM is created with that key, giving each start a fresh session while still
-  surviving rotation. Do the same for any new session-like screen.
-- **Back stack route strings:** `home`, `kanji-home`, `words-home`, `settings`, `about`, `cards`, `word-cards`, `doc:<repo path>`, and session routes `quiz:<ts>[:extra]`, `wquiz:<ts>:<jp|en|rd|ty|pc|wp>[:extra]`, `kreading:<ts>[:extra]`, `draw:<ts>[:extra]`. Wire new routes in `MainActivity`.
+- **ViewModel scope:** typed Draw/document entries provide route-owned stores/lifecycles, retained across coverage/rotation and cleared
+  on removal. Other legacy families still use Activity-scoped, route-keyed VMs; their fresh session keys and explicit leave callbacks
+  remain required until migrated. `AppDestination` is the typed/legacy adapter; do not add another authoritative back stack.
+- **Live routing:** `MainActivity.kt` owns route dispatch and restoration; feature route helpers define argument contracts.
+  Use those implementations rather than a duplicated route roster. `docs/DESIGN.md` owns the behavioral rationale.
 - Source-bound docs encode source/path and optional captured Grammar topic separately. Never resolve a session's reference context
   from later settings/content. Contents jumps use real lazy indices, including leading items, and must not rerun on nested Back.
 - **Manifest hashes** are computed over LF-normalised bytes (`tools/build_manifest.py` in the content repo and `ContentParser.sha256`). Keep
   both in sync, otherwise files fail with "hash mismatch" on Windows checkouts with CRLF.
 - Named word scenes use the separate manifest `scenes` map, never `files` (older clients discard that folder). A declared bad catalog
   disables quiz eligibility rather than synthesizing a legacy fallback. Graded image questions use predecoded, hash-checked snapshots;
-  `WordImage` is only the live article loader. Scene IDs must never become SRS keys.
+  `DocRoute` owns live article image loading; `WordImage` only renders its result. Scene IDs must never become SRS keys.
 - Image cache rows use the basename (`name.webp`), while article references use `images/name.webp`; native gallery fixtures must
   match that key and wait for the asynchronously decoded image, not merely for surrounding article text.
 - Markdown links are file-relative: a word links to `../articles/name.md`, not `articles/name.md`, which is rejected as a nested path.
@@ -94,6 +104,13 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - **Content is untrusted.** Parse defensively, skip bad files instead of failing the sync, never render raw HTML, cap archive sizes.
 - First-import readiness is separate from completed empty DB observations. Gate repository entry UI, not captured
   Listening recovery; test actual section controls and both cache-loading and section-projection restoration frames.
+- Home calculations capture source/branch, selections, preferences, one Clock instant and its zone. Keep heavy projection outside
+  composition; ticks must update allowances, local-day/week calculations and N4 dismissal expiry. Unexpected failures propagate.
+  Focus cutoff initialization is a repository-owned write, not pure presentation. Do not revive cancelled selections.
+- Submit Settings/launch/Home sync through the application coordinator, not screen/Activity jobs. Preserve forced versus ordinary
+  versus throttled launch semantics, and do not coalesce across an intervening branch replacement. Periodic work keeps its own
+  execution-time source and cancellation. Shared diagnostics remain source/branch-bound, including queued and interrupted work.
+  Save local repository validation errors with the form, so rotation cannot replace an invalid saved URL's error with old sync success.
 - N2 nearly exhausted entry headroom while byte budgets still passed. Count directories/skipped ZIP entries and coordinate the content
   publishing guard with `SafeZip` (see `docs/DESIGN.md`); more entry capacity does not relax byte limits or upgrade installed APKs.
   Complete-archive integration fixtures must honor Git `export-ignore` too, rather than zip contributor evidence that never ships.

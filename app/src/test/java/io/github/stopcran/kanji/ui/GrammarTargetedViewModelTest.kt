@@ -72,7 +72,7 @@ class GrammarTargetedViewModelTest {
     }
 
     private fun installTopics(vararg sets: GrammarSet): GrammarPracticeTarget {
-        services.settings.setGrammarParserEpoch(sourceId, ContentParser.GRAMMAR_PARSER_EPOCH)
+        services.settings.sync.setGrammarParserEpoch(sourceId, ContentParser.GRAMMAR_PARSER_EPOCH)
         services.settings.setGrammarNewScope(sourceId, GrammarScope.All)
         runBlocking {
             db.content().insertGrammar(sets.mapIndexed { index, set ->

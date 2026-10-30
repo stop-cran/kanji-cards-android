@@ -5,6 +5,8 @@ import androidx.room.Room
 import androidx.room.withTransaction
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.content.ContentParser
+import io.github.stopcran.kanji.core.srs.Fsrs
+import io.github.stopcran.kanji.core.srs.ReviewRecording
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.WordStacks
 import io.github.stopcran.kanji.data.AppDatabase
@@ -41,6 +43,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.SQLiteMode
 import java.time.Instant
+import java.time.Clock
+import java.time.ZoneOffset
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -285,6 +289,28 @@ class WordKanjiHelpViewModelTest {
         assertEquals(oldStates, db.reviews().allStates().filter { it.kanji in kana })
         assertEquals(oldLog, db.reviews().allLog().filter { it.kanji in kana })
         assertTrue(db.reviews().allLog().filter { it.kanji in kanji }.all { it.stack == WordStacks.n4.id })
+    }
+
+    @Test
+    fun typedConfirmationStaysUncappedAndDoesNotRecordAtAnswerCheck() = runBlocking {
+        install()
+        gate()
+        val at = Instant.now()
+        val vm = WordQuizViewModel(services, ReviewRecording(Clock.fixed(at, ZoneOffset.UTC)))
+        vm.ensureStarted(WordDirection.Type, false)
+        withTimeout(10_000) { while (vm.ui is WordQuizUi.Loading) delay(10) }
+        val q = vm.ui as WordQuizUi.TypeQuestion
+        vm.onDraft(q.word.word)
+        vm.submit()
+        assertTrue(db.reviews().allLog().isEmpty())
+        advance(vm)
+        val log = db.reviews().allLog().single()
+        val state = db.reviews().states(source, stack, WordDirection.Type.mode.name).single()
+        assertEquals(at.toEpochMilli(), log.atMs)
+        assertEquals(3, log.grade)
+        assertTrue(state.stability > Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS)
+        vm.leaveSession()
+        db.withTransaction {}
     }
 
     @Test

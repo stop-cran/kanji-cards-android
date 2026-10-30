@@ -67,10 +67,9 @@ sealed interface DrawUi {
 }
 
 /** Drawing session: caption + canvas -> check (recogniser gate + stroke matcher) -> graded answer with overlay. */
-class DrawViewModel(private val app: Services) : StudyViewModel(app) {
+class DrawViewModel(private val app: Services, private val recognizer: InkRecognition = InkRecognizer()) : StudyViewModel(app.sessionStore) {
     private val fsrs = Fsrs()
     private val matcher = StrokeMatcher()
-    private val recognizer = InkRecognizer()
     private val json = Json { ignoreUnknownKeys = true }
 
     var ui: DrawUi by mutableStateOf(DrawUi.Loading)

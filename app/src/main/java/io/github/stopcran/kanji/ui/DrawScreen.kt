@@ -65,13 +65,13 @@ private val Bad = Color(0xFFC62828)
 
 @Composable
 fun DrawScreen(
-    sessionKey: String,
+    destination: AppDestination.Draw,
     onBack: () -> Unit,
     onOpenDoc: (String) -> Unit,
     onPracticeMore: () -> Unit,
-    vm: DrawViewModel = serviceViewModel(sessionKey) { DrawViewModel(it) },
+    vm: DrawViewModel = serviceViewModel(destination.route) { DrawViewModel(it) },
 ) {
-    LaunchedEffect(sessionKey) { vm.ensureStarted(sessionKey.endsWith(":extra")) }
+    LaunchedEffect(destination) { vm.ensureStarted(destination.extra) }
     val app = LocalContext.current.applicationContext as KanjiApp
     val brush by app.settings.brush.collectAsState()
     androidx.compose.runtime.CompositionLocalProvider(LocalBrush provides brush, LocalBrushLook provides vm.look) {

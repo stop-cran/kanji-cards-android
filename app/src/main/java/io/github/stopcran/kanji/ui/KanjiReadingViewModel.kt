@@ -49,7 +49,7 @@ sealed interface ReadingUi {
 }
 
 /** Kanji readings session over on'yomi and kun'yomi; each (kanji, kind, reading) has its own scheduling state. */
-class KanjiReadingViewModel(private val app: Services) : StudyViewModel(app) {
+class KanjiReadingViewModel(private val app: Services) : StudyViewModel(app.sessionStore) {
     private val fsrs = Fsrs()
     private val random = Random.Default
 

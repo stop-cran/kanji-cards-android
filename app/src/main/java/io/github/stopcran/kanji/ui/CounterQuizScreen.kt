@@ -42,7 +42,7 @@ fun CounterQuizScreen(
     onBack: () -> Unit,
     onPracticeMore: () -> Unit,
     onOpenDoc: (String, String) -> Unit,
-    vm: CounterQuizViewModel = serviceViewModel(sessionKey) { CounterQuizViewModel(it) },
+    vm: CounterQuizViewModel = serviceViewModel(sessionKey) { CounterQuizViewModel(it.counters, it.sessionStore) },
 ) {
     val mode = CounterMode.fromCode(sessionKey.split(':').getOrNull(2))
     val extra = sessionKey.endsWith(":extra")

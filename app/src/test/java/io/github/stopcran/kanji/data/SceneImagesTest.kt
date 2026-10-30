@@ -6,6 +6,7 @@ import androidx.room.Room
 import io.github.stopcran.kanji.core.content.ContentParser
 import io.github.stopcran.kanji.core.content.Manifest
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -72,21 +73,51 @@ class SceneImagesTest {
     }
 
     @Test
+    fun documentsScopeBodiesAndOrderedScenesAndRetainLegacyIllustrations() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), AppDatabase::class.java)
+            .allowMainThreadQueries().build()
+        try {
+            val word = WordEntity("a/repo", "語", "ご", "Word", "wago", "", "", "First body",
+                image = "images/legacy.webp", imageScene = "Legacy illustration")
+            db.content().insertWords(listOf(word, word.copy(sourceId = "b/repo", body = "Other body")))
+            db.content().insertScenes(listOf(
+                WordSceneEntity("a/repo", "語", "later", "Later", "images/later.webp", "Later illustration", false, "later-hash", 2),
+                WordSceneEntity("a/repo", "語", "first", "First", "images/first.webp", "First illustration", true, "first-hash", 0),
+            ))
+            val repository = RoomDocumentRepository(db)
+            val first = repository.observe("a/repo", "words/語.md").first()!!
+            assertEquals("First body", first.body)
+            assertEquals(listOf("first", "later"), first.scenes.map { it.id })
+            assertEquals(listOf("first-hash", "later-hash"), first.scenes.map { it.expectedHash })
+            val other = repository.observe("b/repo", "words/語.md").first()!!
+            assertEquals("Other body", other.body)
+            assertEquals("Legacy illustration", other.scenes.single().description)
+            assertNull(other.scenes.single().sense)
+            assertNull(repository.observe("unknown/repo", "words/語.md").first())
+            assertNull(repository.observe("a/repo", "articles/absent.md").first())
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
     fun loadingChecksTheSourceAndExpectedImageRevision() = runBlocking {
         val db = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), AppDatabase::class.java)
             .allowMainThreadQueries().build()
         try {
             val bytes = sceneWebp()
             val hash = ContentParser.rawSha256(bytes)
+            val repository = RoomDocumentRepository(db)
+            val scene = DocumentScene("scene", "images/a.webp", "Picture", expectedHash = hash)
             db.content().insertImages(listOf(ImageEntity("a/repo", "a.webp", bytes)))
-            val ready = db.content().sceneImage("a/repo", "images/a.webp", hash) as SceneImageResult.Ready
+            val ready = repository.image("a/repo", scene) as SceneImageResult.Ready
             ready.bitmap.recycle()
-            assertTrue(db.content().sceneImage("other/repo", "images/a.webp", hash) is SceneImageResult.Unavailable)
+            assertTrue(repository.image("other/repo", scene) is SceneImageResult.Unavailable)
             db.content().insertImages(listOf(ImageEntity("a/repo", "a.webp", sceneWebp(blue = true))))
-            val changed = db.content().sceneImage("a/repo", "images/a.webp", hash) as SceneImageResult.Unavailable
+            val changed = repository.image("a/repo", scene) as SceneImageResult.Unavailable
             assertTrue(changed.reason.contains("changed"))
             db.content().clearImages("a/repo")
-            val missing = db.content().sceneImage("a/repo", "images/a.webp", hash) as SceneImageResult.Unavailable
+            val missing = repository.image("a/repo", scene) as SceneImageResult.Unavailable
             assertTrue(missing.reason.contains("missing"))
         } finally {
             db.close()

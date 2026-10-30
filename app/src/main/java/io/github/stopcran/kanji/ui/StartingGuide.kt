@@ -12,20 +12,16 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.stopcran.kanji.R
-import io.github.stopcran.kanji.data.Settings
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun StartingGuide(settings: Settings, onKana: () -> Unit, onWords: () -> Unit, onGrammar: () -> Unit) {
-    val visible by settings.startingGuideVisible.collectAsState()
+internal fun StartingGuide(visible: Boolean, onVisibility: (Boolean) -> Unit, onKana: () -> Unit, onWords: () -> Unit, onGrammar: () -> Unit) {
     if (!visible) {
-        TextButton(onClick = { settings.setStartingGuideVisible(true) }) {
+        TextButton(onClick = { onVisibility(true) }) {
             Text(stringResource(R.string.starting_guide_title))
         }
         return
@@ -34,7 +30,7 @@ internal fun StartingGuide(settings: Settings, onKana: () -> Unit, onWords: () -
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Text(stringResource(R.string.starting_guide_title), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                TextButton(onClick = { settings.setStartingGuideVisible(false) }) {
+                TextButton(onClick = { onVisibility(false) }) {
                     Text(stringResource(R.string.starting_guide_hide))
                 }
             }

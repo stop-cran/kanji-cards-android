@@ -20,7 +20,7 @@
     <ID>ComplexCondition:Words.kt$WordQuizBuilder$chosen.size &lt; count - 1 &amp;&amp; c.word !in usedWords &amp;&amp; !excluded(target, c) &amp;&amp; chosen.none { excluded(it, c) } &amp;&amp; usedTitles.add(c.title)</ID>
     <ID>CyclomaticComplexMethod:CardSearch.kt$CardSearch$fun score(kanji: String, title: String, onyomi: List&lt;String&gt;, kunyomi: List&lt;String&gt;, query: String): Int</ID>
     <ID>CyclomaticComplexMethod:ContentParser.kt$ContentParser$fun parse(files: Map&lt;String, ByteArray&gt;): ParsedContent</ID>
-    <ID>CyclomaticComplexMethod:ContentSync.kt$ContentSync$suspend fun sync(source: RepoSource, force: Boolean = false): SyncResult</ID>
+    <ID>CyclomaticComplexMethod:ContentSync.kt$ContentSync$private suspend fun syncContent(source: RepoSource, force: Boolean): SyncResult</ID>
     <ID>CyclomaticComplexMethod:FrontMatter.kt$FrontMatter$fun parse(text: String, requirePlainKeys: Boolean = false): Parsed?</ID>
     <ID>CyclomaticComplexMethod:KanjiReadings.kt$KanjiReadingQuiz$fun question(target: ReadingCard, kind: ReadingKind, all: List&lt;ReadingCard&gt;, random: Random, count: Int = 4, reading: String? = null): ReadingQuestion?</ID>
     <ID>CyclomaticComplexMethod:Markdown.kt$Links$fun resolve(fromPath: String, target: String): LinkTarget?</ID>
@@ -176,7 +176,6 @@
     <ID>NestedBlockDepth:DatabaseMigrationTest.kt$DatabaseMigrationTest$private fun createLegacyDatabase(version: Int): Map&lt;String, List&lt;List&lt;String?&gt;&gt;&gt;</ID>
     <ID>NestedBlockDepth:DrawScreen.kt$@Composable private fun AnswerState(s: DrawUi.Answer, vm: DrawViewModel, onOpenDoc: (String) -&gt; Unit)</ID>
     <ID>NestedBlockDepth:FrontMatter.kt$FrontMatter$fun parse(text: String, requirePlainKeys: Boolean = false): Parsed?</ID>
-    <ID>NestedBlockDepth:KanjiReadings.kt$KanjiReadingQueue$internal fun interleave(items: List&lt;ReadingItem&gt;, gap: Int = SIBLING_GAP): List&lt;ReadingItem&gt;</ID>
     <ID>NestedBlockDepth:Markdown.kt$Markdown$private fun parseInline(s: String, path: String, bold: Boolean, italic: Boolean, out: MutableList&lt;Span&gt;, depth: Int)</ID>
     <ID>NestedBlockDepth:Markdown.kt$Markdown$private fun parseLines(lines: List&lt;String&gt;, path: String, depth: Int): List&lt;Block&gt;</ID>
     <ID>NestedBlockDepth:ReminderWorker.kt$ReminderWorker$override suspend fun doWork(): Result</ID>

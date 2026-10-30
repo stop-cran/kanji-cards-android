@@ -36,12 +36,20 @@ import io.github.stopcran.kanji.ui.StudySessionRegistry
 /** What a ViewModel may use; passed in by a factory so ViewModels never reach for the Application. */
 class Services(val db: AppDatabase, val settings: Settings, val context: Context) {
     val studySessions = StudySessionRegistry()
+    val sessionStore: io.github.stopcran.kanji.data.StudySessionStore = io.github.stopcran.kanji.data.RoomStudySessionStore(db)
+    val reviewStore: io.github.stopcran.kanji.data.ReviewStore = io.github.stopcran.kanji.data.RoomReviewStore(db)
+    val counters: io.github.stopcran.kanji.data.CounterRepository = io.github.stopcran.kanji.data.RoomCounterRepository(db, settings, reviewStore)
+    val documents: io.github.stopcran.kanji.data.DocumentRepository = io.github.stopcran.kanji.data.RoomDocumentRepository(db)
+    internal val home: io.github.stopcran.kanji.data.HomeRepository = io.github.stopcran.kanji.data.RoomHomeRepository(db, settings)
     val listening = io.github.stopcran.kanji.data.ListeningStudy(db, settings)
     val listeningTasks = io.github.stopcran.kanji.data.ListeningTaskStudy(db, settings)
     val listeningAssessments = io.github.stopcran.kanji.data.ListeningAssessmentStudy(db, settings, listeningTasks)
 }
 
 class KanjiApp : Application() {
+    private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, error ->
+        android.util.Log.e("ContentSync", "Sync owner stopped unexpectedly.", error)
+    })
     private val maintenance = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, error ->
         android.util.Log.e("GrammarReadiness", "Readiness rebuild failed; retained milestones remain usable.", error)
     })
@@ -54,7 +62,16 @@ class KanjiApp : Application() {
             .build()
     }
     val settings: Settings by lazy { Settings(this) }
-    val contentSync: ContentSync by lazy { ContentSync(db, settings) }
+    val contentSync: ContentSync by lazy { ContentSync(db, settings.sync) }
+    internal val syncCoordinator by lazy {
+        io.github.stopcran.kanji.data.SyncCoordinator(syncScope, contentSync.activity) { request ->
+            when (request.kind) {
+                io.github.stopcran.kanji.data.SyncKind.Launch -> contentSync.syncOnLaunch(request.source)
+                io.github.stopcran.kanji.data.SyncKind.Forced -> contentSync.sync(request.source, force = true)
+                io.github.stopcran.kanji.data.SyncKind.Ordinary -> contentSync.sync(request.source)
+            }
+        }
+    }
     val services: Services by lazy { Services(db, settings, this) }
 
     override fun onCreate() {

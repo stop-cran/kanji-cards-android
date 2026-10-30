@@ -55,7 +55,7 @@ sealed interface KanaStudyUi {
     ) : KanaStudyUi
 }
 
-class KanaStudyViewModel(private val app: Services) : StudyViewModel(app) {
+class KanaStudyViewModel(private val app: Services) : StudyViewModel(app.sessionStore) {
     private val fsrs = Fsrs()
     private val matcher = StrokeMatcher()
     private val recognizer = InkRecognizer()

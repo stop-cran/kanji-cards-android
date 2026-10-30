@@ -3,15 +3,16 @@ package io.github.stopcran.kanji
 import io.github.stopcran.kanji.core.counters.CounterRoutes
 
 import android.os.Bundle
-import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import io.github.stopcran.kanji.ui.KanjiTheme
 import androidx.compose.runtime.Composable
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -19,11 +20,13 @@ import androidx.compose.runtime.toMutableStateList
 import io.github.stopcran.kanji.ui.AboutScreen
 import io.github.stopcran.kanji.ui.CounterQuizScreen
 import io.github.stopcran.kanji.ui.GrammarQuizScreen
-import io.github.stopcran.kanji.ui.DocScreen
+import io.github.stopcran.kanji.ui.DocRoute
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import io.github.stopcran.kanji.ui.DrawScreen
 import io.github.stopcran.kanji.ui.CardsScreen
 import io.github.stopcran.kanji.ui.HomeActions
-import io.github.stopcran.kanji.ui.HomePages
+import io.github.stopcran.kanji.ui.HomeRoute
 import io.github.stopcran.kanji.ui.KanjiReadingScreen
 import io.github.stopcran.kanji.ui.QuizScreen
 import io.github.stopcran.kanji.ui.SettingsScreen
@@ -33,6 +36,15 @@ import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.ui.KanaStudyScreen
 import io.github.stopcran.kanji.ui.GrammarPracticeRoutes
 import io.github.stopcran.kanji.ui.GrammarPracticeUnavailable
+import io.github.stopcran.kanji.ui.AppDestination
+import io.github.stopcran.kanji.ui.NavigationEntry
+import io.github.stopcran.kanji.ui.RouteOwners
+import io.github.stopcran.kanji.ui.RouteLifecycle
+import io.github.stopcran.kanji.ui.DrawViewModel
+import io.github.stopcran.kanji.ui.serviceViewModel
+import io.github.stopcran.kanji.ui.Page
+import androidx.compose.material3.Text
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.remember
 import android.util.Log
 
@@ -41,7 +53,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val app = application as KanjiApp
         // Not again after rotation or process-recreation; the interval check inside also throttles it.
-        if (savedInstanceState == null) lifecycleScope.launch { app.contentSync.syncOnLaunch(app.settings.source.value) }
+        if (savedInstanceState == null) app.syncCoordinator.request(app.settings.source.value, io.github.stopcran.kanji.data.SyncKind.Launch)
         enableEdgeToEdge()
         setContent { KanjiTheme { AppNav(app) } }
     }
@@ -68,71 +80,123 @@ internal fun restoreStudyRoutes(routes: List<String>, sameProcess: Boolean): Lis
     }
 
 /**
- * Back stack of route strings: "home", "kanji-home", "words-home", "settings", "cards", "word-cards", "quiz:..", "doc:<path>". Survives rotation via
+ * Back stack for [RouteContent]. Survives rotation via
  * rememberSaveable; after process death ephemeral session routes are dropped. Durable listening encounters are restored.
  */
 @Composable
-private fun AppNav(app: KanjiApp) {
+internal fun AppNav(app: KanjiApp, createDraw: (Services) -> DrawViewModel = { DrawViewModel(it) }) {
     val stack = rememberSaveable(
         saver = listSaver(
-            save = { listOf("t:$processToken") + it },
+            save = { listOf("t:$processToken") + it.map(NavigationEntry::save) },
             restore = { saved ->
                 val routes = saved.filterNot { it.startsWith("t:") }
                 val sameProcess = saved.firstOrNull() == "t:$processToken"
-                restoreStudyRoutes(routes, sameProcess).ifEmpty { listOf("home") }.toMutableStateList()
+                NavigationEntry.restore(routes, sameProcess).ifEmpty { listOf(NavigationEntry(AppDestination.Legacy("home"))) }.toMutableStateList()
             },
         ),
     ) {
-        listOf("home").toMutableStateList()
+        listOf(NavigationEntry(AppDestination.Legacy("home"))).toMutableStateList()
     }
+    val owners: RouteOwners = viewModel()
     val holder = rememberSaveableStateHolder()
-    fun push(route: String) {
+    fun push(destination: AppDestination) {
+        val route = destination.route
         if (!GrammarPracticeRoutes.isTargeted(route) ||
-            GrammarPracticeRoutes.savedStateIdentity(stack.last()) != GrammarPracticeRoutes.savedStateIdentity(route)) stack.add(route)
+            GrammarPracticeRoutes.savedStateIdentity(stack.last().destination.route) != GrammarPracticeRoutes.savedStateIdentity(route)) {
+            stack.add(NavigationEntry(destination))
+        }
     }
     fun pop() {
         if (stack.size > 1) {
-            app.services.studySessions.leave(stack.last())
-            holder.removeState(stateKey(stack.lastIndex, stack.last()))
+            val old = stack.last()
+            app.services.studySessions.leave(old.destination.route)
+            owners.remove(old.id)
+            holder.removeState(stateKey(stack.lastIndex, old))
             stack.removeAt(stack.lastIndex)
         }
     }
-    fun replace(route: String) {
+    fun replace(destination: AppDestination) {
         val old = stack.last()
-        app.services.studySessions.leave(old)
-        if (stateKey(stack.lastIndex, old) != stateKey(stack.lastIndex, route)) holder.removeState(stateKey(stack.lastIndex, old))
-        stack[stack.lastIndex] = route
+        val next = NavigationEntry(destination)
+        app.services.studySessions.leave(old.destination.route)
+        owners.remove(old.id)
+        if (stateKey(stack.lastIndex, old) != stateKey(stack.lastIndex, next)) holder.removeState(stateKey(stack.lastIndex, old))
+        stack[stack.lastIndex] = next
     }
     fun browseGrammar() {
-        val index = stack.indexOfLast { it == "grammar-home" }
-        if (index < 0) replace("grammar-home") else while (stack.lastIndex > index) pop()
+        val index = stack.indexOfLast { it.destination.route == "grammar-home" }
+        if (index < 0) replace(AppDestination.Legacy("grammar-home")) else while (stack.lastIndex > index) pop()
     }
 
     BackHandler(enabled = stack.size > 1) { pop() }
 
     // Screens below the top leave composition; the holder keeps their rememberSaveable state (search text, selection, scroll) for Back.
     val top = stack.last()
+    val owner = if (top.scoped) owners.owner(top.id) else null
+    RouteLifecycle(owners, top.id.takeIf { top.scoped })
+    val content: @Composable () -> Unit = {
+        RouteContent(app, top.destination, { push(it) }, { pop() }, { replace(it) }, { browseGrammar() }, createDraw)
+    }
     holder.SaveableStateProvider(stateKey(stack.lastIndex, top)) {
-        RouteContent(app, top, { push(it) }, { pop() }, { replace(it) }, { browseGrammar() })
+        if (owner == null) content() else {
+            CompositionLocalProvider(LocalViewModelStoreOwner provides owner, LocalLifecycleOwner provides owner) { content() }
+        }
     }
 }
 
-/** Index in the key so the same document opened twice in one stack keeps separate scroll state. */
+/** Legacy browsing identity is distinct from a fresh Grammar session/consent identity. */
 internal fun stateKey(index: Int, route: String) = "$index:${GrammarPracticeRoutes.savedStateIdentity(route)}"
 
+internal fun stateKey(index: Int, entry: NavigationEntry) =
+    if (entry.scoped) "entry:${entry.id}" else stateKey(index, entry.destination.route)
+
 internal fun sourceDocRoute(sourceId: String, path: String, topic: String? = null) =
-    "source-doc:${Uri.encode(sourceId)}:${Uri.encode(path)}" + (topic?.let { ":${Uri.encode(it)}" } ?: "")
+    AppDestination.Document(path, sourceId, topic).route
 
 @Composable
 internal fun SourceDocScreen(app: KanjiApp, route: String, pop: () -> Unit, push: (String) -> Unit) {
-    val parts = remember(route) { route.removePrefix("source-doc:").split(":", limit = 3).map(Uri::decode) }
-    val (sourceId, path) = parts
-    DocScreen(app, path, onBack = pop, onOpenDoc = { push(sourceDocRoute(sourceId, it)) },
-        sourceId = sourceId, topic = parts.getOrNull(2)?.takeIf { it.isNotBlank() })
+    val destination = remember(route) { AppDestination.parse(route) }
+    if (destination is AppDestination.Document) DocumentDestination(app, destination, pop) { push(it.route) }
+    else UnavailableDestination(pop)
+}
+
+@Composable
+private fun DocumentDestination(app: KanjiApp, destination: AppDestination.Document, pop: () -> Unit, push: (AppDestination) -> Unit) {
+    val currentSource by app.settings.source.collectAsState()
+    DocRoute(
+        app.services.documents, destination.sourceId ?: currentSource.id, destination.path, pop,
+        { push(AppDestination.Document(it, destination.sourceId)) }, destination.topic,
+    )
+}
+
+@Composable
+private fun UnavailableDestination(pop: () -> Unit) {
+    Page(stringResource(R.string.destination_unavailable), pop) {
+        Text(stringResource(R.string.destination_unavailable_detail))
+    }
 }
 
 @Composable
 private fun RouteContent(
+    app: KanjiApp, destination: AppDestination, push: (AppDestination) -> Unit, pop: () -> Unit,
+    replace: (AppDestination) -> Unit, browseGrammar: () -> Unit, createDraw: (Services) -> DrawViewModel,
+) {
+    when (destination) {
+        is AppDestination.Draw -> DrawScreen(
+            destination, pop, { push(AppDestination.Document(it)) },
+            { replace(AppDestination.Draw(extra = true)) },
+            serviceViewModel(destination.route) { createDraw(it) },
+        )
+        is AppDestination.Document -> DocumentDestination(app, destination, pop, push)
+        AppDestination.Unavailable -> UnavailableDestination(pop)
+        is AppDestination.Legacy -> LegacyRouteContent(
+            app, destination.route, { push(AppDestination.parse(it)) }, pop, { replace(AppDestination.parse(it)) }, browseGrammar,
+        )
+    }
+}
+
+@Composable
+private fun LegacyRouteContent(
     app: KanjiApp,
     route: String,
     push: (String) -> Unit,
@@ -216,13 +280,6 @@ private fun RouteContent(
                 onOpenDoc = { push("doc:$it") },
                 onPracticeMore = { pop(); push("kreading:${System.currentTimeMillis()}:extra") },
             )
-        } else if (route.startsWith("draw:")) {
-            DrawScreen(
-                sessionKey = route,
-                onBack = pop,
-                onOpenDoc = { push("doc:$it") },
-                onPracticeMore = { pop(); push("draw:${System.currentTimeMillis()}:extra") },
-            )
         } else if (route.startsWith("kana-study:")) {
             KanaStudyScreen(
                 sessionKey = route,
@@ -232,13 +289,8 @@ private fun RouteContent(
                     push("kana-study:${script.id}:${mode.name}:${System.currentTimeMillis()}:extra")
                 },
             )
-        } else if (route.startsWith("source-doc:")) {
-            SourceDocScreen(app, route, pop, push)
-        } else if (route.startsWith("doc:")) {
-            val path = route.removePrefix("doc:")
-            DocScreen(app, path, onBack = pop, onOpenDoc = { push("doc:$it") })
         } else {
-            HomePages(
+            HomeRoute(
                 app,
                 route,
                 onBack = pop,
@@ -263,7 +315,7 @@ private fun RouteContent(
                     onGrammar = { extra -> push("grammarquiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
                     onGrammarTarget = { push(GrammarPracticeRoutes.create(it)) },
                     onQuiz = { extra -> push("quiz:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
-                    onDraw = { extra -> push("draw:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
+                    onDraw = { extra -> push(AppDestination.Draw(extra = extra).route) },
                     onReadings = { extra -> push("kreading:${System.currentTimeMillis()}" + if (extra) ":extra" else "") },
                     onWords = { dir, extra -> push("wquiz:${System.currentTimeMillis()}:${dir.code}" + if (extra) ":extra" else "") },
                 ),

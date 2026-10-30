@@ -25,35 +25,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
 
-internal fun grammarFixture(id: String = "alpha", examples: Int = 3, authored: Boolean = true, requires: List<String> = emptyList()): GrammarSet {
-    val targets = listOf("a", "b")
-    val exercises = targets.flatMap { target ->
-        (0 until examples).map { index ->
-            GrammarExercise(
-                "$id-$target-$index", target, "contrast", "Synthetic ____.", "Synthetic meaning.", "Evidence.", "Explanation.",
-                target, listOf(target), targets.map { GrammarOption(it, it, "Rationale.") }, 4,
-            )
-        }
-    }
-    val group = GrammarIntroductionGroup(
-        id, id, targets.map { GrammarFacet(it, it) },
-        exercises.map { GrammarMember(it.id, it.target, it.id.substringAfterLast('-')) }, requires = requires,
-    )
-    return GrammarSet(
-        1, id, id, "articles/x.md", targets.map { GrammarConstruction(it, it) },
-        listOf(GrammarRelationship("contrast", "contrast", targets)), exercises,
-        if (authored) listOf(group) else emptyList(),
-    )
-}
-
-internal fun familiarEvents(set: GrammarSet, now: Instant): List<GrammarEvent> =
-    set.exercises.filter { it.id.endsWith("-0") || it.id.endsWith("-1") }.mapIndexed { index, exercise ->
-        GrammarEvent(
-            index.toLong(), exercise.id, 3, now.minusSeconds(if (exercise.id.endsWith("-0")) 172_800 else 86_400).toEpochMilli(),
-            exercise.target, exercise.relationship, if (exercise.id.endsWith("-0")) "choose" else "type", true, true,
-        )
-    }
-
 class GrammarFocusTest {
     private val now = Instant.parse("2026-10-18T12:00:00Z")
     private val first = grammarFixture()

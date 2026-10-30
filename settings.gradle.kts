@@ -14,4 +14,5 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "kanji-cards-android"
-include(":app")
+include(":core")
+if (!providers.gradleProperty("coreOnly").isPresent) include(":app")

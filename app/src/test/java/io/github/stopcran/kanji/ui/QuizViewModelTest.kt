@@ -4,12 +4,21 @@ import android.app.Application
 import androidx.room.Room
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.srs.StudyMode
+import io.github.stopcran.kanji.core.srs.Fsrs
+import io.github.stopcran.kanji.core.srs.Grade
+import io.github.stopcran.kanji.core.srs.SrsState
+import io.github.stopcran.kanji.core.srs.ReviewRecording
 import io.github.stopcran.kanji.data.AppDatabase
 import io.github.stopcran.kanji.data.KanjiEntity
 import io.github.stopcran.kanji.data.Settings
+import io.github.stopcran.kanji.data.ReviewStore
+import io.github.stopcran.kanji.data.toSrs
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -23,6 +32,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.SQLiteMode
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -116,6 +129,63 @@ class QuizViewModelTest {
         val done = vm.ui as QuizUi.Done
         assertTrue("the wrong card is re-asked, so more answers than cards", done.answered > 2)
         assertTrue(done.correct < done.answered)
+    }
+
+    @Test
+    fun delayedWritesKeepConfirmationTimesAndImmediateStateForReasks() {
+        seed(card("日", "sun", 0), card("月", "moon", 1))
+        val clock = object : Clock() {
+            var now = Instant.ofEpochMilli(System.currentTimeMillis())
+            override fun instant() = now
+            override fun getZone() = ZoneOffset.UTC
+            override fun withZone(zone: ZoneId) = Clock.fixed(now, zone)
+        }
+        val allowWrite = CompletableDeferred<Unit>()
+        val vm = QuizViewModel(services, ReviewRecording(clock), ReviewStore {
+            allowWrite.await()
+            services.reviewStore.record(it)
+        })
+        try {
+            vm.ensureStarted(false)
+            val first = vm.await({ it is QuizUi.Study }) { (vm.ui as QuizUi.Study).card.kanji }
+            val confirmations = mutableListOf<Pair<String, Instant>>()
+            var failed = false
+            repeat(20) {
+                when (val state = vm.ui) {
+                    is QuizUi.Study -> vm.startQuestion()
+                    is QuizUi.Question -> {
+                        vm.pick(if (!failed) NO_ANSWER else state.card.kanji)
+                        failed = true
+                    }
+                    is QuizUi.Answer -> {
+                        confirmations += state.card.kanji to clock.now
+                        vm.next()
+                        clock.now = clock.now.plusSeconds(60)
+                    }
+                    else -> Unit
+                }
+            }
+            assertTrue(vm.ui is QuizUi.Done)
+            assertTrue(runBlocking { db.reviews().allLog().isEmpty() })
+            clock.now = clock.now.plusSeconds(86_400)
+            allowWrite.complete(Unit)
+            val logs = runBlocking {
+                withTimeout(10_000) { while (db.reviews().allLog().size < 3) delay(10) }
+                db.reviews().allLog().filter { it.kanji == first }
+            }
+            val times = confirmations.filter { it.first == first }.take(2).map { it.second }
+            assertEquals(times.map { it.toEpochMilli() }, logs.map { it.atMs })
+            assertEquals(listOf(1, 3), logs.map { it.grade })
+            var expected = SrsState()
+            for ((grade, at) in listOf(Grade.Again, Grade.Good).zip(times)) {
+                expected = Fsrs().review(expected, grade, at, Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS,
+                    Fsrs.seed(first, StudyMode.Quiz.name, expected.reps))
+            }
+            assertEquals(expected, states().single { it.kanji == first }.toSrs())
+        } finally {
+            allowWrite.complete(Unit)
+            vm.leaveSession()
+        }
     }
 
     @Test

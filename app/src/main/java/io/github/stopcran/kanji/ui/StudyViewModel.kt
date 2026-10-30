@@ -2,9 +2,10 @@ package io.github.stopcran.kanji.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.quiz.QuizSession
-import io.github.stopcran.kanji.data.StudySessionEntity
+import io.github.stopcran.kanji.data.StudySessionStore
+import io.github.stopcran.kanji.data.StudyStart
+import io.github.stopcran.kanji.data.StudyEnd
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancel
@@ -26,7 +27,7 @@ class StudySessionRegistry {
     }
 }
 
-abstract class StudyViewModel(private val services: Services) : ViewModel() {
+abstract class StudyViewModel(private val store: StudySessionStore) : ViewModel() {
     private var id: String? = null
     private var counts: () -> Pair<Int, Int> = { 0 to 0 }
     private var ended = false
@@ -42,10 +43,10 @@ abstract class StudyViewModel(private val services: Services) : ViewModel() {
     ): QuizSession<T> {
         currentCoroutineContext().ensureActive()
         check(id == null && !ended) { "Study session cannot be restarted" }
-        val row = StudySessionEntity(UUID.randomUUID().toString(), sourceId, stack, mode, extra, System.currentTimeMillis())
+        val row = StudyStart(UUID.randomUUID().toString(), sourceId, stack, mode, extra, System.currentTimeMillis())
         id = row.id
         counts = { session.answered to session.correct }
-        val start = persist { services.db.reviews().insertSession(row) }
+        val start = persist { store.start(row) }
         start.join()
         check(!start.isCancelled) { "Could not persist study session" }
         return session
@@ -72,11 +73,7 @@ abstract class StudyViewModel(private val services: Services) : ViewModel() {
         val sessionId = id ?: return
         val atMs = System.currentTimeMillis()
         val (answered, correct) = counts()
-        persist {
-            check(services.db.reviews().endSession(sessionId, atMs, reason, answered, correct) == 1) {
-                "Could not close study session"
-            }
-        }
+        persist { store.end(StudyEnd(sessionId, atMs, reason, answered, correct)) }
     }
 
     /** Keep the end marker behind every review, including writes still pending when the route is removed. */

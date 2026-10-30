@@ -32,7 +32,7 @@ class CounterSettingsTest {
         assertEquals(settings.counterScopes.value, restored.counterScopes.value)
         assertEquals(settings.dailyNewCards.value, restored.dailyNewCards.value)
         assertEquals(GrammarPreferences(), restored.grammarFor(source.id))
-        assertEquals(0, restored.counterParserEpoch(source.id))
+        assertEquals(0, restored.sync.counterParserEpoch(source.id))
     }
 
     @Test

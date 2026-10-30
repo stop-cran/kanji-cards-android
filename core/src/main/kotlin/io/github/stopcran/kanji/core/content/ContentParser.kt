@@ -14,7 +14,7 @@ object ContentParser {
     const val GRAMMAR_PARSER_EPOCH = 6
     const val MAX_QUIZ_DISTRACTORS = 3
     const val MAX_IMAGE_BYTES = 150 * 1024
-    internal val IMAGE_PATH = Regex("images/[^/\\\\\\s]+\\.webp")
+    val IMAGE_PATH = Regex("images/[^/\\\\\\s]+\\.webp")
 
     private val json = Json { ignoreUnknownKeys = true }
     private val grammarLevel = Regex("[1-5]")
@@ -334,7 +334,7 @@ object ContentParser {
         else -> null
     }
 
-    internal fun hasWebpEnvelope(bytes: ByteArray) = bytes.size > 12 &&
+    fun hasWebpEnvelope(bytes: ByteArray) = bytes.size > 12 &&
         String(bytes, 0, 4, Charsets.ISO_8859_1) == "RIFF" && String(bytes, 8, 4, Charsets.ISO_8859_1) == "WEBP" &&
         riffSize(bytes) + 8 == bytes.size.toLong()
 

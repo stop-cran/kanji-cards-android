@@ -73,7 +73,7 @@ class GrammarBrowserFlowTest {
             override fun getSharedPreferences(name: String, mode: Int) = context.getSharedPreferences(preferencesName, mode)
         }
         val settings = Settings(isolated).also {
-            it.setGrammarParserEpoch(it.source.value.id, ContentParser.GRAMMAR_PARSER_EPOCH)
+            it.sync.setGrammarParserEpoch(it.source.value.id, ContentParser.GRAMMAR_PARSER_EPOCH)
             it.setGrammarNewScope(it.source.value.id, GrammarScope.N5)
             it.setWeekPlan("FFFFFFF")
             it.setDailyNewCards(6)
@@ -206,7 +206,7 @@ class GrammarBrowserFlowTest {
         }
         val settings = Settings(isolated)
         val source = settings.source.value
-        settings.setGrammarParserEpoch(source.id, ContentParser.GRAMMAR_PARSER_EPOCH)
+        settings.sync.setGrammarParserEpoch(source.id, ContentParser.GRAMMAR_PARSER_EPOCH)
         settings.setGrammarNewScope(source.id, GrammarScope.All)
         val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
         val services = Services(db, settings, context)

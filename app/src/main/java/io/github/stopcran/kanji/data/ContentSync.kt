@@ -87,25 +87,25 @@ private fun io.github.stopcran.kanji.core.content.ParsedContent.toRows(sourceId:
     )
 }
 
-class ContentSync(private val db: AppDatabase, private val settings: Settings, private val http: ContentHttp = UrlConnectionHttp) {
+class ContentSync(private val db: AppDatabase, private val syncState: SyncPreferences, private val http: ContentHttp = UrlConnectionHttp) {
     private val lock = Mutex()
     private val _activity = MutableStateFlow<Map<RepoSource, SyncActivity>>(emptyMap())
     internal val activity = _activity.asStateFlow()
 
     /** Cheap check at app start: at most every [LAUNCH_INTERVAL_MS], and only downloads when the branch head moved. */
-    suspend fun syncOnLaunch(source: RepoSource): SyncResult {
+    suspend fun syncOnLaunch(source: RepoSource): SyncResult = lock.withLock { trackActivity(source) {
         val now = System.currentTimeMillis()
-        if (!needsParserRefresh(source) && now - settings.lastCheckMs < LAUNCH_INTERVAL_MS) return SyncResult.UpToDate
-        val result = sync(source)
-        if (result !is SyncResult.Failed) settings.lastCheckMs = now
-        return result
-    }
+        if (!needsParserRefresh(source) && now - syncState.lastCheckMs < LAUNCH_INTERVAL_MS) return@trackActivity SyncResult.UpToDate
+        val result = syncContent(source, force = false)
+        if (result !is SyncResult.Failed) syncState.lastCheckMs = now
+        result
+    } }
 
     private suspend fun needsParserRefresh(source: RepoSource): Boolean =
-        settings.grammarFor(source.id).parserEpoch < ContentParser.GRAMMAR_PARSER_EPOCH ||
-            settings.counterParserEpoch(source.id) < io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH ||
-            settings.sceneParserEpoch(source.id) < SceneCatalog.PARSER_EPOCH ||
-            settings.listeningParserEpoch(source.id) < io.github.stopcran.kanji.core.listening.ListeningContent.PARSER_EPOCH ||
+        syncState.grammarParserEpoch(source.id) < ContentParser.GRAMMAR_PARSER_EPOCH ||
+            syncState.counterParserEpoch(source.id) < io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH ||
+            syncState.sceneParserEpoch(source.id) < SceneCatalog.PARSER_EPOCH ||
+            syncState.listeningParserEpoch(source.id) < io.github.stopcran.kanji.core.listening.ListeningContent.PARSER_EPOCH ||
             db.listeningTasks().sync(source.id).let {
                 it == null || it.parserEpoch < io.github.stopcran.kanji.core.listening.ListeningTaskContent.PARSER_EPOCH ||
                     it.problem != null || it.acceptedBranch != source.branch
@@ -113,9 +113,8 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
 
     /** Head commit of the branch via the GitHub API (one tiny request); null when unavailable, e.g. offline or rate limited. */
     private fun headCommit(source: RepoSource): String? {
-        val key = "${source.id}@${source.branch}"
         // A 304 does not count against the API rate limit.
-        val known = settings.headEtag(key)
+        val known = syncState.headEtag(source)
         val headers = buildMap {
             put("Accept", "application/vnd.github.sha")
             if (known != null) put("If-None-Match", known.first)
@@ -127,7 +126,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
                     200 -> {
                         val sha = r.body.bufferedReader().readText().trim().takeIf { it.matches(Regex("[0-9a-f]{40}")) }
                         val etag = r.header("ETag")
-                        if (sha != null && etag != null) settings.setHeadEtag(key, etag, sha)
+                        if (sha != null && etag != null) syncState.setHeadEtag(source, etag, sha)
                         sha
                     }
                     else -> null
@@ -149,24 +148,26 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
         }
     }
 
-    suspend fun sync(source: RepoSource, force: Boolean = false): SyncResult = lock.withLock { trackActivity(source) { withContext(Dispatchers.IO) {
+    suspend fun sync(source: RepoSource, force: Boolean = false): SyncResult =
+        lock.withLock { trackActivity(source) { syncContent(source, force) } }
+
+    private suspend fun syncContent(source: RepoSource, force: Boolean): SyncResult = withContext(Dispatchers.IO) {
         try {
             if (db.content().meta(source.id) != null && db.reviews().grammarReadinessStatus(source.id)?.complete != true) {
                 db.rebuildGrammarReadiness(source.id)
             }
             val maySkipImport = !force && !needsParserRefresh(source)
-            val commitKey = "${source.id}@${source.branch}"
             val head = headCommit(source)
             // Rate-limited or offline: fall back to the branch archive, but at most once per interval so launches and worker retries cannot hammer codeload.
             val url = head?.let { source.commitZipUrl(it) } ?: source.zipUrl
             if (!force && head == null && db.content().meta(source.id) != null) {
                 val now = System.currentTimeMillis()
-                if (now - settings.fallbackAttemptMs(commitKey) < LAUNCH_INTERVAL_MS) {
+                if (now - syncState.fallbackAttemptMs(source) < LAUNCH_INTERVAL_MS) {
                     return@withContext SyncResult.Failed("Could not check for updates", retryable = false)
                 }
-                settings.setFallbackAttemptMs(commitKey, now)
+                syncState.setFallbackAttemptMs(source, now)
             }
-            val headUnchanged = head != null && head == settings.syncedCommit(commitKey)
+            val headUnchanged = head != null && head == syncState.syncedCommit(source)
             if (maySkipImport && headUnchanged && db.content().meta(source.id) != null) return@withContext SyncResult.UpToDate
             val files = download(url) { SafeZip.read(it) }
             val parsed = ContentParser.parse(files, SceneImages::problem)
@@ -174,7 +175,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             legacyListeningFailure(parsed, source.id)?.let { return@withContext it }
             if (maySkipImport && parsed.listeningTasks.problems.isEmpty() &&
                 dao.meta(source.id)?.contentVersion == parsed.manifest.contentVersion) {
-                head?.let { settings.setSyncedCommit(commitKey, it) }
+                head?.let { syncState.setSyncedCommit(source, it) }
                 return@withContext SyncResult.UpToDate
             }
             if (parsed.kanji.isEmpty()) {
@@ -190,11 +191,11 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
                 )
             }
             val result = replaceContent(parsed, source, head)
-            settings.setGrammarParserEpoch(source.id, ContentParser.GRAMMAR_PARSER_EPOCH)
-            settings.setCounterParserEpoch(source.id, io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH)
-            settings.setSceneParserEpoch(source.id, SceneCatalog.PARSER_EPOCH)
-            settings.setListeningParserEpoch(source.id, io.github.stopcran.kanji.core.listening.ListeningContent.PARSER_EPOCH)
-            head?.let { settings.setSyncedCommit(commitKey, it) }
+            syncState.setGrammarParserEpoch(source.id, ContentParser.GRAMMAR_PARSER_EPOCH)
+            syncState.setCounterParserEpoch(source.id, io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH)
+            syncState.setSceneParserEpoch(source.id, SceneCatalog.PARSER_EPOCH)
+            syncState.setListeningParserEpoch(source.id, io.github.stopcran.kanji.core.listening.ListeningContent.PARSER_EPOCH)
+            head?.let { syncState.setSyncedCommit(source, it) }
             db.rebuildGrammarReadiness(source.id)
             result
         } catch (e: ContentException) {
@@ -206,7 +207,7 @@ class ContentSync(private val db: AppDatabase, private val settings: Settings, p
             if (e is kotlinx.coroutines.CancellationException) throw e
             SyncResult.Failed(e.message ?: e.javaClass.simpleName, retryable = false)
         }
-    } } }
+    }
 
     private suspend fun replaceContent(
         parsed: io.github.stopcran.kanji.core.content.ParsedContent, source: RepoSource, head: String?,

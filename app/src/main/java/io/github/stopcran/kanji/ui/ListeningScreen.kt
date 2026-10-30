@@ -178,15 +178,16 @@ internal fun ListeningEncounterView(vm: ListeningViewModel, onBack: () -> Unit, 
             val ready = !vm.busy && vm.error == null
             Text("${if (study) "Unscored study" else "N5 listening"} - ${row.sourceId}", style = MaterialTheme.typography.bodySmall)
             vm.picture?.let { SceneBitmap(it, passage.topic) }
-            Text("${vm.positionMs / 1_000}s / ${requireNotNull(passage.audio).durationMs / 1_000}s")
+            val audio = requireNotNull(passage.audio)
+            Text("${vm.positionMs / 1_000}s / ${audio.durationMs / 1_000}s")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (vm.playing) Button(onClick = { vm.pause() }) { Text("Pause") }
-                else Button(onClick = { vm.play(restart = vm.positionMs >= passage.audio.durationMs) }, enabled = ready) {
-                    Text(if (vm.positionMs >= passage.audio.durationMs) "Replay" else if (vm.positionMs > 0) "Resume audio" else "Play")
+                else Button(onClick = { vm.play(restart = vm.positionMs >= audio.durationMs) }, enabled = ready) {
+                    Text(if (vm.positionMs >= audio.durationMs) "Replay" else if (vm.positionMs > 0) "Resume audio" else "Play")
                 }
                 OutlinedButton(onClick = { vm.play(restart = true) }, enabled = ready && !vm.playing && attempt.starts > 0) { Text("From beginning") }
             }
-            OutlinedButton(onClick = { vm.play(restart = vm.positionMs >= passage.audio.durationMs, slower = true) },
+            OutlinedButton(onClick = { vm.play(restart = vm.positionMs >= audio.durationMs, slower = true) },
                 enabled = ready && !vm.playing) { Text("Play more slowly (help)") }
             if (!feedback) {
                 Text("The recording already uses a mild N5 pace. A third full start or extra slowing counts as help.")

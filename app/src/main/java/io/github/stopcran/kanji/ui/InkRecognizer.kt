@@ -19,14 +19,19 @@ data class TimedPt(val x: Float, val y: Float, val t: Long)
 
 enum class ModelState { Unknown, Downloading, Ready, Unavailable }
 
+interface InkRecognition : AutoCloseable {
+    suspend fun prepare(): ModelState
+    suspend fun candidates(strokes: List<List<TimedPt>>): List<String>?
+}
+
 /** ML Kit Digital Ink (Japanese). Advisory: every failure path returns null so the caller falls back to the stroke matcher. */
-class InkRecognizer {
+class InkRecognizer : InkRecognition {
     private val model: DigitalInkRecognitionModel? = DigitalInkRecognitionModelIdentifier.fromLanguageTag("ja")
         ?.let { DigitalInkRecognitionModel.builder(it).build() }
     private val manager = RemoteModelManager.getInstance()
     private var recognizer: DigitalInkRecognizer? = null
 
-    suspend fun prepare(): ModelState {
+    override suspend fun prepare(): ModelState {
         val m = model ?: return ModelState.Unavailable
         return try {
             if (await(manager.isModelDownloaded(m)) == true) return ModelState.Ready
@@ -40,7 +45,7 @@ class InkRecognizer {
     }
 
     /** Candidate texts, best first, or null when recognition is unavailable. */
-    suspend fun candidates(strokes: List<List<TimedPt>>): List<String>? {
+    override suspend fun candidates(strokes: List<List<TimedPt>>): List<String>? {
         val m = model ?: return null
         if (strokes.isEmpty()) return emptyList()
         return try {
@@ -57,7 +62,7 @@ class InkRecognizer {
         }
     }
 
-    fun close() {
+    override fun close() {
         recognizer?.close()
         recognizer = null
     }

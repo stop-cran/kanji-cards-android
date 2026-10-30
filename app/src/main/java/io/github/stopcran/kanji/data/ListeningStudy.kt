@@ -198,9 +198,10 @@ class ListeningStudy(
     }
 
     suspend fun position(id: String, positionMs: Long) = mutate(id) { row, state, passage, now ->
-        require(positionMs in 0..requireNotNull(passage.audio).durationMs + 200) { "Invalid playback position" }
+        val audio = requireNotNull(passage.audio)
+        require(positionMs in 0..audio.durationMs + 200) { "Invalid playback position" }
         row.copy(
-            stateJson = encode(state.copy(positionMs = positionMs.coerceAtMost(passage.audio.durationMs))),
+            stateJson = encode(state.copy(positionMs = positionMs.coerceAtMost(audio.durationMs))),
             lastExposureAtMs = if (row.exposedAtMs != null) now else null,
             lastStudyAtMs = if (row.kind == "study" || row.reviewLogId != null) now else row.lastStudyAtMs,
         )

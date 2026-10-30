@@ -30,7 +30,9 @@ import io.github.stopcran.kanji.core.words.WordKanjiHelp
 import io.github.stopcran.kanji.core.words.WordQuizBuilder
 import io.github.stopcran.kanji.core.words.WordQueues
 import io.github.stopcran.kanji.core.words.WordStacks
-import io.github.stopcran.kanji.data.ReviewLogEntity
+import io.github.stopcran.kanji.core.srs.ReviewIdentity
+import io.github.stopcran.kanji.core.srs.ReviewRecording
+import io.github.stopcran.kanji.data.ReviewStore
 import io.github.stopcran.kanji.data.SceneImageResult
 import io.github.stopcran.kanji.data.sceneImage
 import io.github.stopcran.kanji.data.toPictureScene
@@ -85,11 +87,12 @@ class WordReadingTip(val question: WordQuizUi.Question, val help: WordKanjiHelp)
 /** Word quiz session in one direction; only that direction's scheduling state is updated. */
 class WordQuizViewModel(
     private val app: Services,
+    private val recording: ReviewRecording = ReviewRecording(),
+    private val reviews: ReviewStore = app.reviewStore,
     private val loadPicture: suspend (String, PictureScene) -> SceneImageResult = { source, scene ->
         app.db.content().sceneImage(source, scene.scene.image, scene.imageHash)
     },
-) : StudyViewModel(app) {
-    private val fsrs = Fsrs()
+) : StudyViewModel(app.sessionStore) {
     private val random = Random.Default
 
     var ui: WordQuizUi by mutableStateOf(WordQuizUi.Loading)
@@ -316,18 +319,11 @@ class WordQuizViewModel(
     }
 
     private fun record(word: String, grade: Grade, firstSuccessCapDays: Double?) {
-        val now = Instant.now()
-        val updated = fsrs.review(
-            states[word] ?: SrsState(), grade, now,
-            firstSuccessCapDays = firstSuccessCapDays, fuzzSeed = Fsrs.seed(word, direction.mode.name, states[word]?.reps ?: 0),
-        )
-        states[word] = updated
-        val mode = direction.mode
         val stack = owners[word] ?: stackId
-        recordSession {
-            val log = ReviewLogEntity(0, sourceId, stack, word, mode.name, grade.value, now.toEpochMilli(), sessionId = reviewSessionId)
-            app.db.reviews().record(updated.toEntity(sourceId, stack, word, mode), log)
-        }
+        val record = recording.confirm(
+            ReviewIdentity(sourceId, stack, word, direction.mode, reviewSessionId), states, grade, firstSuccessCapDays,
+        )
+        recordSession { reviews.record(record) }
     }
 
     fun openReadingTip(origin: WordQuizUi.Question) {

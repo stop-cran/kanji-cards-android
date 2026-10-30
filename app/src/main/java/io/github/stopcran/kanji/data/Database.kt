@@ -202,6 +202,12 @@ interface ContentDao {
     )
     fun observeWordsLite(sourceId: String): Flow<List<WordEntity>>
 
+    @Query(
+        "SELECT sourceId, word, reading, title, type, kanji, tags, '' AS body, jlpt, quizExclusions, quizDistractors, image, imageScene, quizImage " +
+            "FROM words WHERE sourceId = :sourceId ORDER BY word"
+    )
+    suspend fun wordsLite(sourceId: String): List<WordEntity>
+
     /** Same as [kanji] without the article body or stroke data (used by background work). */
     @Query(
         "SELECT sourceId, kanji, title, jlpt, tags, strokeCount, radical, phonetic, onyomi, kunyomi, distractors, " +
@@ -288,6 +294,9 @@ interface ContentDao {
 
     @Query("SELECT * FROM word_scenes WHERE sourceId = :sourceId AND word = :word ORDER BY position")
     fun observeWordScenes(sourceId: String, word: String): Flow<List<WordSceneEntity>>
+
+    @Query("SELECT * FROM word_scenes WHERE sourceId = :sourceId AND word = :word ORDER BY position")
+    suspend fun scenesForWord(sourceId: String, word: String): List<WordSceneEntity>
 
     @Query("DELETE FROM word_scenes WHERE sourceId = :sourceId")
     suspend fun clearScenes(sourceId: String)
@@ -504,6 +513,9 @@ interface ReviewDao {
 
     @Query("SELECT atMs FROM review_log WHERE sourceId IN (:sourceIds) AND atMs >= :sinceMs AND atMs < :untilMs")
     fun observeReviewTimes(sourceIds: List<String>, sinceMs: Long, untilMs: Long): Flow<List<Long>>
+
+    @Query("SELECT atMs FROM review_log WHERE sourceId IN (:sourceIds) AND atMs >= :sinceMs AND atMs < :untilMs")
+    suspend fun reviewTimes(sourceIds: List<String>, sinceMs: Long, untilMs: Long): List<Long>
 
     /** Reading cards (kanji + reading) whose first review happened since [sinceMs]; each used a unit of the daily budget. */
     @Query("SELECT COUNT(*) FROM (SELECT 1 FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode IN ('KanjiOn', 'KanjiKun') AND reading != '' GROUP BY mode, kanji, reading HAVING MIN(atMs) >= :sinceMs)")

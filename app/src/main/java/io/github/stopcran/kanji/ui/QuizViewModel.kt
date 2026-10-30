@@ -25,7 +25,9 @@ import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.srs.StudyMode
 import io.github.stopcran.kanji.data.KanjiEntity
-import io.github.stopcran.kanji.data.ReviewLogEntity
+import io.github.stopcran.kanji.core.srs.ReviewIdentity
+import io.github.stopcran.kanji.core.srs.ReviewRecording
+import io.github.stopcran.kanji.data.ReviewStore
 import io.github.stopcran.kanji.data.ReviewStateEntity
 import io.github.stopcran.kanji.data.inStack
 import io.github.stopcran.kanji.data.splitSep
@@ -52,8 +54,11 @@ sealed interface QuizUi {
 }
 
 /** Quiz session: question state -> answer-check state per card; wrong answers are asked again a few cards later. */
-class QuizViewModel(private val app: Services) : StudyViewModel(app) {
-    private val fsrs = Fsrs()
+class QuizViewModel(
+    private val app: Services,
+    private val recording: ReviewRecording = ReviewRecording(),
+    private val reviews: ReviewStore = app.reviewStore,
+) : StudyViewModel(app.sessionStore) {
     private val random = Random.Default
 
     var ui: QuizUi by mutableStateOf(QuizUi.Loading)
@@ -175,17 +180,12 @@ class QuizViewModel(private val app: Services) : StudyViewModel(app) {
         val result = session.answer(a.card.kanji, a.correct, guessed)
         val grade = result.grade
         if (result.record) {
-            val now = Instant.now()
-            val updated = fsrs.review(
-                states[a.card.kanji] ?: SrsState(), grade, now,
-                firstSuccessCapDays = Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS, fuzzSeed = Fsrs.seed(a.card.kanji, StudyMode.Quiz.name, states[a.card.kanji]?.reps ?: 0),
-            )
-            states[a.card.kanji] = updated
             val owner = owners[a.card.kanji] ?: stack
-            recordSession {
-                val log = ReviewLogEntity(0, sourceId, owner, a.card.kanji, StudyMode.Quiz.name, grade.value, now.toEpochMilli(), sessionId = reviewSessionId)
-                app.db.reviews().record(updated.toEntity(sourceId, owner, a.card.kanji, StudyMode.Quiz), log)
-            }
+            val record = recording.confirm(
+                ReviewIdentity(sourceId, owner, a.card.kanji, StudyMode.Quiz, reviewSessionId),
+                states, grade, Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS,
+            )
+            recordSession { reviews.record(record) }
         }
         if (!a.correct && a.picked != NO_ANSWER && !extra) nudge(a.picked)
         showNext()

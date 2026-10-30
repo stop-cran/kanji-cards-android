@@ -23,9 +23,11 @@ internal class ListeningAssessmentStore(private val db: AppDatabase, private val
         validate(form)
         val state = Json.decodeFromString<AssessmentState>(row.stateJson)
         require(state.index in form.items.indices && state.generation >= 0 && state.version >= 0) { "Captured assessment cursor is invalid" }
-        require(state.remainingMs == null || state.remainingMs >= 0) { "Captured assessment timer is invalid" }
-        require(state.deadlineMs == null || state.deadlineMs >= 0) { "Captured assessment deadline is invalid" }
-        require(state.remainingMs == null || state.remainingMs <= 15_000) { "Captured assessment window is too long" }
+        val remainingMs = state.remainingMs
+        val deadlineMs = state.deadlineMs
+        require(remainingMs == null || remainingMs >= 0) { "Captured assessment timer is invalid" }
+        require(deadlineMs == null || deadlineMs >= 0) { "Captured assessment deadline is invalid" }
+        require(remainingMs == null || remainingMs <= 15_000) { "Captured assessment window is too long" }
         val item = form.items[state.index]
         val encounter = requireNotNull(db.listeningTasks().encounter(item.encounterId)) { "Captured assessment item is missing" }
         val record = checked(row, item, encounter)

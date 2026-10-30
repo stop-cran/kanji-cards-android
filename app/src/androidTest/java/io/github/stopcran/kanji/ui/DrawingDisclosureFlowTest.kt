@@ -74,7 +74,7 @@ class DrawingDisclosureFlowTest {
             }
             rule.setContent { MaterialTheme {
                 if (script != null) KanaStudyScreen(route, {}, { _, _ -> }, requireNotNull(kana))
-                else DrawScreen(route, {}, {}, {}, requireNotNull(kanji))
+                else DrawScreen(AppDestination.parse(route) as AppDestination.Draw, {}, {}, {}, requireNotNull(kanji))
             } }
             rule.waitUntil(10_000) { questionTrace() == trace }
             rule.onNodeWithText("Check").performScrollTo().assertIsNotEnabled()

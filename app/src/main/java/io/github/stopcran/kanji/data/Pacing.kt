@@ -28,8 +28,23 @@ fun AppDatabase.observeWeekProgress(settings: Settings, sourceId: String, now: I
     }.distinctUntilChanged()
 }
 
+/** A one-shot week snapshot for consumers already observing review invalidations. */
+suspend fun AppDatabase.weekProgress(sourceId: String, now: Instant, zone: ZoneId, weekPlan: String): WeekProgress {
+    val today = now.atZone(zone).toLocalDate()
+    val monday = today.minusDays((today.dayOfWeek.value - 1).toLong())
+    val times = reviews().reviewTimes(
+        listOf(sourceId, KANA_SOURCE_ID).distinct(),
+        monday.atStartOfDay(zone).toInstant().toEpochMilli(),
+        monday.plusDays(7).atStartOfDay(zone).toInstant().toEpochMilli(),
+    )
+    return WeekProgress(times.map { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }.toSet().size, Pacing.weeklyGoal(DayLevel.parseWeek(weekPlan)))
+}
+
 /** Today's shared allowance of new items across all modes, from the weekday plan, the base amount and the current backlog. */
-suspend fun AppDatabase.newAllowance(settings: Settings, sourceId: String, now: Instant, zone: ZoneId = ZoneId.systemDefault()): NewAllowance {
+suspend fun AppDatabase.newAllowance(settings: Settings, sourceId: String, now: Instant, zone: ZoneId = ZoneId.systemDefault()): NewAllowance =
+    newAllowance(sourceId, now, zone, settings.dailyNewCards.value, settings.weekPlan.value)
+
+internal suspend fun AppDatabase.newAllowance(sourceId: String, now: Instant, zone: ZoneId, dailyNew: Int, weekPlan: String): NewAllowance {
     val today = now.atZone(zone).toLocalDate()
     val startOfDay = today.atStartOfDay(zone).toInstant().toEpochMilli()
     val r = reviews()
@@ -37,9 +52,9 @@ suspend fun AppDatabase.newAllowance(settings: Settings, sourceId: String, now: 
         excludedMode = io.github.stopcran.kanji.core.listening.LISTENING_MODE)
         .groupingBy { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }.eachCount()
         .filterKeys { it != today }.values.toList()
-    val level = DayLevel.parseWeek(settings.weekPlan.value)[today.dayOfWeek.value - 1]
+    val level = DayLevel.parseWeek(weekPlan)[today.dayOfWeek.value - 1]
     val allowance = Pacing.allowance(
-        base = settings.dailyNewCards.value, level = level,
+        base = dailyNew, level = level,
         introducedToday = r.itemsIntroducedSince(sourceId, startOfDay),
         due = r.dueCount(sourceId, now.toEpochMilli(), excludedMode = io.github.stopcran.kanji.core.listening.LISTENING_MODE),
         capacity = Pacing.capacity(perDay),

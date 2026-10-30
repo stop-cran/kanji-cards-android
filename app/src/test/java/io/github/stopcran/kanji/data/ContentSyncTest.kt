@@ -169,7 +169,7 @@ class ListeningN4SyncTest {
         context.getSharedPreferences("settings", 0).edit().clear().commit()
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
         settings = Settings(context)
-        sync = ContentSync(db, settings, http)
+        sync = ContentSync(db, settings.sync, http)
         http.archiveBytes = archive("v1", mapOf("日" to "sun"))
     }
 
@@ -285,7 +285,7 @@ class SyncReportingTest {
         val context = RuntimeEnvironment.getApplication()
         context.getSharedPreferences("settings", 0).edit().clear().commit()
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
-        sync = ContentSync(db, Settings(context), http)
+        sync = ContentSync(db, Settings(context).sync, http)
     }
 
     @After fun cleanup() { db.close() }
@@ -385,7 +385,7 @@ class CounterSyncTest {
         context.getSharedPreferences("settings", 0).edit().clear().commit()
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
         settings = Settings(context)
-        sync = ContentSync(db, settings, http)
+        sync = ContentSync(db, settings.sync, http)
         http.archiveBytes = archive("v1", mapOf("日" to "sun"))
     }
 
@@ -398,17 +398,18 @@ class CounterSyncTest {
     fun counterEpochRefreshesRecentLaunchSameHeadAndSameVersionWithoutResettingOtherSources() = runBlocking {
         assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
         val epoch = io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH
-        assertEquals(epoch, settings.counterParserEpoch(source.id))
-        settings.setCounterParserEpoch(source.id, epoch - 1)
-        settings.setCounterParserEpoch("other/repo", 0)
+        assertEquals(epoch, settings.sync.counterParserEpoch(source.id))
+        settings.sync.setCounterParserEpoch(source.id, epoch - 1)
+        settings.sync.setCounterParserEpoch("other/repo", 0)
         val downloads = http.downloads
         assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
         assertEquals(downloads + 1, http.downloads)
-        assertEquals(epoch, settings.counterParserEpoch(source.id))
-        assertEquals(0, settings.counterParserEpoch("other/repo"))
+        assertEquals(epoch, settings.sync.counterParserEpoch(source.id))
+        assertEquals(0, settings.sync.counterParserEpoch("other/repo"))
         assertTrue(sync.syncOnLaunch(source) is SyncResult.UpToDate)
+        assertEquals(SyncActivity.Finished(SyncResult.UpToDate), sync.activity.value[source])
         assertEquals(downloads + 1, http.downloads)
-        settings.setCounterParserEpoch(source.id, 0)
+        settings.sync.setCounterParserEpoch(source.id, 0)
         http.headSha = SHA_B
         assertTrue(sync.sync(source) is SyncResult.Updated)
         assertEquals(downloads + 2, http.downloads)
@@ -417,15 +418,15 @@ class CounterSyncTest {
     @Test
     fun failedCounterUpgradeLeavesEpochPendingAndRetriesSameHead() = runBlocking {
         assertTrue(sync.sync(source) is SyncResult.Updated)
-        settings.setCounterParserEpoch(source.id, 0)
+        settings.sync.setCounterParserEpoch(source.id, 0)
         http.archiveBytes = archive("v1", mapOf("日" to "sun"), corrupt = setOf("日"))
         assertTrue(sync.syncOnLaunch(source) is SyncResult.Failed)
-        assertEquals(0, settings.counterParserEpoch(source.id))
+        assertEquals(0, settings.sync.counterParserEpoch(source.id))
         assertEquals("sun", db.content().kanji(source.id).single().title)
         http.archiveBytes = archive("v1", mapOf("日" to "sun"))
         assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
         assertEquals(io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH,
-            settings.counterParserEpoch(source.id))
+            settings.sync.counterParserEpoch(source.id))
     }
 }
 
@@ -485,7 +486,7 @@ class ContentLoadStateTest {
         context.getSharedPreferences("settings", 0).edit().clear().commit()
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
         settings = Settings(context)
-        sync = ContentSync(db, settings, http)
+        sync = ContentSync(db, settings.sync, http)
         http.archiveBytes = archive("v1", mapOf("日" to "sun"))
     }
 
@@ -548,7 +549,7 @@ class ContentSyncTest {
         context.getSharedPreferences("settings", 0).edit().clear().commit()
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
         settings = Settings(context)
-        sync = ContentSync(db, settings, http)
+        sync = ContentSync(db, settings.sync, http)
         http.archiveBytes = archive("v1", mapOf("日" to "sun"))
     }
 
@@ -592,8 +593,8 @@ class ContentSyncTest {
         http.archiveBytes = sceneArchive(second = true, grammar = grammar.id to Json.encodeToString(GrammarSet.serializer(), grammar))
         assertEquals(SyncResult.Updated(1, 1, emptyList(), grammar = grammar.exercises.size), sync.sync(source))
         assertEquals(listOf(true, false), db.content().wordScenes(source.id).map { it.quizEligible })
-        assertEquals(SceneCatalog.PARSER_EPOCH, settings.sceneParserEpoch(source.id))
-        assertEquals(0, settings.sceneParserEpoch("other/repo"))
+        assertEquals(SceneCatalog.PARSER_EPOCH, settings.sync.sceneParserEpoch(source.id))
+        assertEquals(0, settings.sync.sceneParserEpoch("other/repo"))
         db.reviews().record(
             ReviewStateEntity(source.id, "words-onomatopoeia", "a", "WordPicture", "Review", 12.5, 5.0, 999, 500, 3, 1),
             ReviewLogEntity(0, source.id, "words-onomatopoeia", "a", "WordPicture", 3, 500),
@@ -605,9 +606,9 @@ class ContentSyncTest {
         )
         val before = Triple(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses())
         db.content().clearScenes(source.id)
-        settings.setSceneParserEpoch(source.id, 0)
+        settings.sync.setSceneParserEpoch(source.id, 0)
         settings.setGrammarNewScope(source.id, GrammarScope.N3)
-        settings.lastCheckMs = System.currentTimeMillis()
+        settings.sync.lastCheckMs = System.currentTimeMillis()
         assertEquals(SyncResult.Updated(1, 1, emptyList(), grammar = grammar.exercises.size), sync.syncOnLaunch(source))
         assertEquals(2, http.downloads)
         assertEquals(2, db.content().wordScenes(source.id).size)
@@ -635,7 +636,7 @@ class ContentSyncTest {
         db.openHelper.writableDatabase.execSQL(
             "CREATE TRIGGER reject_scene BEFORE INSERT ON word_scenes BEGIN SELECT RAISE(ABORT, 'injected scene failure'); END",
         )
-        settings.setSceneParserEpoch(source.id, 0)
+        settings.sync.setSceneParserEpoch(source.id, 0)
         http.headSha = SHA_B
         http.archiveBytes = sceneArchive("changed", bytes = sceneWebp(blue = true))
         val rejected = sync.sync(source)
@@ -644,8 +645,8 @@ class ContentSyncTest {
         assertEquals(beforeScenes, db.content().wordScenes(source.id))
         assertEquals(beforeMeta, db.content().meta(source.id))
         org.junit.Assert.assertArrayEquals(sceneWebp(), db.content().imageBytes(source.id, "a.webp"))
-        assertEquals(0, settings.sceneParserEpoch(source.id))
-        assertEquals(SHA_A, settings.syncedCommit("${source.id}@main"))
+        assertEquals(0, settings.sync.sceneParserEpoch(source.id))
+        assertEquals(SHA_A, settings.sync.syncedCommit(source.copy(branch = "main")))
         assertEquals(beforeScenes.map { it.copy(sourceId = "other/repo") }, db.content().wordScenes("other/repo"))
     }
 
@@ -676,7 +677,7 @@ class ContentSyncTest {
         val r = run()
         assertEquals(SyncResult.Updated(1, 0, emptyList()), r)
         assertEquals(1, runBlocking { db.content().kanjiCount(source.id) })
-        assertEquals(SHA_A, settings.syncedCommit("${source.id}@main"))
+        assertEquals(SHA_A, settings.sync.syncedCommit(source.copy(branch = "main")))
     }
 
     @Test
@@ -714,10 +715,10 @@ class ContentSyncTest {
                 GrammarEntity(source.id, set.id, Json.encodeToString(GrammarSet.serializer(), old), index)
             })
         }
-        settings.setGrammarParserEpoch(source.id, 0)
+        settings.sync.setGrammarParserEpoch(source.id, 0)
         settings.setGrammarNewScope(source.id, GrammarScope.N3)
         settings.setGrammarBrowseScope(source.id, GrammarScope.Unclassified)
-        settings.lastCheckMs = System.currentTimeMillis()
+        settings.sync.lastCheckMs = System.currentTimeMillis()
         assertEquals(SyncResult.Updated(1, 0, emptyList(), grammar = 2), runBlocking { sync.syncOnLaunch(source) })
         assertEquals(2, http.downloads)
         assertEquals(listOf(4, null), runBlocking { db.grammarSets(source.id).single().exercises.map { it.jlpt } })
@@ -759,8 +760,8 @@ class ContentSyncTest {
         settings.setGrammarGuided(source.id, true)
         val ordinary = db.grammarStudy(settings, source.id, java.time.Instant.now()).ordinaryIds
         db.content().putMeta(db.content().meta(source.id)!!.copy(grammarCurriculumJson = null))
-        settings.setGrammarParserEpoch(source.id, 4)
-        settings.lastCheckMs = System.currentTimeMillis()
+        settings.sync.setGrammarParserEpoch(source.id, 4)
+        settings.sync.lastCheckMs = System.currentTimeMillis()
         assertEquals(GrammarCurriculumState.PendingRefresh, db.grammarCurriculum(settings, source.id))
         assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
         assertEquals(2, http.downloads)
@@ -798,8 +799,8 @@ class ContentSyncTest {
             val old = set.copy(introductionGroups = emptyList())
             db.content().insertGrammar(listOf(GrammarEntity(source.id, set.id, Json.encodeToString(GrammarSet.serializer(), old), 0)))
         }
-        settings.setGrammarParserEpoch(source.id, GRAMMAR_LEVEL_EPOCH)
-        settings.lastCheckMs = System.currentTimeMillis()
+        settings.sync.setGrammarParserEpoch(source.id, GRAMMAR_LEVEL_EPOCH)
+        settings.sync.lastCheckMs = System.currentTimeMillis()
         assertTrue(runBlocking { sync.syncOnLaunch(source) } is SyncResult.Updated)
         assertEquals(2, http.downloads)
         assertEquals(listOf(set), runBlocking { db.grammarSets(source.id) })
@@ -830,8 +831,8 @@ class ContentSyncTest {
             ReviewLogEntity(0, source.id, GRAMMAR_STACK, first.id, "Grammar", 3, 500),
         )
         val before = db.reviews().allStates() to db.reviews().allLog()
-        settings.setGrammarParserEpoch(source.id, GRAMMAR_GROUP_EPOCH)
-        settings.lastCheckMs = System.currentTimeMillis()
+        settings.sync.setGrammarParserEpoch(source.id, GRAMMAR_GROUP_EPOCH)
+        settings.sync.lastCheckMs = System.currentTimeMillis()
         assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
         assertEquals(set, db.grammarSets(source.id).single())
         assertEquals(2, http.downloads)
@@ -871,12 +872,12 @@ class ContentSyncTest {
             ReviewLogEntity(0, source.id, GRAMMAR_STACK, "beta-a-0", "Grammar", 3, 500),
         )
         val history = db.reviews().allStates() to db.reviews().allLog()
-        settings.setGrammarParserEpoch(source.id, io.github.stopcran.kanji.core.content.GrammarCurriculum.PARSER_EPOCH)
+        settings.sync.setGrammarParserEpoch(source.id, io.github.stopcran.kanji.core.content.GrammarCurriculum.PARSER_EPOCH)
         settings.setGrammarGuided(source.id, true)
         val pending = db.grammarStudy(settings, source.id, java.time.Instant.now())
         assertEquals(listOf("beta-a-0"), pending.ordinaryIds)
         assertTrue(pending.notice!!.contains("Sync needed"))
-        settings.lastCheckMs = System.currentTimeMillis()
+        settings.sync.lastCheckMs = System.currentTimeMillis()
         assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
         assertEquals(2, http.downloads)
         assertEquals(listOf("alpha"), db.grammarSets(source.id).single { it.id == "beta" }.introductionGroups.single().requires)
@@ -905,13 +906,13 @@ class ContentSyncTest {
             ReviewLogEntity(0, source.id, GRAMMAR_STACK, first.id, "Grammar", 3, 500),
         )
         val before = db.reviews().allStates() to db.reviews().allLog()
-        settings.setGrammarParserEpoch(source.id, GrammarVocabulary.PARSER_EPOCH)
-        settings.lastCheckMs = System.currentTimeMillis()
+        settings.sync.setGrammarParserEpoch(source.id, GrammarVocabulary.PARSER_EPOCH)
+        settings.sync.lastCheckMs = System.currentTimeMillis()
         assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
         assertEquals(set, db.grammarSets(source.id).single())
         assertEquals(2, http.downloads)
         assertEquals(ContentParser.GRAMMAR_PARSER_EPOCH, settings.grammarFor(source.id).parserEpoch)
-        settings.setGrammarParserEpoch(source.id, GrammarVocabulary.PARSER_EPOCH)
+        settings.sync.setGrammarParserEpoch(source.id, GrammarVocabulary.PARSER_EPOCH)
         val broken = Json.encodeToString(GrammarSet.serializer(), set).replace("\"id\":\"alternate\"", "\"id\":\"a\"")
         http.archiveBytes = archive("choices", mapOf("日" to "sun"), grammar = set.id to broken)
         assertTrue(sync.syncOnLaunch(source) is SyncResult.Failed)
@@ -973,7 +974,7 @@ class ContentSyncTest {
         http.headSha = SHA_B
         http.headEtag = "\"etag-2\""
         assertEquals(SyncResult.UpToDate, run())
-        assertEquals(SHA_B, settings.syncedCommit("${source.id}@main"))
+        assertEquals(SHA_B, settings.sync.syncedCommit(source.copy(branch = "main")))
     }
 
     @Test
@@ -1061,18 +1062,18 @@ class ContentSyncTest {
     fun pendingParserUpgradeDoesNotBypassBadContentOrOfflineFallbackSafeguards() {
         http.archiveBytes = archive("v1", mapOf("日" to "sun", "月" to "moon"))
         assertTrue(run() is SyncResult.Updated)
-        settings.setGrammarParserEpoch(source.id, 0)
+        settings.sync.setGrammarParserEpoch(source.id, 0)
         settings.setGrammarNewScope(source.id, GrammarScope.Unclassified)
         val before = runBlocking { db.content().kanji(source.id) }
         val preferences = settings.grammarFor(source.id)
         val lastCheck = System.currentTimeMillis()
-        settings.lastCheckMs = lastCheck
+        settings.sync.lastCheckMs = lastCheck
         http.archiveBytes = archive("v1", mapOf("日" to "sun", "月" to "moon"), corrupt = setOf("月"))
         val rejected = runBlocking { sync.syncOnLaunch(source) } as SyncResult.Failed
         assertTrue(rejected.message, rejected.message.contains("keeping previous cards"))
         assertTrue(rejected.retryable)
         assertEquals(preferences, settings.grammarFor(source.id))
-        assertEquals(lastCheck, settings.lastCheckMs)
+        assertEquals(lastCheck, settings.sync.lastCheckMs)
         assertEquals(before, runBlocking { db.content().kanji(source.id) })
 
         http.headFails = true
@@ -1082,7 +1083,7 @@ class ContentSyncTest {
         assertTrue(runBlocking { sync.syncOnLaunch(source) } is SyncResult.Failed)
         assertEquals(downloads, http.downloads)
         assertEquals(preferences, settings.grammarFor(source.id))
-        assertEquals(lastCheck, settings.lastCheckMs)
+        assertEquals(lastCheck, settings.sync.lastCheckMs)
         assertEquals(before, runBlocking { db.content().kanji(source.id) })
     }
 
@@ -1097,10 +1098,10 @@ class ContentSyncTest {
 
     @Test
     fun launchCheckIsThrottledAndFailuresDoNotConsumeTheInterval() {
-        settings.lastCheckMs = 0
+        settings.sync.lastCheckMs = 0
         http.archiveCode = 503
         assertTrue(runBlocking { sync.syncOnLaunch(source) } is SyncResult.Failed)
-        assertEquals(0L, settings.lastCheckMs)
+        assertEquals(0L, settings.sync.lastCheckMs)
         http.archiveCode = 200
         assertTrue(runBlocking { sync.syncOnLaunch(source) } is SyncResult.Updated)
         val before = http.requests.size

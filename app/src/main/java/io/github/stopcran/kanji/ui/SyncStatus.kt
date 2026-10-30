@@ -7,6 +7,7 @@ import androidx.compose.runtime.saveable.listSaver
 import io.github.stopcran.kanji.core.content.ContentRejections
 import io.github.stopcran.kanji.core.content.ContentType
 import io.github.stopcran.kanji.data.SyncResult
+import io.github.stopcran.kanji.data.SyncActivity
 
 internal data class SyncStatus(val message: String = "", val rejected: String = "", val diagnostic: String = "") {
     fun afterRecreation(): SyncStatus =
@@ -14,6 +15,12 @@ internal data class SyncStatus(val message: String = "", val rejected: String = 
 
     companion object {
         const val SYNCING = "Syncing\u2026"
+        fun fromActivity(activity: SyncActivity?): SyncStatus? = when (activity) {
+            SyncActivity.Running -> SyncStatus(SYNCING)
+            is SyncActivity.Finished -> from(activity.result)
+            SyncActivity.Interrupted -> SyncStatus("Sync interrupted; tap Save & sync to retry.")
+            null -> null
+        }
         val Saver = listSaver<SyncStatus, String>(
             save = { listOf(it.message, it.rejected, it.diagnostic) },
             restore = { SyncStatus(it[0], it[1], it[2]) },

@@ -15,11 +15,14 @@ import io.github.stopcran.kanji.core.counters.CounterRoutes
 import io.github.stopcran.kanji.core.counters.CounterScope
 import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.core.srs.CardPhase
+import io.github.stopcran.kanji.core.srs.Fsrs
+import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.data.AppDatabase
 import io.github.stopcran.kanji.data.COUNTER_STACK
 import io.github.stopcran.kanji.data.CounterEntity
 import io.github.stopcran.kanji.data.Settings
+import io.github.stopcran.kanji.core.srs.ReviewRecord
 import io.github.stopcran.kanji.data.counterIndex
 import io.github.stopcran.kanji.data.counterModeStates
 import io.github.stopcran.kanji.data.counterWaitingCount
@@ -80,7 +83,7 @@ class CounterQuizViewModelTest {
     }
 
     private fun start(mode: CounterMode, extra: Boolean = false): CounterQuizViewModel {
-        val vm = CounterQuizViewModel(services)
+        val vm = CounterQuizViewModel(services.counters, services.sessionStore)
         vm.ensureStarted(mode, extra, CounterGroup.Time)
         await(vm)
         assertTrue((vm.ui as CounterUi.ExpressionQuestion).item.id.startsWith("day-duration-"))
@@ -97,6 +100,30 @@ class CounterQuizViewModelTest {
     private fun next(vm: CounterQuizViewModel) {
         vm.next()
         runBlocking { db.withTransaction {} }
+    }
+
+    @Test
+    fun repositoryKeepsAuthoredOrderSkipsCorruptFilesAndScopesTheSource() = runBlocking {
+        db.content().insertCounters(listOf(CounterEntity(source, "broken", "{", -1)))
+        assertEquals(listOf("days", "age"), services.counters.index(source).files.map { it.id })
+        assertTrue(services.counters.index("other/repo").files.isEmpty())
+    }
+
+    @Test
+    fun repositoryRollsBackStateWhenThePairedLogWriteFails() {
+        db.openHelper.writableDatabase.execSQL(
+            "CREATE TRIGGER reject_counter_review BEFORE INSERT ON review_log BEGIN SELECT RAISE(ABORT, 'fixture'); END",
+        )
+        val now = Instant.parse("2026-10-30T00:00:00Z")
+        val value = ReviewRecord(Fsrs().review(SrsState(), Grade.Good, now), source, COUNTER_STACK,
+            item.id, CounterMode.Expression.mode, Grade.Good, now, "fixture-session")
+        assertThrows(android.database.sqlite.SQLiteConstraintException::class.java) {
+            runBlocking { services.counters.record(value) }
+        }
+        runBlocking {
+            assertTrue(db.reviews().allStates().isEmpty())
+            assertTrue(db.reviews().allLog().isEmpty())
+        }
     }
 
     @Test
@@ -162,7 +189,7 @@ class CounterQuizViewModelTest {
             article = "articles/counts.md", expressions = listOf(item.copy(id = "year-calendar-1")))
         db.content().insertCounters(listOf(CounterEntity(source, advanced.id,
             Json.encodeToString(CounterFile.serializer(), advanced), 2)))
-        val beginner = CounterQuizViewModel(services)
+        val beginner = CounterQuizViewModel(services.counters, services.sessionStore)
         beginner.ensureStarted(CounterMode.Expression, false, CounterGroup.Time, CounterScope.N5)
         await(beginner)
         services.settings.setCounterScope(source, CounterScope.N3)
@@ -173,7 +200,7 @@ class CounterQuizViewModelTest {
         assertTrue(beginner.ui is CounterUi.Done)
         val before = db.reviews().allStates()
         val route = CounterRoutes.create(CounterMode.Expression, CounterGroup.Time, services.settings.counterScopeFor(source))
-        val n3 = CounterQuizViewModel(services)
+        val n3 = CounterQuizViewModel(services.counters, services.sessionStore)
         n3.ensureStarted(CounterMode.Expression, false, CounterGroup.fromRoute(route), CounterScope.fromRoute(route))
         await(n3)
         assertEquals("year-calendar-1", (n3.ui as CounterUi.ExpressionQuestion).item.id)
@@ -190,7 +217,7 @@ class CounterQuizViewModelTest {
             .single { it.kanji == "year-calendar-1" }
         db.reviews().putState(reviewedN3.copy(dueMs = Instant.now().minusSeconds(1).toEpochMilli()))
         val extra = CounterRoutes.extra(route)
-        val continued = CounterQuizViewModel(services)
+        val continued = CounterQuizViewModel(services.counters, services.sessionStore)
         continued.ensureStarted(CounterMode.Expression, true, CounterGroup.fromRoute(extra), CounterScope.fromRoute(extra))
         await(continued)
         assertEquals(setOf(item.id, "year-calendar-1"), continued.index.ids(CounterMode.Expression).toSet())
@@ -239,7 +266,7 @@ class CounterQuizViewModelTest {
             assertEquals(allowance, db.newAllowance(services.settings, source, now))
         }
         for (mode in CounterMode.entries) for (extra in listOf(false, true)) {
-            val vm = CounterQuizViewModel(services)
+            val vm = CounterQuizViewModel(services.counters, services.sessionStore)
             vm.ensureStarted(mode, extra, CounterGroup.Time, CounterScope.N3)
             await(vm)
             assertEquals(setOf(3, 4, 5), vm.index.files.map { it.level }.toSet())

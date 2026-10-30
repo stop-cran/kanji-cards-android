@@ -30,8 +30,9 @@ data class GrammarBrowserPreferences(val kind: GrammarTargetKind = GrammarTarget
 
 class Settings(context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    val sync = SyncPreferences(prefs, ::updateGrammarEpoch)
 
-    /** Every stored preference, for the progress export. */
+    /** Aggregate legacy persistence, including sync hints, for the unchanged progress export. */
     fun snapshot(): Map<String, Any?> = prefs.all.toSortedMap()
     private val _source = MutableStateFlow(load())
     val source: StateFlow<RepoSource> = _source
@@ -44,6 +45,7 @@ class Settings(context: Context) {
     }
 
     private val _grammarPreferences = MutableStateFlow(loadGrammarPreferences())
+    /** Read-only projection of learner choices and the sync owner's parser readiness. */
     val grammarPreferences: StateFlow<Map<String, GrammarPreferences>> = _grammarPreferences
 
     fun grammarFor(sourceId: String): GrammarPreferences = _grammarPreferences.value[sourceId] ?: GrammarPreferences()
@@ -95,27 +97,6 @@ class Settings(context: Context) {
         prefs.edit().putString("$key:kind", value.kind.name).putBoolean("$key:diagram", value.diagram).apply()
     }
 
-    fun sceneParserEpoch(sourceId: String): Int = prefs.getInt("$SCENE_EPOCH$sourceId", 0)
-
-    fun listeningParserEpoch(sourceId: String): Int = prefs.getInt("listeningParserEpoch:$sourceId", 0)
-
-    fun counterParserEpoch(sourceId: String): Int = prefs.getInt("counterParserEpoch:$sourceId", 0)
-
-    fun setCounterParserEpoch(sourceId: String, epoch: Int) {
-        require(epoch >= 0) { "Counter parser epoch must not be negative." }
-        prefs.edit().putInt("counterParserEpoch:$sourceId", epoch).apply()
-    }
-
-    fun setListeningParserEpoch(sourceId: String, epoch: Int) {
-        require(epoch >= 0) { "Listening parser epoch must not be negative." }
-        prefs.edit().putInt("listeningParserEpoch:$sourceId", epoch).apply()
-    }
-
-    fun setSceneParserEpoch(sourceId: String, epoch: Int) {
-        require(epoch >= 0) { "Scene parser epoch must not be negative." }
-        prefs.edit().putInt("$SCENE_EPOCH$sourceId", epoch).apply()
-    }
-
     fun setGrammarNewScope(sourceId: String, scope: GrammarScope) {
         prefs.edit().putString("$GRAMMAR_NEW$sourceId", scope.id).apply()
         _grammarPreferences.update { it + (sourceId to (it[sourceId] ?: GrammarPreferences()).copy(newScope = scope)) }
@@ -126,9 +107,7 @@ class Settings(context: Context) {
         _grammarPreferences.update { it + (sourceId to (it[sourceId] ?: GrammarPreferences()).copy(browseScope = scope)) }
     }
 
-    fun setGrammarParserEpoch(sourceId: String, epoch: Int) {
-        require(epoch >= 0) { "Grammar parser epoch must not be negative." }
-        prefs.edit().putInt("$GRAMMAR_EPOCH$sourceId", epoch).apply()
+    private fun updateGrammarEpoch(sourceId: String, epoch: Int) {
         _grammarPreferences.update { it + (sourceId to (it[sourceId] ?: GrammarPreferences()).copy(parserEpoch = epoch)) }
     }
 
@@ -138,15 +117,15 @@ class Settings(context: Context) {
     }
 
     private fun loadGrammarPreferences(): Map<String, GrammarPreferences> {
-        val prefixes = listOf(GRAMMAR_NEW, GRAMMAR_BROWSE, GRAMMAR_EPOCH, GRAMMAR_GUIDED)
+        val prefixes = listOf(GRAMMAR_NEW, GRAMMAR_BROWSE, GRAMMAR_GUIDED)
         val sources = prefs.all.keys.mapNotNull { key ->
             prefixes.firstOrNull { key.startsWith(it) }?.let { key.removePrefix(it) }
-        }.toSet()
+        }.toSet() + sync.grammarSources()
         return sources.associateWith { sourceId ->
             GrammarPreferences(
                 GrammarScope.fromId(prefs.getString("$GRAMMAR_NEW$sourceId", "all") ?: "all"),
                 GrammarScope.fromId(prefs.getString("$GRAMMAR_BROWSE$sourceId", "all") ?: "all"),
-                prefs.getInt("$GRAMMAR_EPOCH$sourceId", 0),
+                sync.grammarParserEpoch(sourceId),
                 prefs.getBoolean("$GRAMMAR_GUIDED$sourceId", false),
             )
         }
@@ -299,25 +278,10 @@ class Settings(context: Context) {
         get() = prefs.getLong(KEY_REMIND_LAST, 0)
         set(v) = prefs.edit().putLong(KEY_REMIND_LAST, v).apply()
 
-    /** Commit SHA of the content branch at the last successful sync, per source id (lets syncs skip an unchanged archive). */
     /** Index of the illustration set shown in the previous session, or -1. */
     var artSetLast: Int
         get() = prefs.getInt(KEY_ART_SET, -1)
         set(v) = prefs.edit().putInt(KEY_ART_SET, v).apply()
-
-    fun syncedCommit(sourceId: String): String? = prefs.getString("sha:$sourceId", null)
-    fun setSyncedCommit(sourceId: String, sha: String) = prefs.edit().putString("sha:$sourceId", sha).apply()
-    /** ETag of the head-commit response with the SHA it returned, so an unchanged branch costs a 304. */
-    fun headEtag(sourceId: String): Pair<String, String>? = prefs.getString("etag:$sourceId", null)?.split('|')?.takeIf { it.size == 2 }?.let { it[0] to it[1] }
-    fun setHeadEtag(sourceId: String, etag: String, sha: String) = prefs.edit().putString("etag:$sourceId", "$etag|$sha").apply()
-
-    fun clearSyncedCommit(sourceId: String) = prefs.edit().remove("sha:$sourceId").apply()
-    /** Last time an archive was downloaded without a successful head check (API rate-limited or failing), per source and branch. */
-    fun fallbackAttemptMs(key: String): Long = prefs.getLong("fallback:$key", 0)
-    fun setFallbackAttemptMs(key: String, ms: Long) = prefs.edit().putLong("fallback:$key", ms).apply()
-    var lastCheckMs: Long
-        get() = prefs.getLong(KEY_LAST_CHECK, 0)
-        set(v) = prefs.edit().putLong(KEY_LAST_CHECK, v).apply()
 
     val repoUrl: String get() = prefs.getString(KEY_URL, Defaults.CONTENT_REPO_URL) ?: Defaults.CONTENT_REPO_URL
     val branch: String get() = prefs.getString(KEY_BRANCH, Defaults.CONTENT_BRANCH) ?: Defaults.CONTENT_BRANCH
@@ -366,13 +330,10 @@ class Settings(context: Context) {
         const val KEY_REMIND_HOUR = "reminderHour"
         const val KEY_REMIND_IGNORED = "remindersIgnored"
         const val KEY_REMIND_LAST = "lastReminderMs"
-        const val KEY_LAST_CHECK = "lastCheckMs"
         const val GRAMMAR_NEW = "grammarNew:"
         private const val COUNTER_SCOPE = "counterScope:"
         private const val LISTENING_SCOPE = "listeningScope:"
         const val GRAMMAR_BROWSE = "grammarBrowse:"
-        const val GRAMMAR_EPOCH = "grammarParserEpoch:"
         const val GRAMMAR_GUIDED = "grammarGuided:"
-        const val SCENE_EPOCH = "sceneParserEpoch:"
     }
 }

@@ -131,7 +131,7 @@ class GrammarAnswerFlowTest {
         val settings = Settings(isolated).apply {
             setDailyNewCards(50)
             setWeekPlan("FFFFFFF")
-            setGrammarParserEpoch(source.value.id, ContentParser.GRAMMAR_PARSER_EPOCH)
+            sync.setGrammarParserEpoch(source.value.id, ContentParser.GRAMMAR_PARSER_EPOCH)
             setGrammarNewScope(source.value.id, GrammarScope.All)
         }
         val source = settings.source.value.id

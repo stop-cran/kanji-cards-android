@@ -147,7 +147,7 @@ class GrammarPilotAcceptanceTest {
             app.settings.setGrammarNewScope(source.id, GrammarScope.N5)
             app.settings.setGrammarBrowseScope(source.id, GrammarScope.N5)
             app.settings.setGrammarBrowser(source, GrammarBrowserPreferences(GrammarTargetKind.Chapter, false))
-            val synced = runBlocking { ContentSync(app.db, app.settings, http).sync(source, force = true) }
+            val synced = runBlocking { ContentSync(app.db, app.settings.sync, http).sync(source, force = true) }
             assertTrue(synced.toString(), synced is SyncResult.Updated)
             assertTrue((synced as SyncResult.Updated).problems.toString(), synced.problems.isEmpty())
             assertEquals(listOf(headUrl, source.commitZipUrl(head)), requests)

@@ -7,36 +7,6 @@ import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
 
-internal fun taskFixture(name: String = "open-window"): ListeningTaskRecord {
-    val id = "n5-task-$name"
-    val text = requireNotNull(ListeningTaskContentTest::class.java.getResourceAsStream("/listening-tasks/$id.json"))
-        .bufferedReader(Charsets.UTF_8).use { it.readText() }
-    return ListeningTaskContent.parse("listening-tasks/$id.json", text)
-}
-
-internal fun taskTone(): ByteArray = requireNotNull(ListeningTaskContentTest::class.java.getResourceAsStream("/listening-test-tone.ogg"))
-    .use { it.readBytes() }
-
-internal fun approvedTask(
-    packageDraft: ListeningTaskPackage = taskFixture().task, tone: ByteArray = taskTone(), durationMs: Long = 20_000,
-    image: ByteArray? = null,
-): ListeningTaskRecord {
-    val draft = ListeningTaskContent.parse("listening-tasks/${packageDraft.id}.json",
-        Json.encodeToString(ListeningTaskPackage.serializer(), packageDraft.copy(media = null, approval = null)))
-    val hash = ContentParser.rawSha256(tone)
-    val media = TaskMedia(draft.contentHash, draft.task.stages.associate { stage ->
-        stage.id to TaskAudio("task-audio/test-tone.ogg", hash, durationMs, stage.turns.mapIndexed { index, id ->
-            val chunk = durationMs / stage.turns.size
-            ListeningTiming(id, index * chunk, (index + 1) * chunk)
-        })
-    }, image?.let { ListeningImage("task-images/test-picture.webp", ContentParser.rawSha256(it)) })
-    val task = draft.task.copy(media = media, approval = TaskApproval(
-        "approved", draft.contentHash, ListeningTaskContent.mediaHash(media), "2026-10-24",
-        "Synthetic integration fixture only, not learning content or actual listening approval.",
-    ))
-    return ListeningTaskContent.parse("listening-tasks/${task.id}.json", Json.encodeToString(ListeningTaskPackage.serializer(), task))
-}
-
 class ListeningTaskContentTest {
     @Test fun allFourOriginalExamplesRetainTypeOrderAndDraftStatus() {
         val records = listOf("open-window", "rainy-class", "borrow-pencil", "park-invitation").map(::taskFixture)

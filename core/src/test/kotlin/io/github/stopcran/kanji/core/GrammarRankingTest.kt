@@ -16,12 +16,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
 
-internal fun GrammarSet.recommending(vararg links: Pair<String, Int>): GrammarSet = copy(
-    introductionGroups = listOf(introductionGroups.single().copy(
-        next = links.map { (target, importance) -> GrammarRecommendation(target, importance, "Compare $id with $target.") },
-    )),
-)
-
 class GrammarRankingTest {
     private val now = Instant.parse("2026-10-18T12:00:00Z")
     private val related = grammarFixture("beta")

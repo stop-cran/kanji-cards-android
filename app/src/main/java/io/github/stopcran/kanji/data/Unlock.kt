@@ -29,6 +29,10 @@ suspend fun AppDatabase.focusStatus(settings: Settings, sourceId: String, stack:
     if (!settings.focusEnabled.value) return null
     val size = settings.focusSize.value
     val since = settings.focusSince(sourceId, stack, nowMs)
+    return focusStatus(sourceId, stack, kanji, size, since)
+}
+
+internal suspend fun AppDatabase.focusStatus(sourceId: String, stack: String, kanji: List<KanjiEntity>, size: Int, since: Long): FocusStatus {
     val introduced = reviews().meaningIntroducedSince(sourceId, stack, since).toSet()
     if (introduced.isEmpty()) return FocusStatus(size, 0)
     val cards = kanji.map { it.toReadingCard() }

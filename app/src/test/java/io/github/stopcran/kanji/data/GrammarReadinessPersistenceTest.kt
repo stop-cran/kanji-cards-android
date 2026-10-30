@@ -62,7 +62,7 @@ class GrammarReadinessPersistenceTest {
         context.getSharedPreferences("settings", 0).edit().clear().commit()
         settings = Settings(context)
         settings.setWeekPlan("FFFFFFF")
-        settings.setGrammarParserEpoch(source, ContentParser.GRAMMAR_PARSER_EPOCH)
+        settings.sync.setGrammarParserEpoch(source, ContentParser.GRAMMAR_PARSER_EPOCH)
         db = open()
         install(source)
     }
