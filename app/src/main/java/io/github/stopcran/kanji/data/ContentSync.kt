@@ -11,6 +11,8 @@ import io.github.stopcran.kanji.core.content.SafeZip
 import io.github.stopcran.kanji.core.content.SceneCatalog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -35,6 +37,34 @@ internal sealed interface SyncActivity {
     data object Running : SyncActivity
     data class Finished(val result: SyncResult) : SyncActivity
     data object Interrupted : SyncActivity
+}
+
+// Equal terminal results can belong to different attempts, including a conflated periodic refresh.
+internal data class SyncActivityEvent(val state: SyncActivity, val revision: Long)
+
+internal fun MutableStateFlow<Map<RepoSource, SyncActivityEvent>>.record(source: RepoSource, state: SyncActivity) {
+    update { it + (source to SyncActivityEvent(state, (it[source]?.revision ?: 0) + 1)) }
+}
+
+// A non-cancellation request failure must not terminate the process-lifetime admission loop.
+@Suppress("TooGenericExceptionCaught")
+internal suspend fun syncOutcome(reportFailure: (Exception) -> Unit, block: suspend () -> SyncResult): SyncResult {
+    currentCoroutineContext().ensureActive()
+    val result = try {
+        block()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: ContentException) {
+        SyncResult.Failed(error.message ?: "Invalid content", retryable = false)
+    } catch (error: java.io.IOException) {
+        SyncResult.Failed(error.message ?: "Network error", retryable = true)
+    } catch (error: Exception) {
+        reportFailure(error)
+        SyncResult.Failed(error.message ?: error.javaClass.simpleName, retryable = false)
+    }
+    // Blocking I/O can throw an ordinary exception after its coroutine was cancelled.
+    currentCoroutineContext().ensureActive()
+    return result
 }
 
 private fun List<io.github.stopcran.kanji.core.content.GrammarSet>.toGrammarEntities(sourceId: String): List<GrammarEntity> =
@@ -89,7 +119,7 @@ private fun io.github.stopcran.kanji.core.content.ParsedContent.toRows(sourceId:
 
 class ContentSync(private val db: AppDatabase, private val syncState: SyncPreferences, private val http: ContentHttp = UrlConnectionHttp) {
     private val lock = Mutex()
-    private val _activity = MutableStateFlow<Map<RepoSource, SyncActivity>>(emptyMap())
+    private val _activity = MutableStateFlow<Map<RepoSource, SyncActivityEvent>>(emptyMap())
     internal val activity = _activity.asStateFlow()
 
     /** Cheap check at app start: at most every [LAUNCH_INTERVAL_MS], and only downloads when the branch head moved. */
@@ -137,76 +167,66 @@ class ContentSync(private val db: AppDatabase, private val syncState: SyncPrefer
         }
     }
     private suspend fun trackActivity(source: RepoSource, block: suspend () -> SyncResult): SyncResult {
-        _activity.update { it + (source to SyncActivity.Running) }
-        return try {
-            block().also { result ->
-                _activity.update { it + (source to SyncActivity.Finished(result)) }
-            }
+        _activity.record(source, SyncActivity.Running)
+        val result = try {
+            syncOutcome({ error -> android.util.Log.e("ContentSync", "Sync failed for ${source.id}@${source.branch}", error) }, block)
         } catch (cancelled: CancellationException) {
-            _activity.update { it + (source to SyncActivity.Interrupted) }
+            _activity.record(source, SyncActivity.Interrupted)
             throw cancelled
         }
+        _activity.record(source, SyncActivity.Finished(result))
+        return result
     }
 
     suspend fun sync(source: RepoSource, force: Boolean = false): SyncResult =
         lock.withLock { trackActivity(source) { syncContent(source, force) } }
 
     private suspend fun syncContent(source: RepoSource, force: Boolean): SyncResult = withContext(Dispatchers.IO) {
-        try {
-            if (db.content().meta(source.id) != null && db.reviews().grammarReadinessStatus(source.id)?.complete != true) {
-                db.rebuildGrammarReadiness(source.id)
-            }
-            val maySkipImport = !force && !needsParserRefresh(source)
-            val head = headCommit(source)
-            // Rate-limited or offline: fall back to the branch archive, but at most once per interval so launches and worker retries cannot hammer codeload.
-            val url = head?.let { source.commitZipUrl(it) } ?: source.zipUrl
-            if (!force && head == null && db.content().meta(source.id) != null) {
-                val now = System.currentTimeMillis()
-                if (now - syncState.fallbackAttemptMs(source) < LAUNCH_INTERVAL_MS) {
-                    return@withContext SyncResult.Failed("Could not check for updates", retryable = false)
-                }
-                syncState.setFallbackAttemptMs(source, now)
-            }
-            val headUnchanged = head != null && head == syncState.syncedCommit(source)
-            if (maySkipImport && headUnchanged && db.content().meta(source.id) != null) return@withContext SyncResult.UpToDate
-            val files = download(url) { SafeZip.read(it) }
-            val parsed = ContentParser.parse(files, SceneImages::problem)
-            val dao = db.content()
-            legacyListeningFailure(parsed, source.id)?.let { return@withContext it }
-            if (maySkipImport && parsed.listeningTasks.problems.isEmpty() &&
-                dao.meta(source.id)?.contentVersion == parsed.manifest.contentVersion) {
-                head?.let { syncState.setSyncedCommit(source, it) }
-                return@withContext SyncResult.UpToDate
-            }
-            if (parsed.kanji.isEmpty()) {
-                return@withContext SyncResult.Failed(
-                    "No valid cards: ${parsed.problems.firstOrNull() ?: "empty manifest"}",
-                    retryable = false, rejected = parsed.rejectedContent(),
-                )
-            }
-            if (!force && parsed.problems.isNotEmpty() && shrinks(parsed, source.id)) {
-                return@withContext SyncResult.Failed(
-                    "${parsed.problems.size} content issue(s) (${parsed.problems.first()}); keeping previous cards", retryable = true,
-                    rejected = parsed.rejectedContent(),
-                )
-            }
-            val result = replaceContent(parsed, source, head)
-            syncState.setGrammarParserEpoch(source.id, ContentParser.GRAMMAR_PARSER_EPOCH)
-            syncState.setCounterParserEpoch(source.id, io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH)
-            syncState.setSceneParserEpoch(source.id, SceneCatalog.PARSER_EPOCH)
-            syncState.setListeningParserEpoch(source.id, io.github.stopcran.kanji.core.listening.ListeningContent.PARSER_EPOCH)
-            head?.let { syncState.setSyncedCommit(source, it) }
+        if (db.content().meta(source.id) != null && db.reviews().grammarReadinessStatus(source.id)?.complete != true) {
             db.rebuildGrammarReadiness(source.id)
-            result
-        } catch (e: ContentException) {
-            SyncResult.Failed(e.message ?: "Invalid content", retryable = false)
-        } catch (e: java.io.IOException) {
-            SyncResult.Failed(e.message ?: "Network error", retryable = true)
-        } catch (e: Exception) {
-            // Parse, database or security failures must not crash the caller (a worker or the UI); cancellation still propagates.
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            SyncResult.Failed(e.message ?: e.javaClass.simpleName, retryable = false)
         }
+        val maySkipImport = !force && !needsParserRefresh(source)
+        val head = headCommit(source)
+        // Rate-limited or offline: fall back to the branch archive, but at most once per interval so launches and worker retries cannot hammer codeload.
+        val url = head?.let { source.commitZipUrl(it) } ?: source.zipUrl
+        if (!force && head == null && db.content().meta(source.id) != null) {
+            val now = System.currentTimeMillis()
+            if (now - syncState.fallbackAttemptMs(source) < LAUNCH_INTERVAL_MS) {
+                return@withContext SyncResult.Failed("Could not check for updates", retryable = false)
+            }
+            syncState.setFallbackAttemptMs(source, now)
+        }
+        val headUnchanged = head != null && head == syncState.syncedCommit(source)
+        if (maySkipImport && headUnchanged && db.content().meta(source.id) != null) return@withContext SyncResult.UpToDate
+        val files = download(url) { SafeZip.read(it) }
+        val parsed = ContentParser.parse(files, SceneImages::problem)
+        val dao = db.content()
+        legacyListeningFailure(parsed, source.id)?.let { return@withContext it }
+        if (maySkipImport && parsed.listeningTasks.problems.isEmpty() &&
+            dao.meta(source.id)?.contentVersion == parsed.manifest.contentVersion) {
+            head?.let { syncState.setSyncedCommit(source, it) }
+            return@withContext SyncResult.UpToDate
+        }
+        if (parsed.kanji.isEmpty()) {
+            return@withContext SyncResult.Failed(
+                "No valid cards: ${parsed.problems.firstOrNull() ?: "empty manifest"}",
+                retryable = false, rejected = parsed.rejectedContent(),
+            )
+        }
+        if (!force && parsed.problems.isNotEmpty() && shrinks(parsed, source.id)) {
+            return@withContext SyncResult.Failed(
+                "${parsed.problems.size} content issue(s) (${parsed.problems.first()}); keeping previous cards", retryable = true,
+                rejected = parsed.rejectedContent(),
+            )
+        }
+        val result = replaceContent(parsed, source, head)
+        syncState.setGrammarParserEpoch(source.id, ContentParser.GRAMMAR_PARSER_EPOCH)
+        syncState.setCounterParserEpoch(source.id, io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH)
+        syncState.setSceneParserEpoch(source.id, SceneCatalog.PARSER_EPOCH)
+        syncState.setListeningParserEpoch(source.id, io.github.stopcran.kanji.core.listening.ListeningContent.PARSER_EPOCH)
+        head?.let { syncState.setSyncedCommit(source, it) }
+        db.rebuildGrammarReadiness(source.id)
+        result
     }
 
     private suspend fun replaceContent(

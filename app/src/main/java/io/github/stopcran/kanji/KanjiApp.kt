@@ -64,7 +64,9 @@ class KanjiApp : Application() {
     val settings: Settings by lazy { Settings(this) }
     val contentSync: ContentSync by lazy { ContentSync(db, settings.sync) }
     internal val syncCoordinator by lazy {
-        io.github.stopcran.kanji.data.SyncCoordinator(syncScope, contentSync.activity) { request ->
+        io.github.stopcran.kanji.data.SyncCoordinator(syncScope, contentSync.activity, reportFailure = { error ->
+            android.util.Log.e("ContentSync", "Sync request failed unexpectedly; queue remains available.", error)
+        }) { request ->
             when (request.kind) {
                 io.github.stopcran.kanji.data.SyncKind.Launch -> contentSync.syncOnLaunch(request.source)
                 io.github.stopcran.kanji.data.SyncKind.Forced -> contentSync.sync(request.source, force = true)

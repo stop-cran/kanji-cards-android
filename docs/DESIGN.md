@@ -797,6 +797,13 @@ Settings and Home observe the same source/branch-specific detailed outcomes, wit
 cancelling a waiter or recreating an Activity does not cancel admitted work. Manual work is not process-durable: a new process starts
 without invented activity, and a saved Settings syncing marker becomes interrupted only when no live operation supplies its state.
 Saved diagnostics are source-guarded, and local URL validation remains visible independently of earlier sync outcomes.
+Failure status retains retryability across recreation, with different guidance but manual sync available for either classification.
+Non-retryable also includes fallback throttling; it does not mean permanently invalid content or disable manual retry.
+The engine's tracked failure boundary includes launch preflight and completion bookkeeping, not only the import body.
+Cancellation remains interruption and propagates; other request exceptions settle a failure and leave the admission queue usable.
+Unexpected exceptions are logged. Coordinator-only outcomes cannot replace newer engine activity: source-local in-memory activity
+revisions distinguish attempts even when StateFlow conflates a periodic Running/Finished cycle back to an equal terminal result.
+These revisions are observation identity only, not persisted source/parser revisions or new retry scheduling.
 
 `HomeRoute` supplies state/actions to the main, Kanji and Words presentation, including the starting guide and preference callbacks.
 Other section overview producers remain explicit at that route boundary. Home's model still carries the existing slim entity-shaped

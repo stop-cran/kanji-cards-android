@@ -37,7 +37,6 @@
     <ID>EmptyFunctionBlock:ContentSyncTest.kt$FakeHttp.&lt;no name provided&gt;${}</ID>
     <ID>EmptyFunctionBlock:VoiceInput.kt$&lt;no name provided&gt;${}</ID>
     <ID>ExplicitItLambdaParameter:KanjiReadings.kt$KanjiReadingQueue${ it -&gt; st[it.id]?.takeIf { s -&gt; s.phase != CardPhase.New &amp;&amp; !s.due.isAfter(now) }?.let { s -&gt; it to s } }</ID>
-    <ID>InstanceOfCheckForException:ContentSync.kt$ContentSync$e is kotlinx.coroutines.CancellationException</ID>
     <ID>InstanceOfCheckForException:InkRecognizer.kt$InkRecognizer$e is CancellationException</ID>
     <ID>LongMethod:ContentParser.kt$ContentParser$fun parse(files: Map&lt;String, ByteArray&gt;): ParsedContent</ID>
     <ID>LongParameterList:Brush.kt$(pts: List&lt;Offset&gt;, color: Color, peak: Float, endWidth: Float, rough: Float, blur: Float = 0f)</ID>
@@ -193,7 +192,6 @@
     <ID>ThrowsCount:ContentParser.kt$ContentParser$fun parseWord(path: String, text: String): WordArticle</ID>
     <ID>ThrowsCount:SafeZip.kt$SafeZip$fun read(input: InputStream, limits: Limits = Limits()): Map&lt;String, ByteArray&gt;</ID>
     <ID>TooGenericExceptionCaught:ContentParser.kt$ContentParser$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:ContentSync.kt$ContentSync$e: Exception</ID>
     <ID>TooGenericExceptionCaught:InkRecognizer.kt$InkRecognizer$e: Exception</ID>
   </CurrentIssues>
 </SmellBaseline>

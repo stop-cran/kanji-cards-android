@@ -111,6 +111,10 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   versus throttled launch semantics, and do not coalesce across an intervening branch replacement. Periodic work keeps its own
   execution-time source and cancellation. Shared diagnostics remain source/branch-bound, including queued and interrupted work.
   Save local repository validation errors with the form, so rotation cannot replace an invalid saved URL's error with old sync success.
+  Keep failure retryability in saved status without treating every non-retryable result as permanent or disabling manual sync.
+  Catch operational failures around launch preflight as well as import; one failed request must not shut down the queue.
+  Engine activity revisions are per-source observation identity: equal results from a later periodic attempt must supersede an old
+  coordinator fallback even if the observer never sees the intervening Running state. Cancellation still propagates.
 - N2 nearly exhausted entry headroom while byte budgets still passed. Count directories/skipped ZIP entries and coordinate the content
   publishing guard with `SafeZip` (see `docs/DESIGN.md`); more entry capacity does not relax byte limits or upgrade installed APKs.
   Complete-archive integration fixtures must honor Git `export-ignore` too, rather than zip contributor evidence that never ships.

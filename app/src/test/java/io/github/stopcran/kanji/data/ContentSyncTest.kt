@@ -407,7 +407,7 @@ class CounterSyncTest {
         assertEquals(epoch, settings.sync.counterParserEpoch(source.id))
         assertEquals(0, settings.sync.counterParserEpoch("other/repo"))
         assertTrue(sync.syncOnLaunch(source) is SyncResult.UpToDate)
-        assertEquals(SyncActivity.Finished(SyncResult.UpToDate), sync.activity.value[source])
+        assertEquals(SyncActivity.Finished(SyncResult.UpToDate), sync.activity.value[source]?.state)
         assertEquals(downloads + 1, http.downloads)
         settings.sync.setCounterParserEpoch(source.id, 0)
         http.headSha = SHA_B
@@ -444,13 +444,13 @@ class ContentLoadStateTest {
     @Test fun syncActivityRetainsSourceAndBranchBoundResultsAndReportsCancellation() = runBlocking {
         val success = sync.sync(source)
         assertTrue(success is SyncResult.Updated)
-        assertEquals(SyncActivity.Finished(success), sync.activity.value[source])
+        assertEquals(SyncActivity.Finished(success), sync.activity.value[source]?.state)
         val branch = source.copy(branch = "alternate")
         http.archiveCode = 503
         val failure = sync.sync(branch, force = true)
         assertTrue(failure is SyncResult.Failed)
-        assertEquals(SyncActivity.Finished(failure), sync.activity.value[branch])
-        assertEquals(SyncActivity.Finished(success), sync.activity.value[source])
+        assertEquals(SyncActivity.Finished(failure), sync.activity.value[branch]?.state)
+        assertEquals(SyncActivity.Finished(success), sync.activity.value[source]?.state)
 
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
@@ -459,15 +459,52 @@ class ContentLoadStateTest {
         val job = launch(Dispatchers.IO) { sync.sync(other) }
         try {
             assertTrue(entered.await(10, TimeUnit.SECONDS))
-            assertEquals(SyncActivity.Running, sync.activity.value[other])
+            assertEquals(SyncActivity.Running, sync.activity.value[other]?.state)
             job.cancel()
         } finally {
             release.countDown()
             job.join()
         }
-        assertEquals(SyncActivity.Interrupted, sync.activity.value[other])
-        assertEquals(SyncActivity.Finished(success), sync.activity.value[source])
+        assertEquals(SyncActivity.Interrupted, sync.activity.value[other]?.state)
+        assertEquals(SyncActivity.Finished(success), sync.activity.value[source]?.state)
         assertNull(db.content().meta(other.id))
+    }
+
+    @Test fun launchPreflightDatabaseFailureSettlesActivityAndQueuedSyncRecoversAfterRepair() = runBlocking {
+        assertTrue(sync.sync(source) is SyncResult.Updated)
+        settings.sync.lastCheckMs = 42L
+        val database = db.openHelper.writableDatabase
+        database.execSQL("ALTER TABLE listening_task_sync RENAME TO unavailable_task_sync")
+        val ownerScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+        val failedPreflight = kotlinx.coroutines.CompletableDeferred<SyncResult>()
+        val repaired = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val owner = SyncCoordinator(ownerScope, sync.activity) { request ->
+            if (request.kind == SyncKind.Launch) {
+                sync.syncOnLaunch(request.source).also { failedPreflight.complete(it); repaired.await() }
+            } else sync.sync(request.source, force = request.kind == SyncKind.Forced)
+        }
+        var restored = false
+        try {
+            kotlinx.coroutines.withTimeout(10_000) {
+                val launch = owner.request(source, SyncKind.Launch)
+                val failure = failedPreflight.await() as SyncResult.Failed
+                assertEquals(false, failure.retryable)
+                assertEquals(SyncActivity.Finished(failure), sync.activity.value[source]?.state)
+                assertEquals(42L, settings.sync.lastCheckMs)
+                val queued = owner.request(source, SyncKind.Forced)
+                database.execSQL("ALTER TABLE unavailable_task_sync RENAME TO listening_task_sync")
+                restored = true
+                repaired.complete(Unit)
+                assertEquals(failure, launch.await())
+                assertTrue(queued.await() is SyncResult.Updated)
+                assertEquals(SyncResult.UpToDate, owner.request(source).await())
+                assertEquals(SyncActivity.Finished(SyncResult.UpToDate), owner.activity.value[source])
+            }
+        } finally {
+            if (!restored) database.execSQL("ALTER TABLE unavailable_task_sync RENAME TO listening_task_sync")
+            repaired.complete(Unit)
+            ownerScope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+        }
     }
 
     @Test fun contentAvailabilityKeepsMetadataLessCacheAndSeparatesSources() = runBlocking {

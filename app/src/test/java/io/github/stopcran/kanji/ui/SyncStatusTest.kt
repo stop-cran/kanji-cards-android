@@ -63,4 +63,27 @@ class SyncStatusTest {
         assertEquals(status, status.afterRecreation())
         assertEquals(SyncStatus("Up to date"), SyncStatus.from(SyncResult.UpToDate))
     }
+
+    @Test fun retryabilityAndDistinctGuidanceSurviveSavedStateRestoration() {
+        val restored = StateRestorationTester(rule)
+        lateinit var update: (SyncStatus) -> Unit
+        lateinit var read: () -> SyncStatus
+        restored.setContent {
+            var status by rememberSaveable(stateSaver = SyncStatus.Saver) { mutableStateOf(SyncStatus()) }
+            update = { status = it }
+            read = { status }
+            KanjiTheme { Column { SyncStatusText(status) } }
+        }
+        for (retryable in listOf(true, false)) {
+            rule.runOnIdle { update(SyncStatus.from(SyncResult.Failed("Same failure", retryable))) }
+            restored.emulateSavedInstanceStateRestore()
+            rule.runOnIdle { assertEquals(retryable, read().retryable) }
+            rule.onNodeWithText("Sync failed: Same failure").assertIsDisplayed()
+            val hint = if (retryable) "This failure may be temporary." else "Check the error details before retrying."
+            rule.onNodeWithText(hint, substring = true).assertIsDisplayed()
+        }
+        assertEquals(SyncStatus("Old saved failure"), SyncStatus.Saver.restore(listOf("Old saved failure", "", "")))
+        rule.runOnIdle { update(SyncStatus.from(SyncResult.UpToDate)) }
+        rule.onNodeWithText("Check the error details before retrying.", substring = true).assertDoesNotExist()
+    }
 }

@@ -38,7 +38,7 @@ internal data class HomeContentState(val ready: Boolean?, val activity: SyncActi
 internal fun rememberHomeContent(db: AppDatabase, sync: ContentSync, source: RepoSource): HomeContentState = key(db, sync, source) {
     val ready by remember { db.content().observeContentReady(source.id) }.collectAsState(null)
     val activity by sync.activity.collectAsState()
-    HomeContentState(ready, activity[source])
+    HomeContentState(ready, activity[source]?.state)
 }
 
 @Composable

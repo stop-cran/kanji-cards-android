@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -20,10 +21,12 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.data.SyncActivity
+import io.github.stopcran.kanji.data.SyncActivityEvent
 import io.github.stopcran.kanji.data.SyncCoordinator
 import io.github.stopcran.kanji.data.SyncKind
 import io.github.stopcran.kanji.data.SyncRequest
 import io.github.stopcran.kanji.data.SyncResult
+import io.github.stopcran.kanji.data.record
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -47,17 +50,17 @@ class ArchitectureSyncTest {
         val oldUrl = app.settings.repoUrl
         val oldBranch = app.settings.branch
         val ownerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-        val activity = MutableStateFlow<Map<RepoSource, SyncActivity>>(emptyMap())
+        val activity = MutableStateFlow<Map<RepoSource, SyncActivityEvent>>(emptyMap())
         val started = CompletableDeferred<SyncRequest>()
         val finish = CompletableDeferred<Unit>()
         var requests = 0
         val updated = SyncResult.Updated(1, 2, listOf("Native diagnostic"), grammar = 3, listening = 4)
         val owner = SyncCoordinator(ownerScope, activity) { request ->
             requests++
-            activity.value += request.source to SyncActivity.Running
+            activity.record(request.source, SyncActivity.Running)
             started.complete(request)
             finish.await()
-            activity.value += request.source to SyncActivity.Finished(updated)
+            activity.record(request.source, SyncActivity.Finished(updated))
             updated
         }
         val showSettings = mutableStateOf(true)
@@ -112,6 +115,60 @@ class ArchitectureSyncTest {
         } finally {
             finish.complete(Unit)
             ownerScope.cancel()
+            app.settings.setSource(oldUrl, oldBranch)
+        }
+    }
+
+    @Test fun failureGuidanceRestoresWithoutLiveActivityAndBothFailuresAllowManualRetry() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("architectureAcceptance") == "true")
+        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as KanjiApp
+        val oldUrl = app.settings.repoUrl
+        val oldBranch = app.settings.branch
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        var requests = 0
+        fun newOwner(): SyncCoordinator {
+            val activity = MutableStateFlow<Map<RepoSource, SyncActivityEvent>>(emptyMap())
+            return SyncCoordinator(scope, activity) { request ->
+                requests++
+                activity.record(request.source, SyncActivity.Running)
+                val result = when (requests) {
+                    1 -> SyncResult.Failed("Same native failure", true)
+                    2 -> SyncResult.Failed("Same native failure", false)
+                    else -> SyncResult.UpToDate
+                }
+                activity.record(request.source, SyncActivity.Finished(result))
+                result
+            }
+        }
+        var owner = newOwner()
+        fun mount() = rule.activityRule.scenario.onActivity { host ->
+            host.setContent { KanjiTheme { SettingsScreen(app, {}, {}, owner) } }
+        }
+        try {
+            app.settings.setSource("https://github.com/fixture/architecture-retry", "captured")
+            mount()
+            for (hint in listOf("This failure may be temporary.", "Check the error details before retrying.")) {
+                rule.onNodeWithText("Save & sync").performScrollTo().assertIsEnabled().performClick()
+                rule.onNodeWithText(hint, substring = true).performScrollTo().assertIsDisplayed()
+                // Recreate with no in-memory outcome to exercise the saved status, not the shared live result.
+                owner = newOwner()
+                val previous = rule.activity
+                rule.activityRule.scenario.recreate()
+                mount()
+                assertNotSame(previous, rule.activity)
+                rule.onNodeWithText("Sync failed: Same native failure").performScrollTo().assertIsDisplayed()
+                rule.onNodeWithText(hint, substring = true).performScrollTo().assertIsDisplayed()
+                rule.onNodeWithText("Save & sync").performScrollTo().assertIsEnabled()
+            }
+            rule.onNodeWithText("Save & sync").performClick()
+            rule.onNodeWithText("Up to date").performScrollTo().assertIsDisplayed()
+            assertEquals(3, requests)
+            File(app.getExternalFilesDir(null), "architecture-sync-retry-native.json").writeText(JSONObject()
+                .put("api", Build.VERSION.SDK_INT).put("actualActivityRecreations", 2)
+                .put("retryabilityRestoredWithoutLiveActivity", true).put("manualRetryForBothFailures", true)
+                .put("requests", requests).toString(2))
+        } finally {
+            scope.cancel()
             app.settings.setSource(oldUrl, oldBranch)
         }
     }

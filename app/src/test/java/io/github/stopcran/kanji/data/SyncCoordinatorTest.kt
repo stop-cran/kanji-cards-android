@@ -20,7 +20,7 @@ class SyncCoordinatorTest {
 
     @Test fun cancelledScreenWaiterDoesNotCancelWorkAndForcedFollowUpCannotBeCoalescedWithANoop() = runTest {
         val engine = Engine()
-        val owner = SyncCoordinator(backgroundScope, engine.activity, engine::execute)
+        val owner = SyncCoordinator(backgroundScope, engine.activity, execute = engine::execute)
         val ordinary = owner.request(source)
         assertEquals(SyncActivity.Running, owner.activity.value[source])
         assertSame(ordinary, owner.request(source))
@@ -50,7 +50,7 @@ class SyncCoordinatorTest {
 
     @Test fun branchReplacementIsOrderedAndCannotCoalesceAcrossAnInterveningRequest() = runTest {
         val engine = Engine()
-        val owner = SyncCoordinator(backgroundScope, engine.activity, engine::execute)
+        val owner = SyncCoordinator(backgroundScope, engine.activity, execute = engine::execute)
         val other = source.copy(branch = "other")
         val first = owner.request(source)
         val startedFirst = engine.started.receive()
@@ -76,7 +76,7 @@ class SyncCoordinatorTest {
     @Test fun ownerShutdownCancelsOutstandingTicketsAndANewProcessStartsWithoutInventedActivity() = runTest {
         val engine = Engine()
         val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
-        val owner = SyncCoordinator(scope, engine.activity, engine::execute)
+        val owner = SyncCoordinator(scope, engine.activity, execute = engine::execute)
         val active = owner.request(source)
         engine.started.receive()
         val queued = owner.request(source, SyncKind.Forced)
@@ -87,35 +87,87 @@ class SyncCoordinatorTest {
         assertEquals(SyncActivity.Interrupted, owner.activity.value[source])
         assertTrue(owner.request(source).isCancelled)
         val freshEngine = Engine()
-        val fresh = SyncCoordinator(backgroundScope, freshEngine.activity, freshEngine::execute)
+        val fresh = SyncCoordinator(backgroundScope, freshEngine.activity, execute = freshEngine::execute)
         assertTrue(fresh.activity.value.isEmpty())
     }
 
     @Test fun periodicEngineResultsRemainVisibleWithoutAnOwnedRequest() = runTest {
         val engine = Engine()
-        val owner = SyncCoordinator(backgroundScope, engine.activity, engine::execute)
+        val owner = SyncCoordinator(backgroundScope, engine.activity, execute = engine::execute)
         val result = SyncResult.Updated(2, 3, listOf("Retained older task catalog"), grammar = 4, listening = 5)
-        engine.activity.value = mapOf(source to SyncActivity.Finished(result))
+        engine.activity.record(source, SyncActivity.Finished(result))
         runCurrent()
         assertEquals(SyncActivity.Finished(result), owner.activity.value[source])
+    }
+
+    @Test fun thrownRequestDoesNotCancelQueuedOrLaterRequestsAndKeepsFailureSourceScoped() = runTest {
+        val engine = Engine()
+        val errors = mutableListOf<Exception>()
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val owner = SyncCoordinator(backgroundScope, engine.activity, reportFailure = { errors += it }) { request ->
+            if (request.kind == SyncKind.Launch) {
+                entered.complete(Unit)
+                release.await()
+                error("Launch admission failed")
+            }
+            engine.execute(request)
+        }
+        val failed = owner.request(source, SyncKind.Launch)
+        entered.await()
+        val other = source.copy(branch = "other")
+        val queued = owner.request(other, SyncKind.Forced)
+        release.complete(Unit)
+        val failure = failed.await() as SyncResult.Failed
+        assertEquals("Launch admission failed", failure.message)
+        assertFalse(failure.retryable)
+        assertEquals(listOf("Launch admission failed"), errors.map { it.message })
+        val running = engine.started.receive()
+        assertEquals(SyncRequest(other, SyncKind.Forced), running.request)
+        assertEquals(SyncActivity.Finished(failure), owner.activity.value[source])
+        running.result.complete(SyncResult.UpToDate)
+        assertEquals(SyncResult.UpToDate, queued.await())
+        val later = owner.request(source)
+        engine.started.receive().result.complete(SyncResult.UpToDate)
+        assertEquals(SyncResult.UpToDate, later.await())
+        assertEquals(SyncActivity.Finished(SyncResult.UpToDate), owner.activity.value[source])
+    }
+
+    @Test fun fallbackFailureYieldsToPeriodicWorkEvenWhenItsFinalResultEqualsThePreviousResult() = runTest {
+        val engine = Engine()
+        engine.activity.record(source, SyncActivity.Finished(SyncResult.UpToDate))
+        val owner = SyncCoordinator(backgroundScope, engine.activity) { throw java.io.IOException("offline") }
+        val failure = owner.request(source).await() as SyncResult.Failed
+        assertTrue(failure.retryable)
+        runCurrent()
+        assertEquals(SyncActivity.Finished(failure), owner.activity.value[source])
+        val other = source.copy(branch = "other")
+        engine.activity.record(other, SyncActivity.Finished(SyncResult.UpToDate))
+        runCurrent()
+        assertEquals(SyncActivity.Finished(failure), owner.activity.value[source])
+        // Conflate a complete periodic attempt before the observer runs: equal results are still a new attempt.
+        engine.activity.record(source, SyncActivity.Running)
+        engine.activity.record(source, SyncActivity.Finished(SyncResult.UpToDate))
+        runCurrent()
+        assertEquals(SyncActivity.Finished(SyncResult.UpToDate), owner.activity.value[source])
     }
 
     private class Running(val request: SyncRequest, val result: CompletableDeferred<SyncResult> = CompletableDeferred())
 
     private class Engine {
-        val activity = MutableStateFlow<Map<RepoSource, SyncActivity>>(emptyMap())
+        val activity = MutableStateFlow<Map<RepoSource, SyncActivityEvent>>(emptyMap())
         val started = Channel<Running>(Channel.UNLIMITED)
         val calls = mutableListOf<SyncRequest>()
         var lastAccepted: RepoSource? = null
 
         suspend fun execute(request: SyncRequest): SyncResult {
             calls += request
-            activity.value += request.source to SyncActivity.Running
+            activity.record(request.source, SyncActivity.Running)
             val running = Running(request)
             started.send(running)
             val result = running.result.await()
             if (result !is SyncResult.Failed) lastAccepted = request.source
-            activity.value += request.source to SyncActivity.Finished(result)
+            activity.record(request.source, SyncActivity.Finished(result))
             return result
         }
     }

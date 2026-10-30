@@ -17,14 +17,17 @@ internal data class SyncRequest(val source: RepoSource, val kind: SyncKind)
 /** Process-lifetime admission; callers may stop awaiting without cancelling accepted work. */
 internal class SyncCoordinator(
     scope: CoroutineScope,
-    private val engineActivity: StateFlow<Map<RepoSource, SyncActivity>>,
+    private val engineActivity: StateFlow<Map<RepoSource, SyncActivityEvent>>,
+    private val reportFailure: (Exception) -> Unit = {},
     execute: suspend (SyncRequest) -> SyncResult,
 ) {
     private class Pending(val request: SyncRequest, val result: CompletableDeferred<SyncResult> = CompletableDeferred())
+    private data class Completion(val revision: Long?, val state: SyncActivity)
     private val lock = Any()
     private val pending = mutableListOf<Pending>()
+    private val completed = mutableMapOf<RepoSource, Completion>()
     private val queue = Channel<Pending>(Channel.UNLIMITED)
-    private val _activity = MutableStateFlow(engineActivity.value)
+    private val _activity = MutableStateFlow(engineStates())
     val activity = _activity.asStateFlow()
 
     init {
@@ -33,9 +36,16 @@ internal class SyncCoordinator(
         }
         scope.launch {
             for (item in queue) {
-                val result = execute(item.request)
+                val source = item.request.source
+                val before = engineActivity.value[source]
+                val result = syncOutcome(reportFailure) { execute(item.request) }
                 synchronized(lock) {
                     pending.remove(item)
+                    // An executor failure before entering the engine must not revive an older success.
+                    // Newer engine activity (including periodic work) remains authoritative.
+                    if (engineActivity.value[source] == before && before?.state != SyncActivity.Running) {
+                        completed[source] = Completion(before?.revision, SyncActivity.Finished(result))
+                    }
                     publish()
                 }
                 item.result.complete(result)
@@ -45,7 +55,7 @@ internal class SyncCoordinator(
                 queue.close(error)
                 val cancelled = CancellationException("Sync owner stopped", error)
                 pending.forEach { it.result.cancel(cancelled) }
-                _activity.value = engineActivity.value + pending.associate { it.request.source to SyncActivity.Interrupted }
+                _activity.value = engineStates() + pending.associate { it.request.source to SyncActivity.Interrupted }
                 pending.clear()
             }
         }
@@ -60,13 +70,18 @@ internal class SyncCoordinator(
         publish()
         if (queue.trySend(item).isFailure) {
             pending.remove(item)
-            _activity.value = engineActivity.value + (source to SyncActivity.Interrupted)
+            _activity.value = engineStates() + (source to SyncActivity.Interrupted)
             item.result.cancel(CancellationException("Sync owner stopped"))
         }
         item.result
     }
 
     private fun publish() {
-        _activity.value = engineActivity.value + pending.associate { it.request.source to SyncActivity.Running }
+        val engine = engineActivity.value
+        completed.entries.removeAll { (source, result) -> engine[source]?.revision != result.revision }
+        _activity.value = engine.mapValues { it.value.state } + completed.mapValues { it.value.state } +
+            pending.associate { it.request.source to SyncActivity.Running }
     }
+
+    private fun engineStates(): Map<RepoSource, SyncActivity> = engineActivity.value.mapValues { it.value.state }
 }

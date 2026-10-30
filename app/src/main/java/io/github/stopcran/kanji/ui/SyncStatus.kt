@@ -9,7 +9,15 @@ import io.github.stopcran.kanji.core.content.ContentType
 import io.github.stopcran.kanji.data.SyncResult
 import io.github.stopcran.kanji.data.SyncActivity
 
-internal data class SyncStatus(val message: String = "", val rejected: String = "", val diagnostic: String = "") {
+internal data class SyncStatus(
+    val message: String = "", val rejected: String = "", val diagnostic: String = "", val retryable: Boolean? = null,
+) {
+    val retryGuidance: String get() = when (retryable) {
+        true -> "This failure may be temporary. You can try Save & sync again."
+        false -> "Check the error details before retrying. Save & sync remains available."
+        null -> ""
+    }
+
     fun afterRecreation(): SyncStatus =
         if (message == SYNCING) SyncStatus("Sync interrupted; tap Save & sync to retry.") else this
 
@@ -22,8 +30,8 @@ internal data class SyncStatus(val message: String = "", val rejected: String = 
             null -> null
         }
         val Saver = listSaver<SyncStatus, String>(
-            save = { listOf(it.message, it.rejected, it.diagnostic) },
-            restore = { SyncStatus(it[0], it[1], it[2]) },
+            save = { listOf(it.message, it.rejected, it.diagnostic, it.retryable?.toString().orEmpty()) },
+            restore = { SyncStatus(it[0], it[1], it[2], it.getOrNull(3)?.toBooleanStrictOrNull()) },
         )
 
         fun from(result: SyncResult): SyncStatus = when (result) {
@@ -33,7 +41,7 @@ internal data class SyncStatus(val message: String = "", val rejected: String = 
                 result.rejected.describe(),
                 result.problems.firstOrNull()?.let { "${result.problems.size} content issue(s): $it" }.orEmpty(),
             )
-            is SyncResult.Failed -> SyncStatus("Sync failed: ${result.message}", result.rejected.describe())
+            is SyncResult.Failed -> SyncStatus("Sync failed: ${result.message}", result.rejected.describe(), retryable = result.retryable)
             SyncResult.UpToDate -> SyncStatus("Up to date")
         }
     }
@@ -60,6 +68,7 @@ private fun ContentRejections.describe(): String {
 @Composable
 internal fun SyncStatusText(status: SyncStatus) {
     if (status.message.isNotEmpty()) Text(status.message)
+    if (status.retryGuidance.isNotEmpty()) Text(status.retryGuidance, style = MaterialTheme.typography.bodySmall)
     if (status.rejected.isNotEmpty()) Text(status.rejected, color = MaterialTheme.colorScheme.error)
     if (status.diagnostic.isNotEmpty()) Text(status.diagnostic, style = MaterialTheme.typography.bodySmall)
 }
