@@ -2,7 +2,9 @@ package io.github.stopcran.kanji.ui
 
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasText
@@ -20,6 +22,7 @@ import io.github.stopcran.kanji.core.counters.CounterGroup
 import io.github.stopcran.kanji.core.counters.CounterMode
 import io.github.stopcran.kanji.core.counters.CounterRoutes
 import io.github.stopcran.kanji.core.counters.CounterScope
+import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.data.AppDatabase
 import io.github.stopcran.kanji.data.CounterEntity
 import io.github.stopcran.kanji.data.Settings
@@ -41,6 +44,38 @@ import java.time.Instant
 @SQLiteMode(SQLiteMode.Mode.NATIVE)
 class CounterHomeTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test
+    fun summaryShowsEligibleNewOpportunitiesCappedByTheSharedAllowance() {
+        val home = mutableStateOf(CounterHome(10, emptyMap()))
+        rule.setContent { MaterialTheme { Text(home.value.summary()) } }
+        val cases = listOf(
+            CounterHome(10, mapOf(
+                CounterMode.Choose to ModeState.Start(2, 1),
+                CounterMode.Type to ModeState.Locked("Not ready"),
+            ), 10) to "2 due, 1 new",
+            CounterHome(10, mapOf(
+                CounterMode.Expression to ModeState.Start(6, 4),
+                CounterMode.Reading to ModeState.Start(2, 6),
+            ), 5) to "8 due, 5 new",
+            CounterHome(10, mapOf(CounterMode.Choose to ModeState.Start(7, 0)), 10) to "7 due, 0 new",
+            CounterHome(10, mapOf(CounterMode.Choose to ModeState.Start(7, 0)), 0) to "7 due, 0 new",
+        )
+        for ((snapshot, expected) in cases) {
+            rule.runOnIdle { home.value = snapshot }
+            rule.onNodeWithText(expected).assertIsDisplayed()
+        }
+    }
+
+    @Test
+    fun unusedAllowanceDoesNotTurnUnavailableOrFinishedModesIntoNewWork() {
+        val modes = mapOf(CounterMode.Expression to ModeState.PracticeMore)
+        assertEquals("All caught up", CounterHome(10, modes, 10).summary())
+        assertEquals("Nothing to study yet",
+            CounterHome(10, mapOf(CounterMode.Type to ModeState.Locked("Not ready")), 10).summary())
+        assertEquals("No cards yet", CounterHome(0, modes, 10).summary())
+        assertEquals("Loading…", CounterHome(null, modes, 10).summary())
+    }
 
     @Test
     fun preferenceOnlyRefreshKeepsGroupAllowanceAndCapturedN3Route() {

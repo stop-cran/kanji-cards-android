@@ -41,8 +41,9 @@ class CounterHome(
         cards == 0 -> "No cards yet"
         else -> {
             val starts = modes.values.mapNotNull { it as? ModeState.Start }
+            val new = minOf(allowance, starts.sumOf { it.new })
             when {
-                starts.isNotEmpty() -> "${starts.sumOf { it.due }} due; $allowance new-item allowance"
+                starts.isNotEmpty() -> "${starts.sumOf { it.due }} due, $new new"
                 modes.values.any { it == ModeState.PracticeMore } -> "All caught up"
                 else -> "Nothing to study yet"
             }

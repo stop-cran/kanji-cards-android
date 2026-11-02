@@ -123,7 +123,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - Counter reading metadata belongs to the displayed canonical phrase, not every counter in legacy `kana`.
   Whole-expression modes use narrow authored-answer matching, never legacy numeral arithmetic (十十 must not become 二十).
   Keep v2 files separate from v1, advance the source-scoped counter parser epoch for newly retained metadata,
-  and distinguish the shared allowance from summed per-mode new opportunities.
+  and distinguish the shared allowance from summed per-mode new opportunities. Counter Home summaries show
+  `min(remaining shared allowance, summed eligible per-mode new)`; a positive allowance alone is not available work.
   Intersect counter level and group against the source once; sequential source-restoring filters can silently undo
   the first restriction. Retain foreign reverse-choice references without adding them to scoped queues.
   Native cumulative-scope fixtures must retain easier content and isolate target-level questions with test-only due states.

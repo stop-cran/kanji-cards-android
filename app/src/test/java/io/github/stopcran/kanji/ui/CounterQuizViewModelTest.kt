@@ -179,7 +179,9 @@ class CounterQuizViewModelTest {
         val modes = db.counterModeStates(source, index, 1, Instant.now())
         assertEquals(setOf(CounterMode.Expression, CounterMode.Reading), modes.keys)
         assertTrue(modes.values.all { it == ModeState.Start(0, 1) })
-        assertEquals("0 due; 1 new-item allowance", CounterHome(1, modes, 1).summary())
+        assertEquals("0 due, 1 new", CounterHome(1, modes, 1).summary())
+        val uncapped = db.counterModeStates(source, index, 10, Instant.now())
+        assertEquals("0 due, 2 new", CounterHome(1, uncapped, 10).summary())
         assertTrue(db.counterModeStates(source, index, 0, Instant.now()).values.all { it == ModeState.PracticeMore })
     }
 
@@ -262,7 +264,7 @@ class CounterQuizViewModelTest {
             }
             val waiting = expected.let { index -> CounterMode.entries.sumOf { index.ids(it).size } }
             assertEquals(waiting, db.counterWaitingCount(services.settings, source, now, 0))
-            assertEquals("$waiting due; 0 new-item allowance", CounterHome(expected.cards.size, home).summary())
+            assertEquals("$waiting due, 0 new", CounterHome(expected.cards.size, home).summary())
             assertEquals(allowance, db.newAllowance(services.settings, source, now))
         }
         for (mode in CounterMode.entries) for (extra in listOf(false, true)) {
@@ -295,6 +297,6 @@ class CounterQuizViewModelTest {
         assertEquals(setOf(CounterMode.Type, CounterMode.Noun), home.filterValues { it is ModeState.Locked }.keys)
         assertEquals(6, db.counterWaitingCount(services.settings, source, now, 2))
         assertEquals(0, db.counterWaitingCount(services.settings, source, now, 0))
-        assertEquals("0 due; 2 new-item allowance", CounterHome(index.cards.size, home, 2).summary())
+        assertEquals("0 due, 2 new", CounterHome(index.cards.size, home, 2).summary())
     }
 }
