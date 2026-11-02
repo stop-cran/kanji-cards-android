@@ -683,6 +683,10 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
 - **Keyboard resizing:** `MainActivity` explicitly requests `adjustResize`; text-entry pages use `Page(ime = true)` so the keyboard
   reduces the scroll viewport while the heading stays visible. Pre-Android 11 needs this mode to deliver edge-to-edge IME insets:
   the default `adjustPan` can move a short, otherwise non-scrollable exercise above the screen without giving it a scroll range.
+  Every type-in question requests input focus on entry, including Kana in both scripts/directions, Word spelling, Grammar typing,
+  and Counter Type/Write/Read. Feedback removes the field; Next and queued repeats focus their new question without a tap.
+  Draft edits do not request focus again, so a manually dismissed keyboard stays dismissed for that question.
+  Native regression checks assert focus and a settled docked keyboard before any field click; focus alone is not proof of IME visibility.
 - Theme follows the system (light/dark); drawing canvases stay paper-white on purpose.
 - Kanji, Words, Counters, Grammar and Listening share four rotating home-art sets. Matching default/night drawable names provide
   transparent dark-ink/pale-ink variants; all use the same ArtCard scrims, chevron halo and decorative image semantics.

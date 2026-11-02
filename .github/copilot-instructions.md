@@ -55,6 +55,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - **Keyboard on older Android:** keep `MainActivity`'s `adjustResize` and use `Page(ime = true)` for text entry. Pre-Android 11 needs
   resize mode for edge-to-edge IME insets; default panning clips short exercises without creating a scroll range. Search pickers with
   bounded nested lists need it too: check that the final search result is selectable without dismissing the keyboard. Check API 29 and 35.
+  Type-in quiz autofocus tests must assert field focus and a settled visible IME before tapping the field; existing click-first checks
+  hid Kana's missing focus request. Scope focus effects to question entry, not draft changes, so dismissal remains respected.
+  The debug test host also needs manifest `adjustResize`: setting it only after launch still panned on API 29.
 - **System back:** `BackHandler` in `AppNav` pops the route stack; without it back closes the app.
 - Stateful Back callbacks must be lambdas, not references to local functions capturing snapshots.
   Function-reference equality can hide changed captures from `rememberUpdatedState`, retaining a null loading row.
