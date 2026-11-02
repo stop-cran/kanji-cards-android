@@ -38,10 +38,12 @@ class KanjiReadingFlowTest {
     @Test fun successfulKunYomiKeepsKindAndRecordsGuess() = exercise(ReadingKind.Kun, Response.Correct, guessed = true)
     @Test fun wrongOnYomiKeepsKindAndReference() = exercise(ReadingKind.On, Response.Wrong)
     @Test fun unknownKunYomiKeepsKindAndReference() = exercise(ReadingKind.Kun, Response.Unknown)
+    @Test fun curatedKunYomiOmitsOldStartedReadingsButKeepsFullReference() =
+        exercise(ReadingKind.Kun, Response.Correct, curated = true)
 
     private enum class Response { Correct, Wrong, Unknown }
 
-    private fun exercise(kind: ReadingKind, response: Response, guessed: Boolean = false) {
+    private fun exercise(kind: ReadingKind, response: Response, guessed: Boolean = false, curated: Boolean = false) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val preferences = "reading-feedback-${UUID.randomUUID()}"
         val isolated = object : ContextWrapper(context) {
@@ -68,12 +70,19 @@ class KanjiReadingFlowTest {
                 db.content().insertKanji(cards.mapIndexed { index, (kanji, on, kun) ->
                     KanjiEntity(source, kanji, "Fixture $kanji", 5, "", null, null, null, on, kun, "",
                         "Fixture reading reference.\n\nReference: [Related reading note](../articles/reading-note.md)", null, index)
+                        .let { if (curated && kanji == "日") it.copy(quizOnyomi = "", quizKunyomi = "か") else it }
                 })
                 val now = System.currentTimeMillis()
                 db.reviews().putState(ReviewStateEntity(
                     source, Stacks.ALL, "日", kind.mode.name, "Review", 10.0, 5.0, now - 60_000, now - 86_400_000, 2, 0,
-                    reading = if (kind == ReadingKind.On) "にち" else "ひ",
+                    reading = if (kind == ReadingKind.On) "にち" else if (curated) "か" else "ひ",
                 ))
+                if (curated) for ((mode, reading) in listOf(ReadingKind.On to "にち", ReadingKind.Kun to "ひ")) {
+                    db.reviews().putState(ReviewStateEntity(
+                        source, Stacks.ALL, "日", mode.mode.name, "Review", 10.0, 5.0, now - 120_000, now - 86_400_000, 2, 0,
+                        reading = reading,
+                    ))
+                }
             }
             rule.setContent { MaterialTheme {
                 if (document.value != null) Page("Linked reading reference", onBack = { document.value = null }) {
@@ -83,6 +92,7 @@ class KanjiReadingFlowTest {
             rule.waitUntil(10_000) { vm.ui is ReadingUi.Question }
             val question = rule.runOnIdle { vm.ui as ReadingUi.Question }
             assertEquals(kind, question.question.kind)
+            if (curated) assertEquals("か", question.question.correctKey)
             rule.onNodeWithText("Pick the ${kind.label}").performScrollTo().assertIsDisplayed()
             val right = question.question.options.single { it.key == question.question.correctKey }
             val pick = when (response) {

@@ -170,6 +170,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   the declared curriculum/leaf-edge provenance. Plain `GrammarSet` deserialization intentionally ignores that transport field;
   comparing it unchanged with imported groups worked only while the real corpus had no new gates.
 - **Room:** list columns are joined with `SEP` (`\u001F`); use `joinSep()`/`splitSep()`. `review_log.id` is auto-generated, so pass `0`.
+  Kanji quiz-reading columns distinguish NULL (legacy full list) from empty (no questions); never replace empty with full.
+  Keep full readings for wrong-option exclusion. The reading parser epoch lives in Room sync metadata and advances in the
+  accepted content transaction, not in SharedPreferences; migrations preserve both metadata and every excluded key's history.
   Review state is keyed by (`sourceId` = lower-case `owner/repo`, stack, item, mode). Never key it by title or position; titles are editable.
 - **Listening:** persist exposure separately from SRS and retain the captured package/assistance through process recreation.
   Scored Practice more bypasses daily plans, never exposure cooldowns/media checks; reserve extra unseen passages even outside the normal fresh list.

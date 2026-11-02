@@ -58,6 +58,74 @@ internal fun createMigrationSchema(context: Context, name: String, version: Int,
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], manifest = Config.NONE, application = Application::class)
 @SQLiteMode(SQLiteMode.Mode.NATIVE)
+class KanjiReadingMigrationTest {
+    private val context: Application get() = RuntimeEnvironment.getApplication()
+    private val name = "word-jlpt-test.db"
+    private val sources = listOf("owner/repo", "other/repo")
+
+    @After
+    fun cleanUp() {
+        context.deleteDatabase(name)
+    }
+
+    private fun openDatabase() = Room.databaseBuilder(context, AppDatabase::class.java, name)
+        .addMigrations(
+            MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
+            MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
+            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17,
+        )
+        .allowMainThreadQueries()
+        .build()
+
+    private suspend fun withDatabase(block: suspend (AppDatabase) -> Unit) {
+        val db = openDatabase()
+        try {
+            block(db)
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun version16RetainsAllSourcesHistoryAndNullVersusEmptyQuizReadingsAcrossReopen() = runBlocking {
+        createMigrationSchema(context, name, 16) { sqlite ->
+            for (source in sources) {
+                sqlite.execSQL("INSERT INTO kanji VALUES (?, '日', 'sun', 5, '', NULL, NULL, NULL, 'ニチ', 'ひ', '', 'body', NULL, 0)",
+                    arrayOf(source))
+                sqlite.execSQL("INSERT INTO sync_meta VALUES (?, 'v16', 500, 0, NULL, NULL, NULL, NULL)", arrayOf(source))
+                sqlite.execSQL("INSERT INTO review_state VALUES (?, 'all', '日', 'KanjiOn', 'Review', 12.5, 5.0, 999, 500, 3, 1, 'にち')",
+                    arrayOf(source))
+            }
+            sqlite.execSQL("INSERT INTO review_log VALUES (7, ?, 'all', '日', 'KanjiOn', 3, 500, 'にち', NULL)", arrayOf(sources.first()))
+        }
+        withDatabase { db ->
+            for (source in sources) {
+                val card = db.content().kanji(source).single()
+                assertNull(card.quizOnyomi)
+                assertNull(card.quizKunyomi)
+                assertEquals(listOf("ニチ"), card.toReadingCard().askOn)
+                assertEquals(0, db.content().meta(source)!!.kanjiReadingParserEpoch)
+            }
+            val first = db.content().kanji(sources.first()).single().copy(quizOnyomi = "", quizKunyomi = "ひ")
+            db.content().insertKanji(listOf(first))
+        }
+        withDatabase { db ->
+            val first = db.content().kanji(sources.first()).single()
+            assertEquals(emptyList<String>(), first.toReadingCard().askOn)
+            assertEquals(listOf("ひ"), first.toReadingCard().askKun)
+            assertNull(db.content().kanji(sources.last()).single().quizOnyomi)
+            assertEquals(2, db.reviews().allStates().size)
+            assertEquals("にち", db.reviews().allLog().single().reading)
+            assertEquals(7L, db.reviews().allLog().single().id)
+            assertEquals("v16", db.content().meta(sources.first())!!.contentVersion)
+        }
+    }
+
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28], manifest = Config.NONE, application = Application::class)
+@SQLiteMode(SQLiteMode.Mode.NATIVE)
 class DatabaseMigrationTest {
     private val context: Application get() = RuntimeEnvironment.getApplication()
     private val name = "word-jlpt-test.db"
@@ -72,7 +140,7 @@ class DatabaseMigrationTest {
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16,
+            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17,
         )
         .allowMainThreadQueries()
         .build()
@@ -225,7 +293,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(16, db.openHelper.writableDatabase.version)
+                assertEquals(17, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(sources.first(), "all", "日", "KanjiOn", "Review", 12.5, 5.0, 999, 500, 3, 1, "にち"),
                     db.reviews().allStates().single(),
@@ -301,7 +369,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(16, db.openHelper.writableDatabase.version)
+                assertEquals(17, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(source, GRAMMAR_STACK, "alpha-a-0", "Grammar", "Review", 12.5, 5.0, 999, 500, 3, 1),
                     db.reviews().allStates().single(),
@@ -616,7 +684,8 @@ class DatabaseMigrationTest {
         val logColumns = if (version == 2) "id, sourceId, stack, kanji, mode, grade, atMs" else "id, sourceId, kanji, mode, grade, atMs"
         val queries = listOf(
             "SELECT sourceId, word, reading, title, type, kanji, tags, body FROM words ORDER BY sourceId, word",
-            "SELECT * FROM kanji ORDER BY sourceId, kanji",
+            "SELECT sourceId, kanji, title, jlpt, tags, strokeCount, radical, phonetic, onyomi, kunyomi, distractors, " +
+                "body, strokesJson, position FROM kanji ORDER BY sourceId, kanji",
             "SELECT * FROM articles ORDER BY sourceId, slug",
             "SELECT $stateColumns FROM review_state ORDER BY sourceId, ${stackKey}kanji, mode",
             "SELECT $logColumns FROM review_log ORDER BY id",

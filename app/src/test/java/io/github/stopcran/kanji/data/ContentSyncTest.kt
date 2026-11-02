@@ -534,6 +534,78 @@ class ContentLoadStateTest {
 @Config(sdk = [28], manifest = Config.NONE, application = Application::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @SQLiteMode(SQLiteMode.Mode.NATIVE)
+class KanjiReadingSyncTest {
+    private val source = RepoSource("Owner", "Repo", "main")
+    private val http = FakeHttp()
+    private lateinit var db: AppDatabase
+    private lateinit var settings: Settings
+    private lateinit var sync: ContentSync
+
+    @Test
+    fun acceptedReadingEpochRefreshesSameHeadAndVersionWithoutResettingSchedules() = runBlocking {
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
+        val other = source.copy(owner = "Other")
+        assertTrue(sync.sync(other) is SyncResult.Updated)
+        db.reviews().record(
+            ReviewStateEntity(source.id, "all", "日", "KanjiOn", "Review", 12.5, 5.0, 999, 500, 3, 1, "にち"),
+            ReviewLogEntity(0, source.id, "all", "日", "KanjiOn", 3, 500, "にち"),
+        )
+        val before = db.reviews().allStates() to db.reviews().allLog()
+        db.content().putMeta(db.content().meta(source.id)!!.copy(kanjiReadingParserEpoch = 0))
+        val downloads = http.downloads
+        http.archiveBytes = archiveFiles("v1", mapOf("kanji/日.md" to kanjiMd("日", "sun")
+            .replace("distractors:", "quizOnyomi: []\nquizKunyomi: [ひ]\ndistractors:").toByteArray()))
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
+        assertEquals(downloads + 1, http.downloads)
+        val card = db.content().kanji(source.id).single()
+        assertEquals(emptyList<String>(), card.toReadingCard().askOn)
+        assertEquals(listOf("ひ"), card.toReadingCard().askKun)
+        assertEquals(listOf("ニチ"), card.toReadingCard().on)
+        assertEquals(card.toReadingCard(), db.content().kanjiLite(source.id).single().toReadingCard())
+        assertEquals(card.toReadingCard(), db.content().observeKanjiLite(source.id).first().single().toReadingCard())
+        assertEquals(before, db.reviews().allStates() to db.reviews().allLog())
+        assertNull(db.content().kanji(other.id).single().quizOnyomi)
+        assertNull(db.content().kanjiLite(other.id).single().quizOnyomi)
+        assertEquals(ContentParser.KANJI_READING_PARSER_EPOCH, db.content().meta(source.id)!!.kanjiReadingParserEpoch)
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.UpToDate)
+        assertEquals(downloads + 1, http.downloads)
+    }
+
+    @Test
+    fun rejectedReadingRefreshRetainsAcceptedContentAndEpochThenRetriesUnchangedHead() = runBlocking {
+        assertTrue(sync.sync(source) is SyncResult.Updated)
+        db.content().putMeta(db.content().meta(source.id)!!.copy(kanjiReadingParserEpoch = 0))
+        val accepted = db.content().meta(source.id)
+        http.archiveBytes = archiveFiles("v1", mapOf("kanji/日.md" to kanjiMd("日", "sun")
+            .replace("distractors:", "quizOnyomi: null\ndistractors:").toByteArray()))
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Failed)
+        assertEquals(accepted, db.content().meta(source.id))
+        assertNull(db.content().kanji(source.id).single().quizOnyomi)
+        http.archiveBytes = archive("v1", mapOf("日" to "sun"))
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
+        assertEquals(ContentParser.KANJI_READING_PARSER_EPOCH, db.content().meta(source.id)!!.kanjiReadingParserEpoch)
+    }
+
+    @Before
+    fun setUp() {
+        val context = RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("settings", 0).edit().clear().commit()
+        db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
+        settings = Settings(context)
+        sync = ContentSync(db, settings.sync, http)
+        http.archiveBytes = archive("v1", mapOf("日" to "sun"))
+    }
+
+    @After
+    fun tearDown() {
+        db.close()
+    }
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28], manifest = Config.NONE, application = Application::class)
+@SQLiteMode(SQLiteMode.Mode.NATIVE)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ContentSyncTest {
     private val source = RepoSource("Owner", "Repo", "main")
     private val http = FakeHttp()

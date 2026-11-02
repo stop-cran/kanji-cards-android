@@ -12,6 +12,7 @@ class ContentException(message: String) : Exception(message)
 /** Turns a map of repo-relative path -> bytes into validated content. Everything here is treated as untrusted input. */
 object ContentParser {
     const val GRAMMAR_PARSER_EPOCH = 6
+    const val KANJI_READING_PARSER_EPOCH = 1
     const val MAX_QUIZ_DISTRACTORS = 3
     const val MAX_IMAGE_BYTES = 150 * 1024
     val IMAGE_PATH = Regex("images/[^/\\\\\\s]+\\.webp")
@@ -454,6 +455,8 @@ object ContentParser {
             kunyomi = f.list("kunyomi"),
             distractors = f.list("distractors"),
             body = fm.body,
+            quizOnyomi = fm.quizReadings("quizOnyomi", f.list("onyomi")),
+            quizKunyomi = fm.quizReadings("quizKunyomi", f.list("kunyomi")),
         )
     }
 
@@ -506,6 +509,22 @@ object ContentParser {
         !path.startsWith("/") && !path.contains('\\') && path.split('/').none { it == ".." || it.isEmpty() }
 
     private fun Map<String, Any>.str(key: String): String? = (this[key] as? String)?.takeIf { it.isNotEmpty() }
+
+    private fun FrontMatter.Parsed.quizReadings(key: String, full: List<String>): List<String>? {
+        val declarations = entries.filter { it.key.trim('\'', '"') == key }
+        if (declarations.isEmpty()) return null
+        val field = declarations.singleOrNull()?.takeIf { it.key == key && !it.indented }
+        val readings = field?.let { FrontMatter.parseStringList(it.rawValue) }
+            ?: throw ContentException("'$key' must be a single top-level unquoted key with an inline list of strings")
+        val valid = readings.all {
+            it in full && it.matches(Regex("[ぁ-ゟァ-ヿー.\\-]+")) &&
+                io.github.stopcran.kanji.core.reading.ReadingKey.key(it).isNotEmpty()
+        }
+        if (!valid || readings.size != readings.toSet().size) {
+            throw ContentException("'$key' must contain distinct nonempty kana readings from the matching full list")
+        }
+        return readings
+    }
 
     private fun FrontMatter.Parsed.wordJlpt(): Int? {
         val expected = "a single top-level unquoted integer from 1 to 5"

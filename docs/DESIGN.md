@@ -287,7 +287,13 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
   small-っ variant of one (`ReadingKey`: raw form from the card, kana-folded match key without `.`/`-`, display form: on in katakana, kun in
   hiragana). Fewer than two safe options means the question is skipped, never shown with a doubtful answer; a test builds questions for every
   card of the content snapshot. A kanji's readings are asked once its meaning has been answered without "Again" on two different days (or that kind was already
-  started). Only the first three distinct kana stems of a kind become cards (`ReadingCard.quizReadings`: い.きる and い.かす are one reading); a further reading
+  started). Optional `quizOnyomi` / `quizKunyomi` select exact subsets without pruning full dictionary readings:
+  omission retains legacy questions, while an explicit empty list disables that kind. Invalid declarations reject the file.
+  Full readings still protect against wrong options and remain visible in references; candidate distractors use the ask lists.
+  Room v17 preserves nullable versus empty selections and all existing schedules. Accepted source-scoped parser epoch 1
+  is stored atomically with content in Room, forcing unchanged revision/version/launch refresh after upgrade until successful.
+  Formerly started but now excluded keys stay stored without entering normal, extra or padding admissions.
+  Only the first three distinct kana stems of a selected kind become cards (`ReadingCard.quizReadings`: い.きる and い.かす are one reading); a further reading
   is introduced only after the previous one of that kind has reached the Review phase. Each new reading card costs one unit of the shared new-item
   allowance, counted per card (`review_log.reading`). Order only, nothing is withheld: due cards of both kinds are ranked globally (urgency in
   `URGENCY_EPSILON` buckets, then lower retrievability first so obscure readings of known kanji surface), then interleaved greedily so a kanji does

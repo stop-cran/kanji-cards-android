@@ -43,6 +43,14 @@ What the app enforces when importing (`core/content/ContentParser.kt`, `FrontMat
 - Front matter is a restricted subset: `key: value` scalars and inline `[a, b]` lists (commas inside quotes are kept; an unterminated quote
   makes the value a scalar). A scalar in a list field (`tags`, `onyomi`, `kunyomi`, `distractors`, word `kanji`/`tags`) rejects the file.
   The closing `---` must be a standalone line; `---\n---` is a valid empty header.
+- Optional kanji `quizOnyomi` / `quizKunyomi` select exact raw-string subsets of the matching full reading list.
+  Omission retains that full list; `[]` disables questions of that kind. Preserve full readings for articles and wrong-option
+  exclusion. Curated order still uses the first three distinct stems per kind and existing reading IDs.
+  Each declaration must be a single top-level unquoted key and an inline string list with unique, nonempty kana entries.
+  Simple quoted keys, indentation, duplicate declarations, malformed lists and non-subset entries reject the card, never fall back.
+  Content tooling additionally requires each selected reading's own Readings table row to link a real word article;
+  dictionary attestation, correct kanji-reading allocation, frequency and register remain editorial checks.
+  Older APKs ignore these optional fields and continue asking full readings: publish a compatible APK before relying on curation.
 - All word front-matter keys, including unknown fields, must be unquoted, unindented ASCII identifiers matching
   `[A-Za-z_][A-Za-z0-9_-]*`; whitespace before `:` is allowed. All raw keys are validated before duplicate-key collapse.
   Quoted/escaped, tagged, anchored/alias and complex keys are rejected with a path-specific import problem. Whole-line
@@ -80,6 +88,12 @@ level or exclusions. It clears only sync metadata so normal home-screen sync rei
 that older app versions ignored. Cached content remains usable with legacy behavior while offline. Version 1 databases upgrade through both
 registered migrations. The content manifest remains schema version 1; regenerate hashes and `contentVersion` when changing word metadata.
 `contentVersion` is the update contract: a new commit with an unchanged `contentVersion` is treated as up to date and not imported.
+
+Room v17 adds nullable `kanji.quizOnyomi` / `quizKunyomi` using the existing list separator; NULL and empty string remain
+distinct across reopening. Migration 16-to-17 preserves all content, sync metadata and history. The source-scoped
+`sync_meta.kanjiReadingParserEpoch` starts at 0 and forces unchanged-HEAD/version/launch-throttle reimport until accepted
+epoch 1 is committed atomically with a replacement snapshot. Failure leaves the previous accepted content/epoch intact.
+Removed reading keys remain stored but are not admitted to normal, extra or padding queues; their IDs are not rewritten.
 
 Room v10 adds `word_scenes` and nullable `words.quizImage`. The v9 migration retains every existing schedule and Grammar record and
 synthesizes named legacy metadata for stored word images. Scene parser epoch 1 is source-scoped and independent of Grammar epochs;

@@ -1,6 +1,7 @@
 package io.github.stopcran.kanji.core
 
 import io.github.stopcran.kanji.core.home.ModeState
+import io.github.stopcran.kanji.core.content.ContentParser
 import io.github.stopcran.kanji.core.reading.KanjiReadingQuiz
 import io.github.stopcran.kanji.core.reading.KanjiReadingQueue
 import io.github.stopcran.kanji.core.reading.ReadingCard
@@ -93,6 +94,31 @@ class KanjiReadingsTest {
     }
 
     @Test
+    fun curatedListsControlBothQueuesWithoutMakingFullReadingsWrongOptions() {
+        val target = ReadingCard("漱", listOf("ソウ", "シュウ", "ス"), listOf("くちそそ.ぐ", "すす.ぐ"),
+            askOn = emptyList(), askKun = listOf("すす.ぐ"))
+        val states = mapOf(
+            ReadingKind.On to mapOf(id("漱", "そう") to review(now.minusSeconds(1))),
+            ReadingKind.Kun to mapOf(id("漱", "くちそそぐ") to review(now.minusSeconds(1))),
+        )
+        val normal = KanjiReadingQueue.build(listOf(target), states, setOf("漱"), 0, 10, now, noise = 0.0)
+        val extra = KanjiReadingQueue.extraQueue(listOf(target), states, setOf("漱"), now)
+        for (queue in listOf(normal, extra)) {
+            assertEquals(listOf("すすぐ"), queue.map { it.reading })
+            assertEquals(ReadingKind.Kun, queue.single().kind)
+        }
+        val pool = cards + target + ReadingCard("別", emptyList(), listOf("そう", "くちそそぐ", "しゅう"))
+        repeat(30) { seed ->
+            val q = KanjiReadingQuiz.question(target, ReadingKind.Kun, pool, Random(seed))!!
+            assertEquals("すすぐ", q.correctKey)
+            assertTrue(q.options.none { it.key in setOf("そう", "くちそそぐ", "しゅう") })
+            assertNull(KanjiReadingQuiz.question(target, ReadingKind.On, pool, Random(seed)))
+        }
+        val ordered = cards.first { it.kanji == "生" }.copy(askKun = listOf("なま", "い.きる", "う.まれる", "い.かす"))
+        assertEquals(listOf("なま", "いきる", "うまれる"), ordered.quizKeys(ReadingKind.Kun))
+    }
+
+    @Test
     fun queueOffersOnlyUnlockedOrStartedAndChargesEachNewReading() {
         val noStates = emptyMap<ReadingKind, Map<String, SrsState>>()
         assertTrue(KanjiReadingQueue.build(cards, noStates, emptySet(), 0, 10, now, noise = 0.0).isEmpty())
@@ -164,11 +190,9 @@ class KanjiReadingsTest {
     fun everyReadingCardInTheContentSnapshotHasOneValidOption() {
         val dir = File("../../learning-japanese/kanji")
         assumeTrue(dir.exists())
-        fun list(text: String, key: String) = Regex("^$key:\\s*\\[(.*)]\\s*$", RegexOption.MULTILINE).find(text)?.groupValues?.get(1)
-            ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
         val all = dir.listFiles { f -> f.extension == "md" }!!.sorted().map { f ->
-            val t = f.readText()
-            ReadingCard(f.nameWithoutExtension, list(t, "onyomi"), list(t, "kunyomi"), distractors = list(t, "distractors"))
+            val c = ContentParser.parseKanji("kanji/${f.name}", f.readText())
+            ReadingCard(c.kanji, c.onyomi, c.kunyomi, c.quizOnyomi ?: c.onyomi, c.quizKunyomi ?: c.kunyomi, c.distractors)
         }
         assertTrue(all.size > 100)
         var skipped = 0

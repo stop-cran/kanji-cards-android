@@ -38,6 +38,8 @@ data class KanjiEntity(
     val body: String,
     val strokesJson: String?,
     val position: Int,
+    val quizOnyomi: String? = null,
+    val quizKunyomi: String? = null,
 )
 
 @Entity(tableName = "words", primaryKeys = ["sourceId", "word"])
@@ -168,6 +170,7 @@ data class SyncMetaEntity(
     val listeningProblem: String? = null,
     val grammarCurriculumJson: String? = null,
     val grammarCurriculumProblem: String? = null,
+    @ColumnInfo(defaultValue = "0") val kanjiReadingParserEpoch: Int = 0,
 )
 
 /** Everything a content snapshot stores for one source. */
@@ -191,7 +194,7 @@ interface ContentDao {
     /** Home-screen variant: no article body; strokesJson is only '' (present) or NULL (absent). */
     @Query(
         "SELECT sourceId, kanji, title, jlpt, tags, strokeCount, radical, phonetic, onyomi, kunyomi, distractors, " +
-            "'' AS body, CASE WHEN strokesJson IS NULL THEN NULL ELSE '' END AS strokesJson, position " +
+            "'' AS body, CASE WHEN strokesJson IS NULL THEN NULL ELSE '' END AS strokesJson, position, quizOnyomi, quizKunyomi " +
             "FROM kanji WHERE sourceId = :sourceId ORDER BY position"
     )
     fun observeKanjiLite(sourceId: String): Flow<List<KanjiEntity>>
@@ -211,7 +214,7 @@ interface ContentDao {
     /** Same as [kanji] without the article body or stroke data (used by background work). */
     @Query(
         "SELECT sourceId, kanji, title, jlpt, tags, strokeCount, radical, phonetic, onyomi, kunyomi, distractors, " +
-            "'' AS body, CASE WHEN strokesJson IS NULL THEN NULL ELSE '' END AS strokesJson, position " +
+            "'' AS body, CASE WHEN strokesJson IS NULL THEN NULL ELSE '' END AS strokesJson, position, quizOnyomi, quizKunyomi " +
             "FROM kanji WHERE sourceId = :sourceId ORDER BY position",
     )
     suspend fun kanjiLite(sourceId: String): List<KanjiEntity>
@@ -555,7 +558,7 @@ interface ReviewDao {
         ListeningTaskEncounterEntity::class, ListeningAssessmentEntity::class,
         ReviewStateEntity::class, ReviewLogEntity::class, StudySessionEntity::class, SyncMetaEntity::class,
     ],
-    version = 16,
+    version = 17,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -563,6 +566,14 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun reviews(): ReviewDao
     abstract fun listening(): ListeningDao
     abstract fun listeningTasks(): ListeningTaskDao
+}
+
+val MIGRATION_16_17 = object : androidx.room.migration.Migration(16, 17) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE kanji ADD COLUMN quizOnyomi TEXT")
+        db.execSQL("ALTER TABLE kanji ADD COLUMN quizKunyomi TEXT")
+        db.execSQL("ALTER TABLE sync_meta ADD COLUMN kanjiReadingParserEpoch INTEGER NOT NULL DEFAULT 0")
+    }
 }
 
 val MIGRATION_13_14 = object : androidx.room.migration.Migration(13, 14) {

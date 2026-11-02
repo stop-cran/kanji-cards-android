@@ -9,7 +9,12 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
-fun KanjiEntity.toReadingCard() = ReadingCard(kanji, onyomi.splitSep(), kunyomi.splitSep(), distractors = distractors.splitSep())
+fun KanjiEntity.toReadingCard() = ReadingCard(
+    kanji, onyomi.splitSep(), kunyomi.splitSep(),
+    askOn = (quizOnyomi ?: onyomi).splitSep(),
+    askKun = (quizKunyomi ?: kunyomi).splitSep(),
+    distractors = distractors.splitSep(),
+)
 
 /** Everything the readings quiz and reminders need for one stack: scheduling state per kind and the resulting queue. */
 class ReadingData(val cards: List<ReadingCard>, val states: Map<ReadingKind, Map<String, SrsState>>, val items: List<ReadingItem>)
