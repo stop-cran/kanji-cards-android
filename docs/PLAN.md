@@ -5,6 +5,10 @@
 > tuning from the drawing log (after the N4 set), writing-pattern variants ([issue #1](https://github.com/stop-cran/kanji-cards-android/issues/1)),
 > and the release work in milestone 9 (see [RELEASE.md](RELEASE.md)). The sections below are the original plan and are kept for context.
 
+EN/RU localization has a separate [checkpoint implementation plan](https://github.com/stop-cran/learning-japanese-ru/blob/main/docs/IMPLEMENTATION-PLAN.md):
+complete app/instruction localization and a bounded real-content pilot, early integration/correction, then representative
+structured/media integration before expansion. It is planned work, not included in the completed original milestones above.
+
 ## 0. Tooling to install on this PC
 
 Already present: Git, Node.js, Python 3.12, winget. Missing:

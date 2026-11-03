@@ -50,6 +50,17 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 
 ## Gotchas
 
+- **EN/RU checkpoints (planned):** follow the [shared implementation plan](https://github.com/stop-cran/learning-japanese-ru/blob/main/docs/IMPLEMENTATION-PLAN.md).
+  [#127](https://github.com/stop-cran/kanji-cards-android/issues/127#issuecomment-6599265668) intentionally replaces eager
+  custom-source `setSource`/async sync with separate pending candidate and accepted source; stale completions must not activate it.
+  [EN #61](https://github.com/stop-cran/learning-japanese/issues/61#issuecomment-6599265727) requires the current EN reader
+  against newly generated EN packages, not just legacy fixtures; RU rejection must not break existing EN content.
+  Localization uses isolated fixtures for early native smoke checks, then actual reviewed RU archives for integration.
+  Fixtures, translated strings and a plan review alone do not prove delivered lessons or phone acceptance.
+- **Method findings during localization:** reproduce and adjudicate failures before changing app behavior (the API-29
+  autofocus test host needed manifest resize, not a production layout rewrite). In the same fix batch, record reusable
+  verified mechanisms in the relevant app/content instructions with the finding/evidence; correct/review code and run
+  affected tests. Amend the shared plan if dependencies change. Do not add speculative rules or force a finding quota.
 - **Edge-to-edge on API 35:** content draws under the status/navigation bars; a button there is visible but untouchable. Every screen goes
   through `ui/Page`, which applies `statusBarsPadding`/`navigationBarsPadding` and a scroll container. Don't build screens without it.
 - **Keyboard on older Android:** keep `MainActivity`'s `adjustResize` and use `Page(ime = true)` for text entry. Pre-Android 11 needs

@@ -23,6 +23,20 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 6. **Never trust simulated tuning alone.** Matcher thresholds were first tuned on simulated hands; real exported drawings are fixtures
    (`RealDrawingsTest`). Prefer adding real fixtures over adjusting numbers blindly.
 
+### EN/RU edition: accepted next design, not implemented yet
+
+The [shared language/source design](https://github.com/stop-cran/learning-japanese-ru/blob/main/docs/DESIGN.md)
+and [checkpoint plan](https://github.com/stop-cran/learning-japanese-ru/blob/main/docs/IMPLEMENTATION-PLAN.md)
+govern [#28](https://github.com/stop-cran/kanji-cards-android/issues/28) and
+[#127](https://github.com/stop-cran/kanji-cards-android/issues/127). App-owned UI and RU teaching content will be
+localized together, using explicit stable repository base language and Japanese target. Device-language new installs,
+preserved EN upgrades, matching accepted cache, source-specific history and no English lesson fallback are agreed.
+Custom-repo validation will intentionally separate pending candidates from accepted source, replacing today's
+eager save-then-sync flow; this paragraph does not claim that transition has already been implemented.
+Complete reviewed first-version content instructions precede pilot authoring. Native app/kanji/word integration and
+then a small structured-content/media integration gate must feed verified corrections into app/content instructions
+and the execution plan before broad translation. The existing implementation sections below still describe current behavior.
+
 ## 2. Content model
 
 - Kanji card `kanji/<char>.md` (front matter: `kanji`, `title`, `jlpt`, `tags`, readings, `distractors`...). The file name is the identity;
