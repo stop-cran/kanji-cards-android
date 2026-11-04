@@ -29,10 +29,13 @@ import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.stopcran.kanji.core.listening.ListeningTaskType
 import io.github.stopcran.kanji.core.listening.ListeningScope
+import io.github.stopcran.kanji.core.listening.ListeningTaskPackage
+import io.github.stopcran.kanji.core.listening.ListeningTaskAttempt
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.data.ListeningPlayer
 import io.github.stopcran.kanji.data.ListeningTaskAssetEntity
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
@@ -271,6 +274,71 @@ class ListeningTaskFlowTest {
                 screenshot("C-key-point-help-result.png")
             } finally { finish(vm) }
         }
+    }
+
+    @Test fun shuffledWrittenChoicesKeepTheirNumbersThroughRecreationHelpAndFeedback() {
+        ListeningUiFixture().use { fixture ->
+            val task = fixture.records.single { it.task.taskType == ListeningTaskType.KeyPoint }.task
+            val study = fixture.services.listeningTasks
+            val id = runBlocking { study.start(fixture.source, task.id, extra = true) }
+            val captured = runBlocking { requireNotNull(fixture.db.listeningTasks().encounter(id)) }
+            assertEquals(task.options.map { it.id }.toSet(), requireNotNull(study.attempt(captured).optionOrder).toSet())
+            val order = task.options.map { it.id }.reversed()
+            runBlocking {
+                fixture.db.listeningTasks().putEncounter(captured.copy(stateJson = Json.encodeToString(
+                    ListeningTaskAttempt.serializer(), study.attempt(captured).copy(optionOrder = order))))
+            }
+            val original = ListeningTaskViewModel(fixture.services, id)
+            val model = mutableStateOf(original)
+            val content: @Composable () -> Unit = { KanjiTheme { ListeningTaskEncounterView(model.value, {}) { _, _ -> } } }
+            rule.activityRule.scenario.onActivity { it.setContent(content = content) }
+            try {
+                awaitReady(original)
+                assertChoiceOrder(task, order)
+                rule.onNodeWithText("Play remaining stages").performScrollTo().performClick()
+                rule.waitUntil(15_000) { original.attempt?.phase == "answer" && !original.busy }
+                val correct = task.options.single { it.id == task.answer }
+                rule.onNodeWithText("${correct.number}. ${correct.label}").performScrollTo().performClick()
+                rule.waitUntil(5_000) { original.attempt?.answer == correct.id && !original.busy }
+                rule.activityRule.scenario.recreate()
+                val restored = ListeningTaskViewModel(fixture.services, id)
+                rule.activityRule.scenario.onActivity {
+                    model.value = restored
+                    it.enableEdgeToEdge()
+                    it.setContent(content = content)
+                }
+                awaitReady(restored)
+                assertEquals(order, restored.attempt?.optionOrder)
+                assertEquals(correct.id, restored.attempt?.answer)
+                assertChoiceOrder(task, order)
+                rule.onNodeWithText("Show transcript and translation (help)").performScrollTo().performClick()
+                rule.waitUntil(5_000) { !restored.busy && "text-help" in requireNotNull(restored.attempt).assistance }
+                assertChoiceOrder(task, order)
+                rule.onNodeWithText("Check answer").performScrollTo().performClick()
+                rule.waitUntil(10_000) { restored.response != null && !restored.busy }
+                assertEquals(Grade.Hard.value, restored.response?.grade)
+                assertEquals(order, restored.response?.optionOrder)
+                assertChoiceOrder(task, order, feedback = true)
+                assertEquals(captured.contentJson, restored.encounter?.contentJson)
+                assertEquals(1, runBlocking { fixture.db.reviews().allLog().size })
+                screenshot("listening129-shuffled-feedback.png")
+            } finally {
+                finish(model.value)
+                finish(original)
+            }
+        }
+    }
+
+    private fun assertChoiceOrder(task: ListeningTaskPackage, order: List<String>, feedback: Boolean = false) {
+        val options = task.options.associateBy { it.id }
+        val nodes = order.map { id ->
+            val option = options.getValue(id)
+            val prefix = if (feedback && id == task.answer) "Correct: " else ""
+            rule.onNodeWithText("$prefix${option.number}. ${option.label}")
+        }
+        nodes.forEach { it.assertExists() }
+        val positions = nodes.map { it.fetchSemanticsNode().positionInRoot.y }
+        assertEquals(positions.sorted(), positions)
     }
 
     @Test fun essentialPictureStaysVisibleInLandscapeBothThemesAndLargeText() {

@@ -2,6 +2,7 @@ package io.github.stopcran.kanji.core.listening
 
 import io.github.stopcran.kanji.core.srs.Grade
 import kotlinx.serialization.Serializable
+import kotlin.random.Random
 
 @Serializable
 data class ListeningTaskAttempt(
@@ -25,6 +26,7 @@ data class ListeningTaskAttempt(
     val correct: Boolean? = null,
     val grade: Int? = null,
     val giveUp: Boolean = false,
+    val optionOrder: List<String>? = null,
 )
 
 data class TaskPlayRequest(
@@ -37,6 +39,16 @@ object ListeningTaskPolicy {
         ListeningTaskType.TaskBased, ListeningTaskType.KeyPoint,
         ListeningTaskType.VerbalExpression, ListeningTaskType.QuickResponse,
     )
+
+    fun shuffledOptions(task: ListeningTaskPackage, random: Random = Random.Default): List<String>? =
+        if (task.choiceMode == TaskChoiceMode.Text && task.visual == null) task.options.map { it.id }.shuffled(random) else null
+
+    fun options(task: ListeningTaskPackage, order: List<String>?): List<TaskOption> {
+        if (task.choiceMode != TaskChoiceMode.Text || task.visual != null || order == null) return task.options
+        val byId = task.options.associateBy { it.id }
+        if (order.size != byId.size || order.toSet() != byId.keys) return task.options
+        return order.map { byId.getValue(it) }
+    }
 
     fun request(
         task: ListeningTaskPackage, state: ListeningTaskAttempt, request: TaskPlayRequest,

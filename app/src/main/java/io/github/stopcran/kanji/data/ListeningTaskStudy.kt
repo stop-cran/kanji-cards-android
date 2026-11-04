@@ -85,7 +85,8 @@ class ListeningTaskStudy(
         val words = db.content().referencedWords(sourceId, captured.task.vocabulary.mapNotNull { it.word })
         require(words.mapTo(hashSetOf()) { it.word }.containsAll(captured.task.vocabulary.mapNotNull { it.word })) { "A task word article is missing" }
         val id = "listening-task:${UUID.randomUUID()}"
-        val state = ListeningTaskAttempt(phase = if (study) "study" else "listen", describedStudy = described)
+        val state = ListeningTaskAttempt(phase = if (study) "study" else "listen", describedStudy = described,
+            optionOrder = if (study) null else ListeningTaskPolicy.shuffledOptions(captured.task))
         val prior = queue.states[taskId] ?: SrsState()
         dao.putEncounter(ListeningTaskEncounterEntity(
             id, sourceId, taskId, captured.task.exposureId, requireNotNull(sync.acceptedBranch), sync.acceptedRevision,

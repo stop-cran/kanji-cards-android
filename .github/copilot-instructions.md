@@ -315,6 +315,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   accepted content transaction, not in SharedPreferences; migrations preserve both metadata and every excluded key's history.
   Review state is keyed by (`sourceId` = lower-case `owner/repo`, stack, item, mode). Never key it by title or position; titles are editable.
 - **Listening:** persist exposure separately from SRS and retain the captured package/assistance through process recreation.
+  Text mode alone does not mean unbound choices: #129 found numbered-picture text in `n4-task-discussion-room`.
+  Shuffle only picture-free text on fresh scored guided captures; retain authored numbers and persist the ID order.
+  Shared diagnostic/Study rendering must ignore guided permutations; old captures retain authored order.
   Scored Practice more bypasses daily plans, never exposure cooldowns/media checks; reserve extra unseen passages even outside the normal fresh list.
   Only a completed full playback unlocks questions. Technical errors and unscored study never manufacture failure reviews.
   `responseJson` is immutable after submission; feedback playback updates only encounter state/exposure.

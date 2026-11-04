@@ -92,6 +92,59 @@ class ListeningTaskStudyTest {
     }
     private suspend fun hearAll(id: String) { repeat(fixture.task.stages.size) { play(id) } }
 
+    @Test fun scoredChoiceOrderIsCapturedOnceAndSurvivesHelpReplayAndServiceRecreation() = runBlocking {
+        val selection = ListeningSelection(ListeningScope.N5, ListeningTaskType.TaskBased.wire)
+        repeat(2) { index ->
+            val id = study.start(source, fixture.task.id, selection, ListeningTaskStart(extra = index % 2 == 0))
+            val order = requireNotNull(state(id).optionOrder)
+            assertEquals(fixture.task.options.map { it.id }.toSet(), order.toSet())
+            study.close(id, discard = true)
+        }
+        val id = study.start(source, fixture.task.id, selection)
+        val order = requireNotNull(state(id).optionOrder)
+        val captured = row(id)
+        study = newStudy()
+        assertEquals(id, study.start(source, fixture.task.id, selection))
+        study.recover(id)
+        study.revealEvidence(id, textHelp = true)
+        hearAll(id)
+        play(id, wholeReplay = true)
+        repeat(2) { play(id) }
+        assertEquals(order, state(id).optionOrder)
+        assertEquals(order, row(id).presentedOptions(fixture.task, state(id)).map { it.id })
+        assertEquals(captured.contentJson, row(id).contentJson)
+        assertEquals(captured.contentHash, row(id).contentHash)
+        assertEquals(captured.mediaHash, row(id).mediaHash)
+        study.answer(id, fixture.task.answer)
+        study.submit(id)
+        val frozen = requireNotNull(row(id).responseJson)
+        assertEquals(order, Json.decodeFromString(ListeningTaskAttempt.serializer(), frozen).optionOrder)
+        assertEquals(Grade.Hard.value, state(id).grade)
+        play(id, stage = 1)
+        assertEquals(frozen, row(id).responseJson)
+        assertEquals(1, db.reviews().allLog().size)
+    }
+
+    @Test fun oldCapturesAndExcludedOwnersNeverAcquireOrApplyGuidedOrders() = runBlocking {
+        val id = study.start(source, fixture.task.id, extra = true)
+        val old = row(id).copy(stateJson = """{"phase":"listen"}""")
+        db.listeningTasks().putEncounter(old)
+        study = newStudy()
+        assertEquals(id, study.start(source, fixture.task.id, extra = true))
+        assertNull(state(id).optionOrder)
+        assertEquals(fixture.task.options, row(id).presentedOptions(fixture.task, state(id)))
+        val shuffled = ListeningTaskAttempt(optionOrder = fixture.task.options.map { it.id }.reversed())
+        listOf(old.copy(kind = "study"), old.copy(kind = "assessment", assessmentId = "parent"),
+            old.copy(assessmentId = "parent")).forEach { excluded ->
+            assertEquals(fixture.task.options, excluded.presentedOptions(fixture.task, shuffled))
+        }
+        study.close(id, discard = true)
+        val unscored = study.start(source, fixture.task.id, study = true)
+        assertNull(state(unscored).optionOrder)
+        assertEquals(fixture.task.options, row(unscored).presentedOptions(fixture.task, state(unscored)))
+        assertTrue(db.reviews().allLog().isEmpty())
+    }
+
     @Test fun hiddenLevelAndFormatCandidatesCannotConsumeVisibleFreshSlots() = runBlocking {
         val n4 = (0..9).map { index -> approvedTask(fixture.task.copy(
             id = "n4-hidden-$index", exposureId = "n4-hidden-$index", schemaVersion = 2, jlpt = 4)) }
@@ -303,6 +356,7 @@ class ListeningTaskStudyTest {
 
     @Test fun normalWholeReplayAndConcurrentMidnightSubmitUsePinnedContentAndImmutableResponse() = runBlocking {
         val id = study.start(source, fixture.task.id, extra = true)
+        val order = requireNotNull(state(id).optionOrder)
         hearAll(id)
         play(id, wholeReplay = true)
         repeat(2) { play(id) }
@@ -337,6 +391,7 @@ class ListeningTaskStudyTest {
         assertEquals(6, files.getValue("export_manifest.json").jsonObject.getValue("formatVersion").jsonPrimitive.int)
         assertEquals(Json.parseToJsonElement(requireNotNull(frozen)),
             files.getValue("listening_task_encounters.json").jsonArray.single().jsonObject.getValue("response"))
+        assertEquals(order, Json.decodeFromString(ListeningTaskAttempt.serializer(), requireNotNull(frozen)).optionOrder)
         assertTrue(files.getValue("listening_assessments.json").jsonArray.isEmpty())
         assertEquals("example", files.getValue("listening_exposures.json").jsonArray.single().jsonObject.getValue("exposureId").jsonPrimitive.content)
         assertEquals(10, files.size)

@@ -20,6 +20,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.listening.*
+import io.github.stopcran.kanji.data.presentedOptions
 
 @Composable
 fun ListeningTaskScreen(id: String, onBack: () -> Unit, onOpenDoc: (String, String) -> Unit) {
@@ -210,19 +211,21 @@ private fun ListeningTaskChoices(vm: ListeningTaskViewModel, reveal: Boolean) {
     val state = requireNotNull(vm.attempt)
     val row = requireNotNull(vm.encounter)
     val answerable = state.phase == "answer" && row.kind == "graded" && row.reviewLogId == null && vm.error == null && !vm.busy
-    ListeningTaskChoices(task, state.answer, answerable, reveal, vm::answer, Modifier.listeningEvidence(vm))
+    ListeningTaskChoices(task, state.answer, answerable, reveal, vm::answer, Modifier.listeningEvidence(vm),
+        row.presentedOptions(task, state))
 }
 
 @Composable
 internal fun ListeningTaskChoices(
     task: ListeningTaskPackage, answer: String?, answerable: Boolean, reveal: Boolean,
     onAnswer: (String) -> Unit, evidence: Modifier,
+    options: List<TaskOption> = task.options,
 ) {
     Text(stringResource(R.string.listening_choices), style = MaterialTheme.typography.titleMedium)
     if (task.choiceMode == TaskChoiceMode.Audio && !reveal) {
         Text(stringResource(R.string.listening_audio_choice_order))
     }
-    task.options.forEach { option ->
+    options.forEach { option ->
         val label = if (task.choiceMode == TaskChoiceMode.Text || reveal) "${option.number}. ${option.label}" else "${option.number}"
         val visible = if (task.choiceMode == TaskChoiceMode.Text || reveal) evidence else Modifier
         if (answerable) {

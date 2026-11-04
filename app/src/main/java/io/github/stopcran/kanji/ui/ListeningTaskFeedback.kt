@@ -6,7 +6,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.listening.ListeningTaskPackage
+import io.github.stopcran.kanji.core.listening.TaskOption
 import io.github.stopcran.kanji.core.srs.Grade
+import io.github.stopcran.kanji.data.presentedOptions
 
 @Composable
 internal fun ListeningTaskFeedback(vm: ListeningTaskViewModel, onWord: (String) -> Unit) {
@@ -27,15 +29,17 @@ internal fun ListeningTaskFeedback(vm: ListeningTaskViewModel, onWord: (String) 
         }
     }
     ListeningTaskFeedbackBody(task, vm.response?.answer, Modifier.listeningEvidence(vm), vm.vocabularyBodies,
-        onWord, { vm.play(stage = it) }, !vm.busy && vm.error == null)
+        onWord, { vm.play(stage = it) }, !vm.busy && vm.error == null,
+        requireNotNull(vm.encounter).presentedOptions(task, requireNotNull(vm.response ?: vm.attempt)))
 }
 
 @Composable
 internal fun ListeningTaskFeedbackBody(
     task: ListeningTaskPackage, answer: String?, evidence: Modifier, words: Map<String, String>,
     onWord: (String) -> Unit, replay: (Int) -> Unit, replayEnabled: Boolean,
+    options: List<TaskOption> = task.options,
 ) {
-    task.options.forEach { option ->
+    options.forEach { option ->
         HorizontalDivider()
         val prefix = when (option.id) {
             task.answer -> stringResource(R.string.listening_correct_prefix, "")

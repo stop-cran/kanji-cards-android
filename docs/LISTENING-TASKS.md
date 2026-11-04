@@ -38,7 +38,7 @@ The official [purposes](https://www.jlpt.jp/e/guideline/pdf/n5_e_revised.pdf),
 
 | Task discriminator | Listening objective | Observed 2018 presentation | Contract-1 presentation |
 | --- | --- | --- | --- |
-| `task-based` | Extract the information needed to decide an appropriate action | Question, conversation/announcement, repeated question; four printed text or visual choices | Spoken focus before passage and repeated afterwards; four authored, fixed-order Japanese text or numbered visual choices |
+| `task-based` | Extract the information needed to decide an appropriate action | Question, conversation/announcement, repeated question; four printed text or visual choices | Spoken focus before passage and repeated afterwards; four authored Japanese text or numbered visual choices (guided ordering rule below) |
 | `key-point` | Attend to a previously specified point in a conversation/announcement | Same question-before-passage instruction as task-based; four printed text or visual choices | Same stage topology, different explicitly authored listening objective; never infer subtype from number of speakers |
 | `verbal-expression` | Select what the indicated person should say in the depicted situation | Required illustration/role marker; spoken situation/question and three numbered spoken expressions | Keep the illustration visible; play situation then all three numbered choices; answer buttons reveal numbers only |
 | `quick-response` | Select a fitting response to a short utterance | No task illustration; utterance and three numbered spoken responses | Play utterance then all three numbered choices; no written utterance/response before permitted help or feedback |
@@ -47,7 +47,12 @@ Booklet PDF pages 3/8 give the first two instructions; pages 4/9 show map/visual
 pages 12-15 show the expression illustrations; page 16 describes quick response without pictures.
 The first two types do **not** acquire an invented N3-style reading-window distinction.
 Separate fixtures must preserve their objectives even where code and stage order agree.
-All new option orders are authored and fixed, including numbered maps. Legacy options still shuffle.
+Packages retain authored option order and numbering, including numbered maps. Fresh scored guided
+attempts shuffle text choices with no visual, persisting the option-ID permutation separately from
+approved package/media bytes. Each original number remains attached to its choice, even when displayed
+out of numeric order; authors must not rely on text choices' screen positions. Any picture-bearing task,
+spoken/visual choices, unscored Study and diagnostics retain authored order. Legacy dialogue Listening
+keeps its existing, separate capture-time shuffle.
 Task objectives are author-assigned, not mutually exclusive sentence templates.
 
 The [source record](https://github.com/stop-cran/learning-japanese/blob/main/docs/listening-task-sources.json)
@@ -86,11 +91,14 @@ one. Do not rewrite FSRS due dates to implement cooldowns. Merge legacy exposure
 changing historical responses or claiming that unrecorded historical activity is known.
 
 Capture source, branch, repository revision, package and media hashes, task/policy versions,
-exposure identity, fixed option IDs/order, word-article bodies, required image, stage state and
+exposure identity, option IDs and presentation order, word-article bodies, required image, stage state and
 assistance. Sync/settings/source changes cannot retarget an open attempt. New starts use the selected
 source; an old source's captured attempt can be resumed explicitly with its original source shown.
 Pin **every** captured asset through closure, including all assessment items/examples. Historical
 answers keep their package/response metadata, but closing releases otherwise unused binary media.
+Guided shuffles are captured once, stable through replay/help/feedback/resume, and included in the immutable
+submitted response. Older captures without a permutation retain authored order. No content-schema,
+approval/hash, SRS or exposure-identity change is needed for this presentation-only behavior.
 
 ## 3. Guided learning and accounting
 

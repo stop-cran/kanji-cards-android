@@ -8,6 +8,10 @@ import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
+import io.github.stopcran.kanji.core.listening.ListeningTaskAttempt
+import io.github.stopcran.kanji.core.listening.ListeningTaskPackage
+import io.github.stopcran.kanji.core.listening.ListeningTaskPolicy
+import io.github.stopcran.kanji.core.listening.TaskOption
 
 @Entity(tableName = "listening_tasks", primaryKeys = ["sourceId", "id"])
 data class ListeningTaskEntity(
@@ -48,6 +52,9 @@ data class ListeningTaskEncounterEntity(
     val responseJson: String? = null, val submittedAtMs: Long? = null, val introduced: Boolean = false,
     val closedAtMs: Long? = null, val closeReason: String? = null,
 )
+
+fun ListeningTaskEncounterEntity.presentedOptions(task: ListeningTaskPackage, state: ListeningTaskAttempt): List<TaskOption> =
+    if (kind == "graded" && assessmentId == null) ListeningTaskPolicy.options(task, state.optionOrder) else task.options
 
 @Entity(tableName = "listening_assessments", indices = [Index(value = ["sourceId", "closedAtMs"])])
 data class ListeningAssessmentEntity(

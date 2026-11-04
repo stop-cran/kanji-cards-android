@@ -486,6 +486,14 @@ Text options are readable previews; numbered pictures keep their authored orderi
 labels until help/feedback. All required stages must finish before answer selection. Feedback begins
 with the immutable result; captured word articles retain their source and return to the feedback scroll.
 Scroll ownership sits outside the article and portrait/landscape branches, keyed by encounter/phase.
+Fresh scored guided attempts shuffle text choices only when the task has no picture; scheduled and
+Practice more use the same capture-time rule. The optional captured option-ID order is reused for preview,
+help and feedback, including replay/resume/process recreation. Each authored number stays attached to its
+original option (e.g. displayed 3, 1, 4, 2), preserving spoken number references without rewriting approved
+packages/media. Text-only authors must not rely on fixed screen positions. Study, diagnostics, any
+picture-bearing task and spoken/visual choices stay authored. Old captures without an order, or malformed
+permutations, use the complete authored order; they never shuffle on resume. Submitted responses freeze
+the same order alongside ID-based answers. A new random shuffle may legitimately repeat a prior order.
 App and Android Back use the same current-state callback: captured articles return locally,
 unscored study and submitted feedback close the encounter, and unfinished scored work pauses
 for resume/discard. Closing study retains exposure/cooldown without an SRS answer. Diagnostic
