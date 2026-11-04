@@ -3,8 +3,16 @@ package io.github.stopcran.kanji.core
 import io.github.stopcran.kanji.core.content.ContentParser
 import io.github.stopcran.kanji.core.content.KanjiCard
 import io.github.stopcran.kanji.core.content.SafeZip
+import io.github.stopcran.kanji.core.counters.CounterExpressions
+import io.github.stopcran.kanji.core.counters.CounterGrader
+import io.github.stopcran.kanji.core.counters.CounterIndex
+import io.github.stopcran.kanji.core.counters.CounterMode
+import io.github.stopcran.kanji.core.counters.CounterVerdict
+import io.github.stopcran.kanji.core.grammar.GrammarChoices
 import io.github.stopcran.kanji.core.markdown.Block
 import io.github.stopcran.kanji.core.markdown.Markdown
+import io.github.stopcran.kanji.core.words.PictureQuestions
+import io.github.stopcran.kanji.core.words.PictureScene
 import io.github.stopcran.kanji.core.words.WordCard
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.WordQuizBuilder
@@ -18,7 +26,7 @@ import org.junit.Test
 import java.io.File
 import kotlin.random.Random
 
-/** Optional real-publication regressions. CI can run these by setting the two archive path variables. */
+/** Optional real-publication regressions, enabled by the archive path variables used below. */
 class RealLanguageArchiveTest {
     @Test
     fun actualNewEnglishSchemaOneArchiveIsAccepted() {
@@ -43,6 +51,88 @@ class RealLanguageArchiveTest {
         assertRussianReadingRows(parsed)
         assertPilotLevelsAndQuizGates(parsed)
         assertNormalWordChoices(parsed)
+    }
+
+    @Test
+    fun widerRussianPilotRetainsGrammarChoiceTypingAndVocabularySemantics() {
+        val parsed = parseWiderRussianPilot()
+        val lesson = parsed.grammar.single()
+        assertEquals(lesson.exercises.map { it.id }.toSet(),
+            lesson.introductionGroups.single().members.map { it.exerciseId }.toSet())
+        assertTrue(lesson.introductionGroups.single().requires.isEmpty())
+        assertEquals(15, lesson.exercises.sumOf { requireNotNull(it.vocabulary).spans.size })
+        for (exercise in lesson.exercises) {
+            assertEquals(null, exercise.vocabularyProblem)
+            val choices = GrammarChoices.build(exercise, Random(42))
+            val accepted = exercise.acceptedAnswers.map(GrammarChoices::normalizeAnswer).toSet()
+            for (option in choices.options) {
+                assertEquals("${exercise.id}/${option.id}",
+                    option.id in choices.correctOptionIds, GrammarChoices.normalizeAnswer(option.label) in accepted)
+                assertTrue(option.rationale.any { it in 'А'..'я' })
+            }
+            assertFalse(GrammarChoices.normalizeAnswer(exercise.translation) in accepted)
+            assertTrue(exercise.translation.any { it in 'А'..'я' })
+            assertTrue(exercise.explanation.any { it in 'А'..'я' })
+            assertTrue(requireNotNull(exercise.vocabulary).spans.all { span ->
+                !span.text.contains('_') && span.gloss.any { it in 'А'..'я' }
+            })
+        }
+    }
+
+    @Test
+    fun widerRussianPilotKeepsAlternativeCountersSeparateFromCanonicalReadings() {
+        val index = CounterIndex(parseWiderRussianPilot().counters)
+        val apple = index.cards.getValue("tsu-apple-1")
+        assertTrue(apple.en.any { it in 'А'..'я' })
+        for (answer in listOf("つ", "二つ", "二個")) {
+            assertEquals(answer, CounterVerdict.Good, CounterGrader.grade(answer, apple, "つ").verdict)
+        }
+        val reading = index.expression(apple.id)
+        assertEquals(CounterVerdict.Good, CounterExpressions.grade("ふたつ", reading, reading = true).verdict)
+        assertEquals(CounterVerdict.Wrong, CounterExpressions.grade("にこ", reading, reading = true).verdict)
+        val ten = index.expression("native-expression-1")
+        for (answer in listOf("十", "10")) {
+            assertEquals(answer, CounterVerdict.Good, CounterExpressions.grade(answer, ten, reading = false).verdict)
+        }
+        assertEquals(CounterVerdict.Wrong, CounterExpressions.grade("十つ", ten, reading = false).verdict)
+        assertEquals(CounterVerdict.Good, CounterExpressions.grade("とお", ten, reading = true).verdict)
+        assertEquals(CounterVerdict.Wrong, CounterExpressions.grade("じゅう", ten, reading = true).verdict)
+        assertFalse(apple.id in index.ids(CounterMode.Expression))
+        assertFalse("tsu-question-1" in index.ids(CounterMode.Reading))
+        assertTrue(index.ids(CounterMode.Noun).isEmpty())
+    }
+
+    @Test
+    fun widerRussianPilotBuildsBothRealPictureTargetsWithoutTheArticleOnlyScene() {
+        val parsed = parseWiderRussianPilot()
+        val cards = wordCards(parsed)
+        val scenes = parsed.words.flatMap { word ->
+            word.scenes.map { scene -> PictureScene(word.word, scene, parsed.manifest.images.getValue(scene.image)) }
+        }
+        for (word in listOf("きらきら", "にこにこ")) {
+            val question = requireNotNull(PictureQuestions.build(cards.single { it.word == word }, cards, scenes, Random(42)))
+            assertEquals(setOf("きらきら", "にこにこ"), question.options.map { it.word }.toSet())
+            assertEquals(word, question.target.word)
+            assertFalse(question.target.scene.id == "sparkling-interested-eyes")
+            assertTrue(question.scenes.values.all { it.scene.quizEligible && parsed.images.containsKey(it.scene.image) })
+            assertTrue(question.scenes.values.all { scene ->
+                scene.scene.description.any { it in 'А'..'я' } && !scene.scene.description.contains(scene.word)
+            })
+            assertEquals(1, question.requiredScenes(WordDirection.Picture).size)
+            assertEquals(2, question.requiredScenes(WordDirection.WordToPicture).size)
+        }
+    }
+
+    private fun parseWiderRussianPilot(): io.github.stopcran.kanji.core.content.ParsedContent {
+        val parsed = parseArchive("KANJI_CARDS_RU_PILOT_B_ARCHIVE")
+        assertEquals("ru", parsed.manifest.baseLanguage)
+        assertEquals(2, parsed.manifest.schemaVersion)
+        assertTrue(parsed.problems.toString(), parsed.problems.isEmpty())
+        assertTrue(parsed.grammarProblems.toString(), parsed.grammarProblems.isEmpty())
+        assertTrue(parsed.listeningProblems.toString(), parsed.listeningProblems.isEmpty())
+        assertTrue(parsed.listening.isEmpty())
+        assertTrue(parsed.audio.isEmpty())
+        return parsed
     }
 
     private fun assertRussianManifest(parsed: io.github.stopcran.kanji.core.content.ParsedContent) {

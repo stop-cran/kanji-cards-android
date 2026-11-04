@@ -165,19 +165,37 @@ internal fun WordQuizPrompt(
 private fun localizedWordPromptTag(tag: String): String {
     val resource = when (tag) {
         "adjective" -> R.string.word_tag_adjective
+        "appearance" -> R.string.word_tag_appearance
         "body" -> R.string.word_tag_body
         "compound" -> R.string.word_tag_compound
+        "conversation" -> R.string.word_tag_conversation
         "daily-life" -> R.string.word_tag_daily_life
         "drink" -> R.string.word_tag_drink
+        "expression" -> R.string.word_tag_expression
+        "feelings" -> R.string.word_tag_feelings
+        "giongo" -> R.string.word_tag_giongo
+        "giseigo" -> R.string.word_tag_giseigo
+        "gitaigo" -> R.string.word_tag_gitaigo
         "godan" -> R.string.word_tag_godan
+        "intransitive" -> R.string.word_tag_intransitive
         "jukujikun" -> R.string.word_tag_jukujikun
+        "light" -> R.string.word_tag_light
         "literary" -> R.string.word_tag_literary
+        "mimetic" -> R.string.word_tag_mimetic
+        "movement" -> R.string.word_tag_movement
         "nature" -> R.string.word_tag_nature
         "noun" -> R.string.word_tag_noun
+        "onomatopoeia" -> R.string.word_tag_onomatopoeia
         "people" -> R.string.word_tag_people
+        "personality" -> R.string.word_tag_personality
+        "reduplication" -> R.string.word_tag_reduplication
+        "ri-ending" -> R.string.word_tag_ri_ending
         "size" -> R.string.word_tag_size
+        "sokuon" -> R.string.word_tag_sokuon
+        "texture" -> R.string.word_tag_texture
         "time" -> R.string.word_tag_time
         "verb" -> R.string.word_tag_verb
+        "voiced" -> R.string.word_tag_voiced
         else -> return tag
     }
     return stringResource(resource)

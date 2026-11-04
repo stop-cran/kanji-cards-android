@@ -78,7 +78,8 @@ internal fun rememberCounterHome(app: Services, group: CounterGroup = CounterGro
     val scope = app.settings.counterScopes.collectAsState().value[source.id] ?: CounterScope.N5
     val daily = app.settings.dailyNewCards.collectAsState().value
     val week = app.settings.weekPlan.collectAsState().value
-    val state: State<CounterHome> = produceState(CounterHome(null, emptyMap()), source.id, group to scope, daily to week) {
+    val articleLabel = stringResource(R.string.counter_article_reference)
+    val state: State<CounterHome> = produceState(CounterHome(null, emptyMap()), source.id, group to scope, daily to week, articleLabel) {
         value = CounterHome(null, emptyMap())
         app.db.content().observeMeta(source.id).collectLatest {
             val index = app.db.counterIndex(source.id).inScope(group, scope)
@@ -86,7 +87,7 @@ internal fun rememberCounterHome(app: Services, group: CounterGroup = CounterGro
             val budget = app.db.newAllowance(app.settings, source.id, now).remaining
             value = CounterHome(
                 index.cards.size + index.expressions.size, app.db.counterModeStates(source.id, index, budget, now), budget,
-                index.files.mapNotNull { f -> f.article?.let { it to app.context.getString(R.string.counter_article_reference) } }.toMap(),
+                index.files.mapNotNull { f -> f.article?.let { it to articleLabel } }.toMap(),
             )
         }
     }

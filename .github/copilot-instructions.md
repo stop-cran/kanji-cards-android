@@ -27,6 +27,12 @@ The current module inventory lives in `settings.gradle.kts`; build tasks and int
   `.\gradlew.bat -PcoreOnly :core:check` excludes Android project configuration and needs only JDK 17, not the SDK.
   `RealContentTest.parsesRealContentRepoWhenPresent` reads `../../learning-japanese` if that
   clone sits next to this repo, and is skipped otherwise.
+- Real language-archive acceptance requires a GitHub-style single root directory
+  (`git archive --prefix=repository/ ...`), not a flat ZIP. A flat merge-test export produced
+  `manifest.json is missing`; correct the harness, not the parser. Supply
+  `KANJI_CARDS_RU_PILOT_B_ARCHIVE` for the separate wider-pilot cases; do not retarget frozen
+  Pilot A expectations. Rerun `:core:cleanTest :core:test` with the selected cases when only the
+  external archive changes, and check XML for actual executions rather than assumption skips.
 - Emulator (Pixel 9, API 35), adb driving, screenshots and copying an APK to the phone: see the `android-emulator` skill in `.github/skills/`.
 - Gradle treats `RealContentTest.parsesRealContentRepoWhenPresent` as up to date when only the sibling content clone changed; re-run it with
   `.\gradlew.bat :core:cleanTest :core:test cleanTestDebugUnitTest testDebugUnitTest --tests '*ContentTest*'` after pulling or editing the sibling
@@ -57,13 +63,14 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 
 ## Gotchas
 
-- **EN/RU language/source implementation:** follow the [shared implementation plan](https://github.com/stop-cran/learning-japanese-ru/blob/ru-pilot-a-integration/docs/IMPLEMENTATION-PLAN.md).
+- **EN/RU language/source implementation:** follow the [shared implementation plan](https://github.com/stop-cran/learning-japanese-ru/blob/main/docs/IMPLEMENTATION-PLAN.md).
   Custom-source edits are pending candidates until the exact package has been downloaded, parsed and verified; stale or cancelled
   completions cannot activate them. The canonical owner/repository has a stable base language across branches. New EN schema-1
   packages must remain compatible with the released EN reader, while schema-2 RU must fail closed there. Legacy metadata absence
   means EN/ja only. Use actual exported EN and reviewed RU archives for the parser and native gates; synthetic fixtures cannot
   prove compatibility or delivered lessons. UI/content mismatch must block ordinary browsing rather than silently show EN lessons
-  under Russian. The ordinary RU default branch is rollout-gated; only the named `ru-pilot-a` branch is for bounded acceptance.
+  under Russian. The ordinary RU default branch is rollout-gated; `ru-pilot-a` is the named official-source
+  exception. Later cohorts use an explicitly authorized controlled test source rather than weakening that gate.
 - **Locale and live sessions:** API 33+ uses Android per-app locales; API 29–32 use `AppLocale.wrap` and Activity recreation.
   Reconcile System on return from Android Settings, but never replace a custom repository with a language default. Active exercise
   and Listening routes retain their captured source; session article routes must preserve that source and must not become
@@ -112,10 +119,21 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   (Android #127, comment 6617308178). Preserve the original state and gates.
   Localize canonical Word type/tag hints at the prompt renderer without rewriting persisted classification IDs.
   Native8 exposed `noun · nature` below a Russian Type caption; cover the adopted cohort's visible metadata vocabulary,
-  retaining origin-tag suppression and as-authored custom labels. Check new cohort/custom labels in its base language.
+  retaining origin-tag suppression and as-authored custom labels. Pilot B introduced 18 more canonical tags;
+  its real-composable red/green regression extends the resource mapping from 14 to 32 without changing content
+  IDs or gates (Android #128). Check each new cohort's hints across EN/RU/EN; unknown custom labels remain
+  as authored in that source's base language.
+  Resolve UI captions in the composed locale, not `Services.context`/application resources. If a localized caption is
+  captured by `produceState` or a similar long-lived effect, include it in the effect keys. Pilot B's real counter
+  reference stayed English despite an existing RU resource; the same-source EN/RU/EN regression covers both mechanisms.
+  Verify earned gates from actual phase/reps/stability, not “two correct answers”: Pilot B's same-day second answer
+  reached only 1.41 days of stability, below the two-day Word gate. Ordinary extra practice may earn readiness;
+  counter suffix typing still requires two distinct practice days. Do not alter clocks, state or gates to complete a matrix.
   Shell `input text` can fail to map Japanese Unicode to key events even with a focused field and visible IME;
   that is not proof of an app focus defect or of a keyboard's language support. Capture actual focus/IME before
   a disclosed input-only helper, and keep its successful input separate from keyboard-capability evidence.
+  `am instrument` can return ADB exit 0 with `INSTRUMENTATION_CODE: 0` and a helper failure. Assert the helper's
+  success result, not only the shell exit code; retain failed attempts and settle/capture focus before retrying input.
 - **Resource formatting:** Android may trim trailing spaces from string resources. Use `%1$s`/`%2$s` arguments (and localized
   plural resources) for separators and punctuation. Check both locales for duplicate IDs and placeholder/plural parity.
 - **Method findings during localization:** reproduce and adjudicate failures before changing app behavior (the API-29

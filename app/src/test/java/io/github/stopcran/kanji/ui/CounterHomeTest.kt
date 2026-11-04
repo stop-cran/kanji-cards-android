@@ -1,9 +1,14 @@
 package io.github.stopcran.kanji.ui
 
 import android.app.Application
+import android.content.res.Configuration
+import android.os.LocaleList
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
@@ -39,6 +44,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.SQLiteMode
 import java.time.Instant
+import java.util.Locale
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], application = Application::class)
@@ -131,6 +137,57 @@ class CounterHomeTest {
                 assertEquals(allowance, db.newAllowance(settings, source, now))
                 assertTrue(db.reviews().allStates().isEmpty())
                 assertTrue(db.reviews().allLog().isEmpty())
+            }
+        } finally {
+            rule.runOnIdle { visible.value = false }
+            rule.waitForIdle()
+            db.close()
+        }
+    }
+
+    @Test
+    fun articleReferenceFollowsUiLocaleWithoutChangingSourceOrContent() {
+        val context = RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("settings", 0).edit().clear().commit()
+        val settings = Settings(context)
+        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
+        val services = Services(db, settings, context)
+        val source = settings.source.value
+        fun localized(language: String) =
+            context.createConfigurationContext(Configuration(context.resources.configuration).apply {
+                setLocales(LocaleList(Locale.forLanguageTag(language)))
+            })
+        val uiContext = mutableStateOf(localized("en"))
+        val visible = mutableStateOf(true)
+        try {
+            val file = CounterFile(2, "native", "つ", "つ", "Native counters",
+                article = "articles/numbers-and-counters.md",
+                expressions = listOf(CounterExpression("ten", "Ten objects.", "十",
+                    listOf("十", "10"), "とお", listOf("とお"), "No final つ.")))
+            runBlocking {
+                db.content().insertCounters(listOf(CounterEntity(source.id, file.id,
+                    Json.encodeToString(CounterFile.serializer(), file), 0)))
+            }
+            rule.setContent {
+                CompositionLocalProvider(
+                    LocalContext provides uiContext.value,
+                    LocalConfiguration provides uiContext.value.resources.configuration,
+                ) {
+                    MaterialTheme {
+                        if (visible.value) rememberCounterHome(services).articles.values.forEach { Text(it) }
+                    }
+                }
+            }
+            for ((language, expected) in listOf(
+                "en" to "Counting expressions: reference",
+                "ru" to "Счётные выражения: справка",
+                "en" to "Counting expressions: reference",
+            )) {
+                rule.runOnIdle { uiContext.value = localized(language) }
+                rule.waitUntil(10_000) {
+                    rule.onAllNodesWithText(expected).fetchSemanticsNodes().size == 1
+                }
+                assertEquals(source, settings.source.value)
             }
         } finally {
             rule.runOnIdle { visible.value = false }
