@@ -9,6 +9,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import io.github.stopcran.kanji.R
 
 @Composable
 internal fun WordSceneGallery(state: DocumentUi.Ready, onSelect: (String) -> Unit) {
@@ -20,13 +22,17 @@ internal fun WordSceneGallery(state: DocumentUi.Ready, onSelect: (String) -> Uni
         WordImage(state.image, scene.description)
         if (scene.sense != null) {
             Text(scene.description, style = MaterialTheme.typography.bodyMedium)
-            if (!scene.quizEligible) Text("Article illustration only", style = MaterialTheme.typography.labelMedium)
+            if (!scene.quizEligible) Text(stringResource(R.string.article_illustration_only), style = MaterialTheme.typography.labelMedium)
         }
         if (scenes.size > 1) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(onClick = { onSelect(scenes[index - 1].id) }, enabled = index > 0) { Text("Previous scene") }
-                Text("${index + 1} / ${scenes.size}")
-                TextButton(onClick = { onSelect(scenes[index + 1].id) }, enabled = index < scenes.lastIndex) { Text("Next scene") }
+                TextButton(onClick = { onSelect(scenes[index - 1].id) }, enabled = index > 0) {
+                    Text(stringResource(R.string.previous_scene))
+                }
+                Text(stringResource(R.string.scene_position, index + 1, scenes.size))
+                TextButton(onClick = { onSelect(scenes[index + 1].id) }, enabled = index < scenes.lastIndex) {
+                    Text(stringResource(R.string.next_scene))
+                }
             }
         }
     }

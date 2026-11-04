@@ -172,7 +172,9 @@ class ListeningTaskFlowTest {
                 }
             }
         }
-        val formats = listOf("All formats", "English listen-first") + ListeningTaskType.entries.map { it.label }
+        val formats = listOf("All formats", "English listen-first") + ListeningTaskType.entries.map {
+            rule.activity.getString(it.labelResource())
+        }
         for (size in listOf(1f, 1.5f, 2f)) {
             rule.runOnIdle { scale.value = size }
             for (label in formats) {

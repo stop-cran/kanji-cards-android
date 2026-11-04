@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.content.StrokeData
+import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.draw.DrawGate
 import io.github.stopcran.kanji.core.draw.DrawGrader
 import io.github.stopcran.kanji.core.draw.DrawOutcome
@@ -35,6 +36,8 @@ import io.github.stopcran.kanji.data.toEntity
 import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.meaningLearned
 import io.github.stopcran.kanji.data.toSrs
+import io.github.stopcran.kanji.data.AppLocale
+import io.github.stopcran.kanji.data.isOrdinaryEntryAllowed
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -48,7 +51,7 @@ data class Lookalike(val kanji: String, val title: String?, val hasCard: Boolean
 
 sealed interface DrawUi {
     data object Loading : DrawUi
-    data class Empty(val message: String) : DrawUi
+    data class Empty(val reason: DrawEmptyReason) : DrawUi
     data class Question(val card: KanjiEntity, val remaining: Int, val seq: Int, val trace: Boolean = false) : DrawUi
     data class Checking(val card: KanjiEntity) : DrawUi
     data class Answer(
@@ -64,6 +67,15 @@ sealed interface DrawUi {
         val trace: Boolean = false,
     ) : DrawUi
     data class Done(val answered: Int, val clean: Int) : DrawUi
+}
+
+enum class DrawEmptyReason {
+    NoStrokeCards,
+    UnlockBlocked,
+    NothingDue,
+    ContentLanguageMismatch,
+    RussianDefaultGated,
+    CapturedSourceUnavailable,
 }
 
 /** Drawing session: caption + canvas -> check (recogniser gate + stroke matcher) -> graded answer with overlay. */
@@ -94,31 +106,49 @@ class DrawViewModel(private val app: Services, private val recognizer: InkRecogn
     fun ensureStarted(extra: Boolean) {
         if (started) return
         started = true
-        modelState = ModelState.Downloading
-        viewModelScope.launch { modelState = recognizer.prepare() }
         viewModelScope.launch { start(extra) }
     }
 
     private suspend fun start(extra: Boolean) {
         val source = app.settings.source.value
+        val capturedSourceId = registeredCapturedSourceId()
+        if (!admitDrawingSource(source, capturedSourceId)) return
         sourceId = source.id
         stack = app.settings.stack.value
-        val all = app.db.content().kanji(sourceId).inStack(stack)
-        for (k in all) {
-            val data = k.strokesJson?.let { runCatching { json.decodeFromString(StrokeData.serializer(), it) }.getOrNull() } ?: continue
-            references[k.kanji] = data.strokes.map { s -> s.points.map { Pt(it[0], it[1]) } }
-            if (data.orderVariants.isNotEmpty()) orderVariants[k.kanji] = data.orderVariants
+        prepareDrawingSession(extra, source, capturedSourceId)
+    }
+
+    private suspend fun admitDrawingSource(source: RepoSource, capturedSourceId: String?): Boolean = when {
+        capturedSourceId != null && capturedSourceId != source.id -> {
+            ui = DrawUi.Empty(DrawEmptyReason.CapturedSourceUnavailable)
+            false
         }
+        capturedSourceId == null -> {
+            val failure = drawingAdmissionFailure(source)
+            if (failure == null) true else {
+                ui = DrawUi.Empty(failure)
+                false
+            }
+        }
+        else -> true
+    }
+
+    private suspend fun prepareDrawingSession(extra: Boolean, source: RepoSource, capturedSourceId: String?) {
+        val all = app.db.content().kanji(sourceId).inStack(stack)
+        if (rejectFreshDrawingIfChanged(source, capturedSourceId)) return
+        loadReferenceStrokes(all)
         val drawable = all.filter { it.kanji in references }
         if (drawable.isEmpty()) {
-            ui = DrawUi.Empty("No cards with stroke data yet. Sync the content first (⚙ settings).")
+            if (rejectFreshDrawingIfChanged(source, capturedSourceId)) return
+            ui = DrawUi.Empty(DrawEmptyReason.NoStrokeCards)
             return
         }
         cards = drawable.associateBy { it.kanji }
         app.db.reviews().states(sourceId, stack, StudyMode.Draw.name).forEach { states[it.kanji] = it.toSrs() }
         val ids = DrawGate.eligible(drawable.map { it.kanji }, states, app.db.meaningLearned(app.settings, sourceId, stack))
+        if (rejectFreshDrawingIfChanged(source, capturedSourceId)) return
         if (ids.isEmpty() && !extra) {
-            ui = DrawUi.Empty("Drawing: ${app.settings.unlockRule.value.hint.replace("Unlocks", "unlocks")}.")
+            ui = DrawUi.Empty(DrawEmptyReason.UnlockBlocked)
             return
         }
         val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
@@ -129,8 +159,37 @@ class DrawViewModel(private val app: Services, private val recognizer: InkRecogn
         } else {
             QueueBuilder.build(ids, states, Instant.now(), budget).map { it.kanji }
         }
+        if (rejectFreshDrawingIfChanged(source, capturedSourceId)) return
+        modelState = ModelState.Downloading
+        viewModelScope.launch { modelState = recognizer.prepare() }
         session = trackSession(QuizSession(items, { it }, confirm = false), sourceId, stack, StudyMode.Draw.name, extra)
         showNext()
+    }
+
+    private fun loadReferenceStrokes(all: List<KanjiEntity>) {
+        for (kanji in all) {
+            val data = kanji.strokesJson?.let { runCatching { json.decodeFromString(StrokeData.serializer(), it) }.getOrNull() } ?: continue
+            references[kanji.kanji] = data.strokes.map { stroke -> stroke.points.map { Pt(it[0], it[1]) } }
+            if (data.orderVariants.isNotEmpty()) orderVariants[kanji.kanji] = data.orderVariants
+        }
+    }
+
+    private suspend fun drawingAdmissionFailure(source: RepoSource): DrawEmptyReason? {
+        if (!isOrdinaryEntryAllowed(source)) return DrawEmptyReason.RussianDefaultGated
+        val sourceLanguage = app.db.content().meta(source.id)?.baseLanguage ?: app.settings.sync.baseLanguage(source.id) ?: "en"
+        val uiLanguage = AppLocale.resolvedLanguage(app.settings.appLanguage.value)
+        return DrawEmptyReason.ContentLanguageMismatch.takeIf { sourceLanguage != uiLanguage }
+    }
+
+    private suspend fun rejectFreshDrawingIfChanged(source: RepoSource, capturedSourceId: String?): Boolean {
+        if (capturedSourceId != null) return false
+        val reason = if (app.settings.source.value != source) {
+            DrawEmptyReason.CapturedSourceUnavailable
+        } else {
+            drawingAdmissionFailure(source)
+        } ?: return false
+        ui = DrawUi.Empty(reason)
+        return true
     }
 
     /** Tops a short extra session up with weak, already-drawn kanji of other stacks; they keep being scheduled in their own stack. */
@@ -176,7 +235,7 @@ class DrawViewModel(private val app: Services, private val recognizer: InkRecogn
         val kanji = session.take()
         ui = if (kanji == null) {
             finishSession()
-            if (session.answered == 0) DrawUi.Empty("Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings.") else DrawUi.Done(session.answered, session.correct)
+            if (session.answered == 0) DrawUi.Empty(DrawEmptyReason.NothingDue) else DrawUi.Done(session.answered, session.correct)
         } else {
             val trace = DrawGate.shouldTrace(app.settings.traceNew.value, states[kanji], traced, kanji)
             if (trace) traced += kanji

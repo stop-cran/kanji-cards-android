@@ -150,7 +150,7 @@ class WordPictureViewModelTest {
             vm.ensureStarted(direction, extra = false)
             awaitQuestionOrEnd(vm)
             assertTrue(vm.ui is WordQuizUi.Empty)
-            assertNotNull(vm.pictureNotice)
+            assertNotNull(vm.pictureNoticeId)
             vm.pick("word-0")
             vm.next()
             db.withTransaction {}

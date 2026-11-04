@@ -15,6 +15,8 @@ import io.github.stopcran.kanji.core.grammarFixture
 import io.github.stopcran.kanji.data.AppDatabase
 import io.github.stopcran.kanji.data.GRAMMAR_STACK
 import io.github.stopcran.kanji.data.GrammarEntity
+import io.github.stopcran.kanji.data.GrammarPreviewNotice
+import io.github.stopcran.kanji.data.GrammarPreviewNoticeId
 import io.github.stopcran.kanji.data.GrammarResponseEntity
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.ReviewStateEntity
@@ -195,7 +197,7 @@ class GrammarTargetedViewModelTest {
         vm.startTargeted(true, old)
         awaitLoaded(vm)
         val fresh = vm.ui as GrammarUi.Preview
-        assertTrue(fresh.message!!.contains("changed"))
+        assertEquals(listOf(GrammarPreviewNotice(GrammarPreviewNoticeId.PreviewChanged)), fresh.notices)
         assertEquals(6, fresh.preview.members.size)
         assertTrue(fresh.preview.members.all { it.outOfScope && it.missingPrerequisites == listOf("foundation") })
         assertTrue(sessions().isEmpty())
@@ -235,9 +237,9 @@ class GrammarTargetedViewModelTest {
         assertEquals(question, vm.ui)
         assertNull(sessions().single().endReason)
         assertTrue(services.settings.setSource("https://github.com/$originalSource", "other-branch"))
-        assertTrue((targeted(target).ui as GrammarUi.Empty).message.contains("branch"))
+        assertTrue((targeted(target).ui as GrammarUi.Empty).diagnostic.orEmpty().contains("branch"))
         assertTrue(services.settings.setSource("https://github.com/example/fork", "main"))
-        assertTrue((targeted(target).ui as GrammarUi.Empty).message.contains("source"))
+        assertTrue((targeted(target).ui as GrammarUi.Empty).diagnostic.orEmpty().contains("source"))
         repeat(4) {
             assertEquals("Synthetic meaning.", vm.currentExercise!!.translation)
             answerCorrect(vm)
@@ -251,7 +253,13 @@ class GrammarTargetedViewModelTest {
     fun targetedRetriesKeepSuccessfulConfirmationsUnrecorded() {
         val target = installTopics(grammarFixture("alpha", examples = 3))
         val vm = targeted(target, interrupted = true)
-        assertTrue((vm.ui as GrammarUi.Preview).message!!.contains("interrupted"))
+        assertEquals(
+            listOf(
+                GrammarPreviewNotice(GrammarPreviewNoticeId.Interrupted),
+                GrammarPreviewNotice(GrammarPreviewNoticeId.OverrideConsentExpired),
+            ),
+            (vm.ui as GrammarUi.Preview).notices,
+        )
         assertTrue(sessions().isEmpty())
         vm.startTargeted(false, vm.ui as GrammarUi.Preview)
         awaitLoaded(vm)
@@ -264,6 +272,27 @@ class GrammarTargetedViewModelTest {
         assertEquals(7, details().size)
         assertEquals(2, states().single { it.kanji == first.exercise.id }.reps)
         assertTrue(runBlocking { db.reviews().grammarReadiness(sourceId, GrammarReadiness.POLICY_VERSION).isEmpty() })
+    }
+
+    @Test
+    fun emptyResultingQueueShowsTypedNoticeWithoutStartingASession() {
+        val alpha = grammarFixture("alpha", examples = 2).let { set ->
+            set.copy(exercises = set.exercises.map { it.copy(jlpt = 4) })
+        }
+        val target = installTopics(alpha)
+        services.settings.setGrammarNewScope(sourceId, GrammarScope.N5)
+        val vm = targeted(target)
+        val preview = vm.ui as GrammarUi.Preview
+        assertTrue(preview.preview.members.all { it.outOfScope })
+
+        vm.startTargeted(override = false, origin = preview)
+        awaitLoaded(vm)
+
+        assertEquals(
+            listOf(GrammarPreviewNotice(GrammarPreviewNoticeId.QueueEmpty)),
+            (vm.ui as GrammarUi.Preview).notices,
+        )
+        assertTrue(sessions().isEmpty())
     }
 
     @Test
@@ -299,7 +328,7 @@ class GrammarTargetedViewModelTest {
         val fresh = vm.ui as GrammarUi.Preview
         assertEquals(6, fresh.preview.members.size)
         assertEquals(6, vm.practiceDetails!!.groups.getValue("alpha").progress.total)
-        assertTrue(fresh.message!!.contains("changed"))
+        assertEquals(listOf(GrammarPreviewNotice(GrammarPreviewNoticeId.PreviewChanged)), fresh.notices)
         vm.startTargeted(true, old)
         assertEquals(fresh, vm.ui)
         assertTrue(sessions().isEmpty())

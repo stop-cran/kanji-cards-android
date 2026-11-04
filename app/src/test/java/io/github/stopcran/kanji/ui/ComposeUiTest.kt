@@ -1,6 +1,8 @@
 package io.github.stopcran.kanji.ui
 
 import android.app.Application
+import io.github.stopcran.kanji.R
+import androidx.test.core.app.ApplicationProvider
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredWidth
@@ -45,6 +47,8 @@ import io.github.stopcran.kanji.core.words.WordStacks
 import io.github.stopcran.kanji.data.WordEntity
 import io.github.stopcran.kanji.data.ListeningOverview
 import io.github.stopcran.kanji.data.ListeningEncounterEntity
+import io.github.stopcran.kanji.data.GrammarPreviewNotice
+import io.github.stopcran.kanji.data.GrammarPreviewNoticeId
 import io.github.stopcran.kanji.core.listening.ListeningAllowance
 import io.github.stopcran.kanji.core.listening.AssessmentOutcome
 import io.github.stopcran.kanji.core.listening.AssessmentResponse
@@ -99,6 +103,7 @@ class ComposeUiTest {
 
     @Test
     fun diagnosticResultsKeepScoredOrdinalsAndOriginalFeedbackIndexes() {
+        val context = ApplicationProvider.getApplicationContext<Application>()
         val outcomes = listOf(AssessmentOutcome.Correct, AssessmentOutcome.Incorrect,
             AssessmentOutcome.Unanswered, AssessmentOutcome.NotAssessed)
         val responses = ListeningTaskType.entries.flatMapIndexed { index, type ->
@@ -114,19 +119,37 @@ class ComposeUiTest {
         rule.setContent { MaterialTheme { Page("Results") { ListeningAssessmentResults(result.value) { opened = it } } } }
         rule.onNodeWithText("1 / 3 correct").assertIsDisplayed()
         ListeningTaskType.entries.forEachIndexed { index, type ->
-            val outcome = if (outcomes[index] == AssessmentOutcome.NotAssessed) "Not assessed" else outcomes[index].name
-            rule.onNodeWithText("Worked example (not scored) - ${type.label}: Correct").performScrollTo().assertIsDisplayed()
-            rule.onNodeWithText("Scored item ${index + 1}/4 - ${type.label}: $outcome").performScrollTo().assertIsDisplayed()
+            val label = context.getString(type.labelResource())
+            val example = context.getString(R.string.listening_result_example_item)
+            val scored = context.getString(R.string.listening_result_scored_item, index + 1, 4)
+            val exampleResult = context.getString(
+                R.string.listening_result_item_type_outcome,
+                example, label, context.getString(R.string.listening_result_correct),
+            )
+            val outcomeResource = when (outcomes[index]) {
+                AssessmentOutcome.Correct -> R.string.listening_result_correct
+                AssessmentOutcome.NotAssessed -> R.string.listening_not_assessed
+                else -> R.string.listening_result_incorrect
+            }
+            val scoredResult = context.getString(
+                R.string.listening_result_item_type_outcome, scored, label, context.getString(outcomeResource),
+            )
+            rule.onNodeWithText(exampleResult).performScrollTo().assertIsDisplayed()
+            rule.onNodeWithText(scoredResult).performScrollTo().assertIsDisplayed()
             rule.onAllNodesWithText("Feedback and captured transcript")[index * 2 + 1].performScrollTo().performClick()
             rule.runOnIdle { assertEquals(index * 2 + 1, opened) }
         }
-        rule.onNodeWithText("${ListeningTaskType.entries.last().label}: 0 correct out of 0 assessed").performScrollTo().assertIsDisplayed()
+        val lastLabel = context.getString(ListeningTaskType.entries.last().labelResource())
+        rule.onNodeWithText(context.getString(R.string.listening_assessment_type_score, lastLabel, 0, 0))
+            .performScrollTo().assertIsDisplayed()
         rule.runOnIdle {
             result.value = result.value.copy(responses = responses.map { it.copy(outcome = AssessmentOutcome.NotAssessed, exposed = false) })
         }
         rule.onNodeWithText("0 / 0 correct").performScrollTo().assertIsDisplayed()
         ListeningTaskType.entries.forEach { type ->
-            rule.onNodeWithText("${type.label}: 0 correct out of 0 assessed").performScrollTo().assertIsDisplayed()
+            val label = context.getString(type.labelResource())
+            rule.onNodeWithText(context.getString(R.string.listening_assessment_type_score, label, 0, 0))
+                .performScrollTo().assertIsDisplayed()
         }
     }
 
@@ -216,14 +239,20 @@ class ComposeUiTest {
         rule.onNodeWithText("Start with these exceptions").performScrollTo().assertIsEnabled().performClick()
         rule.runOnIdle {
             assertEquals(true, approval)
-            state.value = GrammarUi.Preview(preview.copy(contentVersion = "v2"), "Review changed material.")
+            state.value = GrammarUi.Preview(
+                preview.copy(contentVersion = "v2"),
+                listOf(GrammarPreviewNotice(GrammarPreviewNoticeId.PreviewChanged)),
+            )
         }
+        rule.onNodeWithText("Content, scope or availability changed. Review this updated preview and approve any exceptions again.")
+            .assertExists()
         rule.onNodeWithText(consent).performScrollTo().assertIsOff()
         rule.onNodeWithText("Start").performScrollTo().assertIsNotEnabled()
     }
 
     @Test
     fun grammarGuidanceLeadsWithTheContrastAndKeepsFullRecommendationEvidenceOnDemand() {
+        val context = ApplicationProvider.getApplicationContext<Application>()
         val now = Instant.parse("2026-10-18T12:00:00Z")
         val source = grammarFixture("foundation", examples = 2).recommending("beta" to 3)
         val events = familiarEvents(source, now)
@@ -243,8 +272,10 @@ class ComposeUiTest {
         rule.onNodeWithText(focus.reason).performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("Group: beta. Recommendation priority: 3/3 (maximum, not sum).").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("From foundation (foundation), importance 3: Compare foundation with beta.").performScrollTo().assertIsDisplayed()
-        rule.onNodeWithText("Supported source facet a: 2 positive contexts, 1 typed, 24h span within 21 days.").performScrollTo().assertIsDisplayed()
-        rule.onNodeWithText("Supported source facet b: 2 positive contexts, 1 typed, 24h span within 21 days.").performScrollTo().assertIsDisplayed()
+        for (facet in listOf("a", "b")) {
+            rule.onNodeWithText(context.getString(R.string.grammar_supported_source_facet, facet, 2, 1, 24.0))
+                .performScrollTo().assertIsDisplayed()
+        }
         rule.onNodeWithText("Hide focus details").performScrollTo().performClick()
         rule.onNodeWithText(focus.reason).assertDoesNotExist()
         rule.onNodeWithText("Next focus: beta").performScrollTo().assertIsDisplayed()
@@ -253,6 +284,7 @@ class ComposeUiTest {
     @Test
     @Config(qualifiers = "notnight")
     fun grammarMistakesAndGiveUpHighlightBothCorrectChoicesWithExplicitMarkers() {
+        val context = ApplicationProvider.getApplicationContext<Application>()
         val exercise = grammarFixture().exercises.first().copy(
             additionalCorrectOptions = listOf(io.github.stopcran.kanji.core.content.GrammarOption("alt", "alternative", "Also fits.")),
         )
@@ -264,7 +296,10 @@ class ComposeUiTest {
             androidx.compose.foundation.layout.Column { GrammarOptionFeedback(answer.value) }
         }
         fun assertBothCorrect() {
-            for (text in listOf("✓ Correct: a — Rationale.", "✓ Correct: alternative — Also fits.")) {
+            for (text in listOf(
+                context.getString(R.string.grammar_correct_prefix, "a") + " — Rationale.",
+                context.getString(R.string.grammar_correct_prefix, "alternative") + " — Also fits.",
+            )) {
                 val node = rule.onNodeWithText(text).assertIsDisplayed()
                 val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
                 node.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
@@ -272,10 +307,10 @@ class ComposeUiTest {
             }
         }
         assertBothCorrect()
-        rule.onNodeWithText("✗ Your answer: b — Rationale.").assertIsDisplayed()
+        rule.onNodeWithText(context.getString(R.string.grammar_your_answer_prefix, "b") + " — Rationale.").assertIsDisplayed()
         rule.runOnIdle { answer.value = answer.value.copy(response = "") }
         assertBothCorrect()
-        rule.onNodeWithText("✗ Your answer: b — Rationale.").assertDoesNotExist()
+        rule.onNodeWithText(context.getString(R.string.grammar_your_answer_prefix, "b") + " — Rationale.").assertDoesNotExist()
         rule.onNodeWithText("b — Rationale.").assertIsDisplayed()
     }
 
@@ -289,9 +324,28 @@ class ComposeUiTest {
         rule.onNodeWithText("✓ wind").assertIsDisplayed()
         rule.onNodeWithText("✗ air").assertIsDisplayed()
         rule.onNodeWithText("spirit").assertIsDisplayed()
-        rule.onNodeWithContentDescription("Correct answer: wind").assertIsDisplayed()
-        rule.onNodeWithContentDescription("Your answer, wrong: air").assertIsDisplayed()
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        rule.onNodeWithContentDescription(context.getString(R.string.answer_correct_accessibility, "wind")).assertIsDisplayed()
+        rule.onNodeWithContentDescription(context.getString(R.string.answer_wrong_accessibility, "air")).assertIsDisplayed()
         rule.onNodeWithContentDescription("spirit").assertIsDisplayed()
+    }
+
+    @Test
+    fun sessionCounterExplainsQueuedRepeatsOnDemand() {
+        rule.setContent {
+            MaterialTheme {
+                SessionRemaining(3)
+            }
+        }
+        rule.onNodeWithText("Questions left: 3").assertIsDisplayed()
+        rule.onNodeWithText("This count includes queued repeats.", substring = true).assertDoesNotExist()
+        rule.onNodeWithContentDescription("Why can questions repeat?").performClick()
+        rule.onNodeWithText("About questions left").assertIsDisplayed()
+        rule.onNodeWithText(
+            "This count includes queued repeats. A missed question may return after other questions when available, so the count can stay the same after you answer.",
+        ).assertIsDisplayed()
+        rule.onNodeWithText("Close").performClick()
+        rule.onNodeWithText("About questions left").assertDoesNotExist()
     }
 
     @Test

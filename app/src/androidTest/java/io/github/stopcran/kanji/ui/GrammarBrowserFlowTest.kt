@@ -91,7 +91,7 @@ class GrammarBrowserFlowTest {
         }
         fun awaitQuestion() {
             rule.waitUntil(10_000) { active.value?.second?.ui.let { it is GrammarUi.Choose || it is GrammarUi.Type } }
-            rule.onNodeWithText("Attempts left:", substring = true).performScrollTo().assertIsDisplayed()
+            rule.onNodeWithText("Questions left:", substring = true).performScrollTo().assertIsDisplayed()
         }
         fun returnHome() {
             repeat(2) {
@@ -116,7 +116,7 @@ class GrammarBrowserFlowTest {
                 LaunchedEffect(preferences, budget, active.value) {
                     if (active.value == null) {
                         val study = db.grammarStudy(settings, source, Instant.now())
-                        home.value = GrammarHome(source, study.preferences, study.sets, study.mode, study.focus, study.notice)
+                        home.value = GrammarHome(source, study.preferences, study.sets, study.mode, study.focus, study.learnerMessages)
                     }
                 }
                 KanjiTheme {
@@ -240,7 +240,7 @@ class GrammarBrowserFlowTest {
             val first = route.value
             startRestricted()
             rule.waitUntil(10_000) { vm.value.ui is GrammarUi.Choose }
-            rule.onNodeWithText("Attempts left: 4").assertIsDisplayed()
+            rule.onNodeWithText("Questions left: 4").assertIsDisplayed()
             rule.onNodeWithContentDescription("Back").performClick()
             awaitPreview(vm.value)
             assertNotEquals(first, route.value)

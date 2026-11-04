@@ -31,7 +31,7 @@ class GrammarSettingsTest {
             .commit()
         val before = prefs.all.toMap()
         val settings = Settings(context)
-        assertEquals(before, settings.snapshot())
+        assertEquals(before + ("appLanguage" to "system"), settings.snapshot())
         assertEquals(GRAMMAR_LEVEL_EPOCH, settings.grammarPreferences.value[source.id]?.parserEpoch)
         assertEquals(sha, settings.sync.syncedCommit(source))
         assertNull(settings.sync.syncedCommit(source.copy(branch = "main")))

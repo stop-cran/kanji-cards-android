@@ -26,9 +26,35 @@ data class FacetEvidence(
     val supported: Boolean,
 )
 
-data class GroupEvidence(val facets: Map<String, FacetEvidence>, val diagnostics: List<String>) {
+enum class GrammarEvidenceDiagnosticId {
+    ConflictingEventCopies,
+    FutureDatedEvent,
+    EventCannotBeMapped,
+    InconsistentGradeCorrectness,
+    FutureDatedHistory,
+}
+
+data class GrammarEvidenceDiagnostic(
+    val id: GrammarEvidenceDiagnosticId,
+    val eventId: Long? = null,
+)
+
+data class GroupEvidence(val facets: Map<String, FacetEvidence>, val diagnostics: List<GrammarEvidenceDiagnostic>) {
     val familiar: Boolean get() = facets.isNotEmpty() && facets.values.all { it.supported }
     val covered: Boolean get() = facets.isNotEmpty() && facets.values.all { it.startedKeys >= 2 }
+}
+
+fun GrammarEvidenceDiagnostic.englishMessage(): String = when (id) {
+    GrammarEvidenceDiagnosticId.ConflictingEventCopies ->
+        "Conflicting copies of event ${requireNotNull(eventId)}; evidence unknown."
+    GrammarEvidenceDiagnosticId.FutureDatedEvent ->
+        "Future-dated event ${requireNotNull(eventId)} excluded; check the device clock."
+    GrammarEvidenceDiagnosticId.EventCannotBeMapped ->
+        "Event ${requireNotNull(eventId)} cannot be mapped safely; evidence unknown."
+    GrammarEvidenceDiagnosticId.InconsistentGradeCorrectness ->
+        "Event ${requireNotNull(eventId)} has inconsistent grade/correctness; not positive evidence."
+    GrammarEvidenceDiagnosticId.FutureDatedHistory ->
+        "Future-dated history excluded; check the device clock."
 }
 
 object GrammarEvidence {
@@ -41,15 +67,19 @@ object GrammarEvidence {
         events: List<GrammarEvent>,
         now: Instant,
     ): GroupEvidence {
-        val diagnostics = mutableListOf<String>()
+        val diagnostics = mutableListOf<GrammarEvidenceDiagnostic>()
         val members = group.members.associateBy { it.exerciseId }
         val matching = events.filter { it.exerciseId in members }.groupBy { it.id }.values.mapNotNull { duplicates ->
             if (duplicates.distinct().size == 1) duplicates.first() else {
-                diagnostics += "Conflicting copies of event ${duplicates.first().id}; evidence unknown."
+                diagnostics += GrammarEvidenceDiagnostic(
+                    GrammarEvidenceDiagnosticId.ConflictingEventCopies, duplicates.first().id,
+                )
                 null
             }
         }.filter { event ->
-            validEvent(event, exercises.getValue(event.exerciseId), now, diagnostics)
+            val validation = validateEvent(event, exercises.getValue(event.exerciseId), now)
+            validation.diagnostic?.let(diagnostics::add)
+            validation.valid
         }
         val facets = group.facets.associate { facet ->
             val own = group.members.filter { it.facetId == facet.id }
@@ -70,21 +100,31 @@ object GrammarEvidence {
     }
 
     internal fun validEvent(event: GrammarEvent, exercise: GrammarExercise, now: Instant, diagnostics: MutableList<String>): Boolean {
+        val validation = validateEvent(event, exercise, now)
+        validation.diagnostic?.let { diagnostics += it.englishMessage() }
+        return validation.valid
+    }
+
+    private data class EventValidation(val valid: Boolean, val diagnostic: GrammarEvidenceDiagnostic? = null)
+
+    private fun validateEvent(event: GrammarEvent, exercise: GrammarExercise, now: Instant): EventValidation {
         if (event.atMs > now.toEpochMilli()) {
-            diagnostics += "Future-dated event ${event.id} excluded; check the device clock."
-            return false
+            return EventValidation(
+                false, GrammarEvidenceDiagnostic(GrammarEvidenceDiagnosticId.FutureDatedEvent, event.id),
+            )
         }
-        if (event.atMs < now.minus(WINDOW).toEpochMilli()) return false
+        if (event.atMs < now.minus(WINDOW).toEpochMilli()) return EventValidation(false)
         val mapped = event.identityMatches && event.constructionId == exercise.target && event.relationshipId == exercise.relationship
         val validShape = event.grade in 1..4 && event.correct != null && event.promptType in listOf("choose", "type")
         if (!mapped || !validShape) {
-            diagnostics += "Event ${event.id} cannot be mapped safely; evidence unknown."
-            return false
+            return EventValidation(
+                false, GrammarEvidenceDiagnostic(GrammarEvidenceDiagnosticId.EventCannotBeMapped, event.id),
+            )
         }
-        if (event.correct != (event.grade > 1)) {
-            diagnostics += "Event ${event.id} has inconsistent grade/correctness; not positive evidence."
-        }
-        return true
+        val diagnostic = if (event.correct != (event.grade > 1)) {
+            GrammarEvidenceDiagnostic(GrammarEvidenceDiagnosticId.InconsistentGradeCorrectness, event.id)
+        } else null
+        return EventValidation(true, diagnostic)
     }
 }
 

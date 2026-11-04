@@ -22,6 +22,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -39,17 +41,40 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import java.util.Locale
+
+@Composable
+internal fun listeningCooldownLocalizedText(until: java.time.Instant): String {
+    val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
+    val formatted = listeningCooldownText(until, locale = locale).removePrefix("Practice only until ")
+    return stringResource(R.string.listening_cooldown_until, formatted)
+}
+
+@Composable
+internal fun CapturedListeningLanguageNotice(language: String?) {
+    val captured = language ?: return
+    val current = if (LocalConfiguration.current.locales[0]?.language == "ru") "ru" else "en"
+    if (captured == current) return
+    val context = LocalContext.current
+    val capturedName = context.getString(if (captured == "ru") R.string.language_russian_name else R.string.language_english_name)
+    val currentName = context.getString(if (current == "ru") R.string.language_russian_name else R.string.language_english_name)
+    Text(
+        stringResource(R.string.listening_capture_language_mismatch, capturedName, currentName),
+        color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodySmall,
+    )
+}
 
 @Composable
 internal fun ListeningPassageEvidence(turns: List<ListeningTurn>, references: List<String>) {
     references.distinct().forEach { id ->
         val turn = turns.find { it.id == id }
-        Text("Evidence: $id", style = MaterialTheme.typography.bodySmall)
+        Text(stringResource(R.string.listening_evidence_reference, id), style = MaterialTheme.typography.bodySmall)
         if (turn != null) {
             Text(turn.text)
             Text(turn.translation, style = MaterialTheme.typography.bodySmall)
         } else {
-            Text("This transcript reference is unavailable.", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.listening_evidence_unavailable_reference), style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -113,7 +138,7 @@ internal fun ListeningStartButton(data: ListeningOverview, busy: Boolean, onStar
         Text(stringResource(R.string.listening_extra_practice), style = MaterialTheme.typography.bodySmall)
     } else {
         Button(onClick = { next?.let { onStart(it, false) } }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
-            Text("Start listening")
+            Text(stringResource(R.string.listening_start))
         }
     }
 }
@@ -156,42 +181,50 @@ internal fun ListeningEncounterView(vm: ListeningViewModel, onBack: () -> Unit, 
     }
     val finished = row?.kind == "study" || row?.reviewLogId != null
     val canFinish = finished && row?.closedAtMs == null && passage != null && attempt != null
-    key(row?.id, attempt?.phase) { Page(passage?.title ?: "Listening", ::leave,
+    key(row?.id, attempt?.phase) { Page(passage?.title ?: stringResource(R.string.listening_passage_title), ::leave,
         footer = if (canFinish) { {
-            Button(onClick = { vm.close(false, onBack) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) { Text("Done") }
+            Button(onClick = { vm.close(false, onBack) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.listening_done))
+            }
         } } else null,
     ) {
+        CapturedListeningLanguageNotice(vm.capturedLanguage)
         if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         vm.error?.let {
-            Text(it, color = MaterialTheme.colorScheme.error)
-            Text("No failure is graded for a playback or storage error. The encounter remains resumable.")
-            Button(onClick = vm::retry, enabled = !vm.busy) { Text("Retry") }
+            Text(stringResource(R.string.listening_task_error_generic), color = MaterialTheme.colorScheme.error)
+            Text(stringResource(R.string.listening_no_failure_playback_error))
+            Button(onClick = vm::retry, enabled = !vm.busy) { Text(stringResource(R.string.listening_retry)) }
         }
         if (row == null || passage == null || attempt == null) {
-            if (vm.error == null) Text("Loading the captured recording...")
+            if (vm.error == null) Text(stringResource(R.string.listening_loading_captured_recording))
         } else if (row.closedAtMs != null) {
-            Text("This encounter is complete.")
-            Button(onClick = onBack) { Text("Back") }
+            Text(stringResource(R.string.listening_this_encounter_complete))
+            Button(onClick = onBack) { Text(stringResource(R.string.listening_back)) }
         } else {
             val study = row.kind == "study"
             val feedback = study || row.reviewLogId != null
             val ready = !vm.busy && vm.error == null
-            Text("${if (study) "Unscored study" else "N5 listening"} - ${row.sourceId}", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.listening_legacy_source_detail,
+                stringResource(if (study) R.string.listening_unscored_study else R.string.listening_n5_listening),
+                row.sourceId), style = MaterialTheme.typography.bodySmall)
             vm.picture?.let { SceneBitmap(it, passage.topic) }
             val audio = requireNotNull(passage.audio)
-            Text("${vm.positionMs / 1_000}s / ${audio.durationMs / 1_000}s")
+            Text(stringResource(R.string.listening_seconds_progress, vm.positionMs / 1_000, audio.durationMs / 1_000))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (vm.playing) Button(onClick = { vm.pause() }) { Text("Pause") }
+                if (vm.playing) Button(onClick = { vm.pause() }) { Text(stringResource(R.string.listening_pause)) }
                 else Button(onClick = { vm.play(restart = vm.positionMs >= audio.durationMs) }, enabled = ready) {
-                    Text(if (vm.positionMs >= audio.durationMs) "Replay" else if (vm.positionMs > 0) "Resume audio" else "Play")
+                    Text(stringResource(if (vm.positionMs >= audio.durationMs) R.string.listening_replay else
+                        if (vm.positionMs > 0) R.string.listening_resume_audio else R.string.listening_play))
                 }
-                OutlinedButton(onClick = { vm.play(restart = true) }, enabled = ready && !vm.playing && attempt.starts > 0) { Text("From beginning") }
+                OutlinedButton(onClick = { vm.play(restart = true) }, enabled = ready && !vm.playing && attempt.starts > 0) {
+                    Text(stringResource(R.string.listening_from_beginning))
+                }
             }
             OutlinedButton(onClick = { vm.play(restart = vm.positionMs >= audio.durationMs, slower = true) },
-                enabled = ready && !vm.playing) { Text("Play more slowly (help)") }
+                enabled = ready && !vm.playing) { Text(stringResource(R.string.listening_play_slow_help)) }
             if (!feedback) {
-                Text("The recording already uses a mild N5 pace. A third full start or extra slowing counts as help.")
-                if (attempt.assistance.isNotEmpty()) Text("Help used: ${attempt.assistance.joinToString()}")
+                Text(stringResource(R.string.listening_n5_pace_help))
+                if (attempt.assistance.isNotEmpty()) Text(stringResource(R.string.listening_help_used, listeningAssistanceList(attempt.assistance)))
                 if (attempt.phase == "questions") {
                     passage.questions.forEach { question ->
                         Text(question.prompt, style = MaterialTheme.typography.titleMedium)
@@ -203,19 +236,24 @@ internal fun ListeningEncounterView(vm: ListeningViewModel, onBack: () -> Unit, 
                         }
                     }
                     Button(onClick = { vm.submit() }, enabled = ready && attempt.answers.size == 3,
-                        modifier = Modifier.fillMaxWidth()) { Text("Check all answers") }
+                        modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.listening_check_all_answers)) }
                     OutlinedButton(onClick = { vm.submit(guessed = true) }, enabled = ready && attempt.answers.size == 3,
-                        modifier = Modifier.fillMaxWidth()) { Text("Check - I guessed") }
-                } else Text("Questions appear after the first complete playback. Pausing or leaving preserves this encounter.")
-                TextButton(onClick = { vm.submit(giveUp = true) }, enabled = ready && row.exposedAtMs != null) { Text("I cannot follow this (Again)") }
+                        modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.listening_check_guessed)) }
+                } else Text(stringResource(R.string.listening_questions_after_playback))
+                TextButton(onClick = { vm.submit(giveUp = true) }, enabled = ready && row.exposedAtMs != null) {
+                    Text(stringResource(R.string.listening_cannot_follow))
+                }
             } else {
                 vm.response?.let { result ->
-                    val percent = (requireNotNull(result.correct) * 100.0 / 3).roundToInt()
-                    Text("${result.correct}/3 ($percent%) - ${Grade.entries.single { it.value == result.grade }.name}",
+                    val correct = requireNotNull(result.correct)
+                    val percent = (correct * 100.0 / 3).roundToInt()
+                    val grade = Grade.entries.single { it.value == result.grade }.localizedLabel()
+                    Text(stringResource(R.string.listening_legacy_score, correct, percent, grade),
                         style = MaterialTheme.typography.headlineSmall)
-                    Text(if (row.firstEncounter) "First encounter in this source" else "Previously encountered passage")
-                    Text("This measures this passage, not your ability to understand unseen speech.", style = MaterialTheme.typography.bodySmall)
-                    if (result.assistance.isNotEmpty()) Text("Help used: ${result.assistance.joinToString()}")
+                    Text(stringResource(if (row.firstEncounter) R.string.listening_first_encounter_source
+                        else R.string.listening_previously_encountered_passage))
+                    Text(stringResource(R.string.listening_measures_passage), style = MaterialTheme.typography.bodySmall)
+                    if (result.assistance.isNotEmpty()) Text(stringResource(R.string.listening_help_used, listeningAssistanceList(result.assistance)))
                 }
                 passage.questions.forEach { question ->
                     HorizontalDivider()
@@ -224,45 +262,54 @@ internal fun ListeningEncounterView(vm: ListeningViewModel, onBack: () -> Unit, 
                         val option = question.options.single { it.id == id }
                         val correct = id == question.answer
                         val selected = vm.response?.answers?.get(question.id) == id
-                        Text("${if (correct) "Correct: " else if (selected) "Your answer: " else ""}${option.label}",
+                        val label = when {
+                            correct -> stringResource(R.string.listening_correct_prefix, option.label)
+                            selected -> stringResource(R.string.listening_your_answer_prefix, option.label)
+                            else -> option.label
+                        }
+                        Text(label,
                             color = if (selected && !correct) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
                         Text(option.rationale, style = MaterialTheme.typography.bodySmall)
                     }
                     Text(question.explanation)
                     ListeningPassageEvidence(passage.turns, question.evidence)
                 }
-                Text("Transcript and translation", style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.listening_transcript_translation), style = MaterialTheme.typography.titleLarge)
                 passage.turns.forEach { turn ->
                     Text("${turn.speaker}: ${turn.text}", style = MaterialTheme.typography.titleMedium)
                     Text(turn.translation)
-                    TextButton(onClick = { vm.play(turnId = turn.id) }, enabled = ready && !vm.playing) { Text("Replay ${turn.id}") }
+                    TextButton(onClick = { vm.play(turnId = turn.id) }, enabled = ready && !vm.playing) {
+                        Text(stringResource(R.string.listening_replay_turn, turn.id))
+                    }
                 }
-                if (passage.vocabulary.isNotEmpty()) Text("Vocabulary", style = MaterialTheme.typography.titleLarge)
+                if (passage.vocabulary.isNotEmpty()) Text(stringResource(R.string.listening_vocabulary), style = MaterialTheme.typography.titleLarge)
                 passage.vocabulary.forEach { word ->
                     TextButton(onClick = { vocabulary = word.surface }, modifier = Modifier.fillMaxWidth()) {
                         Text("${word.surface} - ${word.reading}")
                     }
                 }
             }
-            if (row.reviewLogId == null) TextButton(onClick = { discard = true }, enabled = !vm.busy) { Text("Discard encounter") }
+            if (row.reviewLogId == null) TextButton(onClick = { discard = true }, enabled = !vm.busy) {
+                Text(stringResource(R.string.listening_discard_encounter))
+            }
         }
     } }
     if (discard) AlertDialog(
-        onDismissRequest = { discard = false }, title = { Text("Discard this encounter?") },
-        text = { Text("No failure will be graded. If you heard or studied it, a fresh scored encounter waits 24 hours after your last exposure.") },
-        confirmButton = { TextButton(onClick = { discard = false; vm.close(true, onBack) }) { Text("Discard") } },
-        dismissButton = { TextButton(onClick = { discard = false }) { Text("Keep") } },
+        onDismissRequest = { discard = false }, title = { Text(stringResource(R.string.listening_discard_encounter_title)) },
+        text = { Text(stringResource(R.string.listening_discard_encounter_message)) },
+        confirmButton = { TextButton(onClick = { discard = false; vm.close(true, onBack) }) { Text(stringResource(R.string.listening_discard)) } },
+        dismissButton = { TextButton(onClick = { discard = false }) { Text(stringResource(R.string.listening_keep)) } },
     )
     passage?.vocabulary?.find { it.surface == vocabulary }?.let { word ->
         AlertDialog(onDismissRequest = { vocabulary = null }, title = { Text(word.surface) },
             text = { Column(Modifier.heightIn(max = 350.dp).verticalScroll(rememberScrollState())) {
                 Text(word.reading); Text(word.gloss)
             } },
-            confirmButton = { TextButton(onClick = { vocabulary = null }) { Text("Close") } },
+            confirmButton = { TextButton(onClick = { vocabulary = null }) { Text(stringResource(R.string.listening_close)) } },
             dismissButton = {
                 if (word.word in attempt?.vocabularyBodies.orEmpty()) TextButton(onClick = {
                     vm.pause(); article = word.word; vocabulary = null
-                }) { Text("Read word article") }
+                }) { Text(stringResource(R.string.listening_read_word_article)) }
             })
     }
 }

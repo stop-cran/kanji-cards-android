@@ -37,11 +37,14 @@ internal fun WordModeRow(
 ) {
     val readiness = data.wordReadiness[direction]
     val state = data.mode(mode)
-    val explained = if (state is ModeState.Locked && direction.gated) {
-        ModeState.Locked(stringResource(R.string.word_unlock_practise, direction.gate.label))
-    } else state
+    val reason = if (state is ModeState.Locked && direction.gated) {
+        val gateLabel = if (direction.gate == WordDirection.JpToEn) {
+            R.string.mode_japanese_english
+        } else R.string.mode_english_japanese
+        stringResource(R.string.word_unlock_practise, stringResource(gateLabel))
+    } else null
     val detail = readiness?.takeIf { direction.gated }?.let {
         stringResource(R.string.word_unlock_count, it.unlocked, it.candidates)
     }
-    ModeRow(title, explained, detail, onStart)
+    ModeRow(title, state, supportingText = detail, localizedReason = reason, onStart = onStart)
 }

@@ -5,9 +5,14 @@
 > tuning from the drawing log (after the N4 set), writing-pattern variants ([issue #1](https://github.com/stop-cran/kanji-cards-android/issues/1)),
 > and the release work in milestone 9 (see [RELEASE.md](RELEASE.md)). The sections below are the original plan and are kept for context.
 
-EN/RU localization has a separate [checkpoint implementation plan](https://github.com/stop-cran/learning-japanese-ru/blob/main/docs/IMPLEMENTATION-PLAN.md):
-complete app/instruction localization and a bounded real-content pilot, early integration/correction, then representative
-structured/media integration before expansion. It is planned work, not included in the completed original milestones above.
+EN/RU localization has a separate [checkpoint implementation plan](https://github.com/stop-cran/learning-japanese-ru/blob/ru-pilot-a-integration/docs/IMPLEMENTATION-PLAN.md).
+The Android implementation now includes locale selection, EN/RU app resources, repository-language validation, and staged source
+transitions. The reviewed `ru-pilot-a` package is a bounded integration candidate, not the ordinary RU default or broad release.
+Pilot A's bounded C5 integration gate is accepted through Native15, including real pending-validation interruption:
+the signed `a7a9e6b3…` build preserves every SQLite table and all10states/13logs/6sessions, restores the official
+RU pilot, and removes the app-only fault controls exactly. Prior native observations retain their exact APK scopes.
+Testing branches are `ru-pilot-a-integration` for app/RU documentation and `en-language-contract-pilot` for EN tooling.
+Structured/media Pilot B (C6), release acceptance (C7), ordinary RU activation and broad translation remain separate.
 
 ## 0. Tooling to install on this PC
 

@@ -13,10 +13,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.listening.*
 
 @Composable
@@ -61,17 +63,18 @@ internal fun ListeningTaskEncounterView(vm: ListeningTaskViewModel, onBack: () -
         return
     }
     pages.SaveableStateProvider("task:${row?.id}:${state?.phase}") {
-        Page(task?.title ?: "Japanese listening task", leave, scrollable = false, maxWidth = 1100.dp) {
+        Page(task?.title ?: stringResource(R.string.listening_task_default_title), leave, scrollable = false, maxWidth = 1100.dp) {
+            CapturedListeningLanguageNotice(vm.capturedLanguage)
             if (vm.busy && !vm.playing) LinearProgressIndicator(Modifier.fillMaxWidth())
             when {
                 row?.closedAtMs != null -> {
-                    Text("This encounter is complete.")
-                    Button(onClick = onBack) { Text("Back to Listening") }
+                    Text(stringResource(R.string.listening_this_task_complete))
+                    Button(onClick = onBack) { Text(stringResource(R.string.listening_back_to_listening)) }
                 }
                 vm.error != null -> ListeningTaskUnavailable(vm) { discard = true }
                 row == null || task == null || state == null || !vm.ready -> {
-                    Text("Loading the captured task...")
-                    if (row != null) TextButton(onClick = { discard = true }, enabled = !vm.busy) { Text("Discard encounter") }
+                    Text(stringResource(R.string.listening_loading_captured_task))
+                    if (row != null) TextButton(onClick = { discard = true }, enabled = !vm.busy) { Text(stringResource(R.string.listening_discard_encounter)) }
                 }
                 else -> {
                     val feedback = row.kind == "study" || row.reviewLogId != null
@@ -79,41 +82,52 @@ internal fun ListeningTaskEncounterView(vm: ListeningTaskViewModel, onBack: () -
                     ListeningTaskLayout(vm.picture.takeUnless { state.describedStudy }, scroll, pictureView = { modifier ->
                         vm.picture?.let { ListeningTaskPicture(vm, it, task.visual?.role == "required", modifier) }
                     }) {
-                        Text(task.taskType.label, style = MaterialTheme.typography.titleMedium)
-                        Text(task.taskType.objective)
-                        Text("N${task.jlpt} - ${if (row.kind == "study") "Unscored study" else "Guided practice"} - ${row.sourceId} (${row.branch})",
+                        Text(task.taskType.label(), style = MaterialTheme.typography.titleMedium)
+                        Text(task.taskType.objective())
+                        Text(stringResource(
+                            R.string.listening_task_study_status,
+                            task.jlpt,
+                            stringResource(if (row.kind == "study") R.string.listening_unscored_study else R.string.listening_guided_practice),
+                            row.sourceId,
+                            row.branch,
+                        ),
                             style = MaterialTheme.typography.bodySmall)
                         if (state.describedStudy) {
-                            Text("Described study is unscored; it is not an equivalent scored nonvisual presentation.")
+                            Text(stringResource(R.string.listening_described_study_not_equivalent))
                             Text(requireNotNull(task.visual).description, Modifier.listeningEvidence(vm))
                         } else if (task.visual?.role == "required" && !feedback) {
-                            Text("This task requires its picture to score. For nonvisual study, " +
-                                "discard without a grade and choose Described study in Listening.")
+                            Text(stringResource(R.string.listening_required_picture_score))
                         }
                         if (!feedback) {
                             ListeningTaskControls(vm)
                             ListeningTaskChoices(vm, textHelp)
                             ListeningTaskAnswerActions(vm)
                             if (textHelp) ListeningTaskTranscript(vm)
-                            else OutlinedButton(onClick = vm::help, enabled = !vm.busy) { Text("Show transcript and translation (help)") }
+                            else OutlinedButton(onClick = vm::help, enabled = !vm.busy) {
+                                Text(stringResource(R.string.listening_help_transcript_translation))
+                            }
                         } else {
                             ListeningTaskFeedback(vm) { word -> vm.pause(); article = word }
                             ListeningTaskControls(vm)
                         }
-                        if (row.reviewLogId == null) TextButton(onClick = { discard = true }, enabled = !vm.busy) { Text("Discard encounter") }
+                        if (row.reviewLogId == null) TextButton(onClick = { discard = true }, enabled = !vm.busy) {
+                            Text(stringResource(R.string.listening_discard_encounter))
+                        }
                     }
                     if (feedback) {
-                        Button(onClick = { vm.close(false, onBack) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) { Text("Done") }
+                        Button(onClick = { vm.close(false, onBack) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(R.string.listening_done))
+                        }
                     }
                 }
             }
         }
     }
     if (discard) AlertDialog(
-        onDismissRequest = { discard = false }, title = { Text("Discard this encounter?") },
-        text = { Text("No failure is graded. Actual exposure remains recorded; a new scored encounter waits 24 hours. Unscored study remains available.") },
-        confirmButton = { TextButton(onClick = { discard = false; vm.close(true, onBack) }) { Text("Discard") } },
-        dismissButton = { TextButton(onClick = { discard = false }) { Text("Keep") } },
+        onDismissRequest = { discard = false }, title = { Text(stringResource(R.string.listening_discard_this_encounter)) },
+        text = { Text(stringResource(R.string.listening_discard_no_failure)) },
+        confirmButton = { TextButton(onClick = { discard = false; vm.close(true, onBack) }) { Text(stringResource(R.string.listening_discard)) } },
+        dismissButton = { TextButton(onClick = { discard = false }) { Text(stringResource(R.string.listening_keep)) } },
     )
 }
 
@@ -121,10 +135,12 @@ internal fun ListeningTaskEncounterView(vm: ListeningTaskViewModel, onBack: () -
 private fun ColumnScope.ListeningTaskUnavailable(vm: ListeningTaskViewModel, discard: () -> Unit) {
     Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(requireNotNull(vm.error), color = MaterialTheme.colorScheme.error)
-        Text("Technical unavailability is not a wrong answer. Retry the captured evidence or explicitly discard the attempt.")
-        OutlinedButton(onClick = vm::retry, enabled = !vm.busy) { Text("Retry captured evidence") }
-        if (vm.encounter != null) TextButton(onClick = discard, enabled = !vm.busy) { Text("Discard encounter") }
+        Text(stringResource(R.string.listening_task_error_generic), color = MaterialTheme.colorScheme.error)
+        Text(stringResource(R.string.listening_technical_unavailable))
+        OutlinedButton(onClick = vm::retry, enabled = !vm.busy) { Text(stringResource(R.string.listening_retry_captured)) }
+        if (vm.encounter != null) TextButton(onClick = discard, enabled = !vm.busy) {
+            Text(stringResource(R.string.listening_discard_encounter))
+        }
     }
 }
 
@@ -158,25 +174,34 @@ private fun ListeningTaskControls(vm: ListeningTaskViewModel) {
     val complete = task.stages.all { it.id in state.completedStages }
     val whole = complete && !state.wholeReplayInProgress && state.positionMs == 0L
     val enabled = !vm.busy && vm.error == null
-    Text("Stage ${state.stageIndex + 1}/${task.stages.size}: ${task.stages[state.stageIndex].label(task)}")
-    Text("${state.completedStages.size}/${task.stages.size} required stages complete", style = MaterialTheme.typography.bodySmall)
+    Text(stringResource(R.string.listening_stage_progress, state.stageIndex + 1, task.stages.size, task.stages[state.stageIndex].label(task)))
+    Text(stringResource(R.string.listening_stage_complete_count, state.completedStages.size, task.stages.size),
+        style = MaterialTheme.typography.bodySmall)
     if (state.stageIndex == 0) {
         task.stages.first().turns.forEach { id -> Text(task.turns.single { it.id == id }.text) }
     }
-    if (vm.playing) Button(onClick = { vm.pause() }) { Text("Pause") }
+    if (vm.playing) Button(onClick = { vm.pause() }) { Text(stringResource(R.string.listening_pause)) }
     else Button(onClick = { vm.play(wholeReplay = whole) }, enabled = enabled) {
-        Text(if (whole) "Replay whole task" else if (state.positionMs > 0) "Resume audio" else "Play remaining stages")
+        Text(stringResource(if (whole) R.string.listening_replay_whole_task else
+            if (state.positionMs > 0) R.string.listening_resume_audio else R.string.listening_play_stage))
     }
-    OutlinedButton(onClick = { vm.play(wholeReplay = whole, slower = true) }, enabled = enabled) { Text("Play more slowly (help)") }
+    OutlinedButton(onClick = { vm.play(wholeReplay = whole, slower = true) }, enabled = enabled) {
+        Text(stringResource(R.string.listening_play_slow_help))
+    }
     if (!complete && state.positionMs > 0) {
-        OutlinedButton(onClick = { vm.play(stage = state.stageIndex) }, enabled = enabled) { Text("Restart this stage (help)") }
+        OutlinedButton(onClick = { vm.play(stage = state.stageIndex) }, enabled = enabled) {
+            Text(stringResource(R.string.listening_restart_audio))
+        }
     }
     if (complete && !state.wholeReplayInProgress && state.positionMs == 0L) {
-        TextButton(onClick = { vm.play(stage = 0) }, enabled = enabled) { Text("Replay instructions") }
+        TextButton(onClick = { vm.play(stage = 0) }, enabled = enabled) {
+            Text(stringResource(R.string.listening_replay_instructions))
+        }
     }
-    Text("One complete whole replay is normal. Partial/targeted replay, further replay, slowing, text help or guessing limits a correct result to Hard.",
+    Text(stringResource(R.string.listening_playback_policy),
         style = MaterialTheme.typography.bodySmall)
-    (state.technicalProblem ?: state.pictureProblem)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+    state.technicalProblem?.let { Text(stringResource(R.string.listening_audio_technical_problem), color = MaterialTheme.colorScheme.error) }
+    state.pictureProblem?.let { Text(stringResource(R.string.listening_picture_technical_problem), color = MaterialTheme.colorScheme.error) }
 }
 
 @Composable
@@ -193,9 +218,9 @@ internal fun ListeningTaskChoices(
     task: ListeningTaskPackage, answer: String?, answerable: Boolean, reveal: Boolean,
     onAnswer: (String) -> Unit, evidence: Modifier,
 ) {
-    Text("Choices", style = MaterialTheme.typography.titleMedium)
+    Text(stringResource(R.string.listening_choices), style = MaterialTheme.typography.titleMedium)
     if (task.choiceMode == TaskChoiceMode.Audio && !reveal) {
-        Text("The three choices are spoken in number order. Choose a number after hearing all required stages.")
+        Text(stringResource(R.string.listening_audio_choice_order))
     }
     task.options.forEach { option ->
         val label = if (task.choiceMode == TaskChoiceMode.Text || reveal) "${option.number}. ${option.label}" else "${option.number}"
@@ -216,12 +241,19 @@ internal fun Modifier.listeningEvidence(vm: ListeningTaskViewModel): Modifier = 
 private fun ListeningTaskAnswerActions(vm: ListeningTaskViewModel) {
     val state = requireNotNull(vm.attempt)
     val available = !vm.busy && vm.error == null && state.technicalProblem == null && state.pictureProblem == null
-    if (state.assistance.isNotEmpty()) Text("Help used: ${state.assistance.joinToString()}")
+    if (state.assistance.isNotEmpty()) Text(stringResource(
+        R.string.listening_help_used,
+        listeningAssistanceList(state.assistance),
+    ))
     if (state.phase == "answer") {
-        Button(onClick = { vm.submit() }, enabled = available && state.answer != null, modifier = Modifier.fillMaxWidth()) { Text("Check answer") }
-        OutlinedButton(onClick = { vm.submit(guessed = true) }, enabled = available && state.answer != null) { Text("Check - I guessed") }
-    } else Text("Complete every required stage before choosing an answer.")
+        Button(onClick = { vm.submit() }, enabled = available && state.answer != null, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.check_answer))
+        }
+        OutlinedButton(onClick = { vm.submit(guessed = true) }, enabled = available && state.answer != null) {
+            Text(stringResource(R.string.check_guessed))
+        }
+    } else Text(stringResource(R.string.listening_complete_stages_before_answer))
     TextButton(onClick = { vm.submit(giveUp = true) }, enabled = available && vm.encounter?.exposedAtMs != null) {
-        Text("I cannot follow this (Again)")
+        Text(stringResource(R.string.listening_cannot_follow))
     }
 }

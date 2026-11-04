@@ -47,7 +47,7 @@ class DocumentUiTest {
                 image = SceneImageResult.Unavailable("Picture unavailable"))
         }
         rule.onNodeWithText("First sense").assertIsDisplayed()
-        rule.onNodeWithText("Picture unavailable").assertIsDisplayed()
+        rule.onNodeWithText(RuntimeEnvironment.getApplication().getString(R.string.picture_unavailable)).assertIsDisplayed()
         rule.onNodeWithText("Details").performClick()
         rule.runOnIdle { assertEquals("articles/details.md", opened) }
     }
@@ -101,7 +101,7 @@ class DocumentUiTest {
             repository.images.getValue("second/repo").complete(SceneImageResult.Unavailable("Obsolete picture"))
         }
         rule.onNodeWithText("Current body").assertIsDisplayed()
-        rule.onNodeWithText("Current picture").assertIsDisplayed()
+        rule.onNodeWithText(RuntimeEnvironment.getApplication().getString(R.string.picture_unavailable)).assertIsDisplayed()
         rule.onNodeWithText("Obsolete body").assertDoesNotExist()
         rule.onNodeWithText("Obsolete picture").assertDoesNotExist()
     }

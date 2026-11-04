@@ -76,6 +76,7 @@ data class GrammarFocusDecision(
     val reason: String,
     val resetReason: String? = null,
     val continuing: Boolean = false,
+    val newItemAllowanceExhausted: Boolean = false,
 ) {
     val current: FocusCandidate? get() = candidates.find { it.group.id == activation?.groupId }
 }
@@ -144,13 +145,21 @@ object GrammarFocus {
             val reason = if (selected.isEmpty()) {
                 if (input.budget <= 0) "No ordinary new-item allowance remains." else "Review this group, or change focus."
             } else "Continue ${continuing.group.label}."
-            return GrammarFocusDecision(candidates, active, selected, reason, continuing = true)
+            return GrammarFocusDecision(
+                candidates, active, selected, reason, continuing = true, newItemAllowanceExhausted = input.budget <= 0,
+            )
         }
         val candidate = automatic(input, candidates)
-            ?: return GrammarFocusDecision(candidates, null, emptyList(), "No eligible focus has new material.", resetReason)
+            ?: return GrammarFocusDecision(
+                candidates, null, emptyList(), "No eligible focus has new material.", resetReason,
+                newItemAllowanceExhausted = input.budget <= 0,
+            )
         val group = candidate.group
         val activation = GrammarActivation(group.id, FocusOrigin.Automatic, input.cursor.automaticOrdinal)
-        return GrammarFocusDecision(candidates, activation, select(input, group, activation), selectionReason(input, candidate), resetReason)
+        return GrammarFocusDecision(
+            candidates, activation, select(input, group, activation), selectionReason(input, candidate), resetReason,
+            newItemAllowanceExhausted = input.budget <= 0,
+        )
     }
 
     private fun continueFocus(

@@ -17,22 +17,43 @@ import java.util.UUID
 /** Route removal, unlike leaving composition for an article or rotation, ends a session. */
 class StudySessionRegistry {
     private val exits = mutableMapOf<String, () -> Unit>()
+    private val captured = mutableMapOf<String, String>()
 
     fun register(route: String, onExit: () -> Unit) {
         check(exits.putIfAbsent(route, onExit) == null) { "Study route is already registered" }
     }
 
+    fun markCaptured(route: String, sourceId: String) {
+        check(route in exits) { "Study route is not registered" }
+        captured[route] = sourceId
+    }
+
+    fun capturedSourceId(route: String): String? = captured[route]
+
+    fun hasCaptured(route: String): Boolean = route in captured
+
     fun leave(route: String) {
+        captured.remove(route)
         exits.remove(route)?.invoke()
     }
 }
 
 abstract class StudyViewModel(private val store: StudySessionStore) : ViewModel() {
+    private var registeredRoute: String? = null
+    private var registry: StudySessionRegistry? = null
     private var id: String? = null
     private var counts: () -> Pair<Int, Int> = { 0 to 0 }
     private var ended = false
     private var writeJob: Job? = null
     protected val reviewSessionId: String get() = checkNotNull(id) { "Study session has not started" }
+    protected fun registeredCapturedSourceId(): String? =
+        registeredRoute?.let { route -> registry?.capturedSourceId(route) }
+
+    fun attachSessionRegistration(route: String, sessionRegistry: StudySessionRegistry) {
+        check(registeredRoute == null && registry == null)
+        registeredRoute = route
+        registry = sessionRegistry
+    }
 
     protected suspend fun <T : Any> trackSession(
         session: QuizSession<T>,
@@ -49,6 +70,7 @@ abstract class StudyViewModel(private val store: StudySessionStore) : ViewModel(
         val start = persist { store.start(row) }
         start.join()
         check(!start.isCancelled) { "Could not persist study session" }
+        registeredRoute?.let { registry?.markCaptured(it, sourceId) }
         return session
     }
 

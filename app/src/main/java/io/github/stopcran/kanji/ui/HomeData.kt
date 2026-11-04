@@ -89,7 +89,11 @@ class HomeData(
     fun summary(vararg ms: HomeMode): String? {
         if (loading) return null
         val starts = ms.mapNotNull { mode(it) as? ModeState.Start }
-        if (starts.isEmpty()) return if (ms.any { mode(it) == ModeState.PracticeMore }) "All caught up" else "Nothing to study yet"
+        if (starts.isEmpty()) return if (ms.any { mode(it) == ModeState.PracticeMore }) {
+            stringResource(R.string.grammar_all_caught_up)
+        } else {
+            stringResource(R.string.grammar_nothing_to_study)
+        }
         val new = starts.sumOf { it.new }.let { n -> pacing?.let { minOf(n, it.remaining) } ?: n }
         return stringResource(R.string.study_due_new, starts.sumOf { it.due }, new)
     }

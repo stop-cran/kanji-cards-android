@@ -31,7 +31,7 @@ class RealContentTest {
     fun hotelBookingDoesNotAcceptTheSchoolClassReadingWhenRepoPresent() {
         val root = File("../../learning-japanese")
         assumeTrue(File(root, "counters/casesken.json").exists())
-        val file = Json.decodeFromString(CounterFile.serializer(), File(root, "counters/casesken.json").readText())
+        val file = ContentParser.parseCounter("counters/casesken.json", File(root, "counters/casesken.json").readText())
         val card = file.cards.single { it.id == "casesken-reservations-1" }
         assertEquals(CounterVerdict.Wrong, CounterGrader.grade("いちくみ", card, file.reading).verdict)
         assertEquals(CounterVerdict.Yellow, CounterGrader.grade("ひとくみ", card, file.reading).verdict)

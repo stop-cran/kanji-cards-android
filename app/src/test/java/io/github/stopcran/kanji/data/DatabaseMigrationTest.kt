@@ -72,7 +72,7 @@ class KanjiReadingMigrationTest {
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17,
+            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19,
         )
         .allowMainThreadQueries()
         .build()
@@ -96,6 +96,7 @@ class KanjiReadingMigrationTest {
                 sqlite.execSQL("INSERT INTO review_state VALUES (?, 'all', '日', 'KanjiOn', 'Review', 12.5, 5.0, 999, 500, 3, 1, 'にち')",
                     arrayOf(source))
             }
+
             sqlite.execSQL("INSERT INTO review_log VALUES (7, ?, 'all', '日', 'KanjiOn', 3, 500, 'にち', NULL)", arrayOf(sources.first()))
         }
         withDatabase { db ->
@@ -121,6 +122,49 @@ class KanjiReadingMigrationTest {
         }
     }
 
+    @Test
+    fun version17ExistingContentDefaultsToEnglishAndJapanese() = runBlocking {
+        createMigrationSchema(context, name, 17) { sqlite ->
+            sqlite.execSQL(
+                "INSERT INTO sync_meta (sourceId, contentVersion, syncedAtMs, problems) VALUES ('owner/repo', 'v17', 500, 0)",
+            )
+        }
+        withDatabase { db ->
+            val meta = db.content().meta("owner/repo")!!
+            assertEquals("en", meta.baseLanguage)
+            assertEquals("ja", meta.targetLanguage)
+        }
+    }
+
+    @Test
+    fun version18MigrationAddsAcceptanceAuthorityWithoutReplacingCacheOrProgress() = runBlocking {
+        createMigrationSchema(context, name, 18) { sqlite ->
+            sqlite.execSQL(
+                "INSERT INTO sync_meta (sourceId, contentVersion, syncedAtMs, problems, baseLanguage, targetLanguage) " +
+                    "VALUES ('owner/repo', 'v18', 500, 0, 'en', 'ja')",
+            )
+            sqlite.execSQL(
+                "INSERT INTO kanji (sourceId, kanji, title, tags, onyomi, kunyomi, distractors, body, position) " +
+                    "VALUES ('owner/repo', '日', 'sun', '', '', '', '', 'body', 0)",
+            )
+            sqlite.execSQL(
+                "INSERT INTO review_state (sourceId, stack, kanji, mode, phase, stability, difficulty, dueMs, lastReviewMs, reps, lapses, reading) " +
+                    "VALUES ('owner/repo', 'all', '日', 'Quiz', 'Review', 12.0, 5.0, 900, 500, 2, 0, '')",
+            )
+            sqlite.execSQL(
+                "INSERT INTO review_log (id, sourceId, stack, kanji, mode, grade, atMs, reading, sessionId) " +
+                    "VALUES (9, 'owner/repo', 'all', '日', 'Quiz', 3, 500, '', NULL)",
+            )
+        }
+        withDatabase { db ->
+            assertNull(db.sourceAcceptance().current())
+            assertEquals("v18", db.content().meta("owner/repo")!!.contentVersion)
+            assertEquals("sun", db.content().kanji("owner/repo").single().title)
+            assertEquals(2, db.reviews().allStates().single().reps)
+            assertEquals(9L, db.reviews().allLog().single().id)
+        }
+    }
+
 }
 
 @RunWith(RobolectricTestRunner::class)
@@ -140,7 +184,7 @@ class DatabaseMigrationTest {
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17,
+            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19,
         )
         .allowMainThreadQueries()
         .build()
@@ -293,7 +337,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(17, db.openHelper.writableDatabase.version)
+                assertEquals(19, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(sources.first(), "all", "日", "KanjiOn", "Review", 12.5, 5.0, 999, 500, 3, 1, "にち"),
                     db.reviews().allStates().single(),
@@ -369,7 +413,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(17, db.openHelper.writableDatabase.version)
+                assertEquals(19, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(source, GRAMMAR_STACK, "alpha-a-0", "Grammar", "Review", 12.5, 5.0, 999, 500, 3, 1),
                     db.reviews().allStates().single(),

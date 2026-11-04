@@ -49,14 +49,19 @@ fun CounterQuizScreen(
     LaunchedEffect(sessionKey) {
         vm.ensureStarted(mode, extra, CounterGroup.fromRoute(sessionKey), CounterScope.fromRoute(sessionKey))
     }
-    Page("Numbers: ${mode.label}", onBack,
+    Page(stringResource(R.string.counter_quiz_title, stringResource(counterModeLabel(mode))), onBack,
         ime = mode in listOf(CounterMode.Type, CounterMode.Expression, CounterMode.Reading), scrollToTopOnBack = true) {
         if (extra) {
-            Text("Extra practice updates review history and scheduling.", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.counter_extra_practice_help), style = MaterialTheme.typography.bodySmall)
         }
         when (val s = vm.ui) {
             CounterUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-            is CounterUi.Empty -> Text(s.message)
+            is CounterUi.Empty -> Text(stringResource(when (s.reason) {
+                CounterEmptyReason.Selection -> R.string.counter_empty_selection
+                CounterEmptyReason.Due -> R.string.counter_empty_due
+                CounterEmptyReason.TypingPrerequisite -> R.string.counter_empty_type_prerequisite
+                CounterEmptyReason.NounPrerequisite -> R.string.counter_empty_noun_prerequisite
+            }))
             is CounterUi.Done -> {
                 Text(stringResource(R.string.session_complete), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
                 Text(stringResource(R.string.of_answers_correct, s.correct, s.answered))
@@ -66,7 +71,7 @@ fun CounterQuizScreen(
             is CounterUi.Choose -> {
                 SessionRemaining(s.remaining)
                 Sentence(vm, s.card, filled = false)
-                Text("Which counter fits?", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                Text(stringResource(R.string.counter_choose_which), Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 s.options.forEach { o -> OutlinedButton(onClick = { vm.pick(o) }, modifier = Modifier.fillMaxWidth()) { Text(vm.index.counterLabel(o)) } }
                 DontKnowButton { vm.pick(NO_ANSWER) }
             }
@@ -88,19 +93,19 @@ fun CounterQuizScreen(
                 SessionRemaining(s.remaining)
                 Text(s.item.cue, style = MaterialTheme.typography.titleMedium)
                 if (s.reading) Text(s.item.written, fontSize = 32.sp)
-                Text(if (s.reading) "Type the complete reading in kana." else "Type the complete Japanese written expression, not just its counter.")
+                Text(stringResource(if (s.reading) R.string.counter_type_reading else R.string.counter_type_expression))
                 CounterInput(vm)
             }
             is CounterUi.ExpressionAnswer -> {
                 Result(s.correct, s.gaveUp)
                 Text(s.item.cue)
                 Text("${s.item.written} (${s.item.reading})", fontSize = 28.sp)
-                if (!s.gaveUp) Text("You typed ${s.typed}")
+                if (!s.gaveUp) Text(stringResource(R.string.counter_you_typed, s.typed))
                 val answers = if (s.reading) s.item.readingAnswers else s.item.writtenAnswers
-                Text("Accepted: ${answers.joinToString(" / ")}")
+                Text(stringResource(R.string.counter_accepted, answers.joinToString(" / ")))
                 Text(s.item.explanation)
                 vm.index.article(s.item.id)?.let { path ->
-                    TextButton(onClick = { onOpenDoc(vm.sourceId, path) }) { Text("Read the explanation") }
+                    TextButton(onClick = { onOpenDoc(vm.sourceId, path) }) { Text(stringResource(R.string.counter_read_explanation)) }
                 }
                 NextRow(s.correct, canGuess = false, vm)
             }
@@ -108,16 +113,16 @@ fun CounterQuizScreen(
                 val verdict = s.result.verdict
                 Text(
                     when {
-                        s.gaveUp -> "No problem — here it is"
-                        verdict == CounterVerdict.Good -> "Correct!"
-                        verdict == CounterVerdict.Yellow -> "Acceptable, but not the targeted counter"
-                        else -> "Not quite"
+                        s.gaveUp -> stringResource(R.string.counter_no_problem)
+                        verdict == CounterVerdict.Good -> stringResource(R.string.counter_correct)
+                        verdict == CounterVerdict.Yellow -> stringResource(R.string.counter_acceptable_targeted)
+                        else -> stringResource(R.string.counter_not_quite)
                     },
                     color = if (verdict == CounterVerdict.Wrong) wrongTextColor() else correctTextColor(),
                     style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
                 )
                 Sentence(vm, s.card, filled = true)
-                if (!s.gaveUp) Text("You typed ${s.typed}", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                if (!s.gaveUp) Text(stringResource(R.string.counter_you_typed, s.typed), Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 s.result.reason?.let { Text(it, Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                 Details(s.card, s.file.title)
                 NextRow(s.result.ok, canGuess = false, vm)
@@ -126,7 +131,7 @@ fun CounterQuizScreen(
                 SessionRemaining(s.remaining)
                 Text(s.file.counter, fontSize = 72.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 Text(s.file.reading, Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-                Text("Which of these can it count?", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                Text(stringResource(R.string.counter_which_noun), Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 s.options.forEach { o -> OutlinedButton(onClick = { vm.pick(o.id) }, modifier = Modifier.fillMaxWidth()) { Text(o.label) } }
                 DontKnowButton { vm.pick(NO_ANSWER) }
             }
@@ -155,9 +160,9 @@ fun CounterQuizScreen(
 private fun Result(correct: Boolean, gaveUp: Boolean) {
     Text(
         when {
-            correct -> "Correct!"
-            gaveUp -> "No problem — here it is"
-            else -> "Not quite"
+            correct -> stringResource(R.string.counter_correct)
+            gaveUp -> stringResource(R.string.counter_no_problem)
+            else -> stringResource(R.string.counter_not_quite)
         },
         color = if (correct) correctTextColor() else wrongTextColor(),
         style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
@@ -197,7 +202,7 @@ private fun NextRow(ok: Boolean, canGuess: Boolean, vm: CounterQuizViewModel) {
 private fun TypeQuestion(s: CounterUi.TypeQuestion, vm: CounterQuizViewModel) {
     SessionRemaining(s.remaining)
     Sentence(vm, s.card, filled = false)
-    Text("Type the number and counter, e.g. 三本, or just the counter", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    Text(stringResource(R.string.counter_type_number), Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     CounterInput(vm)
 }
 
@@ -215,7 +220,7 @@ private fun CounterInput(vm: CounterQuizViewModel) {
         modifier = Modifier.fillMaxWidth().focusRequester(focus),
     )
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Button(onClick = { vm.submit() }, enabled = vm.draft.isNotBlank(), modifier = Modifier.weight(1f)) { Text("Check") }
+        Button(onClick = { vm.submit() }, enabled = vm.draft.isNotBlank(), modifier = Modifier.weight(1f)) { Text(stringResource(R.string.counter_check)) }
         DontKnowButton(Modifier.weight(1f)) { vm.submit(giveUp = true) }
     }
 }

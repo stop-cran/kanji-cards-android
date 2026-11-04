@@ -3,19 +3,17 @@ package io.github.stopcran.kanji.data
 import io.github.stopcran.kanji.core.srs.ReviewRecord
 
 import io.github.stopcran.kanji.core.content.CounterFile
+import io.github.stopcran.kanji.core.content.ContentParser
 import io.github.stopcran.kanji.core.counters.CounterIndex
 import io.github.stopcran.kanji.core.counters.CounterMode
 import io.github.stopcran.kanji.core.counters.CounterQueueRequest
 import io.github.stopcran.kanji.core.counters.CounterQueues
 import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.core.srs.SrsState
-import kotlinx.serialization.json.Json
 import java.time.Instant
 
 /** Counter cards share one stack, so their review state is never mixed with kanji or word stacks. */
 const val COUNTER_STACK = "counters"
-
-private val counterJson = Json { ignoreUnknownKeys = true }
 
 interface CounterRepository {
     val sourceId: String
@@ -43,7 +41,7 @@ class RoomCounterRepository(
 suspend fun AppDatabase.counterIndex(sourceId: String): CounterIndex =
     CounterIndex(
         content().counters(sourceId).mapNotNull { e ->
-            runCatching { counterJson.decodeFromString(CounterFile.serializer(), e.json) }.getOrNull()
+            runCatching { ContentParser.decodeCounterFile(e.json) }.getOrNull()
         },
     )
 

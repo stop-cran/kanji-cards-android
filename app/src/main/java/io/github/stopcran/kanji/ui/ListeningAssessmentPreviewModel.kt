@@ -4,9 +4,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.stopcran.kanji.Services
+import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.data.ListeningAssessmentPreview
 import io.github.stopcran.kanji.core.listening.ListeningAssessmentProfile
 import kotlinx.coroutines.Job
@@ -79,61 +81,74 @@ fun ListeningAssessmentPreviewScreen(route: String, onBack: () -> Unit, onStart:
 internal fun ListeningAssessmentPreviewView(vm: ListeningAssessmentPreviewModel, onBack: () -> Unit, onStart: (String) -> Unit) {
     LaunchedEffect(vm) { vm.refresh() }
     DisposableEffect(vm) { onDispose { vm.leave() } }
-    Page("Japanese diagnostic section", onBack) {
+    Page(stringResource(R.string.listening_diagnostic_title), onBack) {
         LevelFilter(ListeningAssessmentProfile.entries, vm.profile, { vm.refresh(profile = it) }, { "N${it.jlpt}" },
             enabled = !vm.busy)
-        Text("N${vm.profile.jlpt}: ${vm.profile.scoredCount} scored items and ${vm.profile.groups.size} separate worked examples; " +
-            "${vm.profile.minimumMs / 60_000}-${vm.profile.maximumMs / 60_000} minutes.")
-        Text("This exact diagnostic level is separate from the cumulative guided-practice level.")
-        Text("Diagnostic only: no SRS changes, introductions or daily-allowance use. Actual exposure still creates a 24-hour cooldown.")
-        Text("Single playback; fixed read, listen and answer windows. Answers may change before the deadline. Skip locks an unanswered " +
-            "response but does not advance early. Scored feedback waits until the end.")
-        Text("Pause, leaving this screen, loss of focus, headphones, calls, recovery or help irreversibly changes the section to " +
-            "interrupted practice. It never restarts automatically.")
+        Text(stringResource(R.string.listening_preview_profile,
+            vm.profile.jlpt, vm.profile.scoredCount, vm.profile.groups.size,
+            vm.profile.minimumMs / 60_000, vm.profile.maximumMs / 60_000))
+        Text(stringResource(R.string.listening_preview_separate_scope))
+        Text(stringResource(R.string.listening_preview_no_srs))
+        Text(stringResource(R.string.listening_preview_timing_policy))
+        Text(stringResource(R.string.listening_preview_interruption_policy))
         FilterChip(selected = vm.familiar, onClick = { vm.refresh(includeFamiliar = !vm.familiar) }, enabled = !vm.busy,
-            label = { Text(if (vm.profile == ListeningAssessmentProfile.N4) "Include familiar scored stories" else "Include familiar material") })
+            label = { Text(stringResource(if (vm.profile == ListeningAssessmentProfile.N4)
+                R.string.listening_include_familiar_stories else R.string.listening_include_familiar_material)) })
         if (vm.profile == ListeningAssessmentProfile.N4) {
-            Text("Scored stories are unseen by default. Worked examples may recur after their 24-hour cooldown; their familiarity is disclosed separately.")
+            Text(stringResource(R.string.listening_familiar_policy_n4))
         }
         FilterChip(selected = vm.visual, onClick = { vm.refresh(visualAccess = !vm.visual) }, enabled = !vm.busy,
-            label = { Text("I can use the required pictures") })
-        Text("Described study remains available in guided Listening; it is not an equivalent nonvisual assessment.")
+            label = { Text(stringResource(R.string.listening_picture_access)) })
+        Text(stringResource(R.string.listening_picture_help_equivalence))
         if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-        vm.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        vm.error?.let { Text(stringResource(R.string.listening_assessment_preview_error), color = MaterialTheme.colorScheme.error) }
         val preview = vm.preview
         if (preview != null) {
-            Text("Captured source: ${preview.sourceId} (${preview.branch ?: "not synced"})", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.listening_captured_source,
+                preview.sourceId, preview.branch ?: stringResource(R.string.not_synced)), style = MaterialTheme.typography.bodySmall)
             if (preview.branch != null && preview.requestedBranch != preview.branch) {
-                Text("Configured branch: ${preview.requestedBranch}. This preview uses the last accepted ${preview.branch} snapshot.")
+                Text(stringResource(R.string.listening_configured_branch_snapshot, preview.requestedBranch, preview.branch))
             }
             preview.notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             preview.selection.groups.forEach { status ->
                 HorizontalDivider()
-                Text(status.group.type.label, style = MaterialTheme.typography.titleMedium)
-                Text("${status.eligibleScored}/${status.group.scored} eligible scored items; ${status.eligibleExamples} eligible example(s).")
-                Text("Ready scored pool: ${status.readyScored}/${status.group.pool}. Unavailable: ${status.unavailable}; " +
-                    "cooldown: ${status.coolingDown}; familiar excluded: ${status.familiarExcluded}; inaccessible: ${status.inaccessible}.")
-                status.nextCooldownMs?.let { Text(listeningCooldownText(Instant.ofEpochMilli(it))) }
+                Text(status.group.type.label(), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.listening_assessment_group_eligible,
+                    status.eligibleScored, status.group.scored, status.eligibleExamples))
+                Text(stringResource(R.string.listening_assessment_group_readiness,
+                    status.readyScored, status.group.pool, status.unavailable, status.coolingDown,
+                    status.familiarExcluded, status.inaccessible))
+                status.nextCooldownMs?.let { Text(listeningCooldownLocalizedText(Instant.ofEpochMilli(it))) }
             }
-            preview.selection.durationMs?.let { Text("Projected duration: ${it / 60_000}m ${it / 1_000 % 60}s") }
+            preview.selection.durationMs?.let {
+                Text(stringResource(R.string.listening_projected_duration, it / 60_000, it / 1_000 % 60))
+            }
             preview.selection.durationRange?.let {
-                Text("All eligible forms: ${it.shortestMs / 60_000}m ${it.shortestMs / 1_000 % 60}s - " +
-                    "${it.longestMs / 60_000}m ${it.longestMs / 1_000 % 60}s.")
+                Text(stringResource(R.string.listening_all_eligible_duration,
+                    it.shortestMs / 60_000, it.shortestMs / 1_000 % 60,
+                    it.longestMs / 60_000, it.longestMs / 1_000 % 60))
             }
             val familiarExamples = preview.selection.items.count {
                 it.lastExposureMs != null && it.record.task.usage == io.github.stopcran.kanji.core.listening.TaskUsage.Example
             }
-            if (preview.selection.items.isNotEmpty()) Text(
-                "${preview.selection.familiarCount} of ${preview.profile.scoredCount} selected scored items are familiar; " +
-                    "$familiarExamples selected examples are familiar.")
-            preview.selection.problems.forEach { Text(it, color = MaterialTheme.colorScheme.error) }
+            if (preview.selection.items.isNotEmpty()) Text(stringResource(
+                R.string.listening_familiar_selected_counts,
+                preview.selection.familiarCount,
+                preview.profile.scoredCount,
+                familiarExamples,
+            ))
+            if (preview.selection.problems.isNotEmpty()) {
+                Text(stringResource(R.string.listening_assessment_availability_problem), color = MaterialTheme.colorScheme.error)
+            }
             if (preview.selection.available) {
-                Button(onClick = { vm.start(onStart) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) { Text("Capture this section") }
-                Text("Confirm the source and familiarity above. The next page has an explicit Begin button.")
-            } else Text("A full section is unavailable. No shorter exam or repeated story will be substituted.")
+                Button(onClick = { vm.start(onStart) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.listening_capture_section))
+                }
+                Text(stringResource(R.string.listening_confirm_source_familiarity))
+            } else Text(stringResource(R.string.listening_full_section_unavailable))
         }
-        OutlinedButton(onClick = { vm.refresh() }, enabled = !vm.busy) { Text("Refresh availability") }
-        TextButton(onClick = onBack) { Text("Back to guided Listening") }
-        Text("No official JLPT scaled score, pass prediction or proficiency certification.")
+        OutlinedButton(onClick = { vm.refresh() }, enabled = !vm.busy) { Text(stringResource(R.string.listening_refresh_availability)) }
+        TextButton(onClick = onBack) { Text(stringResource(R.string.listening_back_guided)) }
+        Text(stringResource(R.string.listening_no_official_score))
     }
 }

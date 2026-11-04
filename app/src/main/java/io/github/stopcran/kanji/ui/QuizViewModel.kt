@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import io.github.stopcran.kanji.Services
+import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.quiz.QuizBuilder
 import io.github.stopcran.kanji.core.quiz.QuizCard
 import io.github.stopcran.kanji.core.quiz.QuizOption
@@ -43,7 +44,7 @@ import kotlin.random.Random
 
 sealed interface QuizUi {
     data object Loading : QuizUi
-    data class Empty(val message: String) : QuizUi
+    data class Empty(val messageId: Int) : QuizUi
     /** First sight of a new kanji: shown before it is ever tested (not a review). */
     data class Study(val card: KanjiEntity, val remaining: Int, val font: KanjiFont) : QuizUi
     data class Question(val card: KanjiEntity, val options: List<QuizOption>, val remaining: Int, val font: KanjiFont) : QuizUi
@@ -62,6 +63,8 @@ class QuizViewModel(
     private val random = Random.Default
 
     var ui: QuizUi by mutableStateOf(QuizUi.Loading)
+        private set
+    var contentLanguage by mutableStateOf("en")
         private set
 
     private var sourceId = ""
@@ -87,10 +90,11 @@ class QuizViewModel(
     private suspend fun start(extra: Boolean) {
         val source = app.settings.source.value
         sourceId = source.id
+        contentLanguage = app.settings.sync.baseLanguage(sourceId) ?: app.db.content().meta(sourceId)?.baseLanguage ?: "en"
         stack = app.settings.stack.value
         val all = app.db.content().kanji(sourceId).inStack(stack)
         if (all.size < 2) {
-            ui = QuizUi.Empty("No cards yet. Sync the content first (⚙ settings).")
+            ui = QuizUi.Empty(R.string.kanji_quiz_no_cards)
             return
         }
         cards = all.associateBy { it.kanji }
@@ -140,7 +144,7 @@ class QuizViewModel(
         val kanji = session.take()
         if (kanji == null) {
             finishSession()
-            ui = if (session.answered == 0) QuizUi.Empty("Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings.") else QuizUi.Done(session.answered, session.correct)
+            ui = if (session.answered == 0) QuizUi.Empty(R.string.kanji_quiz_nothing_due) else QuizUi.Done(session.answered, session.correct)
             return
         }
         val card = cards.getValue(kanji)

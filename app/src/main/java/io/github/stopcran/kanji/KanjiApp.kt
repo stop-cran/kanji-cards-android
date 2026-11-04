@@ -21,6 +21,8 @@ import io.github.stopcran.kanji.data.MIGRATION_13_14
 import io.github.stopcran.kanji.data.MIGRATION_14_15
 import io.github.stopcran.kanji.data.MIGRATION_15_16
 import io.github.stopcran.kanji.data.MIGRATION_16_17
+import io.github.stopcran.kanji.data.MIGRATION_17_18
+import io.github.stopcran.kanji.data.MIGRATION_18_19
 import io.github.stopcran.kanji.data.rebuildGrammarReadiness
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -28,11 +30,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import io.github.stopcran.kanji.data.ReminderWorker
 import io.github.stopcran.kanji.data.Settings
 import io.github.stopcran.kanji.data.SyncWorker
 import io.github.stopcran.kanji.ui.ArtSet
 import io.github.stopcran.kanji.ui.StudySessionRegistry
+import io.github.stopcran.kanji.data.AppLocale
 
 /** What a ViewModel may use; passed in by a factory so ViewModels never reach for the Application. */
 class Services(val db: AppDatabase, val settings: Settings, val context: Context) {
@@ -60,11 +64,15 @@ class KanjiApp : Application() {
                 MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
                 MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16,
                 MIGRATION_16_17,
+                MIGRATION_17_18,
+                MIGRATION_18_19,
             )
             .build()
     }
     val settings: Settings by lazy { Settings(this) }
-    val contentSync: ContentSync by lazy { ContentSync(db, settings.sync) }
+    val contentSync: ContentSync by lazy {
+        ContentSync(db, settings.sync, selectedSource = { settings.source.value })
+    }
     internal val syncCoordinator by lazy {
         io.github.stopcran.kanji.data.SyncCoordinator(syncScope, contentSync.activity, reportFailure = { error ->
             android.util.Log.e("ContentSync", "Sync request failed unexpectedly; queue remains available.", error)
@@ -80,7 +88,12 @@ class KanjiApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        val recoveredLanguageSelection = runBlocking { contentSync.recoverCommittedCandidate(settings) }
         ArtSet.choose(settings)
+        AppLocale.initialize(this, settings.appLanguage.value, force = recoveredLanguageSelection != null)
+        recoveredLanguageSelection?.let { token ->
+            runBlocking { contentSync.acknowledgeLanguageSelection(token) }
+        }
         maintenance.launch {
             settings.source.collectLatest {
                 try {

@@ -23,19 +23,55 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 6. **Never trust simulated tuning alone.** Matcher thresholds were first tuned on simulated hands; real exported drawings are fixtures
    (`RealDrawingsTest`). Prefer adding real fixtures over adjusting numbers blindly.
 
-### EN/RU edition: accepted next design, not implemented yet
+### EN/RU edition and repository-language binding
 
 The [shared language/source design](https://github.com/stop-cran/learning-japanese-ru/blob/main/docs/DESIGN.md)
 and [checkpoint plan](https://github.com/stop-cran/learning-japanese-ru/blob/main/docs/IMPLEMENTATION-PLAN.md)
 govern [#28](https://github.com/stop-cran/kanji-cards-android/issues/28) and
-[#127](https://github.com/stop-cran/kanji-cards-android/issues/127). App-owned UI and RU teaching content will be
-localized together, using explicit stable repository base language and Japanese target. Device-language new installs,
-preserved EN upgrades, matching accepted cache, source-specific history and no English lesson fallback are agreed.
-Custom-repo validation will intentionally separate pending candidates from accepted source, replacing today's
-eager save-then-sync flow; this paragraph does not claim that transition has already been implemented.
-Complete reviewed first-version content instructions precede pilot authoring. Native app/kanji/word integration and
-then a small structured-content/media integration gate must feed verified corrections into app/content instructions
-and the execution plan before broad translation. The existing implementation sections below still describe current behavior.
+[#127](https://github.com/stop-cran/kanji-cards-android/issues/127). The app now has System/English/Русский selection,
+localized UI resources, Russian speech matching, repository-language metadata checks, and pending/accepted custom-source
+transitions. On API 33+, Android per-app locales own the configuration; API 29–32 use a wrapped activity context and
+recreation. New installs resolve System from the device locale, upgrades without a saved choice stay English, and returning
+from Android Settings reconciles System only for built-in sources. A custom source is never replaced by a language default.
+
+The transport contract is deliberately versioned: metadata-less packages are legacy EN/ja and schema 1; explicit EN/ja
+uses schema 1; RU/ja requires explicit metadata and schema 2. The current reader accepts legacy EN cards and translated
+counter fields, while the released EN reader must continue accepting new schema-1 EN packages and reject schema-2 RU
+before import. Base language is bound to canonical owner/repository, not a branch, and cannot be changed by a later branch.
+An accepted source stays active until its pending candidate has downloaded and passed parser, language, and integrity checks;
+stale or cancelled validation cannot replace it. Invalid updates retain last-known-good content. Cache and review history
+remain source-scoped, while built-in Kana history is independent of content repositories.
+
+Candidate begin/cancel/validate/accept operations share the `ContentSync` mutex. Candidate cache replacement, the durable
+accepted-source row (branch, language, revision and parser epochs), and Room content metadata commit in one Room transaction;
+the existing SharedPreferences selection/sync hints are only mirrored afterward. A matching pending token lets startup replay
+that mirror if the process stops after the Room commit. Do not clear pending state or mutate candidate selection outside the
+serialized `ContentSync` APIs. Ordinary source-entry eligibility is separate from network/download eligibility: a cached RU
+pilot does not open the gated RU `main` branch.
+
+Language intent is also a durable selection, even when System and explicit English resolve to the same source, branch, and
+effective language. Persist a fresh pending intent marker for every approved choice, mirror preferences, apply the platform
+locale, then acknowledge only that exact marker while still serialized. Startup recovery must reapply the latest intent and,
+on API 33+, force-align the platform locale (including clearing an explicit locale for System) before acknowledging it.
+Repository/branch equality is not proof that the learner's latest language intent has already been applied.
+
+The manifest language guard must inspect root-member names in the raw JSON before decoding to `JsonObject`, because JSON object
+decoders collapse duplicate keys (including escaped spellings). For live exercises, only a route whose ViewModel has durably
+started its study session may retain a language-mismatch exception; a fresh Practice More route is a new admission. Grammar
+learner notices use typed message IDs at presentation boundaries, with raw parser/focus diagnostics retained separately.
+Settings candidate busy-state cleanup is owned by a generation token, not by whether the failed candidate is still pending.
+
+The ordinary RU default branch remains unavailable until its rollout gate is opened. `ru-pilot-a` is an explicit candidate
+for bounded acceptance only. A UI/source mismatch shows a localized unavailable/retry state, never EN teaching fallback.
+An ordinary exercise keeps its captured source while the learner finishes or leaves it; article links opened from a live
+session also carry that source and locale exception, while ordinary browsing still enforces a language match. Such
+session-bound article routes are discarded with ephemeral exercises after process death. Durable Listening encounters keep
+their captured source and language when restored. These rules do not make a drift service a runtime dependency.
+
+The corrected real RU pilot is covered by opt-in archive tests, including Russian reading-table headings, row dispositions,
+ordinary four-choice size, symmetric `川`/`小川` exclusions, and preserved JLPT/stack gates. Core `ReadingCard` questions
+come from the authored `onyomi`/`kunyomi` front matter; linked examples are explanatory text, not an implicit quiz filter.
+Android/native pilot acceptance is a separate gate; archive parsing and resource tests alone are not device acceptance.
 
 ## 2. Content model
 
@@ -718,7 +754,11 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   Selection scrolls to the actual block index plus context/gallery/contents items. Only an explicit selection moves the reader;
   saved list position survives nested Back, and changed headings simply produce updated contents. No guessed anchors or Markdown
   fragment-resolution changes; legacy two-field source routes and ordinary reference browsing remain supported.
-- **Strings:** composable `Text("...")` literals live in `res/values/strings.xml` (`stringResource`, `%1$s` args). ViewModel messages, content descriptions and notification text are still literals; there are no translations yet.
+- **Strings:** app-owned UI, accessibility labels, notifications, speech status, and feedback use `res/values/strings.xml`
+  and `res/values-ru/strings.xml`; formatted resources use positional placeholders and plural resources rather than embedded
+  English labels. Android resource processing trims trailing whitespace, so pass separators/punctuation as formatted
+  arguments instead of relying on a trailing space. Content authored by a repository remains in that source language and is
+  displayed only when its base language matches the UI, except for already-running source-pinned sessions.
 - **Rare glyphs:** old components in articles (e.g. 𠯑 in 話) are CJK Ext. A/B/radical characters that phone system fonts often lack. `RareHan` draws
   characters in those ranges from a bundled subset of HanaMin (`res/font/rare_han_a/b.otf`, a few KB, generated by `tools/make_rare_font.py`, notice in
   `third_party/fonts`). `RareHanTest` fails when the content uses a rare character the subset does not cover; regenerate and update its list.

@@ -3,6 +3,7 @@ package io.github.stopcran.kanji.core.content
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.SerialName
 
 const val SUPPORTED_SCHEMA_VERSION = 1
 
@@ -22,6 +23,8 @@ data class Manifest(
     val listeningTasks: JsonElement = JsonObject(emptyMap()),
     val listeningTaskAudio: JsonElement = JsonObject(emptyMap()),
     val listeningTaskImages: JsonElement = JsonObject(emptyMap()),
+    val baseLanguage: String = "en",
+    val targetLanguage: String = "ja",
 )
 
 data class KanjiCard(
@@ -112,7 +115,7 @@ data class CounterCard(
     val kind: String = "plain",
     /** Sentence with exactly one "{}" where the counter goes; any number stays in the text before it. */
     val text: String,
-    val en: String,
+    @SerialName("translation") val en: String = "",
     val noun: String,
     val phrase: String,
     val reading: String,

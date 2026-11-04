@@ -16,6 +16,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import io.github.stopcran.kanji.data.SceneImageResult
+import androidx.compose.ui.res.stringResource
+import io.github.stopcran.kanji.R
 
 /**
  * Non-quiz media presentation. Quiz questions use already decoded bitmaps, never a graded placeholder.
@@ -23,8 +25,8 @@ import io.github.stopcran.kanji.data.SceneImageResult
 @Composable
 fun WordImage(result: SceneImageResult?, description: String, modifier: Modifier = Modifier) {
     when (result) {
-        null -> Text("Loading picture...", modifier)
-        is SceneImageResult.Unavailable -> Text(result.reason, modifier)
+        null -> Text(stringResource(R.string.loading_picture), modifier)
+        is SceneImageResult.Unavailable -> Text(stringResource(R.string.picture_unavailable), modifier)
         is SceneImageResult.Ready -> SceneBitmap(result.bitmap.asImageBitmap(), description, modifier)
     }
 }

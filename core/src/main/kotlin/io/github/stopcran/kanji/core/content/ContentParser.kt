@@ -1,13 +1,83 @@
 package io.github.stopcran.kanji.core.content
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import java.security.MessageDigest
 
-class ContentException(message: String) : Exception(message)
+class ContentException(message: String, cause: Throwable? = null) : Exception(message, cause)
+
+private object ManifestContractScanner {
+    fun decode(bytes: ByteArray, parser: Json): JsonObject = try {
+        val source = bytes.decodeToString()
+        val raw = parser.parseToJsonElement(source).jsonObject
+        val contractKeys = setOf("schemaVersion", "baseLanguage", "targetLanguage")
+        val duplicate = rootObjectKeys(source, parser).groupingBy { it }.eachCount()
+            .entries.firstOrNull { it.key in contractKeys && it.value > 1 }?.key
+        if (duplicate != null) throw ContentException("manifest.json contains duplicate '$duplicate' declarations")
+        raw
+    } catch (e: ContentException) {
+        throw e
+    } catch (e: IllegalArgumentException) {
+        throw ContentException("manifest.json is invalid: ${e.message}", e)
+    }
+
+    private fun rootObjectKeys(source: String, parser: Json): List<String> {
+        var index = skipWhitespace(source, 0)
+        require(source[index++] == '{')
+        val keys = mutableListOf<String>()
+        while (true) {
+            index = skipWhitespace(source, index)
+            if (source[index] == '}') return keys
+            val keyStart = index
+            index = skipString(source, index)
+            keys += (parser.parseToJsonElement(source.substring(keyStart, index)) as JsonPrimitive).content
+            index = skipWhitespace(source, index)
+            require(source[index++] == ':')
+            index = skipValue(source, skipWhitespace(source, index))
+            index = skipWhitespace(source, index)
+            if (source[index] == '}') return keys
+            require(source[index++] == ',')
+        }
+    }
+
+    private fun skipWhitespace(source: String, from: Int): Int {
+        var index = from
+        while (index < source.length && source[index].isWhitespace()) index++
+        return index
+    }
+
+    private fun skipString(source: String, from: Int): Int {
+        require(source[from] == '"')
+        var index = from + 1
+        while (index < source.length) {
+            when (source[index++]) {
+                '\\' -> index++
+                '"' -> return index
+            }
+        }
+        error("Unterminated JSON string")
+    }
+
+    private fun skipValue(source: String, from: Int): Int {
+        var depth = 0
+        var index = from
+        while (index < source.length) {
+            when (source[index]) {
+                '"' -> index = skipString(source, index)
+                '{', '[' -> { depth++; index++ }
+                '}', ']' -> if (depth == 0) return index else { depth--; index++ }
+                ',' -> if (depth == 0) return index else index++
+                else -> index++
+            }
+        }
+        return index
+    }
+}
 
 /** Turns a map of repo-relative path -> bytes into validated content. Everything here is treated as untrusted input. */
 object ContentParser {
@@ -81,12 +151,36 @@ object ContentParser {
 
     private fun readManifest(files: Map<String, ByteArray>): Manifest {
         val manifestBytes = files["manifest.json"] ?: throw ContentException("manifest.json is missing")
+        val raw = ManifestContractScanner.decode(manifestBytes, json)
         val manifest = try {
             json.decodeFromString(Manifest.serializer(), manifestBytes.decodeToString())
         } catch (e: Exception) {
             throw ContentException("manifest.json is invalid: ${e.message}")
         }
-        return manifest
+        validateManifestLanguage(raw, manifest)
+        return if ("baseLanguage" !in raw) manifest.copy(baseLanguage = "en", targetLanguage = "ja") else manifest
+    }
+
+    private fun validateManifestLanguage(raw: JsonObject, manifest: Manifest) {
+        val metadataDeclared = "baseLanguage" in raw || "targetLanguage" in raw
+        if (!metadataDeclared) {
+            if (manifest.schemaVersion != 1) throw ContentException("Unsupported or incomplete manifest language/schema declaration")
+            return
+        }
+        val base = raw.languageField("baseLanguage")
+        val target = raw.languageField("targetLanguage")
+        if (!supportsLanguageSchema(manifest, base, target)) {
+            throw ContentException("Unsupported or incomplete manifest language/schema declaration")
+        }
+    }
+
+    private fun JsonObject.languageField(name: String): String? =
+        (this[name] as? JsonPrimitive)?.takeIf { it.isString }?.content
+
+    private fun supportsLanguageSchema(manifest: Manifest, base: String?, target: String?): Boolean = when (base) {
+        "en" -> target == "ja" && manifest.baseLanguage == "en" && manifest.targetLanguage == "ja" && manifest.schemaVersion == 1
+        "ru" -> target == "ja" && manifest.baseLanguage == "ru" && manifest.targetLanguage == "ja" && manifest.schemaVersion == 2
+        else -> false
     }
 
     private class TextContent {
@@ -98,12 +192,12 @@ object ContentParser {
         val grammar = mutableListOf<GrammarSet>()
         val problems = mutableListOf<String>()
 
-        fun add(path: String, text: String) {
+        fun add(path: String, text: String, baseLanguage: String) {
             when (path.substringBefore('/') to path.substringAfterLast('.')) {
                 "kanji" to "md" -> kanji += parseKanji(path, text)
                 "words" to "md" -> words += parseWord(path, text)
                 "articles" to "md" -> articles += parseArticle(path, text)
-                "counters" to "json" -> counters += parseCounter(path, text)
+                "counters" to "json" -> counters += parseCounter(path, text, baseLanguage)
                 "grammar" to "json" -> grammar += parseGrammar(path, text)
                 "strokes" to "json" -> parseStrokes(text).let { strokes[it.kanji] = it }
             }
@@ -119,32 +213,35 @@ object ContentParser {
     }
 
     private fun readText(manifest: Manifest, files: Map<String, ByteArray>): TextContent {
-        if (manifest.schemaVersion != SUPPORTED_SCHEMA_VERSION) {
-            throw ContentException("Unsupported content schema ${manifest.schemaVersion}; this app supports $SUPPORTED_SCHEMA_VERSION")
+        if (manifest.schemaVersion !in 1..2) {
+            throw ContentException("Unsupported content schema ${manifest.schemaVersion}; this app supports schemas 1 and 2")
         }
         val content = TextContent()
+        val baseLanguage = manifest.baseLanguage ?: "en"
         for ((path, expectedHash) in manifest.files.toSortedMap()) {
             val bytes = files[path]
-            val problem = when {
-                !isSafePath(path) -> "unsafe path"
-                path.startsWith("scenes/") -> "catalogs must be listed only in manifest.scenes"
-                path.startsWith("curriculum/") -> "catalogs must be listed only in manifest.curriculum"
-                path.startsWith("listening/") || path.startsWith("audio/") -> "listening content needs its separate manifest namespace"
-                bytes == null -> "listed in manifest but missing"
-                sha256(bytes) != expectedHash -> "hash mismatch"
-                else -> null
-            }
+            val problem = textPathProblem(path, expectedHash, bytes)
             if (problem != null) {
                 content.problems += "$path: $problem"
                 continue
             }
             try {
-                content.add(path, checkNotNull(bytes).decodeToString())
+                content.add(path, checkNotNull(bytes).decodeToString(), baseLanguage)
             } catch (e: Exception) {
                 content.problems += "$path: ${e.message}"
             }
         }
         return content
+    }
+
+    private fun textPathProblem(path: String, expectedHash: String, bytes: ByteArray?): String? = when {
+        !isSafePath(path) -> "unsafe path"
+        path.startsWith("scenes/") -> "catalogs must be listed only in manifest.scenes"
+        path.startsWith("curriculum/") -> "catalogs must be listed only in manifest.curriculum"
+        path.startsWith("listening/") || path.startsWith("audio/") -> "listening content needs its separate manifest namespace"
+        bytes == null -> "listed in manifest but missing"
+        sha256(bytes) != expectedHash -> "hash mismatch"
+        else -> null
     }
 
     private fun resolveWordReferences(words: MutableList<WordArticle>, problems: MutableList<String>) {
@@ -363,8 +460,9 @@ object ContentParser {
         }
     }
 
-    fun parseCounter(path: String, text: String): CounterFile {
-        val fields = json.parseToJsonElement(text).jsonObject
+    fun parseCounter(path: String, text: String, baseLanguage: String = "en"): CounterFile {
+        val rawFields = json.parseToJsonElement(text).jsonObject
+        val fields = normalizeCounterTranslations(rawFields, baseLanguage)
         val version = fields["schemaVersion"] as? JsonPrimitive
         require(version != null && !version.isString && version.content in listOf("1", "2")) { "unsupported counter schema version" }
         if ("level" in fields) {
@@ -374,7 +472,7 @@ object ContentParser {
         }
         if (version.content == "2") validateCounterExpressionFields(fields)
         val decoder = if (version.content == "2") Json else json
-        val f = decoder.decodeFromString(CounterFile.serializer(), text)
+        val f = decoder.decodeFromString(CounterFile.serializer(), fields.toString())
         require(f.schemaVersion in 1..2) { "unsupported counters schema ${f.schemaVersion}" }
         require(f.id == path.substringAfterLast('/').removeSuffix(".json")) { "'id' must match the file name" }
         require(f.group in listOf("everyday", "time")) { "unknown counter group '${f.group}'" }
@@ -383,6 +481,57 @@ object ContentParser {
             io.github.stopcran.kanji.core.counters.CounterExpressions.validate(f)
         } else validateLegacyCounterFile(f)
         return f
+    }
+
+    /** Reads both the neutral counter field and published EN files kept on the legacy `en` key. */
+    fun decodeCounterFile(text: String): CounterFile {
+        val fields = normalizeCounterTranslations(json.parseToJsonElement(text).jsonObject, baseLanguage = null)
+        val decoder = if ((fields["schemaVersion"] as? JsonPrimitive)?.content == "2") Json else json
+        return decoder.decodeFromString(CounterFile.serializer(), fields.toString())
+    }
+
+    private fun normalizeCounterTranslations(fields: JsonObject, baseLanguage: String?): JsonObject {
+        val version = fields["schemaVersion"] as? JsonPrimitive
+        if (version?.content != "1") return fields
+        val cards = fields["cards"] as? JsonArray ?: return fields
+        return JsonObject(fields.toMutableMap().apply {
+            put("cards", JsonArray(cards.map { normalizeCounterCard(it, baseLanguage) }))
+        })
+    }
+
+    private fun normalizeCounterCard(element: JsonElement, baseLanguage: String?): JsonElement {
+        val card = element as? JsonObject ?: return element
+        val hasLegacy = "en" in card
+        val hasNeutral = "translation" in card
+        val value = card[if (hasLegacy) "en" else "translation"]
+        validateCounterTranslation(baseLanguage, hasLegacy, hasNeutral, value)
+        return if (!hasLegacy) card else JsonObject(card.toMutableMap().apply {
+            remove("en")
+            put("translation", requireNotNull(value))
+        })
+    }
+
+    private fun validateCounterTranslation(
+        baseLanguage: String?,
+        hasLegacy: Boolean,
+        hasNeutral: Boolean,
+        value: JsonElement?,
+    ) {
+        require(!(hasLegacy && hasNeutral)) { "counter card must not declare both 'en' and 'translation'" }
+        when (baseLanguage) {
+            "ru" -> require(hasNeutral && !hasLegacy) { "Russian counter cards require the neutral 'translation' field" }
+            "en" -> require(hasNeutral || hasLegacy) { "counter card is missing 'translation' (or legacy EN 'en')" }
+        }
+        if (hasLegacy) {
+            require(value is JsonPrimitive && value.isString && value.content.isNotBlank()) {
+                "legacy EN counter 'en' must be a non-empty string"
+            }
+        }
+        if (baseLanguage == "ru") {
+            require(value is JsonPrimitive && value.isString && value.content.isNotBlank()) {
+                "Russian counter 'translation' must be a non-empty string"
+            }
+        }
     }
 
     private fun validateLegacyCounterFile(f: CounterFile) {

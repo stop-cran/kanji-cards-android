@@ -44,12 +44,16 @@ fun Page(
 ) {
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
+    val backDescription = stringResource(R.string.back_accessibility)
     // Session pages: Back first returns to the top, so retracing article links does not exit the session by a stray extra tap.
     BackHandler(enabled = scrollToTopOnBack && scrollable && scroll.value > 0) { scope.launch { scroll.animateScrollTo(0) } }
     // Only pages with text fields track the keyboard; elsewhere a stale IME inset would shrink the page.
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().let { if (ime) it.imePadding() else it }, horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.widthIn(max = maxWidth).fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (onBack != null) TextButton(onClick = onBack, modifier = Modifier.semantics { contentDescription = "Back" }) { Text(stringResource(R.string.back)) }
+            if (onBack != null) TextButton(
+                onClick = onBack,
+                modifier = Modifier.semantics { contentDescription = backDescription },
+            ) { Text(stringResource(R.string.back)) }
             Text(title, style = androidx.compose.material3.MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).padding(start = if (onBack == null) 8.dp else 0.dp).semantics { heading() })
             actions()
         }

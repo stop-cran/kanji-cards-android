@@ -30,6 +30,8 @@ class ListeningTaskViewModel(
         private set
     var task: ListeningTaskPackage? by mutableStateOf(null)
         private set
+    var capturedLanguage: String? by mutableStateOf(null)
+        private set
     var attempt: ListeningTaskAttempt? by mutableStateOf(null)
         private set
     var response: ListeningTaskAttempt? by mutableStateOf(null)
@@ -59,6 +61,8 @@ class ListeningTaskViewModel(
             error = null
             val row = requireNotNull(services.db.listeningTasks().encounter(id)) { "Listening task no longer exists" }
             encounter = row
+            capturedLanguage = services.settings.sync.baseLanguage(row.sourceId)
+                ?: services.db.content().meta(row.sourceId)?.baseLanguage ?: "en"
             val captured = study.record(row).task
             require(captured.taskType in ListeningTaskPolicy.supportedTypes) { "Update the app to present this captured task type" }
             task = captured

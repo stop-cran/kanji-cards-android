@@ -34,7 +34,7 @@ data class NounOption(val id: String, val label: String)
 
 sealed interface CounterUi {
     data object Loading : CounterUi
-    data class Empty(val message: String) : CounterUi
+    data class Empty(val reason: CounterEmptyReason) : CounterUi
     data class Done(val answered: Int, val correct: Int) : CounterUi
 
     data class Choose(val card: CounterCard, val file: CounterFile, val options: List<String>, val remaining: Int) : CounterUi
@@ -59,6 +59,8 @@ sealed interface CounterUi {
         val correct: Boolean get() = picked == answer.id
     }
 }
+
+enum class CounterEmptyReason { Selection, Due, TypingPrerequisite, NounPrerequisite }
 
 /** One counter quiz session in a single [CounterMode]; answers are saved under the shared "counters" stack. */
 class CounterQuizViewModel(private val data: CounterRepository, sessions: StudySessionStore) : StudyViewModel(sessions) {
@@ -93,7 +95,7 @@ class CounterQuizViewModel(private val data: CounterRepository, sessions: StudyS
         sourceId = data.sourceId
         index = data.index(sourceId).inScope(group, scope)
         if (index.ids(mode).isEmpty()) {
-            ui = CounterUi.Empty("No cards in this selection. Choose another level or group, or sync the content (⚙ settings).")
+            ui = CounterUi.Empty(CounterEmptyReason.Selection)
             return
         }
         states += data.states(sourceId, mode)
@@ -109,7 +111,7 @@ class CounterQuizViewModel(private val data: CounterRepository, sessions: StudyS
         val id = session.take()
         if (id == null) {
             finishSession()
-            ui = if (session.answered == 0) CounterUi.Empty(emptyMessage()) else CounterUi.Done(session.answered, session.correct)
+            ui = if (session.answered == 0) CounterUi.Empty(emptyReason()) else CounterUi.Done(session.answered, session.correct)
             return
         }
         val remaining = session.pending + 1
@@ -131,11 +133,10 @@ class CounterQuizViewModel(private val data: CounterRepository, sessions: StudyS
         }
     }
 
-    private fun emptyMessage() = when (mode) {
-        CounterMode.Choose, CounterMode.Expression, CounterMode.Reading ->
-            "Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings."
-        CounterMode.Type -> "Nothing is due. Typing opens for sentences you have answered in “Choose the counter” on two different days."
-        CounterMode.Noun -> "Nothing is due. This opens for a counter once three of its sentences are solid in “Choose the counter”."
+    private fun emptyReason() = when (mode) {
+        CounterMode.Choose, CounterMode.Expression, CounterMode.Reading -> CounterEmptyReason.Due
+        CounterMode.Type -> CounterEmptyReason.TypingPrerequisite
+        CounterMode.Noun -> CounterEmptyReason.NounPrerequisite
     }
 
     fun pick(value: String) {

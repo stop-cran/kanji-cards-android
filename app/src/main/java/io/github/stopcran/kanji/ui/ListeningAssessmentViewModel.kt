@@ -26,6 +26,8 @@ internal class ListeningAssessmentViewModel(
         private set
     var picture: ImageBitmap? by mutableStateOf(null)
         private set
+    var capturedLanguage: String? by mutableStateOf(null)
+        private set
     var detail: ListeningTaskEncounterEntity? by mutableStateOf(null)
         private set
     var error: String? by mutableStateOf(null)
@@ -57,10 +59,15 @@ internal class ListeningAssessmentViewModel(
     fun load() {
         foreground = true
         control {
-            if (!restored) { accept(study.restore(id)); restored = true } else accept(study.snapshot(id))
+            val initial = if (!restored) study.restore(id).also { restored = true } else study.snapshot(id)
+            capturedLanguage = services.settings.sync.baseLanguage(initial.row.sourceId)
+                ?: services.db.content().meta(initial.row.sourceId)?.baseLanguage ?: "en"
+            accept(initial)
             if (watcher == null) watcher = viewModelScope.launch {
                 listeningAction(::fail) {
-                    services.db.listeningTasks().observeAssessment(id).collect { accept(study.snapshot(id)) }
+                    services.db.listeningTasks().observeAssessment(id).collect {
+                        accept(study.snapshot(id))
+                    }
                 }
             }
         }

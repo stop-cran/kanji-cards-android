@@ -37,10 +37,10 @@ private fun GrammarPracticePreviewBody(state: GrammarUi.Preview, embedded: Boole
             Text(preview.label, style = MaterialTheme.typography.titleLarge)
             Text(stringResource(R.string.grammar_practice_source, preview.target.sourceId, preview.target.branch))
         }
-        state.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        state.notices.forEach { Text(grammarPreviewNoticeText(it), color = MaterialTheme.colorScheme.error) }
         Text(stringResource(R.string.grammar_target_counts, preview.members.size, preview.members.count { it.started }, preview.members.count { !it.started }))
-        Text(stringResource(R.string.grammar_practice_scope, preview.scope.introductionLabel))
-        preview.notice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        Text(stringResource(R.string.grammar_practice_scope, grammarScopeIntroduction(preview.scope)))
+        state.learnerMessages.forEach { Text(grammarMessageText(it), style = MaterialTheme.typography.bodySmall) }
         val outOfScope = preview.members.filter { it.outOfScope }
         if (outOfScope.isNotEmpty()) {
             val unclassified = stringResource(R.string.grammar_unclassified)

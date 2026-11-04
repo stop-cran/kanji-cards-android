@@ -19,10 +19,12 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.listening.*
 
 @Composable
@@ -56,27 +58,30 @@ internal fun ListeningAssessmentView(vm: ListeningAssessmentViewModel, onBack: (
         }
         return
     }
-    Page("Japanese diagnostic section", leave, scrollable = false, maxWidth = 1100.dp) {
+    Page(stringResource(R.string.listening_diagnostic_title), leave, scrollable = false, maxWidth = 1100.dp) {
+        CapturedListeningLanguageNotice(vm.capturedLanguage)
         if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         val unavailable = vm.error != null || !vm.ready
         if (current?.row?.closedAtMs != null) {
-            Text("This assessment is closed.")
-            Button(onClick = onBack) { Text("Back to Listening") }
+            Text(stringResource(R.string.listening_assessment_closed))
+            Button(onClick = onBack) { Text(stringResource(R.string.listening_assessment_closed_back)) }
         } else if (current?.result != null && vm.detail == null) {
             Column(Modifier.weight(1f).verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ListeningAssessmentResults(requireNotNull(current.result), vm::showDetail)
-                Button(onClick = { vm.close(onBack) }, enabled = !vm.busy) { Text("Done") }
+                Button(onClick = { vm.close(onBack) }, enabled = !vm.busy) { Text(stringResource(R.string.listening_done)) }
             }
         } else if (unavailable || current == null || task == null) {
             Column(Modifier.weight(1f).verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (vm.error == null) Text("Loading the captured section...")
+                if (vm.error == null) Text(stringResource(R.string.listening_loading_captured_section))
                 else {
-                    Text(requireNotNull(vm.error), color = MaterialTheme.colorScheme.error)
-                    Text("Technical failure is not a wrong answer. Recovery cannot restore the uninterrupted label.")
-                    OutlinedButton(onClick = vm::retry, enabled = !vm.busy) { Text("Retry captured evidence") }
-                    if (current != null) TextButton(onClick = vm::end, enabled = !vm.busy) { Text("End with partial results") }
+                    Text(stringResource(R.string.listening_assessment_error_generic), color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.listening_technical_not_wrong))
+                    OutlinedButton(onClick = vm::retry, enabled = !vm.busy) { Text(stringResource(R.string.listening_retry_captured)) }
+                    if (current != null) TextButton(onClick = vm::end, enabled = !vm.busy) {
+                        Text(stringResource(R.string.listening_end_partial_results))
+                    }
                     TextButton(onClick = { vm.close(onBack, discardUnreadable = true) }, enabled = !vm.busy) {
-                        Text("Discard unreadable capture; keep finalized data")
+                        Text(stringResource(R.string.listening_discard_unreadable))
                     }
                 }
             }
@@ -94,33 +99,37 @@ internal fun ListeningAssessmentView(vm: ListeningAssessmentViewModel, onBack: (
                     picture?.let {
                         ListeningTaskPicture(it, task.visual?.role == "required", task.choiceMode, modifier, evidence,
                             onEnlarge = { vm.pause("Picture enlargement") },
-                            enlargementLabel = if (current.result == null) "Enlarge picture (interrupts section)" else "Enlarge picture")
+                            enlargementLabel = if (current.result == null) R.string.listening_task_picture_enlarge_interrupt
+                                else R.string.listening_task_picture_enlarge)
                     }
                 }) {
                     if (vm.detail != null) {
                         current.result?.let { result ->
                             val index = result.responses.indexOfFirst { it.encounterId == vm.detail?.id }
-                            if (index >= 0) Text("${result.itemLabel(index)} - ${task.taskType.label}")
+                            if (index >= 0) Text(stringResource(
+                                R.string.listening_result_item_type,
+                                listeningAssessmentItemLabel(result, index),
+                                task.taskType.label(),
+                            ))
                         }
                         Text(task.title, style = MaterialTheme.typography.titleLarge)
                         ListeningTaskFeedbackBody(task, current.result?.responses?.find { it.encounterId == vm.detail?.id }?.answer,
                             evidence, vm.words, { vm.pause("Reading captured word"); article = it }, { vm.replay(it) }, !vm.busy && !vm.playing)
-                        TextButton(onClick = vm::hideDetail) { Text("Back to results") }
+                        TextButton(onClick = vm::hideDetail) { Text(stringResource(R.string.listening_back_to_results)) }
                     } else {
                         ListeningAssessmentItem(vm, evidence)
                         TextButton(onClick = { vm.pause("End confirmation"); ending = true }, enabled = !vm.busy) {
-                            Text("End with partial results")
+                            Text(stringResource(R.string.listening_end_partial_results))
                         }
                     }
                 }
             }
         }
     }
-    if (ending) AlertDialog(onDismissRequest = { ending = false }, title = { Text("End this section?") },
-        text = { Text("Finalized responses remain. Unfinished and unvisited items are not assessed; " +
-            "no exposure is invented. Scored feedback will be released.") },
-        confirmButton = { TextButton(onClick = { ending = false; vm.end() }) { Text("End section") } },
-        dismissButton = { TextButton(onClick = { ending = false }) { Text("Keep interrupted session") } })
+    if (ending) AlertDialog(onDismissRequest = { ending = false }, title = { Text(stringResource(R.string.listening_end_section_title)) },
+        text = { Text(stringResource(R.string.listening_end_section_message)) },
+        confirmButton = { TextButton(onClick = { ending = false; vm.end() }) { Text(stringResource(R.string.listening_end_section)) } },
+        dismissButton = { TextButton(onClick = { ending = false }) { Text(stringResource(R.string.listening_keep_interrupted_session)) } })
 }
 
 @Composable
@@ -129,29 +138,38 @@ private fun ListeningAssessmentItem(vm: ListeningAssessmentViewModel, evidence: 
     val state = current.state
     val task = current.record.task
     val example = task.usage == TaskUsage.Example
-    Text(task.taskType.label, style = MaterialTheme.typography.titleLarge)
-    Text(if (example) "Worked example - not in the score" else
-        "Scored item ${current.form.items.take(state.index).count { !it.example } + 1}/${current.form.items.count { !it.example }}")
+    Text(task.taskType.label(), style = MaterialTheme.typography.titleLarge)
+    Text(if (example) stringResource(R.string.listening_worked_example_unscored_score) else
+        stringResource(
+            R.string.listening_scored_item_progress,
+            current.form.items.take(state.index).count { !it.example } + 1,
+            current.form.items.count { !it.example },
+        ))
     if (state.paused) {
-        Text("Paused. ${state.interruptions.joinToString()}")
-        Button(onClick = vm::continuePractice, enabled = !vm.busy && !vm.playing) { Text("Continue as interrupted practice") }
-        OutlinedButton(onClick = vm::showHelp, enabled = !vm.busy && !vm.playing) { Text("Show transcript and translation (help)") }
+        val interruptions = listeningInterruptionList(state.interruptions)
+        Text(stringResource(R.string.listening_assessment_paused, interruptions))
+        Button(onClick = vm::continuePractice, enabled = !vm.busy && !vm.playing) {
+            Text(stringResource(R.string.listening_continue_interrupted_practice))
+        }
+        OutlinedButton(onClick = vm::showHelp, enabled = !vm.busy && !vm.playing) {
+            Text(stringResource(R.string.listening_help_transcript_translation))
+        }
         OutlinedButton(onClick = { vm.replay(state.stageIndex, slower = true) }, enabled = !vm.busy && !vm.playing) {
-            Text("Replay current stage more slowly (help)")
+            Text(stringResource(R.string.listening_replay_stage_slower_help))
         }
     } else if (state.phase == AssessmentPhase.Ready) {
-        Text("The captured form is fixed. Begin starts its instructions, playback and timed windows.")
-        Button(onClick = vm::begin, enabled = !vm.busy) { Text("Begin section") }
+        Text(stringResource(R.string.listening_fixed_form_begin))
+        Button(onClick = vm::begin, enabled = !vm.busy) { Text(stringResource(R.string.listening_begin_section)) }
     }
     when (state.phase) {
         AssessmentPhase.Instruction -> task.stages.first().turns.forEach { id -> Text(task.turns.single { it.id == id }.text) }
-        AssessmentPhase.Preview -> Text("Read / look: ${((state.remainingMs ?: 0) + 999) / 1_000}s")
-        AssessmentPhase.Audio -> Text("Listening: ${task.stages[state.stageIndex].label(task)}")
-        AssessmentPhase.Answer -> Text("Answer window: ${((state.remainingMs ?: 0) + 999) / 1_000}s")
+        AssessmentPhase.Preview -> Text(stringResource(R.string.listening_preview_time, ((state.remainingMs ?: 0) + 999) / 1_000))
+        AssessmentPhase.Audio -> Text(stringResource(R.string.listening_item_audio, task.stages[state.stageIndex].label(task)))
+        AssessmentPhase.Answer -> Text(stringResource(R.string.listening_answer_window, ((state.remainingMs ?: 0) + 999) / 1_000))
         AssessmentPhase.ExampleFeedback -> {
-            Text("Worked example answer / explanation: ${((state.remainingMs ?: 0) + 999) / 1_000}s")
+            Text(stringResource(R.string.listening_example_answer_time, ((state.remainingMs ?: 0) + 999) / 1_000))
             val correct = task.options.single { it.id == task.answer }
-            Text("Correct: ${correct.number}. ${correct.label}")
+            Text(stringResource(R.string.listening_correct_answer_numbered, correct.number, correct.label))
             Text(task.explanation, Modifier.onGloballyPositioned {
                 if (!it.boundsInWindow().isEmpty) {
                     vm.evidenceVisible(current.encounter.id, state.generation, state.phase, textHelp = true, explanation = true)
@@ -164,15 +182,22 @@ private fun ListeningAssessmentItem(vm: ListeningAssessmentViewModel, evidence: 
         ListeningTaskChoices(task, state.answer, state.phase == AssessmentPhase.Answer && !state.paused && !state.skipped && !vm.busy,
             vm.help, { vm.answer(it) }, evidence)
         if (state.phase == AssessmentPhase.Answer) {
-            if (state.skipped) Text("Skipped - unanswered is locked. The clock does not advance early.")
-            else OutlinedButton(onClick = { vm.answer(null) }, enabled = !state.paused && !vm.busy) { Text("Skip (lock unanswered)") }
+            if (state.skipped) Text(stringResource(R.string.listening_skipped_locked))
+            else OutlinedButton(onClick = { vm.answer(null) }, enabled = !state.paused && !vm.busy) {
+                Text(stringResource(R.string.listening_skip_lock))
+            }
         }
     }
     if (!state.paused && state.phase != AssessmentPhase.Ready) {
-        Button(onClick = { vm.pause() }, enabled = !vm.busy) { Text("Pause (interrupts section)") }
+        Button(onClick = { vm.pause() }, enabled = !vm.busy) { Text(stringResource(R.string.listening_pause_interrupts)) }
     }
-    Text(if (state.interrupted) "Interrupted practice - never an uninterrupted full-form attempt" else "Single-play diagnostic")
-    Text("N${current.form.jlpt} - ${current.row.sourceId} (${current.row.branch})", style = MaterialTheme.typography.bodySmall)
+    Text(stringResource(if (state.interrupted) R.string.listening_interrupted_never_full else R.string.listening_single_play_diagnostic))
+    Text(stringResource(
+        R.string.listening_assessment_source_detail,
+        current.form.jlpt,
+        current.row.sourceId,
+        current.row.branch,
+    ), style = MaterialTheme.typography.bodySmall)
     if (vm.help) {
         task.visual?.let { Text(it.description, evidence) }
         ListeningTaskTranscript(task, evidence, { vm.replay(it) }, !vm.busy && !vm.playing)
@@ -181,33 +206,76 @@ private fun ListeningAssessmentItem(vm: ListeningAssessmentViewModel, evidence: 
 
 @Composable
 internal fun ListeningAssessmentResults(result: AssessmentResult, detail: (Int) -> Unit) {
-    Text(if (result.completedFullForm) "Completed full-form diagnostic" else "Partial / interrupted diagnostic", style = MaterialTheme.typography.headlineSmall)
-    Text("N${result.jlpt} - ${result.blueprint}", style = MaterialTheme.typography.bodySmall)
-    Text("${result.correct} / ${result.assessed} correct", style = MaterialTheme.typography.titleLarge)
-    Text("Unanswered: ${result.unanswered}; not assessed: ${result.notAssessed}; planned scored items: ${result.planned}; examples: ${result.examples}.")
-    Text("No SRS or daily-allowance changes. Familiar or helped performance does not prove unseen-listening proficiency.")
-    Text("No official JLPT scaling, pass prediction or certification.")
-    if (result.interrupted) Text("Interruptions: ${result.interruptions.joinToString()}")
+    Text(stringResource(if (result.completedFullForm) R.string.listening_assessment_full_completed
+        else R.string.listening_assessment_partial_interrupted), style = MaterialTheme.typography.headlineSmall)
+    Text(stringResource(R.string.listening_assessment_level_blueprint, result.jlpt, result.blueprint), style = MaterialTheme.typography.bodySmall)
+    Text(stringResource(R.string.listening_assessment_correct_assessed, result.correct, result.assessed), style = MaterialTheme.typography.titleLarge)
+    Text(stringResource(
+        R.string.listening_assessment_counts,
+        result.unanswered,
+        result.notAssessed,
+        result.planned,
+        result.examples,
+    ))
+    Text(stringResource(R.string.listening_assessment_no_srs))
+    Text(stringResource(R.string.listening_no_official_score))
+    if (result.interrupted) {
+        val interruptions = listeningInterruptionList(result.interruptions)
+        Text(stringResource(R.string.listening_interruption_list, interruptions))
+    }
     ListeningTaskType.entries.forEach { type ->
         val responses = result.scored.filter { it.type == type }
-        Text("${type.label}: ${responses.count { it.outcome == AssessmentOutcome.Correct }} correct out of " +
-            "${responses.count { it.outcome != AssessmentOutcome.NotAssessed }} assessed")
+        Text(stringResource(
+            R.string.listening_assessment_type_score,
+            type.label(),
+            responses.count { it.outcome == AssessmentOutcome.Correct },
+            responses.count { it.outcome != AssessmentOutcome.NotAssessed },
+        ))
     }
     result.responses.forEachIndexed { index, response ->
         HorizontalDivider()
-        val outcome = if (response.outcome == AssessmentOutcome.NotAssessed) "Not assessed" else response.outcome.name
-        Text("${result.itemLabel(index)} - ${response.type.label}: $outcome")
-        Text("${if (response.familiar) "Familiar at capture" else "Unseen at capture"}; " +
-            "${if (response.exposed) "exposed during section" else "not exposed during section"}; picture: ${response.visual}.")
-        if (response.assistance.isNotEmpty()) Text("Help: ${response.assistance.joinToString()}")
-        if (response.interrupted) Text("Finalized during interrupted practice.")
-        TextButton(onClick = { detail(index) }) { Text("Feedback and captured transcript") }
+        val outcome = stringResource(if (response.outcome == AssessmentOutcome.NotAssessed) R.string.listening_not_assessed else
+            if (response.outcome == AssessmentOutcome.Correct) R.string.listening_result_correct else R.string.listening_result_incorrect)
+        Text(stringResource(R.string.listening_result_item_type_outcome, listeningAssessmentItemLabel(result, index), response.type.label(), outcome))
+        val familiar = stringResource(if (response.familiar) R.string.listening_familiar_at_capture else R.string.listening_unseen_at_capture)
+        val exposure = stringResource(if (response.exposed) R.string.listening_exposed_during_section else R.string.listening_not_exposed_during_section)
+        val picture = stringResource(if (response.visual) R.string.listening_picture_yes else R.string.listening_picture_no)
+        Text(stringResource(
+            R.string.listening_result_familiar_exposed_visual,
+            familiar, exposure, picture,
+        ))
+        if (response.assistance.isNotEmpty()) {
+            Text(stringResource(R.string.listening_help_used, listeningAssistanceList(response.assistance)))
+        }
+        if (response.interrupted) Text(stringResource(R.string.listening_finalized_interrupted))
+        TextButton(onClick = { detail(index) }) { Text(stringResource(R.string.listening_feedback_captured_transcript)) }
     }
 }
 
-private fun AssessmentResult.itemLabel(index: Int): String =
-    if (responses[index].example) "Worked example (not scored)"
-    else "Scored item ${responses.take(index).count { !it.example } + 1}/$planned"
+@Composable
+private fun listeningAssessmentItemLabel(result: AssessmentResult, index: Int): String =
+    if (result.responses[index].example) stringResource(R.string.listening_result_example_item)
+    else stringResource(R.string.listening_result_scored_item, result.responses.take(index).count { !it.example } + 1, result.planned)
+
+@Composable
+private fun listeningInterruptionLabel(value: String): String = stringResource(when (value) {
+    "App paused or backgrounded" -> R.string.listening_interrupt_app_background
+    "Window focus lost" -> R.string.listening_interrupt_window_focus
+    "Headphones disconnected" -> R.string.listening_interrupt_headphones
+    "Left assessment screen" -> R.string.listening_interrupt_left_screen
+    "Left assessment" -> R.string.listening_interrupt_left_screen
+    "Picture enlargement" -> R.string.listening_interrupt_picture_enlarged
+    "End confirmation" -> R.string.listening_interrupt_end_confirmation
+    "Reading captured word" -> R.string.listening_interrupt_read_article
+    else -> R.string.listening_interrupt_other
+})
+
+@Composable
+private fun listeningInterruptionList(values: Iterable<String>): String {
+    val labels = mutableListOf<String>()
+    for (value in values) labels += listeningInterruptionLabel(value)
+    return labels.joinToString()
+}
 
 @Composable
 private fun AssessmentLifecycle(vm: ListeningAssessmentViewModel) {

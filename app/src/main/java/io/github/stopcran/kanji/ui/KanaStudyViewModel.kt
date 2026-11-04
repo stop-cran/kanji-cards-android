@@ -34,7 +34,7 @@ import java.time.Instant
 
 sealed interface KanaStudyUi {
     data object Loading : KanaStudyUi
-    data class Empty(val message: String) : KanaStudyUi
+    data class Empty(val reason: KanaEmptyReason) : KanaStudyUi
     data class Done(val answered: Int, val correct: Int) : KanaStudyUi
     data class QuizQuestion(val card: KanaCard, val options: List<String>, val remaining: Int) : KanaStudyUi
     data class QuizAnswer(val card: KanaCard, val options: List<String>, val picked: String, val remaining: Int) : KanaStudyUi
@@ -54,6 +54,8 @@ sealed interface KanaStudyUi {
         val trace: Boolean,
     ) : KanaStudyUi
 }
+
+enum class KanaEmptyReason { NoPractice, PracticeMore, NothingDue }
 
 class KanaStudyViewModel(private val app: Services) : StudyViewModel(app.sessionStore) {
     private val fsrs = Fsrs()
@@ -106,7 +108,7 @@ class KanaStudyViewModel(private val app: Services) : StudyViewModel(app.session
             QueueBuilder.build(candidates, states, now, allowance).map { it.kanji }
         }
         if (ids.isEmpty()) {
-            ui = KanaStudyUi.Empty(if (extra) "No kana available to practise." else "Nothing is due. Come back later or choose practice more.")
+            ui = KanaStudyUi.Empty(if (extra) KanaEmptyReason.NoPractice else KanaEmptyReason.PracticeMore)
             return
         }
         session = trackSession(QuizSession(ids, { it }, confirm = false), KANA_SOURCE_ID, script.id, mode.name, extra)
@@ -162,7 +164,7 @@ class KanaStudyViewModel(private val app: Services) : StudyViewModel(app.session
         val id = session.take()
         if (id == null) {
             finishSession()
-            ui = if (session.answered == 0) KanaStudyUi.Empty("Nothing is due.") else KanaStudyUi.Done(session.answered, session.correct)
+            ui = if (session.answered == 0) KanaStudyUi.Empty(KanaEmptyReason.NothingDue) else KanaStudyUi.Done(session.answered, session.correct)
             return
         }
         val card = cards.getValue(id)

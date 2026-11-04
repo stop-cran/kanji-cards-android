@@ -37,6 +37,7 @@ import androidx.core.content.ContextCompat
 import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.core.voice.OptionMatcher
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.util.Locale
 import kotlin.coroutines.resume
 
 sealed interface VoiceStatus {
@@ -47,27 +48,34 @@ sealed interface VoiceStatus {
 
 /** Voice input is offered only when an on-device recognizer exists; audio is never sent to an online service. */
 object VoiceSupport {
-    const val LANGUAGE = "en-US"
+    private val availableLanguages = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
-    fun recognizerIntent(): Intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+    fun languageTag(language: String): String = if (language == "ru") "ru-RU" else "en-US"
+
+    fun recognizerIntent(language: String): Intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-        putExtra(RecognizerIntent.EXTRA_LANGUAGE, LANGUAGE)
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag(language))
         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
         putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
     }
 
-    @Volatile
-    private var available = false
-    val knownAvailable: Boolean get() = available
+    fun knownAvailable(language: String): Boolean = language in availableLanguages
 
-    suspend fun check(context: Context): VoiceStatus {
-        if (available) return VoiceStatus.Available
-        return probe(context).also { available = it == VoiceStatus.Available }
+    suspend fun check(context: Context, language: String): VoiceStatus {
+        if (knownAvailable(language)) return VoiceStatus.Available
+        return probe(context, language).also {
+            if (it == VoiceStatus.Available) availableLanguages.add(language)
+        }
     }
 
-    private suspend fun probe(context: Context): VoiceStatus {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return VoiceStatus.Unavailable("it needs Android 12 or newer")
-        if (!SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) return VoiceStatus.Unavailable("this device has no on-device speech recognizer")
+    private suspend fun probe(context: Context, language: String): VoiceStatus {
+        val languageName = context.getString(if (language == "ru") R.string.language_russian_name else R.string.language_english_name)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return VoiceStatus.Unavailable(context.getString(R.string.voice_android_version_required))
+        }
+        if (!SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
+            return VoiceStatus.Unavailable(context.getString(R.string.voice_no_on_device_recognizer))
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return VoiceStatus.Available
         return suspendCancellableCoroutine { cont ->
             val recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
@@ -80,15 +88,22 @@ object VoiceSupport {
             }
             cont.invokeOnCancellation { if (!done) { done = true; recognizer.destroy() } }
             recognizer.checkRecognitionSupport(
-                recognizerIntent(),
+                recognizerIntent(language),
                 ContextCompat.getMainExecutor(context),
                 object : RecognitionSupportCallback {
                     override fun onSupportResult(support: RecognitionSupport) {
-                        val installed = support.installedOnDeviceLanguages.any { it.startsWith("en") }
-                        finish(if (installed) VoiceStatus.Available else VoiceStatus.Unavailable("the English on-device speech pack is not installed"))
+                        val installed = support.installedOnDeviceLanguages.any {
+                            Locale.forLanguageTag(it).language == language
+                        }
+                        finish(
+                            if (installed) VoiceStatus.Available
+                            else VoiceStatus.Unavailable(context.getString(R.string.voice_not_installed, languageName)),
+                        )
                     }
 
-                    override fun onError(error: Int) = finish(VoiceStatus.Unavailable("the on-device recognizer could not be queried"))
+                    override fun onError(error: Int) = finish(
+                        VoiceStatus.Unavailable(context.getString(R.string.voice_support_query_failed, languageName)),
+                    )
                 },
             )
         }
@@ -96,9 +111,13 @@ object VoiceSupport {
 }
 
 @Composable
-fun rememberVoiceStatus(): State<VoiceStatus> {
+fun rememberVoiceStatus(language: String = "en"): State<VoiceStatus> {
     val context = LocalContext.current
-    return produceState<VoiceStatus>(if (VoiceSupport.knownAvailable) VoiceStatus.Available else VoiceStatus.Checking, context) { value = VoiceSupport.check(context) }
+    return produceState<VoiceStatus>(
+        if (VoiceSupport.knownAvailable(language)) VoiceStatus.Available else VoiceStatus.Checking,
+        context,
+        language,
+    ) { value = VoiceSupport.check(context, language) }
 }
 
 private sealed interface Listen {
@@ -112,17 +131,17 @@ private sealed interface Listen {
  * Hidden unless the user enabled voice input and an on-device recognizer is available.
  */
 @Composable
-fun VoiceButton(options: List<String>, onMatch: (index: Int, heard: String) -> Unit, modifier: Modifier = Modifier) {
+fun VoiceButton(options: List<String>, onMatch: (index: Int, heard: String) -> Unit, language: String = "en", modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val enabled by (context.applicationContext as KanjiApp).settings.voiceInput.collectAsState()
-    val status by rememberVoiceStatus()
+    val status by rememberVoiceStatus(language)
     if (!enabled || status != VoiceStatus.Available) return
 
     var state by remember { mutableStateOf<Listen>(Listen.Idle) }
-    val recognizer = remember { arrayOfNulls<SpeechRecognizer>(1) }
+    val recognizer = remember(language) { arrayOfNulls<SpeechRecognizer>(1) }
     val latest by androidx.compose.runtime.rememberUpdatedState(Pair(options, onMatch))
 
-    DisposableEffect(Unit) { onDispose { recognizer[0]?.destroy(); recognizer[0] = null } }
+    DisposableEffect(language) { onDispose { recognizer[0]?.destroy(); recognizer[0] = null } }
 
     fun start() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
@@ -132,9 +151,10 @@ fun VoiceButton(options: List<String>, onMatch: (index: Int, heard: String) -> U
         r.setRecognitionListener(object : RecognitionListener {
             override fun onResults(results: Bundle?) {
                 val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
-                val index = OptionMatcher.match(heard, latest.first)
+                val index = OptionMatcher.match(heard, latest.first, language)
                 state = if (index != null) Listen.Idle else Listen.Note(
-                    if (heard.isEmpty()) "Didn't catch that. Try again or tap an answer." else "Heard “${heard.first()}” — no clear match. Try again or tap an answer.",
+                    if (heard.isEmpty()) context.getString(R.string.voice_no_match)
+                    else context.getString(R.string.voice_heard_no_match, heard.first()),
                 )
                 if (index != null) latest.second(index, heard.first())
             }
@@ -142,10 +162,14 @@ fun VoiceButton(options: List<String>, onMatch: (index: Int, heard: String) -> U
             override fun onError(error: Int) {
                 state = Listen.Note(
                     when (error) {
-                        SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Didn't catch that. Try again or tap an answer."
-                        SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED, SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> "English speech recognition isn't available on this device."
-                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is needed for voice input."
-                        else -> "Voice input failed. Tap an answer instead."
+                        SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
+                            context.getString(R.string.voice_no_match)
+                        SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED, SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> {
+                            val languageName = context.getString(if (language == "ru") R.string.language_russian_name else R.string.language_english_name)
+                            context.getString(R.string.voice_language_unavailable, languageName)
+                        }
+                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> context.getString(R.string.voice_microphone_permission)
+                        else -> context.getString(R.string.voice_input_failed)
                     },
                 )
             }
@@ -159,11 +183,11 @@ fun VoiceButton(options: List<String>, onMatch: (index: Int, heard: String) -> U
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
         state = Listen.Active
-        r.startListening(VoiceSupport.recognizerIntent())
+        r.startListening(VoiceSupport.recognizerIntent(language))
     }
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) start() else state = Listen.Note("Microphone permission is needed for voice input.")
+        if (granted) start() else state = Listen.Note(context.getString(R.string.voice_microphone_permission))
     }
 
     OutlinedButton(
@@ -173,7 +197,17 @@ fun VoiceButton(options: List<String>, onMatch: (index: Int, heard: String) -> U
         },
         enabled = state != Listen.Active,
         modifier = modifier.fillMaxWidth(),
-    ) { Text(if (state == Listen.Active) "Listening…" else "🎤 Say the meaning") }
+    ) {
+        Text(
+            stringResource(
+                when {
+                    state == Listen.Active -> R.string.voice_listening
+                    language == "ru" -> R.string.voice_say_russian_meaning
+                    else -> R.string.voice_say_meaning
+                },
+            ),
+        )
+    }
     (state as? Listen.Note)?.let { Text(it.text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite }) }
 }
 

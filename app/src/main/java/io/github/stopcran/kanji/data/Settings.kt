@@ -12,6 +12,7 @@ import io.github.stopcran.kanji.core.listening.ListeningScope
 import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.unlock.UnlockRule
 import io.github.stopcran.kanji.core.words.WordStacks
+import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -28,14 +29,99 @@ data class GrammarPreferences(
 
 data class GrammarBrowserPreferences(val kind: GrammarTargetKind = GrammarTargetKind.Chapter, val diagram: Boolean = true)
 
+data class PendingSourceCandidate(val token: String, val url: String, val branch: String, val source: RepoSource)
+
 class Settings(context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     val sync = SyncPreferences(prefs, ::updateGrammarEpoch)
 
     /** Aggregate legacy persistence, including sync hints, for the unchanged progress export. */
     fun snapshot(): Map<String, Any?> = prefs.all.toSortedMap()
+    private val _appLanguage = MutableStateFlow(loadAppLanguage(context))
+    val appLanguage: StateFlow<AppLanguage> = _appLanguage
     private val _source = MutableStateFlow(load())
     val source: StateFlow<RepoSource> = _source
+    private val _pendingSourceCandidate = MutableStateFlow(loadPendingSourceCandidate())
+    val pendingSourceCandidate: StateFlow<PendingSourceCandidate?> = _pendingSourceCandidate
+
+    @Synchronized
+    internal fun applyLanguageSelection(language: AppLanguage, selectedSource: RepoSource?) {
+        val edit = prefs.edit().putString(KEY_APP_LANGUAGE, language.storedValue)
+        selectedSource?.let {
+            edit.putString(KEY_URL, "https://github.com/${it.owner}/${it.repo}")
+                .putString(KEY_BRANCH, it.branch)
+                .remove(KEY_PENDING_SOURCE_TOKEN)
+                .remove(KEY_PENDING_SOURCE_URL)
+                .remove(KEY_PENDING_SOURCE_BRANCH)
+        }
+        check(edit.commit()) { "Could not persist the selected app language." }
+        _appLanguage.value = language
+        selectedSource?.let {
+            _source.value = it
+            _pendingSourceCandidate.value = null
+        }
+    }
+
+    @Synchronized
+    internal fun recoverLanguageSelection(accepted: AcceptedSourceEntity, language: AppLanguage): Boolean {
+        val parsed = RepoSource.parse(accepted.url, accepted.branch) ?: return false
+        if (parsed.id != accepted.sourceId) return false
+        val knownLanguage = sync.baseLanguage(parsed.id)
+        if (knownLanguage != null && knownLanguage != accepted.baseLanguage) return false
+        val defaultLanguage = when (parsed.id) {
+            LanguageSources.defaultForBase("ru").id -> "ru"
+            LanguageSources.defaultForBase("en").id -> "en"
+            else -> null
+        }
+        if (defaultLanguage != null && accepted.baseLanguage != defaultLanguage) return false
+        applyLanguageSelection(language, parsed)
+        return true
+    }
+
+    @Synchronized
+    internal fun beginSourceCandidate(url: String, branch: String): PendingSourceCandidate? {
+        val parsed = RepoSource.parse(url, branch) ?: return null
+        val pending = PendingSourceCandidate(UUID.randomUUID().toString(), url.trim(), branch.trim(), parsed)
+        prefs.edit()
+            .putString(KEY_PENDING_SOURCE_TOKEN, pending.token)
+            .putString(KEY_PENDING_SOURCE_URL, pending.url)
+            .putString(KEY_PENDING_SOURCE_BRANCH, pending.branch)
+            .apply()
+        _pendingSourceCandidate.value = pending
+        return pending
+    }
+
+    @Synchronized
+    fun isCurrentSourceCandidate(token: String): Boolean = _pendingSourceCandidate.value?.token == token
+
+    @Synchronized
+    internal fun cancelSourceCandidate(token: String? = null) {
+        val pending = _pendingSourceCandidate.value ?: return
+        if (token != null && token != pending.token) return
+        clearPendingSourceCandidate()
+    }
+
+    @Synchronized
+    internal fun acceptSourceCandidate(accepted: AcceptedSourceEntity): Boolean {
+        val pending = _pendingSourceCandidate.value?.takeIf {
+            it.token == accepted.token && it.source.id == accepted.sourceId && it.source.branch == accepted.branch
+        } ?: return false
+        val parsed = RepoSource.parse(accepted.url, accepted.branch) ?: return false
+        if (parsed.id != pending.source.id) return false
+        val language = AppLanguage.forBaseLanguage(accepted.baseLanguage)
+        prefs.edit()
+            .putString(KEY_URL, accepted.url)
+            .putString(KEY_BRANCH, accepted.branch)
+            .putString(KEY_APP_LANGUAGE, language.storedValue)
+            .remove(KEY_PENDING_SOURCE_TOKEN)
+            .remove(KEY_PENDING_SOURCE_URL)
+            .remove(KEY_PENDING_SOURCE_BRANCH)
+            .apply()
+        _source.value = parsed
+        _appLanguage.value = language
+        _pendingSourceCandidate.value = null
+        return true
+    }
     private val _startingGuideVisible = MutableStateFlow(prefs.getBoolean(KEY_STARTING_GUIDE, true))
     val startingGuideVisible: StateFlow<Boolean> = _startingGuideVisible
 
@@ -283,11 +369,11 @@ class Settings(context: Context) {
         get() = prefs.getInt(KEY_ART_SET, -1)
         set(v) = prefs.edit().putInt(KEY_ART_SET, v).apply()
 
-    val repoUrl: String get() = prefs.getString(KEY_URL, Defaults.CONTENT_REPO_URL) ?: Defaults.CONTENT_REPO_URL
-    val branch: String get() = prefs.getString(KEY_BRANCH, Defaults.CONTENT_BRANCH) ?: Defaults.CONTENT_BRANCH
+    val repoUrl: String get() = prefs.getString(KEY_URL, null) ?: "https://github.com/${source.value.owner}/${source.value.repo}"
+    val branch: String get() = prefs.getString(KEY_BRANCH, null) ?: source.value.branch
 
-    /** Returns false (and keeps the old value) when the URL or branch is not acceptable. */
-    fun setSource(url: String, branch: String): Boolean {
+    /** Setup/test initializer; production source changes must use ContentSync's serialized authority protocol. */
+    internal fun setSource(url: String, branch: String): Boolean {
         val parsed = RepoSource.parse(url, branch) ?: return false
         prefs.edit().putString(KEY_URL, url.trim()).putString(KEY_BRANCH, branch.trim()).apply()
         _source.value = parsed
@@ -300,14 +386,54 @@ class Settings(context: Context) {
         _dailyNewCards.value = v
     }
 
-    private fun load(): RepoSource =
-        RepoSource.parse(prefs.getString(KEY_URL, null) ?: Defaults.CONTENT_REPO_URL, prefs.getString(KEY_BRANCH, null) ?: Defaults.CONTENT_BRANCH)
-            ?: defaultSource
+    private fun load(): RepoSource {
+        val savedUrl = prefs.getString(KEY_URL, null)
+        val savedBranch = prefs.getString(KEY_BRANCH, null)
+        if (savedUrl == null && savedBranch == null && AppLocale.resolvedLanguage(_appLanguage.value) == "ru") {
+            return LanguageSources.default(AppLanguage.Russian)
+        }
+        return RepoSource.parse(savedUrl ?: Defaults.CONTENT_REPO_URL, savedBranch ?: Defaults.CONTENT_BRANCH) ?: defaultSource
+    }
+
+    private fun loadPendingSourceCandidate(): PendingSourceCandidate? {
+        val token = prefs.getString(KEY_PENDING_SOURCE_TOKEN, null) ?: return null
+        val url = prefs.getString(KEY_PENDING_SOURCE_URL, null) ?: return null
+        val branch = prefs.getString(KEY_PENDING_SOURCE_BRANCH, null) ?: return null
+        val source = RepoSource.parse(url, branch) ?: return null
+        return PendingSourceCandidate(token, url, branch, source)
+    }
+
+    private fun loadAppLanguage(context: Context): AppLanguage {
+        val saved = prefs.getString(KEY_APP_LANGUAGE, null)
+        if (saved != null) return AppLanguage.parse(saved)
+        val firstInstall = runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).firstInstallTime
+        }.getOrDefault(0L)
+        val lastUpdate = runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
+        }.getOrDefault(0L)
+        return (if (firstInstall == 0L || firstInstall == lastUpdate) AppLanguage.System else AppLanguage.English).also {
+            prefs.edit().putString(KEY_APP_LANGUAGE, it.storedValue).apply()
+        }
+    }
+
+    private fun clearPendingSourceCandidate() {
+        prefs.edit()
+            .remove(KEY_PENDING_SOURCE_TOKEN)
+            .remove(KEY_PENDING_SOURCE_URL)
+            .remove(KEY_PENDING_SOURCE_BRANCH)
+            .apply()
+        _pendingSourceCandidate.value = null
+    }
 
     private companion object {
         val defaultSource = RepoSource("stop-cran", "learning-japanese", Defaults.CONTENT_BRANCH)
         const val KEY_URL = "repoUrl"
         const val KEY_BRANCH = "branch"
+        private const val KEY_APP_LANGUAGE = "appLanguage"
+        private const val KEY_PENDING_SOURCE_TOKEN = "pendingSourceToken"
+        private const val KEY_PENDING_SOURCE_URL = "pendingSourceUrl"
+        private const val KEY_PENDING_SOURCE_BRANCH = "pendingSourceBranch"
         const val KEY_STARTING_GUIDE = "startingGuideVisible"
         const val KEY_NEW = "dailyNewCards"
         const val KEY_WEEK = "weekPlan"

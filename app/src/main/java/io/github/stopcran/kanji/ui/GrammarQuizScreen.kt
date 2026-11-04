@@ -102,7 +102,7 @@ private fun GrammarTopicDetails(
     val state = vm.ui
     val loaded = when (state) {
         is GrammarUi.Preview -> GrammarMapState.Ready(requireNotNull(vm.practiceDetails))
-        is GrammarUi.Empty -> GrammarMapState.Unavailable(state.message)
+        is GrammarUi.Empty -> GrammarMapState.Unavailable(grammarMessageText(state.message))
         else -> GrammarMapState.Loading
     }
     GrammarRoadmapPage(loaded, GrammarMapDestination.from(target), actions, onBack, message) {
@@ -121,13 +121,13 @@ private fun GrammarSessionBody(
     GrammarVocabularyHelp(vm)
     val state = vm.ui
     val answer = state as? GrammarUi.Answer
-    key(state) { Page(if (vm.target == null) "Grammar" else stringResource(R.string.grammar_topic_practice), onBack,
+    key(state) { Page(if (vm.target == null) stringResource(R.string.home_grammar) else stringResource(R.string.grammar_topic_practice), onBack,
         ime = true, scrollToTopOnBack = true,
         footer = if (answer != null) { { GrammarAnswerActions(answer, vm) } } else null,
     ) {
         if (answer != null) {
             Text(
-                if (answer.correct) "Correct!" else "Not quite",
+                if (answer.correct) stringResource(R.string.grammar_correct) else stringResource(R.string.grammar_not_quite),
                 color = if (answer.correct) correctTextColor() else wrongTextColor(),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.fillMaxWidth(),
@@ -137,15 +137,15 @@ private fun GrammarSessionBody(
         vm.approvedPractice?.let { Text(stringResource(R.string.grammar_practising_topic, it.label)) }
         if (vm.practiceOverride) Text(stringResource(R.string.grammar_session_exception), style = MaterialTheme.typography.bodySmall)
         vm.focus?.let { GrammarFocusSummary(it, activeSession = true) }
-        vm.focusNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        if (state !is GrammarUi.Empty) vm.focusNotice.forEach { Text(grammarMessageText(it), style = MaterialTheme.typography.bodySmall) }
         when (state) {
-            GrammarUi.Loading -> Text("Loading…", Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            GrammarUi.Loading -> Text(stringResource(R.string.grammar_exercise_loading), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             is GrammarUi.Preview -> GrammarPracticePreviewContent(state, sessionKey) { vm.startTargeted(it, state) }
-            is GrammarUi.Empty -> Text(state.message)
+            is GrammarUi.Empty -> Text(grammarMessageText(state.message))
             is GrammarUi.Done -> {
-                Text("Session complete", style = MaterialTheme.typography.headlineSmall)
-                Text("${state.correct} of ${state.answered} answers correct")
-                if (vm.target == null) Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Done") }
+                Text(stringResource(R.string.grammar_session_complete), style = MaterialTheme.typography.headlineSmall)
+                Text(stringResource(R.string.grammar_answers_correct, state.correct, state.answered))
+                if (vm.target == null) Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.done)) }
                 OutlinedButton(onClick = onPracticeMore, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(if (vm.target == null) R.string.practice_more else R.string.grammar_practice_topic_again))
                 }
@@ -154,8 +154,8 @@ private fun GrammarSessionBody(
                 SessionRemaining(state.remaining)
                 GrammarPrompt(vm, state.exercise)
                 Text(
-                    if (state.choices.correctOptionIds.size > 1) "Choose any one of the correct answers."
-                    else "Choose an answer that fits the task.",
+                    if (state.choices.correctOptionIds.size > 1) stringResource(R.string.grammar_choose_any_correct)
+                    else stringResource(R.string.grammar_choose_fitting_answer),
                     Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
                 )
                 state.options.forEach { option ->
@@ -166,13 +166,13 @@ private fun GrammarSessionBody(
             is GrammarUi.Type -> {
                 SessionRemaining(state.remaining)
                 GrammarPrompt(vm, state.exercise)
-                Text("Type the missing text. Follow the task instructions.", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                Text(stringResource(R.string.grammar_type_missing), Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 TypeAnswer(vm)
             }
             is GrammarUi.Answer -> {
                 GrammarPrompt(vm, state.exercise, state.completion)
                 if (state.response.isNotEmpty()) {
-                    Text("Your answer: ${state.responseLabel}", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                    Text(stringResource(R.string.grammar_your_answer, state.responseLabel), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 }
                 GrammarOptionFeedback(state)
                 Text(state.exercise.evidence, style = MaterialTheme.typography.bodyMedium)
@@ -191,7 +191,7 @@ private fun GrammarAnswerActions(answer: GrammarUi.Answer, vm: GrammarQuizViewMo
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Button(onClick = { vm.next(origin = answer) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.next)) }
         if (answer.correct && answer.type == "choose") {
-            OutlinedButton(onClick = { vm.next(guessed = true, origin = answer) }) { Text("I guessed") }
+            OutlinedButton(onClick = { vm.next(guessed = true, origin = answer) }) { Text(stringResource(R.string.i_guessed)) }
         }
     }
 }
@@ -201,17 +201,17 @@ internal fun GrammarOptionFeedback(state: GrammarUi.Answer) {
     state.options.forEach { option ->
         val correct = option.id in state.correctOptionIds
         val selectedWrong = !correct && state.type == "choose" && option.id == state.response
-        val prefix = when {
-            correct -> "✓ Correct: "
-            selectedWrong -> "✗ Your answer: "
-            else -> ""
+        val answer = when {
+            correct -> stringResource(R.string.grammar_correct_prefix, option.label)
+            selectedWrong -> stringResource(R.string.grammar_your_answer_prefix, option.label)
+            else -> option.label
         }
         val color = when {
             correct -> correctTextColor()
             selectedWrong -> wrongTextColor()
             else -> MaterialTheme.colorScheme.onSurface
         }
-        Text("$prefix${option.label} — ${option.rationale}", color = color, style = MaterialTheme.typography.bodySmall)
+        Text("$answer — ${option.rationale}", color = color, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -229,7 +229,7 @@ private fun TypeAnswer(vm: GrammarQuizViewModel) {
         modifier = Modifier.fillMaxWidth().focusRequester(focus),
     )
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Button(onClick = { vm.check() }, enabled = vm.draft.isNotBlank(), modifier = Modifier.weight(1f)) { Text("Check") }
+        Button(onClick = { vm.check() }, enabled = vm.draft.isNotBlank(), modifier = Modifier.weight(1f)) { Text(stringResource(R.string.grammar_check)) }
         DontKnowButton(Modifier.weight(1f)) { vm.check(giveUp = true) }
     }
 }

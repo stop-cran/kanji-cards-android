@@ -54,11 +54,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.stopcran.kanji.core.draw.DrawOutcome
+import io.github.stopcran.kanji.core.draw.IssueType
 import io.github.stopcran.kanji.core.draw.Pt
+import io.github.stopcran.kanji.core.draw.ShapeFault
 import io.github.stopcran.kanji.core.draw.regularize
 import io.github.stopcran.kanji.core.draw.varyReference
 import io.github.stopcran.kanji.core.draw.Stroke
-import io.github.stopcran.kanji.core.draw.describe
+import io.github.stopcran.kanji.core.draw.StrokeIssue
+
+private fun unlockRuleHint(value: io.github.stopcran.kanji.core.unlock.UnlockRule): Int = when (value) {
+    io.github.stopcran.kanji.core.unlock.UnlockRule.NextDay -> R.string.unlock_next_day_hint
+    io.github.stopcran.kanji.core.unlock.UnlockRule.SpacedSameDay -> R.string.unlock_spaced_same_day_hint
+}
 
 private val Good = Color(0xFF2E7D32)
 private val Bad = Color(0xFFC62828)
@@ -74,11 +81,24 @@ fun DrawScreen(
     LaunchedEffect(destination) { vm.ensureStarted(destination.extra) }
     val app = LocalContext.current.applicationContext as KanjiApp
     val brush by app.settings.brush.collectAsState()
+    val unlockRule by app.settings.unlockRule.collectAsState()
     androidx.compose.runtime.CompositionLocalProvider(LocalBrush provides brush, LocalBrushLook provides vm.look) {
-    Page("Drawing", onBack, scrollToTopOnBack = true) {
+    Page(stringResource(R.string.drawing_title), onBack, scrollToTopOnBack = true) {
         when (val s = vm.ui) {
             DrawUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
-            is DrawUi.Empty -> Text(s.message)
+            is DrawUi.Empty -> Text(
+                when (s.reason) {
+                    DrawEmptyReason.NoStrokeCards -> stringResource(R.string.draw_empty_no_strokes)
+                    DrawEmptyReason.NothingDue -> stringResource(R.string.draw_empty_nothing_due)
+                    DrawEmptyReason.UnlockBlocked -> stringResource(
+                        R.string.draw_no_cards_unlocked,
+                        stringResource(unlockRuleHint(unlockRule)),
+                    )
+                    DrawEmptyReason.ContentLanguageMismatch -> stringResource(R.string.content_language_mismatch_detail)
+                    DrawEmptyReason.RussianDefaultGated -> stringResource(R.string.content_russian_default_gated)
+                    DrawEmptyReason.CapturedSourceUnavailable -> stringResource(R.string.draw_source_changed)
+                },
+            )
             is DrawUi.Done -> {
                 Text(stringResource(R.string.session_complete), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
                 Text(stringResource(R.string.of_drawn_cleanly, s.clean, s.answered))
@@ -97,7 +117,11 @@ fun DrawScreen(
 private fun QuestionState(s: DrawUi.Question, vm: DrawViewModel) {
     val strokes = vm.ink
     SessionRemaining(s.remaining)
-    Text(if (s.trace) "Trace the kanji for" else stringResource(R.string.draw_the_kanji_for), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    Text(
+        stringResource(if (s.trace) R.string.draw_trace_for else R.string.draw_the_kanji_for),
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = TextAlign.Center,
+    )
     Text(s.card.title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     if (s.trace) {
         Text(stringResource(R.string.tracing_practice_notice), style = MaterialTheme.typography.bodySmall,
@@ -131,17 +155,24 @@ private fun QuestionState(s: DrawUi.Question, vm: DrawViewModel) {
 private fun AnswerState(s: DrawUi.Answer, vm: DrawViewModel, onOpenDoc: (String) -> Unit) {
     val showIssues = s.outcome == DrawOutcome.Mistakes
     val (headline, color) = when (s.outcome) {
-        DrawOutcome.Clean -> "Well drawn!" to correctTextColor()
-        DrawOutcome.Mistakes -> "Recognised, with stroke mistakes" to Color(0xFFEF6C00)
-        DrawOutcome.NotRecognized -> (
-            if (s.drawn.isEmpty()) "Here is the kanji"
-            else s.lookalike?.let { "That looks like ${it.kanji}" + (it.title?.let { t -> " ($t)" } ?: "") } ?: "Not recognised"
-            ) to wrongTextColor()
+        DrawOutcome.Clean -> stringResource(R.string.draw_outcome_clean) to correctTextColor()
+        DrawOutcome.Mistakes -> stringResource(R.string.draw_outcome_mistakes) to Color(0xFFEF6C00)
+        DrawOutcome.NotRecognized -> {
+            val text = if (s.drawn.isEmpty()) {
+                stringResource(R.string.draw_outcome_here_is_kanji)
+            } else {
+                s.lookalike?.let {
+                    if (it.title == null) stringResource(R.string.draw_outcome_lookalike_no_title, it.kanji)
+                    else stringResource(R.string.draw_outcome_lookalike, it.kanji, it.title)
+                } ?: stringResource(R.string.draw_outcome_not_recognized)
+            }
+            text to wrongTextColor()
+        }
     }
     Text(s.card.kanji + "  " + s.card.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     if (s.trace) {
         Text(
-            "Practice only: this attempt is not graded.",
+            stringResource(R.string.draw_trace_practice_only),
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.fillMaxWidth(),
             textAlign = TextAlign.Center,
@@ -158,12 +189,54 @@ private fun AnswerState(s: DrawUi.Answer, vm: DrawViewModel, onOpenDoc: (String)
         Text(stringResource(R.string.your_drawing), Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)
         Text(stringResource(R.string.correct_strokes), Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)
     }
-    if (showIssues) s.match.issues.forEach { Text(stringResource(R.string.bullet_prefix) + it.describe(), color = wrongTextColor()) }
+    if (showIssues) s.match.issues.forEach { StrokeIssueText(it) }
     if (!s.recognizerUsed && s.drawn.isNotEmpty()) Text(stringResource(R.string.graded_by_stroke_shapes_only), style = MaterialTheme.typography.bodySmall)
     Button(onClick = { vm.next() }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.next)) }
     HorizontalDivider(Modifier.padding(vertical = 4.dp))
     MarkdownView(s.card.body, "kanji/${s.card.kanji}.md", onOpenDoc)
 }
+
+@Composable
+internal fun StrokeIssueText(issue: StrokeIssue) {
+    val ref = (issue.refIndex ?: 0) + 1
+    val drawn = (issue.drawnIndex ?: 0) + 1
+    val text = when (issue.type) {
+        IssueType.Reversed -> stringResource(R.string.draw_stroke_reversed, ref)
+        IssueType.WrongOrder -> stringResource(R.string.draw_stroke_wrong_order, ref, drawn)
+        IssueType.WrongShape -> if (issue.faults.isEmpty()) {
+            stringResource(R.string.draw_stroke_wrong_shape, ref)
+        } else {
+            val faults = issue.faults.map { stringResource(shapeFaultLabel(it)) }.joinToString(", ")
+            stringResource(R.string.draw_stroke_shape_faults, ref, faults)
+        }
+        IssueType.Joined -> stringResource(R.string.draw_stroke_joined, ref, ref + 1)
+        IssueType.Broken -> stringResource(R.string.draw_stroke_broken, ref)
+        IssueType.Missing -> stringResource(R.string.draw_stroke_missing, ref)
+        IssueType.Extra -> stringResource(R.string.draw_stroke_extra, drawn)
+        IssueType.MissingHook -> stringResource(R.string.draw_stroke_missing_hook, ref)
+        IssueType.ExtraHook -> stringResource(R.string.draw_stroke_extra_hook, ref)
+    }
+    Text(stringResource(R.string.bullet_prefix) + text, color = wrongTextColor())
+}
+
+private val shapeFaultLabels = mapOf(
+    ShapeFault.TooLow to R.string.shape_fault_too_low,
+    ShapeFault.TooHigh to R.string.shape_fault_too_high,
+    ShapeFault.TooFarLeft to R.string.shape_fault_too_far_left,
+    ShapeFault.TooFarRight to R.string.shape_fault_too_far_right,
+    ShapeFault.TooShort to R.string.shape_fault_too_short,
+    ShapeFault.TooLong to R.string.shape_fault_too_long,
+    ShapeFault.SlopesDown to R.string.shape_fault_slopes_down,
+    ShapeFault.SlopesUp to R.string.shape_fault_slopes_up,
+    ShapeFault.LeansRight to R.string.shape_fault_leans_right,
+    ShapeFault.LeansLeft to R.string.shape_fault_leans_left,
+    ShapeFault.TooSteep to R.string.shape_fault_too_steep,
+    ShapeFault.TooFlat to R.string.shape_fault_too_flat,
+    ShapeFault.TooCurved to R.string.shape_fault_too_curved,
+    ShapeFault.TooStraight to R.string.shape_fault_too_straight,
+)
+
+private fun shapeFaultLabel(fault: ShapeFault): Int = shapeFaultLabels.getValue(fault)
 
 @Composable
 internal fun Overlay(modifier: Modifier, draw: @Composable () -> Unit) {
@@ -178,20 +251,22 @@ internal fun DrawingPad(
     onSize: (Float) -> Unit,
     modifier: Modifier,
     ghost: List<Stroke>? = null,
-    subject: String = "kanji",
+    subject: Int = R.string.drawing_subject_kanji,
 ) {
     val current = remember { mutableStateListOf<TimedPt>() }
     val brush = LocalBrush.current
     val look = LocalBrushLook.current
     val measurer = rememberTextMeasurer()
+    val context = LocalContext.current
     val labels = remember(ghost) { ghost?.let { strokeNumberPositions(it) } }
+    val subjectLabel = stringResource(subject)
     Canvas(
         modifier
             .border(2.dp, MaterialTheme.colorScheme.outline)
             .background(Color.White)
             .onSizeChanged { onSize(it.width.toFloat()) }
             .clipToBounds()
-            .semantics { contentDescription = "Drawing area for the $subject, ${strokes.size} strokes drawn. Drawing needs touch input; use “I don't remember” to skip." }
+            .semantics { contentDescription = context.getString(R.string.drawing_area_description, subjectLabel, strokes.size) }
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown()

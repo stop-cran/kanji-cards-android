@@ -45,6 +45,13 @@ class OptionMatcherTest {
 
     @Test fun exactBeatsPartialOverlap() = assertEquals(1, OptionMatcher.match(listOf("one"), listOf("one person; alone", "one")))
 
+    @Test fun russianMeaningsAndNumberFormsMatchWithoutEnglishNormalization() {
+        assertEquals(1, OptionMatcher.match(listOf("прекрасный день"), listOf("вода", "прекрасный день"), "ru"))
+        assertEquals(1, OptionMatcher.match(listOf("2"), listOf("один", "две", "три"), "ru"))
+        assertEquals(1, OptionMatcher.match(listOf("ёжи"), listOf("вода", "ежи"), "ru"))
+        assertNull(OptionMatcher.match(listOf("water"), listOf("вода", "дерево"), "ru"))
+    }
+
     @Test fun curatedWordDistractorsAppearAndRespectExclusionsAndLeaveASlotForScoring() {
         fun word(id: String, title: String, distractors: List<String> = emptyList(), exclusions: List<String> = emptyList()) =
             WordCard(id, id, title, "noun", emptyList(), quizExclusions = exclusions, quizDistractors = distractors)

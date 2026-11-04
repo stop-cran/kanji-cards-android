@@ -18,6 +18,7 @@ import androidx.work.WorkerParameters
 import androidx.room.withTransaction
 import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.MainActivity
+import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.srs.QueueBuilder
 import io.github.stopcran.kanji.core.srs.ReminderPolicy
 import io.github.stopcran.kanji.core.srs.StudyMode
@@ -81,15 +82,17 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
     }
 
     private fun notify(due: Int): Boolean {
-        val ctx = applicationContext
+        val ctx = AppLocale.wrap(applicationContext)
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return false
         val manager = ctx.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CHANNEL, "Study reminders", NotificationManager.IMPORTANCE_DEFAULT))
+        manager.createNotificationChannel(NotificationChannel(
+            CHANNEL, ctx.getString(R.string.notification_channel_study_reminders), NotificationManager.IMPORTANCE_DEFAULT,
+        ))
         val open = PendingIntent.getActivity(ctx, 0, Intent(ctx, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val n = NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(io.github.stopcran.kanji.R.drawable.ic_stat_reminder)
-            .setContentTitle("Time for your kanji")
-            .setContentText("$due cards are waiting for you.")
+            .setContentTitle(ctx.getString(R.string.notification_study_title))
+            .setContentText(ctx.resources.getQuantityString(R.plurals.notification_study_due, due, due))
             .setContentIntent(open)
             .setAutoCancel(true)
             .build()

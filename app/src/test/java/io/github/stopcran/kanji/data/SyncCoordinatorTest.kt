@@ -100,6 +100,27 @@ class SyncCoordinatorTest {
         assertEquals(SyncActivity.Finished(result), owner.activity.value[source])
     }
 
+    @Test fun activityRevisionAdvancesForRepeatedEqualOrdinaryResults() = runTest {
+        val engine = Engine()
+        val owner = SyncCoordinator(backgroundScope, engine.activity, execute = engine::execute)
+        val initialRevision = owner.activityRevisions.value[source] ?: 0L
+
+        val first = owner.request(source)
+        engine.started.receive().result.complete(SyncResult.UpToDate)
+        assertEquals(SyncResult.UpToDate, first.await())
+        runCurrent()
+        val firstRevision = requireNotNull(owner.activityRevisions.value[source])
+        assertTrue(firstRevision > initialRevision)
+
+        val second = owner.request(source)
+        engine.started.receive().result.complete(SyncResult.UpToDate)
+        assertEquals(SyncResult.UpToDate, second.await())
+        runCurrent()
+
+        assertEquals(SyncActivity.Finished(SyncResult.UpToDate), owner.activity.value[source])
+        assertTrue(requireNotNull(owner.activityRevisions.value[source]) > firstRevision)
+    }
+
     @Test fun thrownRequestDoesNotCancelQueuedOrLaterRequestsAndKeepsFailureSourceScoped() = runTest {
         val engine = Engine()
         val errors = mutableListOf<Exception>()

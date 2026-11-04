@@ -50,6 +50,15 @@ import io.github.stopcran.kanji.data.splitSep
 
 private val originTags = setOf("wago", "kango", "gairaigo")
 
+private fun wordDirectionLabel(direction: WordDirection): Int = when (direction) {
+    WordDirection.JpToEn -> R.string.mode_japanese_english
+    WordDirection.EnToJp -> R.string.mode_english_japanese
+    WordDirection.Reading -> R.string.mode_reading
+    WordDirection.Type -> R.string.mode_type_it
+    WordDirection.Picture -> R.string.mode_picture_word
+    WordDirection.WordToPicture -> R.string.mode_word_picture
+}
+
 /** Session key: "wquiz:<timestamp>:<jp|en|rd|ty|pc|wp>[:extra]". */
 @Composable
 fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit, onPracticeMore: (WordDirection?) -> Unit, vm: WordQuizViewModel = serviceViewModel(sessionKey) { WordQuizViewModel(it) }) {
@@ -61,25 +70,18 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
         WordReadingTipDialog(tip) { vm.closeReadingTip(tip) }
     }
     Page(
-        when (direction) {
-            WordDirection.JpToEn -> "Words: Japanese → English"
-            WordDirection.EnToJp -> "Words: English → Japanese"
-            WordDirection.Reading -> "Words: reading"
-            WordDirection.Type -> "Words: type it"
-            WordDirection.Picture -> "Words: picture → word"
-            WordDirection.WordToPicture -> "Words: word → picture"
-        },
+        stringResource(R.string.word_mode_title, stringResource(wordDirectionLabel(direction))),
         onBack,
         ime = direction == WordDirection.Type,
         scrollToTopOnBack = true,
     ) {
         if (extra) {
-            Text("Extra practice: saved answers update review history and scheduling.", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.word_extra_practice), style = MaterialTheme.typography.bodySmall)
         }
-        vm.pictureNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        vm.pictureNoticeId?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall) }
         when (val s = vm.ui) {
             WordQuizUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
-            is WordQuizUi.Empty -> Text(s.message)
+            is WordQuizUi.Empty -> Text(stringResource(s.messageId))
             is WordQuizUi.TypeQuestion -> TypeQuestion(s, vm)
             is WordQuizUi.TypeAnswer -> TypeAnswer(s, vm, onOpenDoc)
             is WordQuizUi.Done -> {
@@ -87,7 +89,8 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
                 Text(stringResource(R.string.of_answers_correct, s.correct, s.answered))
                 Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.done)) }
                 OutlinedButton(onClick = { onPracticeMore(s.suggestion) }, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (s.suggestion == null) stringResource(R.string.practice_more) else "Practice more: ${s.suggestion.label}")
+                    Text(if (s.suggestion == null) stringResource(R.string.practice_more)
+                        else stringResource(R.string.word_practice_more_suggestion, stringResource(wordDirectionLabel(s.suggestion))))
                 }
             }
             is WordQuizUi.Question -> {
@@ -100,12 +103,12 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
                     help = s.kanjiHelp[s.word.word], onRead = { vm.openReadingTip(s) })
                 Text(
                     when (s.direction) {
-                        WordDirection.JpToEn -> "What does it mean?"
-                        WordDirection.EnToJp -> "Which word is it?"
-                        WordDirection.Reading -> "How is it read?"
+                        WordDirection.JpToEn -> stringResource(R.string.word_question_meaning)
+                        WordDirection.EnToJp -> stringResource(R.string.word_question_identity)
+                        WordDirection.Reading -> stringResource(R.string.word_question_reading)
                         WordDirection.Type -> ""
-                        WordDirection.Picture -> "Which word fits this picture?"
-                        WordDirection.WordToPicture -> "Which picture fits this word?"
+                        WordDirection.Picture -> stringResource(R.string.word_question_picture_word)
+                        WordDirection.WordToPicture -> stringResource(R.string.word_question_word_picture)
                     },
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center,
@@ -119,7 +122,7 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
                     key(s, generation) {
                         VoiceButton(s.options.map { it.label }, { i, heard ->
                             vm.pick(s.options[i].word, heard, s, generation)
-                        })
+                        }, language = vm.contentLanguage)
                     }
                 }
             }
@@ -152,9 +155,32 @@ internal fun WordQuizPrompt(
         if (help != null && onRead != null) WordReadingHelp(help, onRead)
     } else {
         Text(word.title, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        val hint = (listOfNotNull(word.type) + word.tags.splitSep()).filter { it !in originTags }.distinct().joinToString(" · ")
+        val hint = (listOfNotNull(word.type) + word.tags.splitSep()).filter { it !in originTags }
+            .distinct().map { localizedWordPromptTag(it) }.joinToString(" · ")
         if (hint.isNotEmpty()) Text(hint, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     }
+}
+
+@Composable
+private fun localizedWordPromptTag(tag: String): String {
+    val resource = when (tag) {
+        "adjective" -> R.string.word_tag_adjective
+        "body" -> R.string.word_tag_body
+        "compound" -> R.string.word_tag_compound
+        "daily-life" -> R.string.word_tag_daily_life
+        "drink" -> R.string.word_tag_drink
+        "godan" -> R.string.word_tag_godan
+        "jukujikun" -> R.string.word_tag_jukujikun
+        "literary" -> R.string.word_tag_literary
+        "nature" -> R.string.word_tag_nature
+        "noun" -> R.string.word_tag_noun
+        "people" -> R.string.word_tag_people
+        "size" -> R.string.word_tag_size
+        "time" -> R.string.word_tag_time
+        "verb" -> R.string.word_tag_verb
+        else -> return tag
+    }
+    return stringResource(resource)
 }
 
 @Composable
@@ -192,9 +218,9 @@ private fun TypeQuestion(s: WordQuizUi.TypeQuestion, vm: WordQuizViewModel) {
     LaunchedEffect(s) { runCatching { focus.requestFocus() } }
     SessionRemaining(s.remaining)
     WordQuizPrompt(s.word, WordDirection.Type, s.font, big = true)
-    Text("Type the word's Japanese spelling.", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    Text(stringResource(R.string.word_type_spelling_prompt), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     if (s.word.word != s.word.reading) {
-        Text("Reading alone counts as partial recall.", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+        Text(stringResource(R.string.word_type_reading_partial), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     }
     androidx.compose.material3.OutlinedTextField(
         value = vm.draft,
@@ -208,7 +234,9 @@ private fun TypeQuestion(s: WordQuizUi.TypeQuestion, vm: WordQuizViewModel) {
         modifier = Modifier.fillMaxWidth().focusRequester(focus),
     )
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Button(onClick = { vm.submit() }, enabled = vm.draft.isNotBlank(), modifier = Modifier.weight(1f)) { Text("Check") }
+        Button(onClick = { vm.submit() }, enabled = vm.draft.isNotBlank(), modifier = Modifier.weight(1f)) {
+            Text(stringResource(R.string.check))
+        }
         DontKnowButton(Modifier.weight(1f)) { vm.submit(giveUp = true) }
     }
 }
@@ -220,10 +248,10 @@ private fun TypeAnswer(s: WordQuizUi.TypeAnswer, vm: WordQuizViewModel, onOpenDo
     Text(stringResource(R.string.value_dash_detail, s.word.reading, s.word.title), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Text(
         when {
-            s.gaveUp -> "No problem — here it is"
-            verdict == TypedVerdict.Exact -> "Correct!"
-            verdict == TypedVerdict.KanaOnly -> "Reading recalled — spelling needs practice"
-            else -> "Not quite"
+            s.gaveUp -> stringResource(R.string.word_type_answer_give_up)
+            verdict == TypedVerdict.Exact -> stringResource(R.string.answer_correct)
+            verdict == TypedVerdict.KanaOnly -> stringResource(R.string.word_type_answer_kana_only)
+            else -> stringResource(R.string.answer_not_quite)
         },
         color = when (verdict) {
             TypedVerdict.Wrong -> wrongTextColor()
@@ -235,11 +263,12 @@ private fun TypeAnswer(s: WordQuizUi.TypeAnswer, vm: WordQuizViewModel, onOpenDo
         textAlign = TextAlign.Center,
     )
     if (verdict == TypedVerdict.KanaOnly) {
-        Text("Review the spelling above, then choose Next.", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+        Text(stringResource(R.string.word_review_spelling), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     }
     if (!s.gaveUp) {
         val matched = s.result.matched?.takeIf { verdict == TypedVerdict.Wrong }
-        val text = if (matched != null) "You typed ${s.typed} — ${matched.reading}, ${matched.title}" else "You typed ${s.typed}"
+        val text = if (matched != null) stringResource(R.string.word_you_typed_match, s.typed, matched.reading, matched.title)
+            else stringResource(R.string.word_you_typed, s.typed)
         Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     }
     val ok = verdict != TypedVerdict.Wrong
@@ -261,9 +290,9 @@ private fun Answer(s: WordQuizUi.Answer, vm: WordQuizViewModel, onOpenDoc: (Stri
     }
     Text(
         when {
-            s.correct -> "Correct!"
-            s.picked == NO_ANSWER -> "No problem — here it is"
-            else -> "Not quite"
+            s.correct -> stringResource(R.string.answer_correct)
+            s.picked == NO_ANSWER -> stringResource(R.string.answer_no_problem)
+            else -> stringResource(R.string.answer_not_quite)
         },
         color = if (s.correct) correctTextColor() else wrongTextColor(),
         style = MaterialTheme.typography.titleMedium,
@@ -319,9 +348,9 @@ internal fun PictureChoices(picture: WordPictureUi, picked: String? = null, onPi
                         SceneBitmap(picture.images.getValue(scene.image), scene.description)
                         Text(
                             when {
-                                picked == null -> "Picture ${row * 2 + column + 1}"
-                                verdict == Verdict.Correct -> "Correct: ${option.label}"
-                                verdict == Verdict.Wrong -> "Your choice: ${option.label}"
+                                picked == null -> stringResource(R.string.picture_option_number, row * 2 + column + 1)
+                                verdict == Verdict.Correct -> stringResource(R.string.picture_option_correct, option.label)
+                                verdict == Verdict.Wrong -> stringResource(R.string.picture_option_your_choice, option.label)
                                 else -> option.label
                             },
                             style = MaterialTheme.typography.bodyMedium,

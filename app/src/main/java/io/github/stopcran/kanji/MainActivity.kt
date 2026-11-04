@@ -11,6 +11,7 @@ import io.github.stopcran.kanji.ui.KanjiTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.saveable.listSaver
@@ -47,8 +48,14 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.remember
 import android.util.Log
+import io.github.stopcran.kanji.data.AppLocale
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(AppLocale.wrap(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as KanjiApp
@@ -57,11 +64,32 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent { KanjiTheme { AppNav(app) } }
     }
+
+    override fun onResume() {
+        super.onResume()
+        val app = application as KanjiApp
+        lifecycleScope.launch {
+            if (app.settings.pendingSourceCandidate.value != null) {
+                app.contentSync.cancelSourceCandidate(app.settings)
+            }
+            val language = app.settings.appLanguage.value
+            val platformChoice = AppLocale.choiceFromPlatform(this@MainActivity)
+            if (platformChoice != null && language != platformChoice) {
+                AppLocale.apply(this@MainActivity, platformChoice)
+            } else if (language == io.github.stopcran.kanji.data.AppLanguage.System) {
+                app.contentSync.selectAppLanguage(app.settings, language)?.let {
+                    app.syncCoordinator.request(it, io.github.stopcran.kanji.data.SyncKind.Ordinary)
+                }
+            }
+        }
+    }
 }
 
 /** Ephemeral quizzes restart after process death; listening routes resume their durable captured encounter. */
 private val processToken = System.nanoTime().toString()
-private val sessionPrefixes = listOf("quiz:", "wquiz:", "cquiz:", "grammarquiz:", "draw:", "kreading:", "kana-study:")
+private val sessionPrefixes = listOf(
+    "quiz:", "wquiz:", "cquiz:", "grammarquiz:", "draw:", "kreading:", "kana-study:", "session-doc:",
+)
 
 internal fun restoreStudyRoutes(routes: List<String>, sameProcess: Boolean): List<String> =
     routes.mapNotNull { saved ->
@@ -150,8 +178,8 @@ internal fun stateKey(index: Int, route: String) = "$index:${GrammarPracticeRout
 internal fun stateKey(index: Int, entry: NavigationEntry) =
     if (entry.scoped) "entry:${entry.id}" else stateKey(index, entry.destination.route)
 
-internal fun sourceDocRoute(sourceId: String, path: String, topic: String? = null) =
-    AppDestination.Document(path, sourceId, topic).route
+internal fun sourceDocRoute(sourceId: String, path: String, topic: String? = null, sessionBound: Boolean = false) =
+    AppDestination.Document(path, sourceId, topic, sessionBound).route
 
 @Composable
 internal fun SourceDocScreen(app: KanjiApp, route: String, pop: () -> Unit, push: (String) -> Unit) {
@@ -163,10 +191,15 @@ internal fun SourceDocScreen(app: KanjiApp, route: String, pop: () -> Unit, push
 @Composable
 private fun DocumentDestination(app: KanjiApp, destination: AppDestination.Document, pop: () -> Unit, push: (AppDestination) -> Unit) {
     val currentSource by app.settings.source.collectAsState()
-    DocRoute(
-        app.services.documents, destination.sourceId ?: currentSource.id, destination.path, pop,
-        { push(AppDestination.Document(it, destination.sourceId)) }, destination.topic,
-    )
+    val sourceId = destination.sourceId ?: currentSource.id
+    io.github.stopcran.kanji.ui.ContentLanguageGate(
+        app, sourceId, pop, allowSessionLanguageMismatch = destination.sessionBound,
+    ) {
+        DocRoute(
+            app.services.documents, sourceId, destination.path, pop,
+            { push(AppDestination.Document(it, sourceId, sessionBound = destination.sessionBound)) }, destination.topic,
+        )
+    }
 }
 
 @Composable
@@ -176,17 +209,37 @@ private fun UnavailableDestination(pop: () -> Unit) {
     }
 }
 
+internal fun isLanguageIndependentRoute(route: String, capturedExercise: Boolean): Boolean {
+    val sourceBoundListening = route.startsWith("listening:") ||
+        route.startsWith("listening-task:") || route.startsWith("listening-assessment:")
+    val sourceBoundExercise = listOf("quiz:", "wquiz:", "cquiz:", "grammarquiz:", "kreading:").any(route::startsWith)
+    return route in setOf("settings", "about", "home", "kana-home") ||
+        route.startsWith("kana-study:") || sourceBoundListening || (sourceBoundExercise && capturedExercise)
+}
+
+private fun isSourceBoundExerciseRoute(route: String): Boolean =
+    listOf("quiz:", "wquiz:", "cquiz:", "grammarquiz:", "kreading:").any(route::startsWith)
+
 @Composable
 private fun RouteContent(
     app: KanjiApp, destination: AppDestination, push: (AppDestination) -> Unit, pop: () -> Unit,
     replace: (AppDestination) -> Unit, browseGrammar: () -> Unit, createDraw: (Services) -> DrawViewModel,
 ) {
+    val selectedSource by app.settings.source.collectAsState()
     when (destination) {
-        is AppDestination.Draw -> DrawScreen(
-            destination, pop, { push(AppDestination.Document(it)) },
-            { replace(AppDestination.Draw(extra = true)) },
-            serviceViewModel(destination.route) { createDraw(it) },
-        )
+        is AppDestination.Draw -> {
+            val capturedSourceId = app.services.studySessions.capturedSourceId(destination.route)
+            val drawSourceId = capturedSourceId ?: selectedSource.id
+            io.github.stopcran.kanji.ui.ContentLanguageGate(
+                app, drawSourceId, pop, allowSessionLanguageMismatch = capturedSourceId != null,
+            ) {
+                DrawScreen(
+                    destination, pop, { push(AppDestination.Document(it, drawSourceId, sessionBound = true)) },
+                    { replace(AppDestination.Draw(extra = true)) },
+                    serviceViewModel(destination.route) { createDraw(it) },
+                )
+            }
+        }
         is AppDestination.Document -> DocumentDestination(app, destination, pop, push)
         AppDestination.Unavailable -> UnavailableDestination(pop)
         is AppDestination.Legacy -> LegacyRouteContent(
@@ -204,33 +257,70 @@ private fun LegacyRouteContent(
     replace: (String) -> Unit,
     browseGrammar: () -> Unit,
 ) {
+    val source by app.settings.source.collectAsState()
+    val sessionSourceId = rememberSaveable(route) { app.settings.source.value.id }
+    val capturedExercise = isSourceBoundExerciseRoute(route) && app.services.studySessions.hasCaptured(route)
+    val languageIndependent = isLanguageIndependentRoute(route, capturedExercise)
+    if (languageIndependent) {
+        LegacyRouteBody(app, route, sessionSourceId, push, pop, replace, browseGrammar)
+    } else {
+        io.github.stopcran.kanji.ui.ContentLanguageGate(app, source.id, pop) {
+            LegacyRouteBody(app, route, sessionSourceId, push, pop, replace, browseGrammar)
+        }
+    }
+}
+
+@Composable
+private fun LegacyRouteBody(
+    app: KanjiApp,
+    route: String,
+    sessionSourceId: String,
+    push: (String) -> Unit,
+    pop: () -> Unit,
+    replace: (String) -> Unit,
+    browseGrammar: () -> Unit,
+) {
     when (route) {
         "settings" -> SettingsScreen(app, onBack = pop, onAbout = { push("about") })
         "about" -> AboutScreen(onBack = pop)
-        "cards" -> CardsScreen(app, onBack = pop, onOpen = { push("doc:kanji/$it.md") }, onOpenDoc = { push("doc:$it") })
-        "word-cards" -> WordCardsScreen(app, onBack = pop, onOpen = { push("doc:words/$it.md") }, onOpenDoc = { push("doc:$it") })
+        "cards" -> CardsScreen(
+            app, onBack = pop,
+            onOpen = { push(sourceDocRoute(app.settings.source.value.id, "kanji/$it.md")) },
+            onOpenDoc = { push(sourceDocRoute(app.settings.source.value.id, it)) },
+        )
+        "word-cards" -> WordCardsScreen(
+            app, onBack = pop,
+            onOpen = { push(sourceDocRoute(app.settings.source.value.id, "words/$it.md")) },
+            onOpenDoc = { push(sourceDocRoute(app.settings.source.value.id, it)) },
+        )
         "listening-home" -> io.github.stopcran.kanji.ui.ListeningPage(app, pop, push)
         GrammarPracticeRoutes.UNAVAILABLE -> GrammarPracticeUnavailable(pop, browseGrammar)
         else -> if (route.startsWith("listening-assessment-preview:")) {
             io.github.stopcran.kanji.ui.ListeningAssessmentPreviewScreen(route, pop, replace)
         } else if (route.startsWith("listening-assessment:")) {
-            io.github.stopcran.kanji.ui.ListeningAssessmentScreen(route, pop) { source, path -> push(sourceDocRoute(source, path)) }
+            io.github.stopcran.kanji.ui.ListeningAssessmentScreen(route, pop) { source, path ->
+                push(sourceDocRoute(source, path, sessionBound = true))
+            }
         } else if (route.startsWith("listening-task:")) {
-            io.github.stopcran.kanji.ui.ListeningTaskScreen(route, pop) { source, path -> push(sourceDocRoute(source, path)) }
+            io.github.stopcran.kanji.ui.ListeningTaskScreen(route, pop) { source, path ->
+                push(sourceDocRoute(source, path, sessionBound = true))
+            }
         } else if (route.startsWith("listening:")) {
-            io.github.stopcran.kanji.ui.ListeningScreen(route, pop) { source, path -> push(sourceDocRoute(source, path)) }
+            io.github.stopcran.kanji.ui.ListeningScreen(route, pop) { source, path ->
+                push(sourceDocRoute(source, path, sessionBound = true))
+            }
         } else if (route.startsWith("quiz:")) {
             QuizScreen(
                 sessionKey = route,
                 onBack = pop,
-                onOpenDoc = { push("doc:$it") },
+                onOpenDoc = { push(sourceDocRoute(sessionSourceId, it, sessionBound = true)) },
                 onPracticeMore = { pop(); push("quiz:${System.currentTimeMillis()}:extra") },
             )
         } else if (route.startsWith("wquiz:")) {
             WordQuizScreen(
                 sessionKey = route,
                 onBack = pop,
-                onOpenDoc = { push("doc:$it") },
+                onOpenDoc = { push(sourceDocRoute(sessionSourceId, it, sessionBound = true)) },
                 onPracticeMore = { d -> pop(); push("wquiz:${System.currentTimeMillis()}:${d?.code ?: route.split(":")[2]}:extra") },
             )
         } else if (route.startsWith("cquiz:")) {
@@ -241,7 +331,7 @@ private fun LegacyRouteContent(
                     val next = CounterRoutes.extra(route)
                     pop(); push(next)
                 },
-                onOpenDoc = { source, path -> push(sourceDocRoute(source, path)) },
+                onOpenDoc = { source, path -> push(sourceDocRoute(source, path, sessionBound = true)) },
             )
         } else if (route.startsWith("grammarquiz:")) {
             val target = remember(route) {
@@ -258,7 +348,7 @@ private fun LegacyRouteContent(
                 GrammarQuizScreen(
                     sessionKey = route,
                     onBack = pop,
-                    onOpenDoc = { sourceId, path, topic -> push(sourceDocRoute(sourceId, path, topic)) },
+                    onOpenDoc = { sourceId, path, topic -> push(sourceDocRoute(sourceId, path, topic, sessionBound = true)) },
                     onPracticeMore = {
                         if (target == null) {
                             pop()
@@ -277,7 +367,7 @@ private fun LegacyRouteContent(
             KanjiReadingScreen(
                 sessionKey = route,
                 onBack = pop,
-                onOpenDoc = { push("doc:$it") },
+                onOpenDoc = { push(sourceDocRoute(sessionSourceId, it, sessionBound = true)) },
                 onPracticeMore = { pop(); push("kreading:${System.currentTimeMillis()}:extra") },
             )
         } else if (route.startsWith("kana-study:")) {
@@ -303,7 +393,7 @@ private fun LegacyRouteContent(
                     onCountersPage = { push("counters-home") },
                     onGrammarPage = { push("grammar-home") },
                     onListeningPage = { push("listening-home") },
-                    onOpenDoc = { push("doc:$it") },
+                    onOpenDoc = { push(sourceDocRoute(app.settings.source.value.id, it)) },
                     onGrammarDoc = { sourceId, path, topic -> push(sourceDocRoute(sourceId, path, topic)) },
                     onKanaPage = { push("kana-home") },
                     onKanaStudy = { script, mode, extra ->

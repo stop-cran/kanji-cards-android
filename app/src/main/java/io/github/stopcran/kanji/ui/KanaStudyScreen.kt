@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.sp
 import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.draw.DrawOutcome
-import io.github.stopcran.kanji.core.draw.describe
 import io.github.stopcran.kanji.core.kana.KanaMode
 import io.github.stopcran.kanji.core.kana.KanaScript
 import io.github.stopcran.kanji.ui.KanaStudyUi.DrawAnswer
@@ -49,20 +48,24 @@ fun KanaStudyScreen(
     val app = LocalContext.current.applicationContext as KanjiApp
     val brush by app.settings.brush.collectAsState()
     androidx.compose.runtime.CompositionLocalProvider(LocalBrush provides brush, LocalBrushLook provides vm.look) {
-        Page(mode.title, onBack, ime = mode == KanaMode.TypeKanaToRomaji || mode == KanaMode.TypeRomajiToKana,
+        Page(stringResource(kanaModeLabel(mode)), onBack, ime = mode == KanaMode.TypeKanaToRomaji || mode == KanaMode.TypeRomajiToKana,
             scrollToTopOnBack = true) {
             when (val state = vm.ui) {
-                KanaStudyUi.Loading -> Text("Loading kana…")
-                is KanaStudyUi.Empty -> Text(state.message)
+                KanaStudyUi.Loading -> Text(stringResource(R.string.kana_loading))
+                is KanaStudyUi.Empty -> Text(stringResource(when (state.reason) {
+                    KanaEmptyReason.NoPractice -> R.string.kana_no_practice
+                    KanaEmptyReason.PracticeMore -> R.string.kana_nothing_due_practice_more
+                    KanaEmptyReason.NothingDue -> R.string.kana_nothing_due
+                }))
                 is KanaStudyUi.Done -> {
-                    Text("Session complete", style = MaterialTheme.typography.headlineSmall)
-                    Text("${state.correct} correct out of ${state.answered}")
-                    Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Done") }
+                    Text(stringResource(R.string.session_complete), style = MaterialTheme.typography.headlineSmall)
+                    Text(stringResource(R.string.of_answers_correct, state.correct, state.answered))
+                    Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.done)) }
                     OutlinedButton(
                         onClick = { onPracticeMore(script, mode) },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text("Practice more")
+                        Text(stringResource(R.string.practice_more))
                     }
                 }
                 is KanaStudyUi.QuizQuestion -> QuizQuestion(state, mode, vm)
@@ -70,7 +73,7 @@ fun KanaStudyScreen(
                 is KanaStudyUi.TypeQuestion -> TypeQuestion(state.card.kana, state.card.romaji, state.remaining, mode, vm)
                 is KanaStudyUi.TypeAnswer -> TypeAnswer(state, mode, vm)
                 is KanaStudyUi.DrawQuestion -> DrawQuestion(state, vm)
-                is KanaStudyUi.DrawChecking -> Text("Checking strokes for ${state.card.kana}…")
+                is KanaStudyUi.DrawChecking -> Text(stringResource(R.string.kana_checking_strokes, state.card.kana))
                 is DrawAnswer -> DrawAnswer(state, vm)
             }
         }
@@ -87,13 +90,17 @@ private fun QuizQuestion(state: KanaStudyUi.QuizQuestion, mode: KanaMode, vm: Ka
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
     )
-    Text(if (forward) "Choose the romaji" else "Choose the kana", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    Text(
+        stringResource(if (forward) R.string.kana_choose_romaji else R.string.kana_choose_kana),
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth(),
+    )
     state.options.forEach { option ->
         OutlinedButton(onClick = { vm.pick(option) }, modifier = Modifier.fillMaxWidth()) {
             Text(option, fontSize = 24.sp)
         }
     }
-    OutlinedButton(onClick = { vm.pick(NO_ANSWER) }, modifier = Modifier.fillMaxWidth()) { Text("I don't know") }
+    OutlinedButton(onClick = { vm.pick(NO_ANSWER) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.kana_dont_know)) }
 }
 
 @Composable
@@ -102,7 +109,9 @@ private fun QuizAnswer(state: KanaStudyUi.QuizAnswer, mode: KanaMode, vm: KanaSt
     val correct = state.picked == expected
     Text(state.card.kana, fontSize = 80.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Text(
-        if (correct) "Correct!" else if (state.picked == NO_ANSWER) "It is $expected" else "Not quite — $expected",
+        if (correct) stringResource(R.string.kana_correct) else if (state.picked == NO_ANSWER) {
+            stringResource(R.string.kana_answer_is, expected)
+        } else stringResource(R.string.kana_not_quite_answer, expected),
         color = if (correct) correctTextColor() else wrongTextColor(),
         style = MaterialTheme.typography.titleMedium,
         textAlign = TextAlign.Center,
@@ -140,7 +149,7 @@ private fun TypeQuestion(kana: String, romaji: String, remaining: Int, mode: Kan
     OutlinedTextField(
         value = vm.draft,
         onValueChange = vm::onDraft,
-        label = { Text(if (forward) "Type the romaji" else "Type the kana") },
+        label = { Text(stringResource(if (forward) R.string.kana_mode_type_kana_romaji else R.string.kana_mode_type_romaji_kana)) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(
             capitalization = KeyboardCapitalization.None,
@@ -150,8 +159,8 @@ private fun TypeQuestion(kana: String, romaji: String, remaining: Int, mode: Kan
         modifier = Modifier.fillMaxWidth().focusRequester(focus),
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = { vm.submit(giveUp = true) }, modifier = Modifier.weight(1f)) { Text("I don't remember") }
-        Button(onClick = vm::submit, enabled = vm.draft.isNotBlank(), modifier = Modifier.weight(1f)) { Text("Check") }
+        OutlinedButton(onClick = { vm.submit(giveUp = true) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.kana_remember)) }
+        Button(onClick = vm::submit, enabled = vm.draft.isNotBlank(), modifier = Modifier.weight(1f)) { Text(stringResource(R.string.check)) }
     }
 }
 
@@ -160,13 +169,15 @@ private fun TypeAnswer(state: KanaStudyUi.TypeAnswer, mode: KanaMode, vm: KanaSt
     val answer = if (mode == KanaMode.TypeKanaToRomaji) state.card.romaji else state.card.kana
     Text(state.card.kana, fontSize = 80.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Text(
-        if (state.correct) "Correct!" else if (state.typed.isBlank()) "The answer is $answer" else "Not quite — the answer is $answer",
+        if (state.correct) stringResource(R.string.kana_correct) else if (state.typed.isBlank()) {
+            stringResource(R.string.kana_answer_is, answer)
+        } else stringResource(R.string.kana_not_quite_answer, answer),
         color = if (state.correct) correctTextColor() else wrongTextColor(),
         style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.fillMaxWidth(),
         textAlign = TextAlign.Center,
     )
-    Text("Your answer: ${state.typed.ifBlank { "—" }}", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+    Text(stringResource(R.string.kana_answer_feedback, state.typed.ifBlank { "—" }), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     NextButtons(state.correct, vm)
 }
 
@@ -175,7 +186,7 @@ private fun DrawQuestion(state: KanaStudyUi.DrawQuestion, vm: KanaStudyViewModel
     val strokes = vm.ink
     SessionRemaining(state.remaining)
     Text(
-        if (state.trace) "Trace the kana for" else "Draw the kana for",
+        stringResource(if (state.trace) R.string.kana_trace_prompt else R.string.kana_draw_prompt),
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth(),
     )
@@ -190,27 +201,27 @@ private fun DrawQuestion(state: KanaStudyUi.DrawQuestion, vm: KanaStudyViewModel
         onSize = vm::padSized,
         modifier = Modifier.fillMaxWidth().aspectRatio(1f),
         ghost = if (state.trace) vm.reference(state.card) else null,
-        subject = "kana",
+        subject = R.string.drawing_subject_kana,
     )
     when (vm.modelState) {
-        ModelState.Downloading -> Text("Preparing handwriting recognition…", style = MaterialTheme.typography.bodySmall)
+        ModelState.Downloading -> Text(stringResource(R.string.kana_prepare_recognition), style = MaterialTheme.typography.bodySmall)
         ModelState.Unavailable -> Text(
-            "Handwriting recognition is unavailable; stroke shapes will still be checked.",
+            stringResource(R.string.kana_recognition_unavailable),
             style = MaterialTheme.typography.bodySmall,
         )
         else -> Unit
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = { if (strokes.isNotEmpty()) strokes.removeAt(strokes.lastIndex) }, enabled = strokes.isNotEmpty()) {
-            Text("Undo")
+            Text(stringResource(R.string.undo))
         }
-        OutlinedButton(onClick = { strokes.clear() }, enabled = strokes.isNotEmpty()) { Text("Clear") }
+        OutlinedButton(onClick = { strokes.clear() }, enabled = strokes.isNotEmpty()) { Text(stringResource(R.string.clear)) }
         Button(
             onClick = { vm.checkDrawing(strokes.toList(), vm.inkSize) },
             enabled = strokes.isNotEmpty(),
             modifier = Modifier.weight(1f),
         ) {
-            Text("Check")
+            Text(stringResource(R.string.check))
         }
     }
     if (!state.trace) {
@@ -218,7 +229,7 @@ private fun DrawQuestion(state: KanaStudyUi.DrawQuestion, vm: KanaStudyViewModel
             onClick = { vm.checkDrawing(emptyList(), vm.inkSize) },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("I don't remember")
+            Text(stringResource(R.string.kana_remember))
         }
     }
 }
@@ -227,14 +238,14 @@ private fun DrawQuestion(state: KanaStudyUi.DrawQuestion, vm: KanaStudyViewModel
 private fun DrawAnswer(state: DrawAnswer, vm: KanaStudyViewModel) {
     val issues = state.outcome == DrawOutcome.Mistakes
     val (headline, color) = when (state.outcome) {
-        DrawOutcome.Clean -> "Well written!" to correctTextColor()
-        DrawOutcome.Mistakes -> "Recognized, with stroke mistakes" to wrongTextColor()
-        DrawOutcome.NotRecognized -> "Not recognized" to wrongTextColor()
+        DrawOutcome.Clean -> stringResource(R.string.kana_well_written) to correctTextColor()
+        DrawOutcome.Mistakes -> stringResource(R.string.kana_recognized_mistakes) to wrongTextColor()
+        DrawOutcome.NotRecognized -> stringResource(R.string.kana_not_recognized) to wrongTextColor()
     }
     Text(state.card.kana, fontSize = 80.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     if (state.trace) {
         Text(
-            "Practice only: this attempt is not graded.",
+            stringResource(R.string.kana_practice_only),
             style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
@@ -251,12 +262,12 @@ private fun DrawAnswer(state: DrawAnswer, vm: KanaStudyViewModel) {
         }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Your drawing", Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)
-        Text("Correct strokes", Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.kana_your_drawing), Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.kana_correct_strokes), Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)
     }
-    if (issues) state.match.issues.forEach { Text("• ${it.describe()}", color = wrongTextColor()) }
+    if (issues) state.match.issues.forEach { StrokeIssueText(it) }
     if (!state.recognizerUsed && state.drawn.isNotEmpty()) {
-        Text("Graded by stroke shapes only.", style = MaterialTheme.typography.bodySmall)
+        Text(stringResource(R.string.kana_shapes_only), style = MaterialTheme.typography.bodySmall)
     }
     Button(
         onClick = vm::next,
@@ -272,6 +283,19 @@ private fun NextButtons(correct: Boolean, vm: KanaStudyViewModel) {
         Button(onClick = vm::next, modifier = Modifier.weight(1f)) {
             Text(stringResource(R.string.next))
         }
-        if (correct) OutlinedButton(onClick = { vm.next(guessed = true) }) { Text("I guessed") }
+        if (correct) OutlinedButton(onClick = { vm.next(guessed = true) }) { Text(stringResource(R.string.i_guessed)) }
     }
+}
+
+internal fun kanaModeLabel(mode: KanaMode): Int = when (mode) {
+    KanaMode.QuizKanaToRomaji -> R.string.kana_mode_quiz_kana_romaji
+    KanaMode.QuizRomajiToKana -> R.string.kana_mode_quiz_romaji_kana
+    KanaMode.Draw -> R.string.kana_mode_draw
+    KanaMode.TypeKanaToRomaji -> R.string.kana_mode_type_kana_romaji
+    KanaMode.TypeRomajiToKana -> R.string.kana_mode_type_romaji_kana
+}
+
+internal fun kanaScriptLabel(script: KanaScript): Int = when (script) {
+    KanaScript.Hiragana -> R.string.kana_script_hiragana
+    KanaScript.Katakana -> R.string.kana_script_katakana
 }

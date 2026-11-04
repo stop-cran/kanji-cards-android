@@ -34,6 +34,13 @@ The current module inventory lives in `settings.gradle.kts`; build tasks and int
 - Check the exit status/test results before committing; a chained `test; commit; push` publishes a red build.
 - Native `OK (N tests)` can include `assumeTrue` skips. Use raw instrumentation output (`-w -r`) and require a
   status-code 0 for each selected case; provide the external acceptance archives those cases require.
+- Signed-release ADB/UI smoke is not instrumentation or debug-host coverage. Record the installed APK hash/signer,
+  actual MainActivity taps, raw command statuses, captured UI phases and restart results separately.
+  Compose radio selection may not appear as a checkable UIAutomator node: verify selected-state screenshots,
+  not just the presence of option labels. API 29 has no `cmd locale` service; disclose that unavailable probe.
+  API 33+ per-app `[en]` versus `[]` distinguishes English from System on an English device; compare the probe
+  with its actual captured phase, not just the effective UI language. Normal force-stop/relaunch does not prove
+  a crash before mirroring/acknowledgement. Preserve failed coordinate attempts and exclude them from passed flows.
 - IME visibility can precede the end of its native inset animation. Await that completion before scrolling/tapping in keyboard
   reachability tests; Compose idleness alone does not wait for the platform animation.
 
@@ -50,17 +57,107 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 
 ## Gotchas
 
-- **EN/RU checkpoints (planned):** follow the [shared implementation plan](https://github.com/stop-cran/learning-japanese-ru/blob/main/docs/IMPLEMENTATION-PLAN.md).
-  [#127](https://github.com/stop-cran/kanji-cards-android/issues/127#issuecomment-6599265668) intentionally replaces eager
-  custom-source `setSource`/async sync with separate pending candidate and accepted source; stale completions must not activate it.
-  [EN #61](https://github.com/stop-cran/learning-japanese/issues/61#issuecomment-6599265727) requires the current EN reader
-  against newly generated EN packages, not just legacy fixtures; RU rejection must not break existing EN content.
-  Localization uses isolated fixtures for early native smoke checks, then actual reviewed RU archives for integration.
-  Fixtures, translated strings and a plan review alone do not prove delivered lessons or phone acceptance.
+- **EN/RU language/source implementation:** follow the [shared implementation plan](https://github.com/stop-cran/learning-japanese-ru/blob/ru-pilot-a-integration/docs/IMPLEMENTATION-PLAN.md).
+  Custom-source edits are pending candidates until the exact package has been downloaded, parsed and verified; stale or cancelled
+  completions cannot activate them. The canonical owner/repository has a stable base language across branches. New EN schema-1
+  packages must remain compatible with the released EN reader, while schema-2 RU must fail closed there. Legacy metadata absence
+  means EN/ja only. Use actual exported EN and reviewed RU archives for the parser and native gates; synthetic fixtures cannot
+  prove compatibility or delivered lessons. UI/content mismatch must block ordinary browsing rather than silently show EN lessons
+  under Russian. The ordinary RU default branch is rollout-gated; only the named `ru-pilot-a` branch is for bounded acceptance.
+- **Locale and live sessions:** API 33+ uses Android per-app locales; API 29–32 use `AppLocale.wrap` and Activity recreation.
+  Reconcile System on return from Android Settings, but never replace a custom repository with a language default. Active exercise
+  and Listening routes retain their captured source; session article routes must preserve that source and must not become
+  standalone language-mismatch bypasses after process death.
+- Candidate acceptance is a single `ContentSync`-serialized protocol: begin/cancel/validate/accept must use its lock, Room commits
+  the candidate cache plus durable accepted-source metadata together, and SharedPreferences is only mirrored after commit.
+  Startup may repair only a still-matching pending token. Keep ordinary RU-default entry gated even when canonical-source cache
+  data from the explicit pilot branch exists. A mismatch bypass requires a persisted, currently registered exercise capture;
+  Practice More creates a fresh route and must pass source/language admission again.
+- Protect every cache writer, not only candidate acceptance: an ordinary sync request may have captured branch A before waiting
+  for the `ContentSync` mutex. Recheck the selected source and durable accepted branch under serialization and again inside the
+  Room replacement transaction; otherwise a queued worker/coordinator request can replace an accepted same-repository branch.
+  Keep review rows and the independent Kana source untouched by content replacement.
+- Intentional built-in default/language transitions are also cache-authority writes. Route `setAppLanguage`, System-on-return and
+  confirmed default replacement through `ContentSync`'s serialized authority protocol; update the durable selected branch before
+  mirroring preferences, and recover a committed transition after process death. Do not retain obsolete accepted-branch authority
+  that can permanently reject sync for the intentionally selected default. Direct preference setters are only setup/test helpers.
+- Every approved language choice, including System versus explicit English on the same repository, branch and effective language,
+  must persist its intent marker. Mirror preferences before acknowledging the exact marker; startup recovery must not overwrite a
+  newer mirrored choice. Apply the Android per-app locale inside the serialized selection operation, and on recovery force-align
+  platform locales (including clearing explicit locales for System) before acknowledging.
+- Route exemptions are capture- and source-specific: the registry records a source only after the study-start write succeeds.
+  Apply locale/rollout admission to every fresh typed Draw route, including Practice More; only the already registered route may
+  finish under its captured source. Never treat a legacy/typed route family or a reused route shape as a capture.
+- Inspect manifest root keys before JSON-object decoding so duplicate or escaped-equivalent contract keys fail closed. At Grammar
+  presentation boundaries, carry typed scope values and diagnostic IDs/arguments into localized templates; do not interpolate
+  core English scope labels or render raw evidence diagnostics. Keep diagnostic meaning and event identity. Candidate validation
+  busy-state cleanup must use generation/job ownership so rejected work can be retried without editing the form. Persist candidate
+  status as typed message IDs, render in the current locale, and save terminal acceptance before applying a locale that may
+  recreate the Activity; migrate older saved strings and clear checking only when no pending candidate remains. Long localized Settings
+  chips/actions should wrap with 8 dp row and column gaps rather than squeeze or truncate labels, preserving callbacks and gates.
+  Save custom-source replacement confirmation before `AppLocale.apply`, too: on older Android, its platform callback
+  recreates the Activity before the suspending Room acknowledgement returns, so post-apply UI assignments can be lost.
+  `SettingsLocalizationUiTest` models cancellation at that callback and restores saved state to verify both Keep and Use default;
+  do not bypass durable language-intent markers for an already-selected language to avoid recreation.
+  Align the visible repository/branch draft with a language-driven default-source replacement, preserving drafts when
+  the selected source is unchanged; otherwise a later Save can silently reselect the previous source.
+  Recovery, stale preview and expired-consent notices are learner-facing localization surfaces too; model their distinctions as
+  typed messages and localize them at the actual Practice renderer rather than exposing ViewModel strings.
+  Map producer-owned unlock-rule hints through the rule's existing resource mapping; a normal
+  learning prerequisite must not fall through to a repository-unavailable diagnosis. Composed voice notices receive complete
+  localized reason sentences, so the wrapper must not append another full stop.
+  Keep already localized Word-mode prerequisite copy in ModeRow's localizedReason override, not a new
+  legacy Locked.reason; format prerequisite directions with localized mode resources, not core English labels.
+  Native7's valid-but-locked RU word pool otherwise showed content-recovery advice instead of its learning prerequisite
+  (Android #127, comment 6617308178). Preserve the original state and gates.
+  Localize canonical Word type/tag hints at the prompt renderer without rewriting persisted classification IDs.
+  Native8 exposed `noun · nature` below a Russian Type caption; cover the adopted cohort's visible metadata vocabulary,
+  retaining origin-tag suppression and as-authored custom labels. Check new cohort/custom labels in its base language.
+  Shell `input text` can fail to map Japanese Unicode to key events even with a focused field and visible IME;
+  that is not proof of an app focus defect or of a keyboard's language support. Capture actual focus/IME before
+  a disclosed input-only helper, and keep its successful input separate from keyboard-capability evidence.
+- **Resource formatting:** Android may trim trailing spaces from string resources. Use `%1$s`/`%2$s` arguments (and localized
+  plural resources) for separators and punctuation. Check both locales for duplicate IDs and placeholder/plural parity.
 - **Method findings during localization:** reproduce and adjudicate failures before changing app behavior (the API-29
   autofocus test host needed manifest resize, not a production layout rewrite). In the same fix batch, record reusable
   verified mechanisms in the relevant app/content instructions with the finding/evidence; correct/review code and run
   affected tests. Amend the shared plan if dependencies change. Do not add speculative rules or force a finding quota.
+  Emit each native command/output/error/status record atomically, or use separate logs per concurrent device.
+  Native9 shared-file line appends damaged eighteen record boundaries and left extra unassignable status markers
+  (Android #127, comment 6618617092). Total exit-marker counts do not prove per-command completeness:
+  preserve damaged originals, exclude ambiguous records from acceptance, and rerun only affected critical evidence.
+  Pass PowerShell argument arrays by name and reject empty native argument lists before launch; repeated identical
+  usage/binding failures are not boot delays. Keep commands requiring device confirmation asynchronous until
+  the fresh dialog is confirmed, then await completion and verify its artifact. Native10 waited for ADB backup
+  to finish before confirming: its token had already expired, leaving a zero-byte file, not a platform-backup
+  capability finding (Android #127, comment 6619212791).
+  A serial/port is not an AVD identity: before app commands, verify the scoped emulator's AVD name and API.
+  Native12 found an unrelated API35 AVD at its assigned API29 port and correctly stopped before install.
+  Never stop or use that foreign AVD; authorize a free console/ADB port pair for the same owned AVD instead.
+  Use `-s` for every device command and retain real before/after fingerprint rows, not reconstructed expected values.
+  After scrolling or changing text scale, derive taps from the current hierarchy, not a filename or remembered position.
+  Native12b's first Russian-labelled tap actually selected Spaced same day; it was corrected to Next day before further
+  checks, without study answers. Disclose the mistake and correction. Restoring an effective default may materialize a
+  preference (NextDay or font scale 1.0) that was previously unset; compare both raw values and effective behavior.
+  Bind GitHub test-source writes to an operation-local owner credential and verify that login/repository permission
+  before native execution; the default CLI account's denied push is not proof that the owner's stored credential
+  is unavailable. Native13 stopped those checks under the wrong account; parent owner preflight succeeded
+  (Android #127, comment 6626137486). Cleanup verification must check exact task-created paths on the scoped device:
+  Native13's unscoped `find .` traversed the device filesystem and failed, so it did not prove task-file absence.
+  An empty AVD-name property with exit0 is not identification; use the scoped emulator-console name and require
+  the expected nonempty value before app commands. Native14's launch metadata names the owned AVD, but its property
+  probe was empty. A Checking frame or configured network delay also does not prove interrupted validation:
+  Native14's post-stop Room authority already accepted the candidate. Verify pre-acceptance state and actual request
+  blocking before claiming pending-candidate recovery (Android #127, comment 6626796021).
+  Native15 resolves that boundary on the owned userdebug AVD: temporary UID-only IPv4/IPv6 HTTPS rules show
+  actual dropped packets, a fresh durable candidate token and Checking before force-stop at1.85 seconds.
+  Post-stop Room and the entire DB/WAL/SHM archive remain unchanged; relaunch abandons the pending token.
+  Fault controls must target only the test app, restore both complete rule sets exactly, and never modify host
+  networking or another device. This proves pre-acceptance interruption, not mid-body/post-commit/pre-ack death.
+  Evidence: Android #127, comment 6627649546; no study answers or database/authority fixtures were added.
+- **Detekt callback formatting:** a semicolon-packed Settings callback (`if (changed) cancelCandidate(); value = next`)
+  produced `EmptyElseBlock` findings at the `if`. Expanding the conditional into braces and placing the assignment on its own
+  line cleared both findings without changing transition behavior.
 - **Edge-to-edge on API 35:** content draws under the status/navigation bars; a button there is visible but untouchable. Every screen goes
   through `ui/Page`, which applies `statusBarsPadding`/`navigationBarsPadding` and a scroll container. Don't build screens without it.
 - **Keyboard on older Android:** keep `MainActivity`'s `adjustResize` and use `Page(ime = true)` for text entry. Pre-Android 11 needs
@@ -90,6 +187,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   from later settings/content. Contents jumps use real lazy indices, including leading items, and must not rerun on nested Back.
 - **Manifest hashes** are computed over LF-normalised bytes (`tools/build_manifest.py` in the content repo and `ContentParser.sha256`). Keep
   both in sync, otherwise files fail with "hash mismatch" on Windows checkouts with CRLF.
+- Raw stroke provenance is separate from normalized manifest hashes: verify the actual public export against frozen source
+  Git blobs when claiming byte-identical assets. Commit/branch codeload ZIPs can have different root prefixes and ZIP hashes
+  despite identical file bodies; pin the exact endpoint/hash and never present a desktop fetch as native download evidence.
 - Named word scenes use the separate manifest `scenes` map, never `files` (older clients discard that folder). A declared bad catalog
   disables quiz eligibility rather than synthesizing a legacy fallback. Graded image questions use predecoded, hash-checked snapshots;
   `DocRoute` owns live article image loading; `WordImage` only renders its result. Scene IDs must never become SRS keys.
@@ -126,6 +226,14 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   execution-time source and cancellation. Shared diagnostics remain source/branch-bound, including queued and interrupted work.
   Save local repository validation errors with the form, so rotation cannot replace an invalid saved URL's error with old sync success.
   Keep failure retryability in saved status without treating every non-retryable result as permanent or disabling manual sync.
+  Remap saved validation errors such as invalid repository URLs through the current locale without clearing the actual error.
+  Candidate acceptance failures remain failures even when the selected repository/branch already matches; source equality alone
+  is not evidence that the candidate import succeeded. Keep a candidate terminal notice ahead of an older same-source completed
+  sync, but let a newer source-bound coordinator activity revision supersede it, even when the new result is equal.
+  Pair saved candidate activity revisions with the coordinator's process epoch: counters from a previous process cannot
+  outrank new activity, even if their numbers coincide. Clearing pending must not rebind or redate a terminal notice.
+  Gate all candidate UI/locale completions by foreground generation and pending-token ownership, including successful
+  same-source completions. Failed acceptance clears only its own pending token, preserving the selected cache and newer work.
   Catch operational failures around launch preflight as well as import; one failed request must not shut down the queue.
   Engine activity revisions are per-source observation identity: equal results from a later periodic attempt must supersede an old
   coordinator fallback even if the observer never sees the intervening Running state. Cancellation still propagates.

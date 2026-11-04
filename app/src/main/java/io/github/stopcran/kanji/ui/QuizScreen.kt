@@ -34,10 +34,10 @@ import io.github.stopcran.kanji.data.splitSep
 @Composable
 fun QuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit, onPracticeMore: () -> Unit, vm: QuizViewModel = serviceViewModel(sessionKey) { QuizViewModel(it) }) {
     LaunchedEffect(sessionKey) { vm.ensureStarted(sessionKey.endsWith(":extra")) }
-    Page("Quiz", onBack, scrollToTopOnBack = true) {
+    Page(stringResource(R.string.quiz_title), onBack, scrollToTopOnBack = true) {
         when (val s = vm.ui) {
             QuizUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
-            is QuizUi.Empty -> Text(s.message)
+            is QuizUi.Empty -> Text(stringResource(s.messageId))
             is QuizUi.Done -> {
                 Text(stringResource(R.string.session_complete), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
                 Text(stringResource(R.string.of_answers_correct, s.correct, s.answered))
@@ -53,7 +53,7 @@ fun QuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Un
                     OutlinedButton(onClick = { vm.pick(o.kanji) }, modifier = Modifier.fillMaxWidth()) { Text(o.title) }
                 }
                 DontKnowButton { vm.pick(NO_ANSWER) }
-                VoiceButton(s.options.map { it.title }, { i, heard -> vm.pick(s.options[i].kanji, heard) })
+                VoiceButton(s.options.map { it.title }, { i, heard -> vm.pick(s.options[i].kanji, heard) }, language = vm.contentLanguage)
             }
             is QuizUi.Answer -> AnswerState(s, vm, onOpenDoc)
         }
@@ -79,9 +79,9 @@ private fun AnswerState(s: QuizUi.Answer, vm: QuizViewModel, onOpenDoc: (String)
     Text(s.card.kanji, fontSize = bigKanjiSize(96), fontFamily = s.font.family(), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Text(
         when {
-            s.correct -> "Correct!"
-            s.picked == NO_ANSWER -> "No problem — it means “${s.card.title}”"
-            else -> "Not quite — it means “${s.card.title}”"
+            s.correct -> stringResource(R.string.answer_correct)
+            s.picked == NO_ANSWER -> stringResource(R.string.kanji_no_problem_answer, s.card.title)
+            else -> stringResource(R.string.kanji_not_quite_answer, s.card.title)
         },
         color = if (s.correct) correctTextColor() else wrongTextColor(),
         style = MaterialTheme.typography.titleMedium,

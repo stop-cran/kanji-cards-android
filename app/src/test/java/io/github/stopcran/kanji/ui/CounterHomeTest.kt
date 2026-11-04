@@ -16,6 +16,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.room.Room
 import io.github.stopcran.kanji.Services
+import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.content.CounterExpression
 import io.github.stopcran.kanji.core.content.CounterFile
 import io.github.stopcran.kanji.core.counters.CounterGroup
@@ -153,8 +154,9 @@ class CounterHomeTest {
     }
 
     private fun awaitCount(count: Int) {
+        val label = RuntimeEnvironment.getApplication().resources.getQuantityString(R.plurals.counter_prompts, count, count)
         rule.waitUntil(10_000) {
-            rule.onAllNodesWithText("$count prompts in this selection").fetchSemanticsNodes().size == 1
+            rule.onAllNodesWithText(label).fetchSemanticsNodes().size == 1
         }
     }
 }

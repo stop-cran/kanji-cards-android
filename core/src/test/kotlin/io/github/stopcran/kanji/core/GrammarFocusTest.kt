@@ -13,6 +13,7 @@ import io.github.stopcran.kanji.core.grammar.GrammarActivation
 import io.github.stopcran.kanji.core.grammar.GrammarCursor
 import io.github.stopcran.kanji.core.grammar.GrammarEvent
 import io.github.stopcran.kanji.core.grammar.GrammarEvidence
+import io.github.stopcran.kanji.core.grammar.GrammarEvidenceDiagnosticId
 import io.github.stopcran.kanji.core.grammar.GrammarExposure
 import io.github.stopcran.kanji.core.grammar.GrammarFocus
 import io.github.stopcran.kanji.core.grammar.GrammarFocusInput
@@ -67,7 +68,7 @@ class GrammarFocusTest {
         assertFalse(evidence(good.map { it.copy(atMs = it.atMs - 21L * 86_400_000) }).familiar)
         val future = evidence(good.map { if (it.promptType == "type") it.copy(atMs = now.toEpochMilli() + 1) else it })
         assertFalse(future.familiar)
-        assertTrue(future.diagnostics.any { it.contains("Future-dated") })
+        assertTrue(future.diagnostics.any { it.id == GrammarEvidenceDiagnosticId.FutureDatedEvent })
         for (unknown in listOf(
             good.map { it.copy(identityMatches = false) },
             good.map { it.copy(constructionId = "other") },
@@ -77,6 +78,27 @@ class GrammarFocusTest {
             assertFalse(evidence(unknown).familiar)
             assertTrue(evidence(unknown).diagnostics.isNotEmpty())
         }
+    }
+
+    @Test
+    fun evidenceDiagnosticsCarryTypedCodesAndEventIds() {
+        val event = familiarEvents(first, now).first()
+        val inconsistent = event.copy(id = 101, grade = 3, correct = false)
+        val future = event.copy(id = 102, atMs = now.toEpochMilli() + 1)
+        val unmapped = event.copy(id = 103, identityMatches = false)
+        val conflict = listOf(event.copy(id = 104), event.copy(id = 104, grade = 1))
+
+        val diagnostics = evidence(listOf(inconsistent, future, unmapped) + conflict).diagnostics
+
+        assertEquals(
+            setOf(
+                GrammarEvidenceDiagnosticId.InconsistentGradeCorrectness to 101L,
+                GrammarEvidenceDiagnosticId.FutureDatedEvent to 102L,
+                GrammarEvidenceDiagnosticId.EventCannotBeMapped to 103L,
+                GrammarEvidenceDiagnosticId.ConflictingEventCopies to 104L,
+            ),
+            diagnostics.map { it.id to it.eventId }.toSet(),
+        )
     }
 
     @Test
@@ -102,6 +124,20 @@ class GrammarFocusTest {
         assertEquals(2L, manual.automaticOrdinal)
         assertEquals(FocusOrigin.Manual, manual.active!!.origin)
         assertEquals(2, GrammarFocus.decide(current.copy(cursor = manual)).selected.size)
+    }
+
+    @Test
+    fun decisionExposesAllowanceExhaustionWithoutParsingDisplayText() {
+        val selected = GrammarFocus.decide(input()).selected
+        val active = GrammarActivation("alpha", FocusOrigin.Automatic, 1, true, selected)
+        val states = selected.associate { it.exerciseId to SrsState(CardPhase.Review) }
+        val decision = GrammarFocus.decide(
+            input(states = states, cursor = GrammarCursor(2, 1, active)).copy(budget = 0),
+        )
+
+        assertTrue(decision.continuing)
+        assertTrue(decision.newItemAllowanceExhausted)
+        assertTrue(decision.selected.isEmpty())
     }
 
     @Test

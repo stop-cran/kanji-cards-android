@@ -150,7 +150,8 @@ class ListeningAssessmentFlowTest {
                 val result = requireNotNull(vm.snapshot!!.result)
                 val firstScored = result.responses.indexOfFirst { !it.example }
                 val response = result.responses[firstScored]
-                val label = "Scored item 1/${profile.scoredCount} - ${response.type.label}"
+                val typeLabel = InstrumentationRegistry.getInstrumentation().targetContext.getString(response.type.labelResource())
+                val label = "Scored item 1/${profile.scoredCount} - $typeLabel"
                 rule.onNodeWithText("$label: Correct").performScrollTo().assertIsDisplayed()
                 rule.onAllNodesWithText("Feedback and captured transcript")[firstScored].performScrollTo().performClick()
                 rule.waitUntil(10_000) { !vm.busy && vm.detail?.id == response.encounterId }

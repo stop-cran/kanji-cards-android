@@ -22,9 +22,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import io.github.stopcran.kanji.core.content.GrammarExercise
 import io.github.stopcran.kanji.core.content.GrammarVocabulary
 import io.github.stopcran.kanji.data.WordEntity
+import io.github.stopcran.kanji.R
 
 @Composable
 fun GrammarPrompt(vm: GrammarQuizViewModel, exercise: GrammarExercise, answer: String? = null) {
@@ -47,9 +49,9 @@ fun GrammarPrompt(vm: GrammarQuizViewModel, exercise: GrammarExercise, answer: S
     Text(text, style = MaterialTheme.typography.headlineSmall,
         textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
     if (rendered.ranges.isNotEmpty()) {
-        Text("Tap underlined words for help. Heavier links: not yet familiar in the app.",
+        Text(stringResource(R.string.grammar_tap_vocabulary_help),
             style = MaterialTheme.typography.bodySmall)
-        OutlinedButton(onClick = vm::openVocabularyList, modifier = Modifier.fillMaxWidth()) { Text("Vocabulary") }
+        OutlinedButton(onClick = vm::openVocabularyList, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.grammar_vocabulary)) }
     }
     exercise.vocabularyProblem?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     Text(exercise.translation, style = MaterialTheme.typography.bodyMedium,
@@ -61,20 +63,22 @@ fun GrammarVocabularyHelp(vm: GrammarQuizViewModel) {
     if (vm.vocabularyListOpen) {
         AlertDialog(
             onDismissRequest = vm::closeVocabularyList,
-            title = { Text("Vocabulary in this prompt") },
+            title = { Text(stringResource(R.string.grammar_vocabulary_prompt_title)) },
             text = {
                 Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
+                    val lookUp = stringResource(R.string.grammar_look_up)
+                    val notFamiliar = stringResource(R.string.grammar_not_familiar_look_up)
                     vm.currentExercise?.vocabulary?.spans.orEmpty().forEach { span ->
                         TextButton(onClick = { vm.openLookup(span) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                             Text(buildAnnotatedString {
                                 with(RareHan) { appendWithRare(span.text) }
-                                append(if (vm.isFamiliar(span)) " — look up" else " — not yet familiar; look up")
+                                append(if (vm.isFamiliar(span)) " $lookUp" else " $notFamiliar")
                             })
                         }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = vm::closeVocabularyList) { Text("Close") } },
+            confirmButton = { TextButton(onClick = vm::closeVocabularyList) { Text(stringResource(R.string.grammar_focus_close)) } },
         )
     }
     vm.lookup?.let { span ->
@@ -84,19 +88,19 @@ fun GrammarVocabularyHelp(vm: GrammarQuizViewModel) {
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     Text(span.reading, style = MaterialTheme.typography.titleMedium)
-                    if (span.headword != span.text) Text("Dictionary form: ${span.headword}")
+                    if (span.headword != span.text) Text(stringResource(R.string.grammar_dictionary_form, span.headword))
                     Text(span.gloss, modifier = Modifier.padding(vertical = 12.dp))
                     Text(
-                        if (vm.isFamiliar(span)) "Familiar in word practice; this reading or meaning may still be new."
-                        else "Not yet familiar according to your word-recognition progress.",
+                        if (vm.isFamiliar(span)) stringResource(R.string.grammar_familiar_word_practice)
+                        else stringResource(R.string.grammar_not_familiar_word_progress),
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    if (!vm.lookupHasArticle()) Text("Local explanation; no linked word article.", style = MaterialTheme.typography.bodySmall)
+                    if (!vm.lookupHasArticle()) Text(stringResource(R.string.grammar_local_explanation), style = MaterialTheme.typography.bodySmall)
                 }
             },
-            confirmButton = { TextButton(onClick = vm::closeLookup) { Text("Close") } },
+            confirmButton = { TextButton(onClick = vm::closeLookup) { Text(stringResource(R.string.grammar_focus_close)) } },
             dismissButton = {
-                if (vm.lookupHasArticle()) TextButton(onClick = vm::openLookupArticle) { Text("Read word article") }
+                if (vm.lookupHasArticle()) TextButton(onClick = vm::openLookupArticle) { Text(stringResource(R.string.grammar_read_word_article)) }
             },
         )
     }

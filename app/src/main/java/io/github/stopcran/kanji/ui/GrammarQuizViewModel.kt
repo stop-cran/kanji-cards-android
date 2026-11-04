@@ -12,7 +12,6 @@ import io.github.stopcran.kanji.core.content.GrammarExercise
 import io.github.stopcran.kanji.core.content.GrammarOption
 import io.github.stopcran.kanji.core.content.GrammarVocabularySpan
 import io.github.stopcran.kanji.core.words.Advancement
-import io.github.stopcran.kanji.core.grammar.GRAMMAR_NOT_DUE
 import io.github.stopcran.kanji.core.grammar.GrammarChoices
 import io.github.stopcran.kanji.core.grammar.GrammarChoiceSnapshot
 import io.github.stopcran.kanji.core.grammar.GrammarPracticePreview
@@ -28,6 +27,10 @@ import io.github.stopcran.kanji.data.GRAMMAR_STACK
 import io.github.stopcran.kanji.data.GrammarResponseEntity
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.GrammarFocusTicket
+import io.github.stopcran.kanji.data.GrammarMessage
+import io.github.stopcran.kanji.data.GrammarMessageId
+import io.github.stopcran.kanji.data.GrammarPreviewNotice
+import io.github.stopcran.kanji.data.GrammarPreviewNoticeId
 import io.github.stopcran.kanji.data.GrammarStudy
 import io.github.stopcran.kanji.data.GrammarPracticeSnapshot
 import io.github.stopcran.kanji.data.GrammarRoadmapSnapshot
@@ -44,8 +47,12 @@ import kotlin.random.Random
 
 sealed interface GrammarUi {
     data object Loading : GrammarUi
-    data class Preview(val preview: GrammarPracticePreview, val message: String? = null) : GrammarUi
-    data class Empty(val message: String) : GrammarUi
+    data class Preview(
+        val preview: GrammarPracticePreview,
+        val notices: List<GrammarPreviewNotice> = emptyList(),
+        val learnerMessages: List<GrammarMessage> = emptyList(),
+    ) : GrammarUi
+    data class Empty(val message: GrammarMessage, val diagnostic: String? = null) : GrammarUi
     data class Done(val answered: Int, val correct: Int) : GrammarUi
     data class Choose(val exercise: GrammarExercise, val choices: GrammarChoiceSnapshot, val remaining: Int) : GrammarUi {
         val options: List<GrammarOption> get() = choices.options
@@ -99,11 +106,12 @@ class GrammarQuizViewModel(
     private var familiarWords = emptySet<String>()
     private var asked = 0
     private var started = false
-    private var emptyMessage = GRAMMAR_NOT_DUE
+    private var emptyMessage = GrammarMessage(GrammarMessageId.NoDue)
+    private var emptyDiagnostic: String? = null
     private var focusTicket: GrammarFocusTicket? = null
     var focus: io.github.stopcran.kanji.core.grammar.GrammarFocusDecision? by mutableStateOf(null)
         private set
-    var focusNotice: String? by mutableStateOf(null)
+    var focusNotice: List<GrammarMessage> by mutableStateOf(emptyList())
         private set
     var approvedPractice: GrammarPracticePreview? by mutableStateOf(null)
         private set
@@ -118,8 +126,11 @@ class GrammarQuizViewModel(
         viewModelScope.launch {
             if (target == null) start(extra) else prepareTarget {
                 val snapshot = app.db.grammarPractice(app.settings, target, Instant.now())
-                showPreview(snapshot, if (interrupted)
-                    "This topic was reopened after the app was interrupted. Review a fresh batch; previous override consent has expired." else null)
+                val notices = if (interrupted) listOf(
+                    GrammarPreviewNotice(GrammarPreviewNoticeId.Interrupted),
+                    GrammarPreviewNotice(GrammarPreviewNoticeId.OverrideConsentExpired),
+                ) else emptyList()
+                showPreview(snapshot, notices)
             }
         }
     }
@@ -146,9 +157,9 @@ class GrammarQuizViewModel(
                 val (snapshot, queue) = prepared
                 when {
                     queue == null -> showPreview(
-                        snapshot, "Content, scope or availability changed. Review this updated preview and approve any exceptions again.",
+                        snapshot, listOf(GrammarPreviewNotice(GrammarPreviewNoticeId.PreviewChanged)),
                     )
-                    queue.isEmpty() -> showPreview(snapshot, "No exercises are available with these choices. No session was started.")
+                    queue.isEmpty() -> showPreview(snapshot, listOf(GrammarPreviewNotice(GrammarPreviewNoticeId.QueueEmpty)))
                     else -> {
                         sourceId = target.sourceId
                         approvedPractice = snapshot.preview
@@ -165,14 +176,17 @@ class GrammarQuizViewModel(
         val selected = target ?: return
         prepareTarget(current = { ui === origin }) {
             val snapshot = app.db.grammarPractice(app.settings, selected, Instant.now())
-            if (ui === origin) showPreview(snapshot, if (snapshot.preview == origin.preview) origin.message else
-                "Content, scope or availability changed. Review this updated preview and approve any exceptions again.")
+            if (ui === origin) showPreview(
+                snapshot,
+                if (snapshot.preview == origin.preview) origin.notices
+                else listOf(GrammarPreviewNotice(GrammarPreviewNoticeId.PreviewChanged)),
+            )
         }
     }
 
-    private fun showPreview(snapshot: GrammarPracticeSnapshot, message: String? = null) {
+    private fun showPreview(snapshot: GrammarPracticeSnapshot, notices: List<GrammarPreviewNotice> = emptyList()) {
         practiceDetails = snapshot.roadmap
-        ui = GrammarUi.Preview(snapshot.preview, message)
+        ui = GrammarUi.Preview(snapshot.preview, notices, snapshot.study.learnerMessages)
     }
 
     override fun onSessionLeft() {
@@ -187,11 +201,11 @@ class GrammarQuizViewModel(
         } catch (error: IllegalArgumentException) {
             if (!current()) return
             Log.e("GrammarPractice", "Could not prepare targeted practice", error)
-            ui = GrammarUi.Empty(error.message ?: "Targeted practice is unavailable. Return to Grammar and choose a topic again.")
+            ui = GrammarUi.Empty(GrammarMessage(GrammarMessageId.TargetUnavailable), error.message)
         } catch (error: SQLiteException) {
             if (!current()) return
             Log.e("GrammarPractice", "Could not read or start targeted practice", error)
-            ui = GrammarUi.Empty("Could not access practice data. Return to Grammar and try again.")
+            ui = GrammarUi.Empty(GrammarMessage(GrammarMessageId.PracticeDataUnavailable), error.message)
         }
     }
 
@@ -233,14 +247,23 @@ class GrammarQuizViewModel(
             }
         }.toMap()
         if (exercises.isEmpty()) {
-            ui = GrammarUi.Empty("No grammar exercises are available. Sync the content first (⚙ settings).")
+            ui = GrammarUi.Empty(
+                GrammarMessage(GrammarMessageId.NoExercises),
+                "No grammar exercises are available. Sync the content first (⚙ settings).",
+            )
             return
         }
         states += study.states
         focusTicket = study.ticket
         focus = if (!extra && study.preferences.guided) study.focus else null
-        focusNotice = if (!extra && study.preferences.guided) study.notice else null
-        emptyMessage = study.notice ?: GRAMMAR_NOT_DUE
+        focusNotice = if (!extra && study.preferences.guided) study.learnerMessages else emptyList()
+        emptyMessage = study.learnerMessages.firstOrNull {
+            it.id in setOf(
+                GrammarMessageId.FocusNoEligible, GrammarMessageId.FocusNoAllowance, GrammarMessageId.FocusReviewOrChange,
+                GrammarMessageId.SyncNeeded, GrammarMessageId.ContentProblem, GrammarMessageId.NoUnseenForScope,
+            )
+        } ?: GrammarMessage(GrammarMessageId.NoDue)
+        emptyDiagnostic = study.notice
         session = trackSession(QuizSession(queue.map { it.kanji }, { it }), sourceId, GRAMMAR_STACK, StudyMode.Grammar.name, extra)
         showNext()
     }
@@ -278,7 +301,7 @@ class GrammarQuizViewModel(
         if (id == null) {
             finishSession()
             ui = if (session.answered == 0) {
-                GrammarUi.Empty(emptyMessage)
+                GrammarUi.Empty(emptyMessage, emptyDiagnostic)
             } else {
                 GrammarUi.Done(session.answered, session.correct)
             }
@@ -358,7 +381,10 @@ class GrammarQuizViewModel(
             val error = app.db.recordGrammarAnswer(
                 app.settings, updated.toEntity(sourceId, GRAMMAR_STACK, answer.exercise.id, StudyMode.Grammar), log, detail, focusTicket,
             )
-            if (error != null) focusNotice = error
+            if (error != null) {
+                Log.e("GrammarFocus", "Could not record focus progress: $error")
+                focusNotice = listOf(GrammarMessage(GrammarMessageId.ReadinessProblem))
+            }
         }
     }
 

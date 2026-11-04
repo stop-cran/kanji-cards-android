@@ -33,6 +33,31 @@ sealed interface SyncResult {
     ) : SyncResult
 }
 
+internal fun isOrdinaryEntryAllowed(source: RepoSource): Boolean =
+    source.id != "stop-cran/learning-japanese-ru" || source.branch != "main"
+
+enum class SourceCandidateFailure {
+    UpdatesUnavailable,
+    InvalidContent,
+    NoCards,
+    LanguageChanged,
+    DamagedUpdate,
+    Cancelled,
+}
+
+sealed interface SourceCandidateResult {
+    data class Validated(val candidate: ValidatedSourceCandidate) : SourceCandidateResult
+    data class Rejected(val reason: SourceCandidateFailure) : SourceCandidateResult
+}
+
+data class ValidatedSourceCandidate internal constructor(
+    val source: RepoSource,
+    val baseLanguage: String,
+    internal val head: String,
+    internal val parsed: io.github.stopcran.kanji.core.content.ParsedContent,
+    internal val candidateToken: String?,
+)
+
 internal sealed interface SyncActivity {
     data object Running : SyncActivity
     data class Finished(val result: SyncResult) : SyncActivity
@@ -84,6 +109,8 @@ private fun io.github.stopcran.kanji.core.content.ParsedContent.toSyncMeta(sourc
     (curriculum as? GrammarCurriculumState.Ready)?.let { Json.encodeToString(GrammarCurriculumData.serializer(), it.curriculum) },
     (curriculum as? GrammarCurriculumState.Invalid)?.reason,
     kanjiReadingParserEpoch = ContentParser.KANJI_READING_PARSER_EPOCH,
+    baseLanguage = manifest.baseLanguage,
+    targetLanguage = manifest.targetLanguage,
 )
 
 private fun io.github.stopcran.kanji.core.content.ParsedContent.toRows(sourceId: String): ContentRows {
@@ -118,13 +145,129 @@ private fun io.github.stopcran.kanji.core.content.ParsedContent.toRows(sourceId:
     )
 }
 
-class ContentSync(private val db: AppDatabase, private val syncState: SyncPreferences, private val http: ContentHttp = UrlConnectionHttp) {
+class ContentSync(
+    private val db: AppDatabase,
+    private val syncState: SyncPreferences,
+    private val http: ContentHttp = UrlConnectionHttp,
+    private val selectedSource: (() -> RepoSource?)? = null,
+) {
     private val lock = Mutex()
     private val _activity = MutableStateFlow<Map<RepoSource, SyncActivityEvent>>(emptyMap())
     internal val activity = _activity.asStateFlow()
+    internal var beforeCandidateCommit: suspend () -> Unit = {}
+    internal var beforeDefaultSelectionMirror: suspend () -> Unit = {}
+
+    suspend fun beginSourceCandidate(settings: Settings, url: String, branch: String): PendingSourceCandidate? =
+        lock.withLock { settings.beginSourceCandidate(url, branch) }
+
+    suspend fun cancelSourceCandidate(settings: Settings, token: String? = null) =
+        lock.withLock { settings.cancelSourceCandidate(token) }
+
+    suspend fun recoverCommittedCandidate(settings: Settings): String? = withContext(Dispatchers.IO) {
+        lock.withLock {
+            val accepted = db.sourceAcceptance().current() ?: return@withLock null
+            sourceSelectionLanguage(accepted.token)?.let { language ->
+                if (settings.recoverLanguageSelection(accepted, language)) return@withLock accepted.token
+                return@withLock null
+            }
+            if (!settings.isCurrentSourceCandidate(accepted.token)) return@withLock null
+            mirrorAcceptedMetadata(accepted)
+            settings.acceptSourceCandidate(accepted)
+            null
+        }
+    }
+
+    /** Changes language intent and, for built-in sources, serializes the selected-default authority transition. */
+    suspend fun selectAppLanguage(
+        settings: Settings,
+        language: AppLanguage,
+        applyPlatformLocale: suspend () -> Unit = {},
+    ): RepoSource? = lock.withLock {
+        val current = settings.source.value
+        val target = LanguageSources.default(language).takeIf { LanguageSources.isDefault(current) }
+        val selected = target ?: current
+        val needsSync = target != null && (target != current || !authorityMatches(target))
+        val marker = persistLanguageSelection(settings, selected, language)
+        applyPlatformLocale()
+        acknowledgeLanguageSelectionLocked(marker)
+        if (needsSync) selected else null
+    }
+
+    /** Explicitly selects a language-matching built-in repository after the learner confirms replacement. */
+    suspend fun selectDefaultSource(settings: Settings, source: RepoSource, language: AppLanguage): Boolean =
+        lock.withLock {
+            if (source != LanguageSources.default(language)) return@withLock false
+            acknowledgeLanguageSelectionLocked(persistLanguageSelection(settings, source, language))
+            true
+        }
+
+    /** A System locale change can move the selected built-in branch without changing language intent. */
+    suspend fun reconcileSystemLanguage(settings: Settings): RepoSource? = lock.withLock {
+        if (settings.appLanguage.value != AppLanguage.System) return@withLock null
+        val current = settings.source.value
+        val target = LanguageSources.defaultForBase(AppLocale.systemLanguage())
+            .takeIf { LanguageSources.isDefault(current) } ?: return@withLock null
+        if (target == current && authorityMatches(target)) return@withLock null
+        acknowledgeLanguageSelectionLocked(persistLanguageSelection(settings, target, AppLanguage.System))
+        target
+    }
+
+    suspend fun acknowledgeLanguageSelection(token: String) = lock.withLock {
+        acknowledgeLanguageSelectionLocked(token)
+    }
+
+    private suspend fun acknowledgeLanguageSelectionLocked(token: String) {
+        val accepted = db.sourceAcceptance().current()?.takeIf { it.token == token } ?: return
+        if (sourceSelectionLanguage(token) == null) return
+        db.withTransaction {
+            db.sourceAcceptance().put(accepted.copy(token = "source-authority:${java.util.UUID.randomUUID()}"))
+        }
+    }
+
+    private suspend fun authorityMatches(source: RepoSource): Boolean {
+        val current = db.sourceAcceptance().current()
+        return current?.sourceId == source.id && current.branch == source.branch
+    }
+
+    private suspend fun persistLanguageSelection(settings: Settings, source: RepoSource, language: AppLanguage): String {
+        val previous = db.sourceAcceptance().current()?.takeIf { it.sourceId == source.id }
+        val baseLanguage = syncState.baseLanguage(source.id) ?: db.content().meta(source.id)?.baseLanguage
+            ?: previous?.baseLanguage ?: when (source.id) {
+                LanguageSources.defaultForBase("ru").id -> "ru"
+                else -> "en"
+            }
+        val expectedDefaultLanguage = when (source.id) {
+            LanguageSources.defaultForBase("ru").id -> "ru"
+            LanguageSources.defaultForBase("en").id -> "en"
+            else -> null
+        }
+        check(expectedDefaultLanguage == null || expectedDefaultLanguage == baseLanguage) {
+            "The built-in repository's accepted language does not match the selected default."
+        }
+        val accepted = AcceptedSourceEntity(
+            token = sourceSelectionToken(language),
+            sourceId = source.id,
+            url = "https://github.com/${source.owner}/${source.repo}",
+            branch = source.branch,
+            baseLanguage = baseLanguage,
+            head = previous?.takeIf { it.branch == source.branch }?.head.orEmpty(),
+            grammarParserEpoch = previous?.grammarParserEpoch ?: syncState.grammarParserEpoch(source.id),
+            counterParserEpoch = previous?.counterParserEpoch ?: syncState.counterParserEpoch(source.id),
+            sceneParserEpoch = previous?.sceneParserEpoch ?: syncState.sceneParserEpoch(source.id),
+            listeningParserEpoch = previous?.listeningParserEpoch ?: syncState.listeningParserEpoch(source.id),
+            acceptedAtMs = System.currentTimeMillis(),
+        )
+        db.withTransaction { db.sourceAcceptance().put(accepted) }
+        withContext(kotlinx.coroutines.NonCancellable) {
+            beforeDefaultSelectionMirror()
+            settings.applyLanguageSelection(language, source)
+        }
+        return accepted.token
+    }
 
     /** Cheap check at app start: at most every [LAUNCH_INTERVAL_MS], and only downloads when the branch head moved. */
     suspend fun syncOnLaunch(source: RepoSource): SyncResult = lock.withLock { trackActivity(source) {
+        if (isGatedRussianDefault(source)) return@trackActivity russianDefaultBlocked()
         val now = System.currentTimeMillis()
         if (!needsParserRefresh(source) && now - syncState.lastCheckMs < LAUNCH_INTERVAL_MS) return@trackActivity SyncResult.UpToDate
         val result = syncContent(source, force = false)
@@ -181,9 +324,105 @@ class ContentSync(private val db: AppDatabase, private val syncState: SyncPrefer
     }
 
     suspend fun sync(source: RepoSource, force: Boolean = false): SyncResult =
-        lock.withLock { trackActivity(source) { syncContent(source, force) } }
+        lock.withLock {
+            trackActivity(source) {
+                if (isGatedRussianDefault(source)) russianDefaultBlocked() else syncContent(source, force)
+            }
+        }
+
+    fun ordinaryEntryAllowed(source: RepoSource): Boolean = isOrdinaryEntryAllowed(source)
+
+    @Suppress("TooGenericExceptionCaught")
+    suspend fun validateSourceCandidate(source: RepoSource, candidateToken: String? = null): SourceCandidateResult = lock.withLock {
+        if (isGatedRussianDefault(source)) return@withLock SourceCandidateResult.Rejected(SourceCandidateFailure.InvalidContent)
+        try {
+            withContext(Dispatchers.IO) {
+                val head = headCommit(source)
+                    ?: return@withContext SourceCandidateResult.Rejected(SourceCandidateFailure.UpdatesUnavailable)
+                val files = download(source.commitZipUrl(head)) { SafeZip.read(it) }
+                val parsed = ContentParser.parse(files, SceneImages::problem)
+                val acceptedLanguage = syncState.baseLanguage(source.id) ?: db.content().meta(source.id)?.baseLanguage
+                candidateRejection(parsed, source.id, acceptedLanguage)?.let(SourceCandidateResult::Rejected)
+                    ?: SourceCandidateResult.Validated(
+                        ValidatedSourceCandidate(source, parsed.manifest.baseLanguage, head, parsed, candidateToken),
+                    )
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: ContentException) {
+            SourceCandidateResult.Rejected(SourceCandidateFailure.InvalidContent)
+        } catch (_: java.io.IOException) {
+            SourceCandidateResult.Rejected(SourceCandidateFailure.UpdatesUnavailable)
+        } catch (error: Exception) {
+            android.util.Log.e("ContentSync", "Candidate validation failed for ${source.id}@${source.branch}", error)
+            SourceCandidateResult.Rejected(SourceCandidateFailure.InvalidContent)
+        }
+    }
+
+    private suspend fun candidateRejection(
+        parsed: io.github.stopcran.kanji.core.content.ParsedContent,
+        sourceId: String,
+        acceptedLanguage: String?,
+    ): SourceCandidateFailure? =
+        when {
+            acceptedLanguage != null && acceptedLanguage != parsed.manifest.baseLanguage -> SourceCandidateFailure.LanguageChanged
+            parsed.kanji.isEmpty() -> SourceCandidateFailure.NoCards
+            parsed.problems.isNotEmpty() && shrinks(parsed, sourceId) -> SourceCandidateFailure.DamagedUpdate
+            legacyListeningFailure(parsed, sourceId) != null -> SourceCandidateFailure.InvalidContent
+            else -> null
+        }
+
+    /** Imports only the still-current, already validated candidate; selection changes cancel its transaction. */
+    suspend fun acceptSourceCandidate(
+        candidate: ValidatedSourceCandidate,
+        isCurrent: () -> Boolean,
+        activate: (AcceptedSourceEntity) -> Unit,
+    ): SyncResult = lock.withLock {
+        withContext(Dispatchers.IO) {
+            if (!isCurrent()) return@withContext SyncResult.Failed("Source selection was cancelled", retryable = true)
+            val knownLanguage = syncState.baseLanguage(candidate.source.id) ?: db.content().meta(candidate.source.id)?.baseLanguage
+            if (knownLanguage != null && knownLanguage != candidate.baseLanguage) {
+                return@withContext SyncResult.Failed("Repository language changed; keeping previous content", retryable = false)
+            }
+            if (candidate.parsed.kanji.isEmpty()) {
+                return@withContext SyncResult.Failed("No valid cards in the selected repository", retryable = false)
+            }
+            if (candidate.parsed.problems.isNotEmpty() && shrinks(candidate.parsed, candidate.source.id)) {
+                return@withContext SyncResult.Failed("Invalid update; keeping previous content", retryable = false)
+            }
+            val accepted = AcceptedSourceEntity(
+                token = currentCandidateToken(candidate, isCurrent) ?: return@withContext SyncResult.Failed(
+                    "Source selection was cancelled", retryable = true,
+                ),
+                sourceId = candidate.source.id,
+                url = "https://github.com/${candidate.source.owner}/${candidate.source.repo}",
+                branch = candidate.source.branch,
+                baseLanguage = candidate.baseLanguage,
+                head = candidate.head,
+                grammarParserEpoch = ContentParser.GRAMMAR_PARSER_EPOCH,
+                counterParserEpoch = io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH,
+                sceneParserEpoch = SceneCatalog.PARSER_EPOCH,
+                listeningParserEpoch = io.github.stopcran.kanji.core.listening.ListeningContent.PARSER_EPOCH,
+                acceptedAtMs = System.currentTimeMillis(),
+            )
+            currentCoroutineContext().ensureActive()
+            val result = try {
+                withContext(kotlinx.coroutines.NonCancellable) {
+                    val imported = replaceContent(candidate.parsed, candidate.source, candidate.head, { isCurrent() }, accepted)
+                    mirrorAcceptedMetadata(accepted)
+                    activate(accepted)
+                    imported
+                }
+            } catch (_: StaleSourceCandidateException) {
+                return@withContext SyncResult.Failed("Source selection was cancelled", retryable = true)
+            }
+            db.rebuildGrammarReadiness(candidate.source.id)
+            result
+        }
+    }
 
     private suspend fun syncContent(source: RepoSource, force: Boolean): SyncResult = withContext(Dispatchers.IO) {
+        if (!ordinarySourceIsCurrent(source)) return@withContext SyncResult.UpToDate
         if (db.content().meta(source.id) != null && db.reviews().grammarReadinessStatus(source.id)?.complete != true) {
             db.rebuildGrammarReadiness(source.id)
         }
@@ -203,6 +442,14 @@ class ContentSync(private val db: AppDatabase, private val syncState: SyncPrefer
         val files = download(url) { SafeZip.read(it) }
         val parsed = ContentParser.parse(files, SceneImages::problem)
         val dao = db.content()
+        val acceptedLanguage = syncState.baseLanguage(source.id) ?: dao.meta(source.id)?.baseLanguage
+        if (acceptedLanguage != null && acceptedLanguage != parsed.manifest.baseLanguage) {
+            return@withContext SyncResult.Failed(
+                "Repository language changed from $acceptedLanguage to ${parsed.manifest.baseLanguage}; keeping previous content",
+                retryable = false,
+                rejected = parsed.rejectedContent(),
+            )
+        }
         legacyListeningFailure(parsed, source.id)?.let { return@withContext it }
         if (maySkipImport && parsed.listeningTasks.problems.isEmpty() &&
             dao.meta(source.id)?.contentVersion == parsed.manifest.contentVersion) {
@@ -221,7 +468,10 @@ class ContentSync(private val db: AppDatabase, private val syncState: SyncPrefer
                 rejected = parsed.rejectedContent(),
             )
         }
-        val result = replaceContent(parsed, source, head)
+        val result = replaceOrdinaryContent(parsed, source, head) ?: return@withContext SyncResult.UpToDate
+        check(syncState.bindBaseLanguage(source.id, parsed.manifest.baseLanguage)) {
+            "Repository language changed while accepting content"
+        }
         syncState.setGrammarParserEpoch(source.id, ContentParser.GRAMMAR_PARSER_EPOCH)
         syncState.setCounterParserEpoch(source.id, io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH)
         syncState.setSceneParserEpoch(source.id, SceneCatalog.PARSER_EPOCH)
@@ -231,19 +481,77 @@ class ContentSync(private val db: AppDatabase, private val syncState: SyncPrefer
         result
     }
 
+    private suspend fun replaceOrdinaryContent(
+        parsed: io.github.stopcran.kanji.core.content.ParsedContent,
+        source: RepoSource,
+        head: String?,
+    ): SyncResult.Updated? {
+        if (!ordinarySourceIsCurrent(source)) return null
+        return try {
+            replaceContent(parsed, source, head, isCurrent = { ordinarySourceIsCurrent(source) })
+        } catch (_: StaleSourceCandidateException) {
+            null
+        }
+    }
+
     private suspend fun replaceContent(
         parsed: io.github.stopcran.kanji.core.content.ParsedContent, source: RepoSource, head: String?,
+        isCurrent: suspend () -> Boolean = { true },
+        accepted: AcceptedSourceEntity? = null,
     ): SyncResult.Updated = db.withTransaction {
+        if (!isCurrent()) throw StaleSourceCandidateException()
         val rows = parsed.toRows(source.id)
         val meta = parsed.toSyncMeta(source.id)
         val tasks = db.importListeningTasks(parsed, source, head)
         db.content().replaceContent(source.id, rows, meta.copy(problems = meta.problems + tasks.problems.size))
         db.listening().pruneAudio(source.id)
+        if (!isCurrent()) throw StaleSourceCandidateException()
+        accepted?.let { db.sourceAcceptance().put(it) }
+        if (accepted != null) beforeCandidateCommit()
+        if (!isCurrent()) throw StaleSourceCandidateException()
         SyncResult.Updated(
             rows.kanji.size, rows.words.size, parsed.problems + tasks.problems,
             parsed.grammar.sumOf { it.exercises.size }, rows.listening.size + db.listeningTasks().importedCount(source.id),
             parsed.rejectedContent(tasks.rejectedPaths),
         )
+    }
+
+    private suspend fun ordinarySourceIsCurrent(source: RepoSource): Boolean {
+        if (selectedSource?.invoke()?.let { it != source } == true) return false
+        val accepted = db.sourceAcceptance().current()?.takeIf { it.sourceId == source.id }
+        return accepted == null || accepted.branch == source.branch
+    }
+
+    private fun isGatedRussianDefault(source: RepoSource) = !isOrdinaryEntryAllowed(source)
+
+    private fun currentCandidateToken(candidate: ValidatedSourceCandidate, isCurrent: () -> Boolean): String? =
+        candidate.candidateToken?.takeIf { isCurrent() }
+
+    private fun mirrorAcceptedMetadata(accepted: AcceptedSourceEntity) {
+        check(syncState.bindBaseLanguage(accepted.sourceId, accepted.baseLanguage)) {
+            "Repository language changed while mirroring accepted source"
+        }
+        syncState.setGrammarParserEpoch(accepted.sourceId, accepted.grammarParserEpoch)
+        syncState.setCounterParserEpoch(accepted.sourceId, accepted.counterParserEpoch)
+        syncState.setSceneParserEpoch(accepted.sourceId, accepted.sceneParserEpoch)
+        syncState.setListeningParserEpoch(accepted.sourceId, accepted.listeningParserEpoch)
+        val source = RepoSource.parse(accepted.url, accepted.branch)
+        check(source?.id == accepted.sourceId) { "Accepted source identity is invalid" }
+        syncState.setSyncedCommit(checkNotNull(source), accepted.head)
+    }
+
+    private fun russianDefaultBlocked() =
+        SyncResult.Failed("Russian default content is not enabled for ordinary study yet", retryable = false)
+
+    private class StaleSourceCandidateException : Exception()
+
+    private fun sourceSelectionToken(language: AppLanguage) =
+        "$SOURCE_SELECTION_PENDING_PREFIX${language.storedValue}:${java.util.UUID.randomUUID()}"
+
+    private fun sourceSelectionLanguage(token: String): AppLanguage? {
+        if (!token.startsWith(SOURCE_SELECTION_PENDING_PREFIX)) return null
+        val stored = token.removePrefix(SOURCE_SELECTION_PENDING_PREFIX).substringBefore(':')
+        return AppLanguage.parse(stored).takeIf { it.storedValue == stored }
     }
 
     private suspend fun legacyListeningFailure(parsed: io.github.stopcran.kanji.core.content.ParsedContent, source: String): SyncResult.Failed? {
@@ -289,6 +597,7 @@ class ContentSync(private val db: AppDatabase, private val syncState: SyncPrefer
         }
     }
     private companion object {
+        const val SOURCE_SELECTION_PENDING_PREFIX = "source-selection-pending:"
         const val MAX_DOWNLOAD_BYTES = 48L * 1024 * 1024
         const val LAUNCH_INTERVAL_MS = 6L * 60 * 60 * 1000
     }

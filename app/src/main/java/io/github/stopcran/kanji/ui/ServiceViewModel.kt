@@ -18,6 +18,7 @@ inline fun <reified VM : ViewModel> serviceViewModel(key: String, crossinline cr
             create(services).also { vm ->
                 if (vm is StudyViewModel) {
                     services.studySessions.register(key, vm::leaveSession)
+                    vm.attachSessionRegistration(key, services.studySessions)
                     vm.addCloseable { services.studySessions.leave(key) }
                 }
             }

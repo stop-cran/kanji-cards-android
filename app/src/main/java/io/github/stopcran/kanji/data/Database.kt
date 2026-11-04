@@ -171,7 +171,35 @@ data class SyncMetaEntity(
     val grammarCurriculumJson: String? = null,
     val grammarCurriculumProblem: String? = null,
     @ColumnInfo(defaultValue = "0") val kanjiReadingParserEpoch: Int = 0,
+    @ColumnInfo(defaultValue = "'en'") val baseLanguage: String = "en",
+    @ColumnInfo(defaultValue = "'ja'") val targetLanguage: String = "ja",
 )
+
+/** Durable source authority for the last accepted candidate or intentional built-in selection. */
+@Entity(tableName = "accepted_source")
+data class AcceptedSourceEntity(
+    @PrimaryKey val slot: Int = 1,
+    val token: String,
+    val sourceId: String,
+    val url: String,
+    val branch: String,
+    val baseLanguage: String,
+    val head: String,
+    val grammarParserEpoch: Int,
+    val counterParserEpoch: Int,
+    val sceneParserEpoch: Int,
+    val listeningParserEpoch: Int,
+    val acceptedAtMs: Long,
+)
+
+@Dao
+interface SourceAcceptanceDao {
+    @Query("SELECT * FROM accepted_source WHERE slot = 1")
+    suspend fun current(): AcceptedSourceEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun put(value: AcceptedSourceEntity)
+}
 
 /** Everything a content snapshot stores for one source. */
 data class ContentRows(
@@ -557,8 +585,9 @@ interface ReviewDao {
         ListeningTaskIdentityEntity::class, ListeningExposureEntity::class, ListeningTaskSyncEntity::class,
         ListeningTaskEncounterEntity::class, ListeningAssessmentEntity::class,
         ReviewStateEntity::class, ReviewLogEntity::class, StudySessionEntity::class, SyncMetaEntity::class,
+        AcceptedSourceEntity::class,
     ],
-    version = 17,
+    version = 19,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -566,6 +595,18 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun reviews(): ReviewDao
     abstract fun listening(): ListeningDao
     abstract fun listeningTasks(): ListeningTaskDao
+    abstract fun sourceAcceptance(): SourceAcceptanceDao
+}
+
+val MIGRATION_18_19 = object : androidx.room.migration.Migration(18, 19) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS accepted_source (slot INTEGER NOT NULL PRIMARY KEY, token TEXT NOT NULL, " +
+                "sourceId TEXT NOT NULL, url TEXT NOT NULL, branch TEXT NOT NULL, baseLanguage TEXT NOT NULL, head TEXT NOT NULL, " +
+                "grammarParserEpoch INTEGER NOT NULL, counterParserEpoch INTEGER NOT NULL, sceneParserEpoch INTEGER NOT NULL, " +
+                "listeningParserEpoch INTEGER NOT NULL, acceptedAtMs INTEGER NOT NULL)",
+        )
+    }
 }
 
 val MIGRATION_16_17 = object : androidx.room.migration.Migration(16, 17) {
@@ -573,6 +614,13 @@ val MIGRATION_16_17 = object : androidx.room.migration.Migration(16, 17) {
         db.execSQL("ALTER TABLE kanji ADD COLUMN quizOnyomi TEXT")
         db.execSQL("ALTER TABLE kanji ADD COLUMN quizKunyomi TEXT")
         db.execSQL("ALTER TABLE sync_meta ADD COLUMN kanjiReadingParserEpoch INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+val MIGRATION_17_18 = object : androidx.room.migration.Migration(17, 18) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE sync_meta ADD COLUMN baseLanguage TEXT NOT NULL DEFAULT 'en'")
+        db.execSQL("ALTER TABLE sync_meta ADD COLUMN targetLanguage TEXT NOT NULL DEFAULT 'ja'")
     }
 }
 

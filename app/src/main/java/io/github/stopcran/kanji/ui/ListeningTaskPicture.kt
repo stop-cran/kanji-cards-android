@@ -14,7 +14,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -23,6 +25,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.listening.TaskChoiceMode
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -31,9 +34,11 @@ import kotlin.math.roundToInt
 internal fun ListeningTaskPicture(vm: ListeningTaskViewModel, bitmap: ImageBitmap, required: Boolean, modifier: Modifier) {
     ListeningTaskPicture(bitmap, required, vm.task?.choiceMode, modifier, Modifier.listeningEvidence(vm)) {
         val state = vm.attempt
-        if (vm.playing) Button(onClick = { vm.pause() }) { Text("Pause audio") }
+        if (vm.playing) Button(onClick = { vm.pause() }) { Text(stringResource(R.string.listening_pause)) }
         else if (state?.phase == "listen" || state?.wholeReplayInProgress == true) {
-            Button(onClick = { vm.play() }, enabled = !vm.busy && vm.error == null) { Text("Continue audio") }
+            Button(onClick = { vm.play() }, enabled = !vm.busy && vm.error == null) {
+                Text(stringResource(R.string.listening_continue_audio))
+            }
         }
     }
 }
@@ -41,25 +46,25 @@ internal fun ListeningTaskPicture(vm: ListeningTaskViewModel, bitmap: ImageBitma
 @Composable
 internal fun ListeningTaskPicture(
     bitmap: ImageBitmap, required: Boolean, choiceMode: TaskChoiceMode?, modifier: Modifier, evidence: Modifier,
-    onEnlarge: () -> Unit = {}, enlargementLabel: String = "Enlarge picture", controls: @Composable () -> Unit = {},
+    onEnlarge: () -> Unit = {}, enlargementLabel: Int = R.string.listening_task_picture_enlarge, controls: @Composable () -> Unit = {},
 ) {
     var enlarged by rememberSaveable { mutableStateOf(false) }
     val description = when {
-        !required -> "Context picture. Described study is available in Listening."
-        choiceMode == TaskChoiceMode.Visual -> "Essential numbered picture. Described study is available in Listening."
-        else -> "Essential scene picture. Described study is available in Listening."
+        !required -> stringResource(R.string.listening_picture_context_description)
+        choiceMode == TaskChoiceMode.Visual -> stringResource(R.string.listening_picture_essential_numbered_description)
+        else -> stringResource(R.string.listening_picture_essential_scene_description)
     }
     Column(modifier) {
         Image(bitmap, description, Modifier.weight(1f).fillMaxWidth().testTag("listening-task-picture").then(evidence),
             contentScale = ContentScale.Fit)
-        TextButton(onClick = { onEnlarge(); enlarged = true }) { Text(enlargementLabel) }
+        TextButton(onClick = { onEnlarge(); enlarged = true }) { Text(stringResource(enlargementLabel)) }
     }
     if (enlarged) Dialog(onDismissRequest = { enlarged = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize()) {
-            Page("Task picture", { enlarged = false }, scrollable = false, maxWidth = 1100.dp) {
+            Page(stringResource(R.string.listening_task_picture_page), { enlarged = false }, scrollable = false, maxWidth = 1100.dp) {
                 ZoomableTaskPicture(bitmap, description, Modifier.weight(1f)) {
                     controls()
-                    TextButton(onClick = { enlarged = false }) { Text("Return to task") }
+                    TextButton(onClick = { enlarged = false }) { Text(stringResource(R.string.listening_task_picture_return)) }
                 }
             }
         }
@@ -78,15 +83,16 @@ private fun ZoomableTaskPicture(bitmap: ImageBitmap, description: String, modifi
         offset = boundedPictureOffset(bitmap, viewport, zoom, offset)
     }
     val transform = rememberTransformableState { scale, delta, _ -> magnify(zoom * scale); pan(delta) }
+    val context = LocalContext.current
     Column(modifier.fillMaxWidth()) {
         Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().onSizeChanged { viewport = it }.testTag("listening-picture-zoom")
             .transformable(transform).semantics {
-                stateDescription = "${(zoom * 100).roundToInt()} percent"
+                stateDescription = context.getString(R.string.listening_zoom_percent, (zoom * 100).roundToInt())
                 customActions = listOf(
-                    CustomAccessibilityAction("Move picture left") { pan(Offset(-viewport.width / 4f, 0f)); true },
-                    CustomAccessibilityAction("Move picture right") { pan(Offset(viewport.width / 4f, 0f)); true },
-                    CustomAccessibilityAction("Move picture up") { pan(Offset(0f, -viewport.height / 4f)); true },
-                    CustomAccessibilityAction("Move picture down") { pan(Offset(0f, viewport.height / 4f)); true },
+                    CustomAccessibilityAction(context.getString(R.string.listening_picture_move_left)) { pan(Offset(-viewport.width / 4f, 0f)); true },
+                    CustomAccessibilityAction(context.getString(R.string.listening_picture_move_right)) { pan(Offset(viewport.width / 4f, 0f)); true },
+                    CustomAccessibilityAction(context.getString(R.string.listening_picture_move_up)) { pan(Offset(0f, -viewport.height / 4f)); true },
+                    CustomAccessibilityAction(context.getString(R.string.listening_picture_move_down)) { pan(Offset(0f, viewport.height / 4f)); true },
                 )
             }) {
             val bounded = boundedPictureOffset(bitmap, viewport, zoom, offset)
@@ -95,9 +101,9 @@ private fun ZoomableTaskPicture(bitmap: ImageBitmap, description: String, modifi
             }, contentScale = ContentScale.Fit)
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = { magnify(zoom + 0.5f) }, enabled = zoom < 4f) { Text("Zoom in") }
-            TextButton(onClick = { magnify(zoom - 0.5f) }, enabled = zoom > 1f) { Text("Zoom out") }
-            TextButton(onClick = { magnify(1f); offset = Offset.Zero }) { Text("Reset") }
+            TextButton(onClick = { magnify(zoom + 0.5f) }, enabled = zoom < 4f) { Text(stringResource(R.string.listening_zoom_in)) }
+            TextButton(onClick = { magnify(zoom - 0.5f) }, enabled = zoom > 1f) { Text(stringResource(R.string.listening_zoom_out)) }
+            TextButton(onClick = { magnify(1f); offset = Offset.Zero }) { Text(stringResource(R.string.listening_zoom_reset)) }
             controls()
         }
     }

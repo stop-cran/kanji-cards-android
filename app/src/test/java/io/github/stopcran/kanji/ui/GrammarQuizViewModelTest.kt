@@ -23,6 +23,7 @@ import io.github.stopcran.kanji.data.AppDatabase
 import io.github.stopcran.kanji.data.GRAMMAR_LEVEL_EPOCH
 import io.github.stopcran.kanji.data.GRAMMAR_STACK
 import io.github.stopcran.kanji.data.GrammarEntity
+import io.github.stopcran.kanji.data.GrammarMessageId
 import io.github.stopcran.kanji.data.GrammarResponseEntity
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.ReviewStateEntity
@@ -132,6 +133,21 @@ class GrammarQuizViewModelTest {
 
     private fun mode(): ModeState = runBlocking {
         db.grammarStudy(services.settings, sourceId, Instant.now()).mode
+    }
+
+    @Test
+    fun noUnseenMessageCarriesScopeForLocalizedEmptyAndPreviewGuidance() {
+        install(count = 1, levels = listOf(2))
+        services.settings.sync.setGrammarParserEpoch(sourceId, GRAMMAR_LEVEL_EPOCH)
+        services.settings.setGrammarNewScope(sourceId, GrammarScope.N4)
+
+        val vm = launch()
+        val empty = vm.ui as GrammarUi.Empty
+
+        assertEquals(GrammarMessageId.NoUnseenForScope, empty.message.id)
+        assertEquals(GrammarScope.N4, empty.message.scope)
+        assertNull(empty.message.label)
+        assertTrue(empty.diagnostic.orEmpty().contains("No unseen grammar exercises match N4 and easier"))
     }
 
     private fun seedReview(index: Int, due: Instant) = runBlocking {
@@ -362,7 +378,7 @@ class GrammarQuizViewModelTest {
         assertEquals(ModeState.Start(4, 4), mode())
         val vm = launch()
         assertEquals("beta", vm.focus!!.current!!.group.id)
-        assertFalse(vm.focusNotice.orEmpty().contains(vm.focus!!.reason))
+        assertFalse(vm.focusNotice.toString().contains(vm.focus!!.reason))
         val asked = mutableListOf<String>()
         repeat(8) {
             asked += when (val question = vm.ui) {
@@ -410,7 +426,7 @@ class GrammarQuizViewModelTest {
         services.settings.sync.setGrammarParserEpoch(sourceId, GRAMMAR_LEVEL_EPOCH)
         services.settings.setGrammarNewScope(sourceId, GrammarScope.N5)
         assertTrue(mode() is ModeState.Locked)
-        assertTrue((launch().ui as GrammarUi.Empty).message.contains("No unseen grammar exercises match N5"))
+        assertTrue((launch().ui as GrammarUi.Empty).diagnostic.orEmpty().contains("No unseen grammar exercises match N5"))
         seedReview(0, Instant.now().minusSeconds(60))
         assertEquals(ModeState.Start(1, 0), mode())
         assertEquals("exercise-0", (launch().ui as GrammarUi.Choose).exercise.id)
@@ -448,7 +464,7 @@ class GrammarQuizViewModelTest {
         for (scope in listOf(GrammarScope.Unclassified, GrammarScope.N4)) {
             services.settings.setGrammarNewScope(sourceId, scope)
             assertEquals(ModeState.PracticeMore, mode())
-            assertEquals(GRAMMAR_LEVEL_SYNC_NEEDED, (launch().ui as GrammarUi.Empty).message)
+            assertEquals(GRAMMAR_LEVEL_SYNC_NEEDED, (launch().ui as GrammarUi.Empty).diagnostic)
             assertEquals("exercise-0", (launch(extra = true).ui as GrammarUi.Choose).exercise.id)
         }
         services.settings.setGrammarNewScope(sourceId, GrammarScope.All)

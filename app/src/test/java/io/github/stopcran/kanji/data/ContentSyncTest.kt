@@ -16,6 +16,7 @@ import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.content.SceneCatalog
 import io.github.stopcran.kanji.core.content.WordScene
 import io.github.stopcran.kanji.core.content.WordSceneFile
+import io.github.stopcran.kanji.core.kana.KANA_SOURCE_ID
 import io.github.stopcran.kanji.core.grammar.GrammarScope
 import io.github.stopcran.kanji.core.listening.ListeningScope
 import io.github.stopcran.kanji.core.listening.ListeningTaskContent
@@ -24,13 +25,20 @@ import io.github.stopcran.kanji.core.taskTone
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -638,6 +646,282 @@ class ContentSyncTest {
         assertEquals(SHA_B, db.listeningTasks().sync(source.id)?.acceptedRevision)
         assertNull(db.listeningTasks().sync(source.id)?.problem)
         assertTrue(sync.sync(source) is SyncResult.UpToDate)
+    }
+
+    @RunWith(RobolectricTestRunner::class)
+    @Config(sdk = [28], manifest = Config.NONE, application = Application::class)
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @SQLiteMode(SQLiteMode.Mode.NATIVE)
+    class SourceCandidateImportTest {
+        private val source = RepoSource("Owner", "Accepted", "main")
+        private val http = FakeHttp()
+        private lateinit var db: AppDatabase
+        private lateinit var settings: Settings
+        private lateinit var sync: ContentSync
+
+        @Before
+        fun setup() {
+            val context = RuntimeEnvironment.getApplication()
+            context.getSharedPreferences("settings", 0).edit().clear().commit()
+            db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
+            settings = Settings(context)
+            settings.setSource("https://github.com/${source.owner}/${source.repo}", source.branch)
+            sync = ContentSync(db, settings.sync, http, selectedSource = { settings.source.value })
+            http.archiveBytes = archive("accepted-v1", mapOf("日" to "sun"))
+        }
+
+        @After
+        fun cleanup() {
+            db.close()
+        }
+
+        @Test
+        fun candidateSupersededDuringImportRollsBackWithoutChangingAcceptedSourceOrCache() = runBlocking {
+            assertTrue(sync.sync(source) is SyncResult.Updated)
+            val before = requireNotNull(db.content().meta(source.id))
+            val candidate = requireNotNull(sync.beginSourceCandidate(settings, "https://github.com/Candidate/Repo", "ru-pilot-a"))
+            http.archiveBytes = archive("candidate-v1", mapOf("月" to "moon"))
+            val validated = sync.validateSourceCandidate(candidate.source, candidate.token) as SourceCandidateResult.Validated
+            var checks = 0
+
+            val result = sync.acceptSourceCandidate(
+                validated.candidate,
+                { ++checks < 3 },
+                { accepted -> check(settings.acceptSourceCandidate(accepted)) },
+            )
+
+            assertTrue(result is SyncResult.Failed)
+            assertEquals(source, settings.source.value)
+            assertEquals(before, db.content().meta(source.id))
+            assertNull(db.content().meta(candidate.source.id))
+            assertNull(settings.sync.baseLanguage(candidate.source.id))
+            assertNull(db.sourceAcceptance().current())
+        }
+
+        @Test
+        fun cancellationAtTransactionCommitBoundaryCannotSplitSelectedBranchFromSharedCache() = runBlocking {
+            assertTrue(sync.sync(source) is SyncResult.Updated)
+            val candidate = requireNotNull(
+                sync.beginSourceCandidate(settings, "https://github.com/${source.owner}/${source.repo}", "candidate-b"),
+            )
+            http.archiveBytes = archive("candidate-v1", mapOf("月" to "moon"))
+            val validated = sync.validateSourceCandidate(candidate.source, candidate.token) as SourceCandidateResult.Validated
+            val atCommit = CompletableDeferred<Unit>()
+            val releaseCommit = CompletableDeferred<Unit>()
+            sync.beforeCandidateCommit = { atCommit.complete(Unit); releaseCommit.await() }
+
+            val accepting = async(Dispatchers.IO) {
+                sync.acceptSourceCandidate(
+                    validated.candidate,
+                    { settings.isCurrentSourceCandidate(candidate.token) },
+                    { accepted -> check(settings.acceptSourceCandidate(accepted)) },
+                )
+            }
+            atCommit.await()
+            val cancelling = async(Dispatchers.IO) {
+                sync.cancelSourceCandidate(settings, candidate.token)
+            }
+            yield()
+            assertFalse(cancelling.isCompleted)
+            releaseCommit.complete(Unit)
+
+            assertTrue(accepting.await() is SyncResult.Updated)
+            cancelling.await()
+            assertEquals(candidate.source, settings.source.value)
+            assertEquals("moon", db.content().kanji(source.id).single().title)
+            assertEquals(candidate.token, db.sourceAcceptance().current()?.token)
+            assertEquals(candidate.source.branch, db.sourceAcceptance().current()?.branch)
+        }
+
+        @Test
+        fun failedSameSourceCandidateAcceptanceKeepsNewerAcceptedCache() = runBlocking {
+            assertTrue(sync.sync(source) is SyncResult.Updated)
+            val candidate = requireNotNull(
+                sync.beginSourceCandidate(settings, "https://github.com/${source.owner}/${source.repo}", source.branch),
+            )
+            http.archiveBytes = archive(
+                "candidate-v2",
+                mapOf("日" to "candidate day", "月" to "moon"),
+                corrupt = setOf("月"),
+            )
+            val validated = sync.validateSourceCandidate(candidate.source, candidate.token) as SourceCandidateResult.Validated
+
+            http.headSha = SHA_B
+            http.archiveBytes = archive("accepted-v3", mapOf("日" to "newer day", "月" to "moon"))
+            assertTrue(sync.sync(source) is SyncResult.Updated)
+            val cacheBeforeFailure = db.content().kanji(source.id)
+
+            val result = sync.acceptSourceCandidate(
+                validated.candidate,
+                { settings.isCurrentSourceCandidate(candidate.token) },
+                { accepted -> check(settings.acceptSourceCandidate(accepted)) },
+            )
+
+            assertTrue(result.toString(), result is SyncResult.Failed)
+            assertEquals(source, candidate.source)
+            assertEquals(source, settings.source.value)
+            assertTrue(settings.isCurrentSourceCandidate(candidate.token))
+            assertEquals(cacheBeforeFailure, db.content().kanji(source.id))
+            assertEquals("newer day", db.content().kanji(source.id).single { it.kanji == "日" }.title)
+            assertNull(db.sourceAcceptance().current())
+        }
+
+        @Test
+        fun queuedOrdinarySyncCannotOverwriteAcceptedBranchOrProgress() = runBlocking {
+            assertTrue(sync.sync(source) is SyncResult.Updated)
+            val reviewProgress = ReviewStateEntity(source.id, "all", "日", "Quiz", "Review", 2.0, 5.0, 900, 800, 2, 1)
+            val kanaProgress = ReviewStateEntity(KANA_SOURCE_ID, "hiragana", "あ", "KanaToRomaji", "Review", 3.0, 4.0, 900, 800, 3, 0)
+            db.reviews().putState(reviewProgress)
+            db.reviews().putState(kanaProgress)
+            val candidate = requireNotNull(
+                sync.beginSourceCandidate(settings, "https://github.com/${source.owner}/${source.repo}", "candidate-b"),
+            )
+            http.archiveBytes = archive("candidate-v1", mapOf("月" to "moon"))
+            http.headSha = SHA_B
+            val validated = sync.validateSourceCandidate(candidate.source, candidate.token) as SourceCandidateResult.Validated
+            val atCommit = CompletableDeferred<Unit>()
+            val releaseCommit = CompletableDeferred<Unit>()
+            sync.beforeCandidateCommit = { atCommit.complete(Unit); releaseCommit.await() }
+
+            val accepting = async(Dispatchers.IO) {
+                sync.acceptSourceCandidate(
+                    validated.candidate,
+                    { settings.isCurrentSourceCandidate(candidate.token) },
+                    { accepted -> check(settings.acceptSourceCandidate(accepted)) },
+                )
+            }
+            atCommit.await()
+
+            val ordinaryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+            try {
+                val enteredOrdinarySync = CompletableDeferred<Unit>()
+                val coordinator = SyncCoordinator(ordinaryScope, sync.activity) { request ->
+                    enteredOrdinarySync.complete(Unit)
+                    sync.sync(request.source, force = request.kind == SyncKind.Forced)
+                }
+                val staleRequest = coordinator.request(source)
+                enteredOrdinarySync.await()
+                http.archiveBytes = archive("stale-branch-a", mapOf("日" to "stale sun"))
+                releaseCommit.complete(Unit)
+
+                assertTrue(accepting.await() is SyncResult.Updated)
+                val downloadsAfterAcceptance = http.downloads
+                assertTrue(staleRequest.await() is SyncResult.UpToDate)
+
+                assertEquals(candidate.source, settings.source.value)
+                assertEquals(candidate.source.branch, db.sourceAcceptance().current()?.branch)
+                assertEquals("moon", db.content().kanji(source.id).single().title)
+                assertEquals(downloadsAfterAcceptance, http.downloads)
+                assertEquals(reviewProgress, db.reviews().states(source.id, "all", "Quiz").single())
+                assertEquals(kanaProgress, db.reviews().states(KANA_SOURCE_ID, "hiragana", "KanaToRomaji").single())
+            } finally {
+                releaseCommit.complete(Unit)
+                ordinaryScope.cancel()
+            }
+        }
+
+        @Test
+        fun processRestartRecoversCandidateCommittedBeforeSettingsMirror() = runBlocking {
+            assertTrue(sync.sync(source) is SyncResult.Updated)
+            val candidate = requireNotNull(
+                sync.beginSourceCandidate(settings, "https://github.com/${source.owner}/${source.repo}", "candidate-restart"),
+            )
+            http.archiveBytes = archive("candidate-v1", mapOf("月" to "moon"))
+            val validated = sync.validateSourceCandidate(candidate.source, candidate.token) as SourceCandidateResult.Validated
+
+            try {
+                sync.acceptSourceCandidate(
+                    validated.candidate,
+                    { settings.isCurrentSourceCandidate(candidate.token) },
+                ) { error("Simulated process death after the durable Room commit") }
+                error("Expected the post-commit process-death simulation")
+            } catch (expected: IllegalStateException) {
+                assertEquals("Simulated process death after the durable Room commit", expected.message)
+            }
+
+            assertEquals(source, settings.source.value)
+            assertEquals(candidate.token, db.sourceAcceptance().current()?.token)
+            assertEquals("moon", db.content().kanji(source.id).single().title)
+            val restartedSettings = Settings(RuntimeEnvironment.getApplication())
+            val restartedSync = ContentSync(db, restartedSettings.sync, http)
+            restartedSync.recoverCommittedCandidate(restartedSettings)
+            assertEquals(candidate.source, restartedSettings.source.value)
+            assertNull(restartedSettings.pendingSourceCandidate.value)
+            assertEquals("moon", db.content().kanji(source.id).single().title)
+        }
+
+        @Test
+        fun intentionalDefaultTransitionsReplaceObsoleteAuthorityAndSyncNormalAndForcedMain() = runBlocking {
+            val english = LanguageSources.defaultForBase("en")
+            val russian = LanguageSources.defaultForBase("ru")
+            settings.setSource("https://github.com/${english.owner}/${english.repo}", english.branch)
+            sync = ContentSync(db, settings.sync, http, selectedSource = { settings.source.value })
+            assertTrue(sync.sync(english) is SyncResult.Updated)
+
+            val reviewProgress = ReviewStateEntity(english.id, "all", "日", "Quiz", "Review", 2.0, 5.0, 900, 800, 2, 1)
+            val kanaProgress = ReviewStateEntity(KANA_SOURCE_ID, "hiragana", "あ", "KanaToRomaji", "Review", 3.0, 4.0, 900, 800, 3, 0)
+            db.reviews().putState(reviewProgress)
+            db.reviews().putState(kanaProgress)
+
+            val draft = requireNotNull(sync.beginSourceCandidate(
+                settings, "https://github.com/${english.owner}/${english.repo}", "accepted-non-main",
+            ))
+            http.archiveBytes = archive("accepted-non-main", mapOf("月" to "candidate moon"))
+            val validated = sync.validateSourceCandidate(draft.source, draft.token) as SourceCandidateResult.Validated
+            assertTrue(sync.acceptSourceCandidate(
+                validated.candidate,
+                { settings.isCurrentSourceCandidate(draft.token) },
+                { accepted -> check(settings.acceptSourceCandidate(accepted)) },
+            ) is SyncResult.Updated)
+            assertEquals("accepted-non-main", settings.source.value.branch)
+
+            assertNull(sync.selectAppLanguage(settings, AppLanguage.Russian))
+            assertEquals(draft.source, settings.source.value)
+            assertTrue(sync.selectDefaultSource(settings, russian, AppLanguage.Russian))
+            assertEquals(russian, settings.source.value)
+            assertTrue(db.sourceAcceptance().current()?.token?.startsWith("source-authority:") == true)
+
+            assertEquals(english, sync.selectAppLanguage(settings, AppLanguage.English))
+            assertEquals(english, settings.source.value)
+            assertEquals(english.branch, db.sourceAcceptance().current()?.branch)
+
+            http.headSha = SHA_B
+            http.archiveBytes = archive("english-main-normal", mapOf("日" to "normal main sun"))
+            val normal = sync.sync(english)
+            assertTrue(normal.toString(), normal is SyncResult.Updated)
+            assertEquals("normal main sun", db.content().kanji(english.id).single().title)
+            assertEquals(reviewProgress, db.reviews().states(english.id, "all", "Quiz").single())
+            assertEquals(kanaProgress, db.reviews().states(KANA_SOURCE_ID, "hiragana", "KanaToRomaji").single())
+
+            http.headSha = "cccccccccccccccccccccccccccccccccccccccc"
+            http.archiveBytes = archive("english-main-forced", mapOf("日" to "forced main sun"))
+            val forced = sync.sync(english, force = true)
+            assertTrue(forced.toString(), forced is SyncResult.Updated)
+            assertEquals("forced main sun", db.content().kanji(english.id).single().title)
+        }
+
+        @Test
+        fun interruptedDefaultTransitionRecoversTheDurableSelectionMirror() = runBlocking {
+            val english = LanguageSources.defaultForBase("en")
+            val russian = LanguageSources.defaultForBase("ru")
+            settings.setSource("https://github.com/${english.owner}/${english.repo}", english.branch)
+            sync = ContentSync(db, settings.sync, http, selectedSource = { settings.source.value })
+            sync.beforeDefaultSelectionMirror = { error("Simulated process death after the durable source selection commit") }
+
+            try {
+                sync.selectDefaultSource(settings, russian, AppLanguage.Russian)
+                error("Expected the post-commit mirror interruption")
+            } catch (expected: IllegalStateException) {
+                assertEquals("Simulated process death after the durable source selection commit", expected.message)
+            }
+
+            assertEquals(english, settings.source.value)
+            val restartedSettings = Settings(RuntimeEnvironment.getApplication())
+            val restartedSync = ContentSync(db, restartedSettings.sync, http, selectedSource = { restartedSettings.source.value })
+            restartedSync.recoverCommittedCandidate(restartedSettings)
+            assertEquals(russian, restartedSettings.source.value)
+            assertEquals(AppLanguage.Russian, restartedSettings.appLanguage.value)
+        }
     }
 
     @Test

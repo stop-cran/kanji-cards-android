@@ -40,13 +40,15 @@ import kotlin.random.Random
 
 sealed interface ReadingUi {
     data object Loading : ReadingUi
-    data class Empty(val message: String) : ReadingUi
+    data class Empty(val reason: ReadingEmptyReason) : ReadingUi
     data class Question(val card: KanjiEntity, val question: ReadingQuestion, val remaining: Int, val font: KanjiFont) : ReadingUi
     data class Answer(val card: KanjiEntity, val question: ReadingQuestion, val picked: String, val remaining: Int, val font: KanjiFont, val allReadings: List<String>, val pickedBelongsTo: List<String> = emptyList()) : ReadingUi {
         val correct: Boolean get() = picked == question.correctKey
     }
     data class Done(val answered: Int, val correct: Int) : ReadingUi
 }
+
+enum class ReadingEmptyReason { NoCards, UnlockBlocked }
 
 /** Kanji readings session over on'yomi and kun'yomi; each (kanji, kind, reading) has its own scheduling state. */
 class KanjiReadingViewModel(private val app: Services) : StudyViewModel(app.sessionStore) {
@@ -78,7 +80,7 @@ class KanjiReadingViewModel(private val app: Services) : StudyViewModel(app.sess
         stack = app.settings.stack.value
         val all = app.db.content().kanji(sourceId).inStack(stack)
         if (all.isEmpty()) {
-            ui = ReadingUi.Empty("No cards yet. Sync the content first (⚙ settings).")
+            ui = ReadingUi.Empty(ReadingEmptyReason.NoCards)
             return
         }
         cards = all.associateBy { it.kanji }
@@ -137,7 +139,7 @@ class KanjiReadingViewModel(private val app: Services) : StudyViewModel(app.sess
             val item = session.take()
             if (item == null) {
                 finishSession()
-                ui = if (session.answered == 0) ReadingUi.Empty("Nothing to practise yet. ${app.settings.unlockRule.value.hint.replace("Unlocks", "Readings unlock")}.") else ReadingUi.Done(session.answered, session.correct)
+                ui = if (session.answered == 0) ReadingUi.Empty(ReadingEmptyReason.UnlockBlocked) else ReadingUi.Done(session.answered, session.correct)
                 return
             }
             val target = readingCards.first { it.kanji == item.kanji }

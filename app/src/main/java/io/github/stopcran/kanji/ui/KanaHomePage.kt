@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.stopcran.kanji.KanjiApp
@@ -38,8 +39,13 @@ internal fun KanaPage(
 ) {
     var selectedId by rememberSaveable { mutableStateOf(KanaScript.Hiragana.id) }
     val script = KanaScript.entries.first { it.id == selectedId }
-    Page("Kana", onBack) {
-        Text("${KanaCatalog.all(script).size} ${script.label} cards", style = MaterialTheme.typography.bodyLarge)
+    Page(stringResource(R.string.kana_title), onBack) {
+        Text(pluralStringResource(
+            R.plurals.kana_script_cards,
+            KanaCatalog.all(script).size,
+            KanaCatalog.all(script).size,
+            stringResource(kanaScriptLabel(script)),
+        ), style = MaterialTheme.typography.bodyLarge)
         Text(
             stringResource(R.string.kana_intro),
             style = MaterialTheme.typography.bodyMedium,
@@ -49,7 +55,7 @@ internal fun KanaPage(
                 FilterChip(
                     selected = option == script,
                     onClick = { selectedId = option.id },
-                    label = { Text(option.label) },
+                    label = { Text(stringResource(kanaScriptLabel(option))) },
                 )
             }
         }
@@ -57,13 +63,12 @@ internal fun KanaPage(
         KanaMode.entries.forEach { mode ->
             val locked = overview.lockedCount(script, mode)
             val lockSummary = when (locked) {
-                null -> "Checking locked kana…"
-                0 -> "No kana locked"
-                1 -> "1 kana locked"
-                else -> "$locked kana locked"
+                null -> stringResource(R.string.kana_checking_locked)
+                0 -> stringResource(R.string.kana_no_locked)
+                else -> pluralStringResource(R.plurals.kana_locked_count, locked, locked)
             }
             ModeRow(
-                mode.title,
+                stringResource(kanaModeLabel(mode)),
                 overview.modeState(script, mode),
                 onStart = { extra -> onStudy(script, mode, extra) },
                 supportingText = lockSummary,

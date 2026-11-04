@@ -14,20 +14,26 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import io.github.stopcran.kanji.Defaults
 
-private data class Credit(val name: String, val by: String, val license: String, val url: String)
+private data class Credit(val nameId: Int, val by: String, val licenseId: Int, val url: String)
 
 private val credits = listOf(
-    Credit("Ensō Nihongo (this app)", "© Roman Konstantinovskiy and contributors", "Apache License 2.0", "https://github.com/stop-cran/kanji-cards-android"),
-    Credit("Card content (default repository)", "© Roman Konstantinovskiy and contributors", "CC BY-SA 4.0", Defaults.CONTENT_REPO_URL),
-    Credit("Stroke data: KanjiVG (kanji and built-in kana)", "© Ulrich Apel and contributors", "CC BY-SA 3.0", "https://kanjivg.tagaini.net"),
-    Credit("Readings and word data: KANJIDIC2 and JMdict", "© Electronic Dictionary Research and Development Group", "EDRDG licence", "https://www.edrdg.org/edrdg/licence.html"),
-    Credit("Font: Noto Serif JP", "© Google Inc.", "SIL Open Font License 1.1", "https://github.com/notofonts/noto-cjk"),
-    Credit("Font: Klee One", "© The Klee Project Authors", "SIL Open Font License 1.1", "https://github.com/fontworks-fonts/Klee"),
-    Credit("Font: Yuji Syuku", "© The Yuji Project Authors", "SIL Open Font License 1.1", "https://github.com/Kinutafontfactory/Yuji"),
-    Credit("Font: HanaMin (rare characters only, a few glyphs)", "© GlyphWiki", "GlyphWiki licence", "https://github.com/cjkvi/HanaMinAFDKO"),
-    Credit("Libraries: AndroidX (Compose, Room, WorkManager, Navigation, Lifecycle), Kotlin and kotlinx", "© The Android Open Source Project, JetBrains and contributors", "Apache License 2.0", "https://www.apache.org/licenses/LICENSE-2.0"),
-    Credit("Handwriting recognition: ML Kit Digital Ink", "© Google", "ML Kit terms; recognition runs on the device", "https://developers.google.com/ml-kit/terms"),
-    Credit("Scheduling algorithm: FSRS-5 (own implementation)", "Open Spaced Repetition project", "reference implementations are MIT", "https://github.com/open-spaced-repetition"),
+    Credit(R.string.credit_app, "© Roman Konstantinovskiy and contributors", R.string.license_apache, "https://github.com/stop-cran/kanji-cards-android"),
+    Credit(R.string.credit_default_content, "© Roman Konstantinovskiy and contributors", R.string.license_cc_by_sa_4, Defaults.CONTENT_REPO_URL),
+    Credit(R.string.credit_stroke_data, "© Ulrich Apel and contributors", R.string.license_cc_by_sa_3, "https://kanjivg.tagaini.net"),
+    Credit(
+        R.string.credit_dictionary_data, "© Electronic Dictionary Research and Development Group",
+        R.string.license_edrdg, "https://www.edrdg.org/edrdg/licence.html",
+    ),
+    Credit(R.string.credit_font_noto, "© Google Inc.", R.string.license_sil_ofl, "https://github.com/notofonts/noto-cjk"),
+    Credit(R.string.credit_font_klee, "© The Klee Project Authors", R.string.license_sil_ofl, "https://github.com/fontworks-fonts/Klee"),
+    Credit(R.string.credit_font_yuji, "© The Yuji Project Authors", R.string.license_sil_ofl, "https://github.com/Kinutafontfactory/Yuji"),
+    Credit(R.string.credit_font_hanamin, "© GlyphWiki", R.string.license_glyphwiki, "https://github.com/cjkvi/HanaMinAFDKO"),
+    Credit(
+        R.string.credit_libraries, "© The Android Open Source Project, JetBrains and contributors",
+        R.string.license_apache, "https://www.apache.org/licenses/LICENSE-2.0",
+    ),
+    Credit(R.string.credit_handwriting, "© Google", R.string.license_mlkit, "https://developers.google.com/ml-kit/terms"),
+    Credit(R.string.credit_fsrs, "Open Spaced Repetition project", R.string.license_fsrs, "https://github.com/open-spaced-repetition"),
 )
 
 @Composable
@@ -35,24 +41,22 @@ fun AboutScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val version = remember(context) { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "" }
     val uri = LocalUriHandler.current
-    Page("About", onBack) {
+    Page(stringResource(R.string.about_title), onBack) {
         Text(stringResource(R.string.kanji_cards, version), style = MaterialTheme.typography.titleMedium)
         Text(
-            "A personal Japanese trainer: study kana and kanji, practise writing with stroke checks, and read articles that live in a " +
-                "GitHub repository you can fork. Your progress and drawings stay on this device; the app only downloads the public content repository.",
+            stringResource(R.string.about_description),
             style = MaterialTheme.typography.bodyMedium,
         )
         Text(stringResource(R.string.sources_and_licences), style = MaterialTheme.typography.titleMedium)
         credits.forEach { c ->
             Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                Text(c.name, style = MaterialTheme.typography.bodyLarge)
-                Text(stringResource(R.string.author_and_license, c.by, c.license), style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(c.nameId), style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(R.string.author_and_license, c.by, stringResource(c.licenseId)), style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = { uri.openUri(c.url) }) { Text(c.url.removePrefix("https://")) }
             }
         }
         Text(
-            "The stroke data and any content derived from KanjiVG, KANJIDIC2 or JMdict keeps its original licence; " +
-                "if you fork the content repository, keep the attributions in its NOTICE file.",
+            stringResource(R.string.about_attribution_notice),
             style = MaterialTheme.typography.bodySmall,
         )
         TextButton(onClick = { uri.openUri("https://github.com/stop-cran/kanji-cards-android/blob/main/docs/PRIVACY.md") }) { Text(stringResource(R.string.privacy_policy)) }

@@ -17,6 +17,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.Services
@@ -49,6 +51,21 @@ class CounterHome(
             }
         }
     }
+
+    @Composable
+    fun localizedSummary(): String = when {
+        cards == null -> stringResource(R.string.loading)
+        cards == 0 -> stringResource(R.string.counter_no_cards)
+        else -> {
+            val starts = modes.values.mapNotNull { it as? ModeState.Start }
+            val new = minOf(allowance, starts.sumOf { it.new })
+            when {
+                starts.isNotEmpty() -> stringResource(R.string.study_due_new, starts.sumOf { it.due }, new)
+                modes.values.any { it == ModeState.PracticeMore } -> stringResource(R.string.mode_nothing_due)
+                else -> stringResource(R.string.counter_nothing_to_study)
+            }
+        }
+    }
 }
 
 @Composable
@@ -69,7 +86,7 @@ internal fun rememberCounterHome(app: Services, group: CounterGroup = CounterGro
             val budget = app.db.newAllowance(app.settings, source.id, now).remaining
             value = CounterHome(
                 index.cards.size + index.expressions.size, app.db.counterModeStates(source.id, index, budget, now), budget,
-                index.files.mapNotNull { f -> f.article?.let { it to "Counting expressions: reference" } }.toMap(),
+                index.files.mapNotNull { f -> f.article?.let { it to app.context.getString(R.string.counter_article_reference) } }.toMap(),
             )
         }
     }
@@ -87,29 +104,52 @@ internal fun CountersPage(
     onCounters: (CounterMode, Boolean, CounterGroup, CounterScope) -> Unit,
     onOpenDoc: (String) -> Unit,
 ) {
+    val context = LocalContext.current
     val source = app.settings.source.collectAsState().value
     val scope = app.settings.counterScopes.collectAsState().value[source.id] ?: CounterScope.N5
     var selected by rememberSaveable(source.id, source.branch) { mutableStateOf(CounterGroup.All.code) }
     val group = CounterGroup.fromCode(selected)
     val home = rememberCounterHome(app, group)
-    Page("Numbers & counters", onBack, scrollable = home.cards != null) {
-        LevelFilter(CounterScope.entries, scope, { app.settings.setCounterScope(source.id, it) }, { it.label },
+    Page(stringResource(R.string.counter_page_title), onBack, scrollable = home.cards != null) {
+        LevelFilter(CounterScope.entries, scope, { app.settings.setCounterScope(source.id, it) }, { context.getString(counterScopeLabel(it)) },
             description = if (scope == CounterScope.N4 || scope == CounterScope.N3)
                 stringResource(R.string.level_filter_includes_easier) else null)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CounterGroup.entries.forEach { item ->
-                FilterChip(selected = group == item, onClick = { selected = item.code }, label = { Text(item.label) })
+                FilterChip(selected = group == item, onClick = { selected = item.code }, label = { Text(stringResource(counterGroupLabel(item))) })
             }
         }
-        Text(if (home.cards == null) "Loading…" else "${home.cards} prompts in this selection")
-        Text("Levels are learning targets, not an official JLPT syllabus. Filters keep the same review history.")
+        if (home.cards == null) Text(stringResource(R.string.loading))
+        else Text(pluralStringResource(R.plurals.counter_prompts, home.cards, home.cards))
+        Text(stringResource(R.string.counter_levels_disclaimer))
         Text(stringResource(R.string.counter_shared_allowance, home.allowance))
-        Text("Choose a counter, write a complete expression, or recall its complete kana reading. Each skill has its own review history.")
+        Text(stringResource(R.string.counter_page_guidance))
         home.modes.forEach { (mode, state) ->
-            ModeRow(mode.label, state, onStart = { onCounters(mode, it, group, scope) })
+            ModeRow(stringResource(counterModeLabel(mode)), state, onStart = { onCounters(mode, it, group, scope) })
         }
         home.articles.forEach { (path, label) ->
             TextButton(onClick = { onOpenDoc(path) }) { Text(label) }
         }
     }
+}
+
+private fun counterScopeLabel(scope: CounterScope): Int = when (scope) {
+    CounterScope.N5 -> R.string.level_n5
+    CounterScope.N4 -> R.string.level_n4
+    CounterScope.N3 -> R.string.level_n3
+    CounterScope.All -> R.string.counter_scope_all
+}
+
+private fun counterGroupLabel(group: CounterGroup): Int = when (group) {
+    CounterGroup.All -> R.string.counter_group_all
+    CounterGroup.Everyday -> R.string.counter_group_everyday
+    CounterGroup.Time -> R.string.counter_group_time
+}
+
+internal fun counterModeLabel(mode: CounterMode): Int = when (mode) {
+    CounterMode.Choose -> R.string.counter_mode_choose
+    CounterMode.Type -> R.string.counter_mode_type
+    CounterMode.Noun -> R.string.counter_mode_noun
+    CounterMode.Expression -> R.string.counter_mode_expression
+    CounterMode.Reading -> R.string.counter_mode_reading
 }

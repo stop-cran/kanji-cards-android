@@ -191,6 +191,37 @@ class WordsTest {
     }
 
     @Test
+    fun localizedRiverMeaningCollisionIsExcludedSymmetricallyWithoutChangingNormalPools() {
+        val river = WordCard("川", "かわ", "река; ручей", "noun", listOf("川"), quizExclusions = listOf("小川"))
+        val smallStream = WordCard("小川", "おがわ", "ручей", "noun", listOf("小川"))
+        val largerRiver = WordCard("河", "かわ", "большая река", "noun", listOf("河"))
+        val day = WordCard("昼", "ひる", "день", "noun", listOf("昼"))
+        val daytime = WordCard("昼間", "ひるま", "дневное время", "noun", listOf("昼間"))
+        val evening = WordCard("夕方", "ゆうがた", "вечер", "noun", listOf("夕方"))
+        val riverPool = listOf(river, smallStream, largerRiver, day, daytime, evening)
+
+        for (direction in meaningDirections) {
+            for ((target, excluded) in listOf(river to smallStream, smallStream to river)) {
+                val options = WordQuizBuilder.options(target, riverPool, direction, Random(42))
+                assertEquals(4, options.size)
+                assertEquals(1, options.count { it.word == target.word })
+                assertFalse(options.any { it.word == excluded.word })
+            }
+        }
+
+        val riverDistinction = WordQuizBuilder.options(
+            river, listOf(river, largerRiver, day, evening), WordDirection.JpToEn, Random(1),
+        )
+        assertEquals(4, riverDistinction.size)
+        assertTrue(riverDistinction.any { it.word == largerRiver.word })
+        val daytimeDistinction = WordQuizBuilder.options(
+            day, listOf(day, daytime, largerRiver, evening), WordDirection.JpToEn, Random(1),
+        )
+        assertEquals(4, daytimeDistinction.size)
+        assertTrue(daytimeDistinction.any { it.word == daytime.word })
+    }
+
+    @Test
     fun excludedPairsCannotAppearTogetherAmongDistractorsInEitherSelectionOrder() {
         val target = optionWord("target", tags = listOf("kind"))
         val a = optionWord("a", listOf("b"), listOf("kind"))

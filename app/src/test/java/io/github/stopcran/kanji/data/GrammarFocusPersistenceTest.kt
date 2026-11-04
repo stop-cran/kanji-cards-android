@@ -89,10 +89,12 @@ class GrammarFocusPersistenceTest {
         assertTrue(preview.focus!!.selected.isNotEmpty())
         assertFalse(preview.notice.orEmpty().contains(preview.focus.reason))
         assertTrue(preview.notice.orEmpty().contains("Rebuilding prerequisite readiness"))
+        assertTrue(preview.learnerMessages.any { it.id == GrammarMessageId.ReadinessRebuilding })
         settings.setDailyNewCards(0)
         val empty = study()
         assertTrue(empty.focus!!.selected.isEmpty())
         assertTrue(empty.notice.orEmpty().contains(empty.focus.reason))
+        assertTrue(empty.learnerMessages.any { it.id == GrammarMessageId.FocusNoAllowance })
         assertNull(cursor())
     }
 
@@ -208,6 +210,7 @@ class GrammarFocusPersistenceTest {
         settings.sync.setGrammarParserEpoch(source, GRAMMAR_LEVEL_EPOCH)
         assertTrue(study().ordinaryIds.isEmpty())
         assertTrue(study().notice!!.contains("Sync needed"))
+        assertTrue(study().learnerMessages.any { it.id == GrammarMessageId.SyncNeeded })
         assertEquals(12, db.grammarStudy(settings, source, now, extra = true).extraIds.size)
         settings.sync.setGrammarParserEpoch(source, ContentParser.GRAMMAR_PARSER_EPOCH)
         db.reviews().putGrammarFocus(GrammarFocusEntity(source, 0, """{"automaticOrdinal":-1}"""))
@@ -216,6 +219,7 @@ class GrammarFocusPersistenceTest {
         assertEquals("""{"automaticOrdinal":-1}""", db.reviews().grammarFocus(source)!!.json)
         db.content().putMeta(SyncMetaEntity(source, "partial", 1, 1, "grammar/broken.json: invalid requires"))
         assertTrue(study().notice!!.contains("content errors"))
+        assertTrue(study().learnerMessages.any { it.id == GrammarMessageId.ContentProblem })
         db.changeGrammarGuided(settings, source, false)
         assertEquals(12, study().ordinaryIds.size)
     }

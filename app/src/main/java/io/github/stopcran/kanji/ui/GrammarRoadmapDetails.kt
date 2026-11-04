@@ -108,7 +108,7 @@ private fun GrammarMapGroupEvidence(snapshot: GrammarRoadmapSnapshot, item: Gram
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-        item.evidence.diagnostics.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+        item.evidence.diagnostics.forEach { Text(grammarEvidenceDiagnosticText(it), style = MaterialTheme.typography.bodySmall) }
     }
 }
 

@@ -38,23 +38,31 @@ internal fun HomeRoute(app: KanjiApp, route: String, onBack: () -> Unit, actions
     val source by app.settings.source.collectAsState()
     key(source) {
         val state = rememberHomeState(app.services, app.syncCoordinator.activity)
+        val meta by remember(source) { app.db.content().observeMeta(source.id) }.collectAsState(null)
+        val uiLanguage = androidx.compose.ui.platform.LocalConfiguration.current.locales.get(0)?.language
+            ?.takeIf { it == "ru" } ?: "en"
+        val content = state.content.copy(
+            languageMismatch = state.content.ready == true && (meta?.baseLanguage ?: app.settings.sync.baseLanguage(source.id) ?: "en") != uiLanguage,
+            rolloutBlocked = !app.contentSync.ordinaryEntryAllowed(source),
+        )
+        val safeState = state.copy(content = content)
         val preferences = remember(app.settings) { homePreferences(app.settings) }
         val retry: () -> Unit = { app.syncCoordinator.request(source) }
         LaunchedEffect(source) {
             if (!app.services.home.ready(source).first()) app.syncCoordinator.request(source)
         }
         val section = when (route) {
-            "kanji-home" -> "Kanji"
-            "words-home" -> "Words"
-            "counters-home" -> "Numbers & counters"
-            "grammar-home" -> "Grammar"
+            "kanji-home" -> io.github.stopcran.kanji.R.string.home_kanji
+            "words-home" -> io.github.stopcran.kanji.R.string.home_words
+            "counters-home" -> io.github.stopcran.kanji.R.string.home_counters
+            "grammar-home" -> io.github.stopcran.kanji.R.string.home_grammar
             else -> null
         }
         if (section != null) {
-            ContentSection(state.content, section, onBack, retry) {
+            ContentSection(safeState.content, androidx.compose.ui.res.stringResource(section), onBack, retry) {
                 when (route) {
-                    "kanji-home" -> KanjiPage(state.data, preferences, onBack, actions)
-                    "words-home" -> WordsPage(preferences, state.data, onBack, actions.onWordCards, actions.onWords)
+                    "kanji-home" -> KanjiPage(safeState.data, preferences, onBack, actions)
+                    "words-home" -> WordsPage(preferences, safeState.data, onBack, actions.onWordCards, actions.onWords)
                     "counters-home" -> CountersPage(app, onBack, actions)
                     else -> GrammarPage(app, onBack, actions.onGrammarDoc, actions.onGrammar, actions.onGrammarTarget)
                 }
@@ -65,10 +73,10 @@ internal fun HomeRoute(app: KanjiApp, route: String, onBack: () -> Unit, actions
             val kana = rememberKanaOverview(app)
             val guideVisible by app.settings.startingGuideVisible.collectAsState()
             MainPage(
-                state,
+                safeState,
                 HomeOverview(
-                    kana.summary(), rememberCounterHome(app).summary(), rememberGrammarHome(app).value.summary(),
-                    rememberListeningHome(app).value.summary(), kana.allowance, guideVisible,
+                    kana.summary(), rememberCounterHome(app).localizedSummary(), rememberGrammarHome(app).value.summary(),
+                    rememberListeningHome(app).value.localizedSummary(), kana.allowance, guideVisible,
                 ),
                 preferences, actions, retry,
             )

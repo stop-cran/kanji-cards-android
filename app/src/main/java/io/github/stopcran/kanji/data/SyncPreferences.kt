@@ -26,6 +26,18 @@ class SyncPreferences internal constructor(
     fun setListeningParserEpoch(sourceId: String, epoch: Int) = putEpoch("listeningParserEpoch:", sourceId, epoch)
     fun setCounterParserEpoch(sourceId: String, epoch: Int) = putEpoch("counterParserEpoch:", sourceId, epoch)
 
+    fun baseLanguage(sourceId: String): String? = prefs.getString("baseLanguage:$sourceId", null)
+
+    /** Binds a repository to its first accepted language; a branch cannot silently switch editions. */
+    @Synchronized
+    fun bindBaseLanguage(sourceId: String, language: String): Boolean {
+        require(language in setOf("en", "ru"))
+        val accepted = baseLanguage(sourceId)
+        if (accepted != null && accepted != language) return false
+        prefs.edit().putString("baseLanguage:$sourceId", language).commit()
+        return true
+    }
+
     private fun putEpoch(prefix: String, sourceId: String, epoch: Int) {
         require(epoch >= 0) { "Parser epoch must not be negative." }
         prefs.edit().putInt("$prefix$sourceId", epoch).apply()

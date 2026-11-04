@@ -5,10 +5,14 @@ import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.listening.ListeningAttempt
 import io.github.stopcran.kanji.core.listening.ListeningPassage
@@ -36,6 +40,27 @@ internal data class ListeningHomeState(
     val queue: ListeningQueue? = null, val resumes: List<ListeningResume> = emptyList(),
     val assessmentPending: Boolean = false, val taskNotice: String? = null,
 ) {
+    @Composable
+    fun localizedSummary(): String = overview?.let { data ->
+        when {
+            data.active != null || resumes.any { it.sourceId == data.sourceId } || assessmentPending ->
+                stringResource(R.string.listening_summary_unfinished)
+            data.passages.isEmpty() && queue?.tasks.orEmpty().isEmpty() ->
+                stringResource(R.string.listening_summary_no_recordings)
+            else -> {
+                val due = queue?.due ?: data.due
+                val fresh = queue?.fresh ?: data.fresh
+                val blocked = queue?.blocked ?: data.blocked
+                val countSummary = if (due.isEmpty() && fresh.isEmpty()) stringResource(R.string.listening_summary_all_caught_up)
+                    else stringResource(R.string.listening_summary_due_new, due.size, fresh.size)
+                val blockedSummary = blocked.size.takeIf { it > 0 }?.let {
+                    pluralStringResource(R.plurals.listening_blocked_count, it, it)
+                }
+                listOfNotNull(countSummary, blockedSummary).joinToString(", ")
+            }
+        }
+    } ?: stringResource(if (error == null) R.string.loading else R.string.listening_generic_error)
+
     fun summary(): String = overview?.let {
         if (it.active != null || resumes.any { pending -> pending.sourceId == it.sourceId } || assessmentPending) "Unfinished encounter"
         else if (it.passages.isEmpty() && queue?.tasks.orEmpty().isEmpty()) "No recordings yet"
@@ -110,6 +135,8 @@ class ListeningViewModel(
         private set
     var picture: ImageBitmap? by mutableStateOf(null)
         private set
+    var capturedLanguage: String? by mutableStateOf(null)
+        private set
     var error: String? by mutableStateOf(null)
         private set
     var playing by mutableStateOf(false)
@@ -131,6 +158,8 @@ class ListeningViewModel(
         if (observer != null) return
         observer = action {
             val row = requireNotNull(app.db.listening().encounter(id)) { "Listening encounter no longer exists" }
+            capturedLanguage = app.settings.sync.baseLanguage(row.sourceId)
+                ?: app.db.content().meta(row.sourceId)?.baseLanguage ?: "en"
             passage = app.listening.record(row).passage
             if (row.closedAtMs != null) { accept(row); return@action }
             bytes = app.listening.audio(id)

@@ -12,14 +12,20 @@ sealed interface AppDestination {
         override val route get() = "draw:$sessionId" + if (extra) ":extra" else ""
     }
 
-    data class Document(val path: String, val sourceId: String? = null, val topic: String? = null) : AppDestination {
+    data class Document(
+        val path: String,
+        val sourceId: String? = null,
+        val topic: String? = null,
+        val sessionBound: Boolean = false,
+    ) : AppDestination {
         init {
             require(DOCUMENT_PATH.matches(path))
             require(sourceId == null || sourceId.isNotBlank())
-            require(sourceId != null || topic == null)
+            require(sourceId != null || (topic == null && !sessionBound))
         }
         override val route get() = if (sourceId == null) "doc:$path" else {
-            "source-doc:${Uri.encode(sourceId)}:${Uri.encode(path)}" + (topic?.let { ":${Uri.encode(it)}" } ?: "")
+            val prefix = if (sessionBound) "session-doc" else "source-doc"
+            "$prefix:${Uri.encode(sourceId)}:${Uri.encode(path)}" + (topic?.let { ":${Uri.encode(it)}" } ?: "")
         }
     }
 
@@ -39,10 +45,12 @@ sealed interface AppDestination {
                     Draw(parts[1], parts.size == 3)
                 }
                 route.startsWith("doc:") -> Document(route.removePrefix("doc:"))
-                route.startsWith("source-doc:") -> {
-                    val parts = route.removePrefix("source-doc:").split(':', limit = 3).map(Uri::decode)
+                route.startsWith("source-doc:") || route.startsWith("session-doc:") -> {
+                    val sessionBound = route.startsWith("session-doc:")
+                    val prefix = if (sessionBound) "session-doc:" else "source-doc:"
+                    val parts = route.removePrefix(prefix).split(':', limit = 3).map(Uri::decode)
                     require(parts.size >= 2)
-                    Document(parts[1], parts[0], parts.getOrNull(2)?.takeIf { it.isNotBlank() })
+                    Document(parts[1], parts[0], parts.getOrNull(2)?.takeIf { it.isNotBlank() }, sessionBound)
                 }
                 else -> Legacy(route)
             }

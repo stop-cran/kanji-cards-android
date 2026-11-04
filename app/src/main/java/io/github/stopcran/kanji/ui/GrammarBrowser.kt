@@ -125,7 +125,10 @@ internal fun GrammarMapBrowser(
     if (missingChapters) Text(stringResource(R.string.grammar_browser_chapter_fallback))
     if (kind == GrammarTargetKind.Set) Text(stringResource(R.string.grammar_browser_set_list))
     OutlinedTextField(query, { query = it }, label = { Text(stringResource(R.string.grammar_search_topics)) }, singleLine = true)
-    Text(stringResource(R.string.grammar_map_browse, snapshot.study.preferences.browseScope.browseLabel), style = MaterialTheme.typography.bodySmall)
+    Text(
+        stringResource(R.string.grammar_map_browse, grammarScopeBrowse(snapshot.study.preferences.browseScope)),
+        style = MaterialTheme.typography.bodySmall,
+    )
     TextButton(onClick = { tools = !tools }) { Text(stringResource(R.string.grammar_browser_tools)) }
     if (tools) {
         GrammarScopeChips(snapshot.study.preferences.browseScope, actions.browseScope)
@@ -208,7 +211,10 @@ private fun GrammarFindNext(snapshot: GrammarRoadmapSnapshot, destination: Gramm
     OutlinedButton(onClick = { next?.let { actions.navigate(destination.group(it)) } }, enabled = next != null) {
         Text(stringResource(R.string.grammar_map_find_next))
     }
-    Text(stringResource(R.string.grammar_practice_scope, snapshot.study.preferences.newScope.introductionLabel), style = MaterialTheme.typography.bodySmall)
+    Text(
+        stringResource(R.string.grammar_practice_scope, grammarScopeIntroduction(snapshot.study.preferences.newScope)),
+        style = MaterialTheme.typography.bodySmall,
+    )
     Text(stringResource(R.string.grammar_map_find_help), style = MaterialTheme.typography.bodySmall)
 }
 

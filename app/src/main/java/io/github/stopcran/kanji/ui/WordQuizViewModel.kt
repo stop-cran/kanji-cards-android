@@ -8,6 +8,7 @@ import androidx.room.withTransaction
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import io.github.stopcran.kanji.Services
+import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.Confusion
 import io.github.stopcran.kanji.core.srs.FontPolicy
@@ -58,7 +59,7 @@ data class WordPictureUi(val question: PictureQuestion, val images: Map<String, 
 
 sealed interface WordQuizUi {
     data object Loading : WordQuizUi
-    data class Empty(val message: String) : WordQuizUi
+    data class Empty(val messageId: Int) : WordQuizUi
     data class Question(
         val word: WordEntity, val direction: WordDirection, val options: List<WordOption>, val remaining: Int, val font: KanjiFont,
         val picture: WordPictureUi? = null,
@@ -98,7 +99,9 @@ class WordQuizViewModel(
     var ui: WordQuizUi by mutableStateOf(WordQuizUi.Loading)
         private set
 
-    var pictureNotice: String? by mutableStateOf(null)
+    var pictureNoticeId: Int? by mutableStateOf(null)
+        private set
+    var contentLanguage by mutableStateOf("en")
         private set
 
     var readingTip: WordReadingTip? by mutableStateOf(null)
@@ -136,6 +139,7 @@ class WordQuizViewModel(
         val selectedStack = app.settings.wordStack.value
         val n4Unlocked = app.settings.n4Unlocked.value
         sourceId = source.id
+        contentLanguage = app.settings.sync.baseLanguage(sourceId) ?: app.db.content().meta(sourceId)?.baseLanguage ?: "en"
         val (allWords, storedScenes, levels) = app.db.withTransaction {
             Triple(
                 app.db.content().words(sourceId),
@@ -152,7 +156,7 @@ class WordQuizViewModel(
             WordKanjiHelp.build(word.word, word.reading, stack, levels)?.let { word.word to it }
         }.toMap()
         if (all.size < 2) {
-            ui = WordQuizUi.Empty("No words yet. Sync the content first (⚙ settings).")
+            ui = WordQuizUi.Empty(R.string.word_quiz_no_words)
             return
         }
         wordList = all
@@ -230,13 +234,11 @@ class WordQuizViewModel(
         ui = if (session.answered == 0) {
             WordQuizUi.Empty(
                 when (direction) {
-                    WordDirection.EnToJp -> "Nothing is due. English → Japanese opens for words you have answered twice in Japanese → English."
-                    WordDirection.Reading -> "Nothing is due. The reading quiz opens for words with kanji that you have answered twice in Japanese → English."
-                    WordDirection.JpToEn -> "Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings."
-                    WordDirection.Type -> "Nothing is due. Typing opens for words you have answered twice in English → Japanese."
-                    WordDirection.Picture, WordDirection.WordToPicture ->
-                        "Nothing is due or has distinct usable picture choices. Picture questions open for words with an eligible picture " +
-                            "that you have answered twice in Japanese → English."
+                    WordDirection.EnToJp -> R.string.word_quiz_nothing_due_en_to_jp
+                    WordDirection.Reading -> R.string.word_quiz_nothing_due_reading
+                    WordDirection.JpToEn -> R.string.word_quiz_nothing_due_jp_to_en
+                    WordDirection.Type -> R.string.word_quiz_nothing_due_type
+                    WordDirection.Picture, WordDirection.WordToPicture -> R.string.word_quiz_nothing_due_picture
                 },
             )
         } else WordQuizUi.Done(session.answered, session.correct)
@@ -258,7 +260,7 @@ class WordQuizViewModel(
                     questionHelp(word, picture.question.options))
                 return
             }
-            if (pictureNotice == null) pictureNotice = "Skipped picture questions without distinct permitted choices."
+            if (pictureNoticeId == null) pictureNoticeId = R.string.picture_questions_skipped
             word = session.take()
         }
         finish()
@@ -282,7 +284,7 @@ class WordQuizViewModel(
                     is SceneImageResult.Ready -> decoded[scene.scene.image] = result.bitmap
                     is SceneImageResult.Unavailable -> {
                         unavailableImages += scene.scene.image
-                        pictureNotice = result.reason
+                        pictureNoticeId = R.string.picture_unavailable
                         return null
                     }
                 }
