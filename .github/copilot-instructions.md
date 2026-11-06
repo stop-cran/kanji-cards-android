@@ -118,6 +118,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - N2 nearly exhausted entry headroom while byte budgets still passed. Count directories/skipped ZIP entries and coordinate the content
   publishing guard with `SafeZip` (see `docs/DESIGN.md`); more entry capacity does not relax byte limits or upgrade installed APKs.
   Complete-archive integration fixtures must honor Git `export-ignore` too, rather than zip contributor evidence that never ships.
+- Real-corpus fixtures share `PublishableContentFixture`: use NUL-delimited Git publication selection and reject excluded manifest
+  dependencies before loading the corpus. Walking all non-`.git` files retained 1.56 GiB of contributor evidence and exhausted a
+  2 GiB test heap (#130); preserve that evidence in Git rather than deleting it or raising heap limits as documentation grows.
 - Sync diagnostics are not rejected-card counts: optional metadata warnings keep their owning cards.
   Report distinct rejected files with explicit units, and count retained Listening catalogs from the accepted cache, excluding unsupported placeholders.
 - Counter reading metadata belongs to the displayed canonical phrase, not every counter in legacy `kana`.

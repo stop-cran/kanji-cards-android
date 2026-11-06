@@ -823,6 +823,11 @@ Testing seams: network goes through `ContentHttp` (tests use a fake), feature st
 UI tests (`ComposeUiTest`) run on Robolectric for the stateless pieces (answer feedback, article toggle, page chrome). Static analysis is Detekt
 with a baseline (`config/detekt`); new code must add no findings, and the baseline should only shrink.
 
+Real-corpus JVM fixtures load the complete publishable working tree through Git's `export-ignore` selection, including non-ignored
+local additions, rather than eagerly retaining contributor documentation. Both direct parsing and mixed-archive compatibility use
+the same test-only loader; it fails on Git errors or excluded manifest dependencies before reading the corpus. Every existing parser
+assertion and archive budget remains in force. Contributor source/review evidence stays in Git and local checkouts (#130).
+
 ### Local progress evidence
 
 Room v8 adds Grammar sets and response details without resetting existing progress; its migration clears only sync metadata to reimport
