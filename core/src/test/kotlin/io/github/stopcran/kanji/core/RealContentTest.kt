@@ -44,11 +44,7 @@ class RealContentTest {
     fun completeMixedArchiveKeepsShortTaskAudioOutOfTheLegacyReaderWhenRepoPresent() {
         val root = File("../../learning-japanese")
         assumeTrue(File(root, "manifest.json").exists())
-        val git = ProcessBuilder("git", "-C", root.absolutePath, "ls-files", "-c", "-o",
-            "--exclude-standard", "-z", "--", ":(exclude,attr:export-ignore)").start()
-        val tracked = git.inputStream.readBytes().decodeToString().split('\u0000').filter { it.isNotEmpty() }
-        assertEquals(0, git.waitFor())
-        val files = tracked.associateWith { File(root, it).readBytes() }.toMutableMap()
+        val files = PublishableContentFixture.load(root).toMutableMap()
         val tone = requireNotNull(javaClass.getResourceAsStream("/listening-short-tone.ogg")).use { it.readBytes() }
         val task = approvedTask(taskFixture().task.copy(id = "test-only-content-import", exposureId = "test-only-content-import"), tone, 250)
         val path = "listening-tasks/${task.task.id}.json"
@@ -114,8 +110,7 @@ class RealContentTest {
     fun parsesRealContentRepoWhenPresent() {
         val root = File("../../learning-japanese")
         assumeTrue(File(root, "manifest.json").exists())
-        val files = root.walkTopDown().filter { it.isFile && !it.path.contains(".git") }
-            .associate { it.relativeTo(root).invariantSeparatorsPath to it.readBytes() }
+        val files = PublishableContentFixture.load(root)
         val parsed = ContentParser.parse(files)
         assertEquals(emptyList<String>(), parsed.problems)
         assertTrue(parsed.kanji.size >= 20)
