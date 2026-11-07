@@ -109,6 +109,7 @@ private fun io.github.stopcran.kanji.core.content.ParsedContent.toSyncMeta(sourc
     (curriculum as? GrammarCurriculumState.Ready)?.let { Json.encodeToString(GrammarCurriculumData.serializer(), it.curriculum) },
     (curriculum as? GrammarCurriculumState.Invalid)?.reason,
     kanjiReadingParserEpoch = ContentParser.KANJI_READING_PARSER_EPOCH,
+    kanjiMeaningParserEpoch = ContentParser.KANJI_MEANING_PARSER_EPOCH,
     baseLanguage = manifest.baseLanguage,
     targetLanguage = manifest.targetLanguage,
 )
@@ -119,7 +120,7 @@ private fun io.github.stopcran.kanji.core.content.ParsedContent.toRows(sourceId:
             sourceId, c.kanji, c.title, c.jlpt, c.tags.joinSep(), c.strokeCount, c.radical, c.phonetic,
             c.onyomi.joinSep(), c.kunyomi.joinSep(), c.distractors.joinSep(), c.body,
             strokes[c.kanji]?.let { Json.encodeToString(io.github.stopcran.kanji.core.content.StrokeData.serializer(), it) },
-            i, c.quizOnyomi?.joinSep(), c.quizKunyomi?.joinSep(),
+            i, c.quizOnyomi?.joinSep(), c.quizKunyomi?.joinSep(), c.quizExclusions.joinSep(),
         )
     }
     val counterRows = counters.mapIndexed { i, c ->
@@ -277,6 +278,7 @@ class ContentSync(
 
     private suspend fun needsParserRefresh(source: RepoSource): Boolean =
         (db.content().meta(source.id)?.kanjiReadingParserEpoch ?: 0) < ContentParser.KANJI_READING_PARSER_EPOCH ||
+            (db.content().meta(source.id)?.kanjiMeaningParserEpoch ?: 0) < ContentParser.KANJI_MEANING_PARSER_EPOCH ||
             syncState.grammarParserEpoch(source.id) < ContentParser.GRAMMAR_PARSER_EPOCH ||
             syncState.counterParserEpoch(source.id) < io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH ||
             syncState.sceneParserEpoch(source.id) < SceneCatalog.PARSER_EPOCH ||

@@ -2,7 +2,7 @@ package io.github.stopcran.kanji.core.content
 
 /** Minimal front-matter reader: `key: value` scalars and inline `[a, b]` lists. Content is untrusted, so no full YAML. */
 object FrontMatter {
-    data class Entry(val key: String, val rawValue: String, val indented: Boolean)
+    data class Entry(val key: String, val rawValue: String, val indented: Boolean, val rawLine: String = "")
     data class Parsed(val fields: Map<String, Any>, val body: String, val entries: List<Entry>)
     private val plainKey = Regex("[A-Za-z_][A-Za-z0-9_-]*")
 
@@ -40,7 +40,7 @@ object FrontMatter {
             if (colon <= 0) return null
             val key = line.substring(0, colon).trim()
             val raw = line.substring(colon + 1).trim()
-            entries += Entry(key, raw, line.first().isWhitespace())
+            entries += Entry(key, raw, line.first().isWhitespace(), line)
         }
         val fields = LinkedHashMap<String, Any>()
         for (entry in entries) fields[entry.key] = parseValue(entry.rawValue)

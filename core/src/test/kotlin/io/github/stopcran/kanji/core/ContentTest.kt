@@ -439,13 +439,13 @@ class ContentTest {
     }
 
     @Test
-    fun quizExclusionScanningIgnoresCommentsUnrelatedScalarTextAndKanjiFields() {
+    fun quizExclusionScanningIgnoresCommentsAndUnrelatedScalarTextButValidatesKanji() {
         val word = ContentParser.parseWord(
             "words/a.md", quizWord("a", "# quiz_exclusions: [missing]\nnotes: quiz_exclusions: [missing]"),
         )
         assertTrue(word.quizExclusions.isEmpty())
         val kanji = kanjiMd.replace("jlpt: 5", "jlpt: 5\nquiz_exclusions: null\n'quiz_exclusions': [5]")
-        assertEquals(5, ContentParser.parseKanji("kanji/日.md", kanji).jlpt)
+        assertThrows(ContentException::class.java) { ContentParser.parseKanji("kanji/日.md", kanji) }
     }
 
     private val wordKeyProblem =

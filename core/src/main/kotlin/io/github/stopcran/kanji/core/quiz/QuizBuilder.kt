@@ -2,7 +2,13 @@ package io.github.stopcran.kanji.core.quiz
 
 import kotlin.random.Random
 
-data class QuizCard(val kanji: String, val title: String, val tags: List<String>, val distractors: List<String>)
+data class QuizCard(
+    val kanji: String,
+    val title: String,
+    val tags: List<String>,
+    val distractors: List<String>,
+    val quizExclusions: List<String> = emptyList(),
+)
 
 data class QuizOption(val kanji: String, val title: String)
 
@@ -17,8 +23,12 @@ object QuizBuilder {
         val chosen = LinkedHashMap<String, QuizCard>()
         val usedTitles = hashSetOf(target.title)
 
+        fun excluded(a: QuizCard, b: QuizCard) = b.kanji in a.quizExclusions || a.kanji in b.quizExclusions
+
         fun tryAdd(c: QuizCard) {
-            if (chosen.size < count - 1 && c.kanji != target.kanji && usedTitles.add(c.title)) chosen[c.kanji] = c
+            if (chosen.size >= count - 1 || c.kanji == target.kanji) return
+            if (excluded(target, c) || chosen.values.any { excluded(it, c) }) return
+            if (usedTitles.add(c.title)) chosen[c.kanji] = c
         }
 
         target.distractors.mapNotNull { byKanji[it] }.forEach(::tryAdd)

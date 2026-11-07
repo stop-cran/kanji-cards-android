@@ -42,6 +42,7 @@ data class KanjiCard(
     val body: String,
     val quizOnyomi: List<String>? = null,
     val quizKunyomi: List<String>? = null,
+    val quizExclusions: List<String> = emptyList(),
 )
 
 data class WordArticle(

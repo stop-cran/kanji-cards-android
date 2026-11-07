@@ -51,6 +51,21 @@ What the app enforces when importing (`core/content/ContentParser.kt`, `FrontMat
   Content tooling additionally requires each selected reading's own Readings table row to link a real word article;
   dictionary attestation, correct kanji-reading allocation, frequency and register remain editorial checks.
   Older APKs ignore these optional fields and continue asking full readings: publish a compatible APK before relying on curation.
+- Optional kanji `quiz_exclusions: [冗]` lists exact single-character kanji IDs, not titles or readings.
+  Omission and `[]` retain legacy meaning choices. Declare it once as an unquoted top-level key with an inline
+  string list. Malformed, duplicate, indented/shadowed, quoted/encoded, tagged or anchored/aliased declarations,
+  self references, duplicate IDs, unsafe IDs and Unicode noncharacters reject the owning card.
+  References must exist in the full accepted corpus after duplicate-title removal; dangling references cascade
+  until every retained reference resolves. A selected deck/filter does not change reference validity.
+  Either endpoint excludes the direct pair against the target and among distractors, for curated and fallback
+  choices; this is symmetric, not transitive. Sparse pools may yield fewer choices, including the target alone.
+  Room schema 20 stores exclusions (default empty) and source-scoped `kanjiMeaningParserEpoch` (default 0).
+  Accepted epoch 1 bypasses unchanged HEAD/contentVersion and launch throttling when reimport is pending,
+  and advances only with transactional snapshot acceptance. Failures retain the previous snapshot and epoch.
+  Progress, full readings and NULL-versus-empty curated readings are preserved. Older clients ignore this
+  optional field and do **not** enforce the guard: an upgraded compatible client is required before relying
+  on exclusions. This bounded owner-testing mechanism is not general-release/device acceptance or a claim
+  that all semantic ambiguity is prevented.
 - All word front-matter keys, including unknown fields, must be unquoted, unindented ASCII identifiers matching
   `[A-Za-z_][A-Za-z0-9_-]*`; whitespace before `:` is allowed. All raw keys are validated before duplicate-key collapse.
   Quoted/escaped, tagged, anchored/alias and complex keys are rejected with a path-specific import problem. Whole-line

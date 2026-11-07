@@ -40,6 +40,7 @@ data class KanjiEntity(
     val position: Int,
     val quizOnyomi: String? = null,
     val quizKunyomi: String? = null,
+    @ColumnInfo(defaultValue = "''") val quizExclusions: String = "",
 )
 
 @Entity(tableName = "words", primaryKeys = ["sourceId", "word"])
@@ -173,6 +174,7 @@ data class SyncMetaEntity(
     @ColumnInfo(defaultValue = "0") val kanjiReadingParserEpoch: Int = 0,
     @ColumnInfo(defaultValue = "'en'") val baseLanguage: String = "en",
     @ColumnInfo(defaultValue = "'ja'") val targetLanguage: String = "ja",
+    @ColumnInfo(defaultValue = "0") val kanjiMeaningParserEpoch: Int = 0,
 )
 
 /** Durable source authority for the last accepted candidate or intentional built-in selection. */
@@ -222,7 +224,7 @@ interface ContentDao {
     /** Home-screen variant: no article body; strokesJson is only '' (present) or NULL (absent). */
     @Query(
         "SELECT sourceId, kanji, title, jlpt, tags, strokeCount, radical, phonetic, onyomi, kunyomi, distractors, " +
-            "'' AS body, CASE WHEN strokesJson IS NULL THEN NULL ELSE '' END AS strokesJson, position, quizOnyomi, quizKunyomi " +
+            "'' AS body, CASE WHEN strokesJson IS NULL THEN NULL ELSE '' END AS strokesJson, position, quizOnyomi, quizKunyomi, quizExclusions " +
             "FROM kanji WHERE sourceId = :sourceId ORDER BY position"
     )
     fun observeKanjiLite(sourceId: String): Flow<List<KanjiEntity>>
@@ -242,7 +244,7 @@ interface ContentDao {
     /** Same as [kanji] without the article body or stroke data (used by background work). */
     @Query(
         "SELECT sourceId, kanji, title, jlpt, tags, strokeCount, radical, phonetic, onyomi, kunyomi, distractors, " +
-            "'' AS body, CASE WHEN strokesJson IS NULL THEN NULL ELSE '' END AS strokesJson, position, quizOnyomi, quizKunyomi " +
+            "'' AS body, CASE WHEN strokesJson IS NULL THEN NULL ELSE '' END AS strokesJson, position, quizOnyomi, quizKunyomi, quizExclusions " +
             "FROM kanji WHERE sourceId = :sourceId ORDER BY position",
     )
     suspend fun kanjiLite(sourceId: String): List<KanjiEntity>
@@ -587,7 +589,7 @@ interface ReviewDao {
         ReviewStateEntity::class, ReviewLogEntity::class, StudySessionEntity::class, SyncMetaEntity::class,
         AcceptedSourceEntity::class,
     ],
-    version = 19,
+    version = 20,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -596,6 +598,13 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun listening(): ListeningDao
     abstract fun listeningTasks(): ListeningTaskDao
     abstract fun sourceAcceptance(): SourceAcceptanceDao
+}
+
+val MIGRATION_19_20 = object : androidx.room.migration.Migration(19, 20) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE kanji ADD COLUMN quizExclusions TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE sync_meta ADD COLUMN kanjiMeaningParserEpoch INTEGER NOT NULL DEFAULT 0")
+    }
 }
 
 val MIGRATION_18_19 = object : androidx.room.migration.Migration(18, 19) {

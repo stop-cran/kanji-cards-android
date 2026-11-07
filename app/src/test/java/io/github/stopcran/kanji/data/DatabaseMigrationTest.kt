@@ -72,7 +72,7 @@ class KanjiReadingMigrationTest {
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19,
+            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20,
         )
         .allowMainThreadQueries()
         .build()
@@ -83,6 +83,54 @@ class KanjiReadingMigrationTest {
             block(db)
         } finally {
             db.close()
+        }
+    }
+
+    @Test
+    fun version17MeaningUpgradePreservesAllSourcesReadingsAndProgressAndReopensCached20() = runBlocking {
+        createMigrationSchema(context, name, 17) { sqlite ->
+            for (source in sources) {
+                sqlite.execSQL(
+                    "INSERT INTO kanji (sourceId, kanji, title, tags, onyomi, kunyomi, distractors, body, strokesJson, position, quizOnyomi, quizKunyomi) " +
+                        "VALUES (?, '日', 'sun', 'jlpt-n5', 'ニチ', 'ひ', '', 'article', 'strokes', 2, '', NULL)",
+                    arrayOf(source),
+                )
+                sqlite.execSQL("INSERT INTO sync_meta (sourceId, contentVersion, syncedAtMs, problems, kanjiReadingParserEpoch) " +
+                    "VALUES (?, 'v17', 500, 0, 1)", arrayOf(source))
+                sqlite.execSQL("INSERT INTO review_state VALUES (?, 'all', '日', 'KanjiOn', 'Review', 12.5, 5.0, 999, 500, 3, 1, 'にち')",
+                    arrayOf(source))
+                sqlite.execSQL("INSERT INTO review_log (sourceId, stack, kanji, mode, grade, atMs, reading) " +
+                    "VALUES (?, 'all', '日', 'KanjiOn', 3, 500, 'にち')", arrayOf(source))
+            }
+        }
+        withDatabase { db ->
+            for (source in sources) {
+                val card = db.content().kanji(source).single()
+                assertEquals("", card.quizExclusions)
+                assertEquals("", card.quizOnyomi)
+                assertNull(card.quizKunyomi)
+                assertEquals("ニチ", card.onyomi)
+                assertEquals("ひ", card.kunyomi)
+                assertEquals("article", card.body)
+                assertEquals("strokes", card.strokesJson)
+                assertEquals(2, card.position)
+                assertEquals(0, db.content().meta(source)!!.kanjiMeaningParserEpoch)
+                assertEquals(1, db.content().meta(source)!!.kanjiReadingParserEpoch)
+            }
+            val first = db.content().kanji(sources.first()).single()
+            db.content().insertKanji(listOf(first.copy(quizExclusions = "月")))
+            db.content().putMeta(db.content().meta(sources.first())!!.copy(kanjiMeaningParserEpoch = 1))
+        }
+        withDatabase { db ->
+            assertEquals(20, db.openHelper.readableDatabase.version)
+            assertEquals("月", db.content().kanji(sources.first()).single().quizExclusions)
+            assertEquals("月", db.content().kanjiLite(sources.first()).single().quizExclusions)
+            assertEquals("", db.content().kanji(sources.last()).single().quizExclusions)
+            assertEquals(1, db.content().meta(sources.first())!!.kanjiMeaningParserEpoch)
+            assertEquals(0, db.content().meta(sources.last())!!.kanjiMeaningParserEpoch)
+            assertEquals(2, db.reviews().allStates().size)
+            assertEquals(listOf("にち", "にち"), db.reviews().allLog().map { it.reading })
+            assertTrue(db.reviews().allStates().all { it.reps == 3 && it.stability == 12.5 })
         }
     }
 
@@ -184,7 +232,7 @@ class DatabaseMigrationTest {
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19,
+            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20,
         )
         .allowMainThreadQueries()
         .build()
@@ -337,7 +385,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(19, db.openHelper.writableDatabase.version)
+                assertEquals(20, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(sources.first(), "all", "日", "KanjiOn", "Review", 12.5, 5.0, 999, 500, 3, 1, "にち"),
                     db.reviews().allStates().single(),
@@ -413,7 +461,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(19, db.openHelper.writableDatabase.version)
+                assertEquals(20, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(source, GRAMMAR_STACK, "alpha-a-0", "Grammar", "Review", 12.5, 5.0, 999, 500, 3, 1),
                     db.reviews().allStates().single(),

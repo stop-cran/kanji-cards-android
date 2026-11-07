@@ -549,6 +549,75 @@ class KanjiReadingSyncTest {
     private lateinit var settings: Settings
     private lateinit var sync: ContentSync
 
+    private fun meaningArchive(declaration: String = "") = archiveFiles("v1", mapOf(
+        "kanji/日.md" to kanjiMd("日", "sun").replace("distractors:", "$declaration\ndistractors:").toByteArray(),
+        "kanji/月.md" to kanjiMd("月", "moon").toByteArray(),
+    ))
+
+    @Test
+    fun meaningEpochRefreshesSameHeadVersionAndThrottledLaunchThroughFullAndSlimMappings() = runBlocking {
+        http.archiveBytes = meaningArchive()
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
+        val other = source.copy(owner = "Other")
+        assertTrue(sync.sync(other) is SyncResult.Updated)
+        val otherMeta = db.content().meta(other.id)!!.copy(kanjiMeaningParserEpoch = 0)
+        db.content().putMeta(otherMeta)
+        db.reviews().record(
+            ReviewStateEntity(source.id, "all", "日", "Quiz", "Review", 12.5, 5.0, 999, 500, 3, 1),
+            ReviewLogEntity(0, source.id, "all", "日", "Quiz", 3, 500),
+        )
+        val history = db.reviews().allStates() to db.reviews().allLog()
+        val oldMeta = db.content().meta(source.id)!!.copy(kanjiMeaningParserEpoch = 0)
+        db.content().putMeta(oldMeta)
+        val downloads = http.downloads
+        http.archiveBytes = meaningArchive("quiz_exclusions: [月]")
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
+        assertEquals(downloads + 1, http.downloads)
+        val full = db.content().kanji(source.id).map { it.toQuizCard() }
+        assertEquals(listOf("月"), full.single { it.kanji == "日" }.quizExclusions)
+        assertEquals(full, db.content().kanjiLite(source.id).map { it.toQuizCard() })
+        assertEquals(full, db.content().observeKanjiLite(source.id).first().map { it.toQuizCard() })
+        for (target in full) {
+            assertEquals(listOf(target.kanji), io.github.stopcran.kanji.core.quiz.QuizBuilder
+                .options(target, full, kotlin.random.Random(4)).map { it.kanji })
+        }
+        assertEquals(history, db.reviews().allStates() to db.reviews().allLog())
+        assertEquals(otherMeta, db.content().meta(other.id))
+        assertTrue(db.content().kanji(other.id).all { it.quizExclusions.isEmpty() })
+        assertEquals(ContentParser.KANJI_MEANING_PARSER_EPOCH, db.content().meta(source.id)!!.kanjiMeaningParserEpoch)
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.UpToDate)
+        assertEquals(downloads + 1, http.downloads)
+    }
+
+    @Test
+    fun failedMeaningEpochRefreshPreservesSnapshotAndEpochAndRetriesWithoutHeadOrVersionChange() = runBlocking {
+        http.archiveBytes = meaningArchive()
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
+        db.content().putMeta(db.content().meta(source.id)!!.copy(kanjiMeaningParserEpoch = 0))
+        val accepted = db.content().meta(source.id) to db.content().kanji(source.id)
+        for (declaration in listOf("quiz_exclusions: null", "quiz_exclusions: [未]")) {
+            http.archiveBytes = meaningArchive(declaration)
+            assertTrue(sync.syncOnLaunch(source) is SyncResult.Failed)
+            assertEquals(accepted, db.content().meta(source.id) to db.content().kanji(source.id))
+        }
+        http.archiveFails = true
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Failed)
+        assertEquals(accepted, db.content().meta(source.id) to db.content().kanji(source.id))
+        http.archiveFails = false
+        http.archiveBytes = meaningArchive("quiz_exclusions: [月]")
+        db.openHelper.writableDatabase.execSQL(
+            "CREATE TRIGGER reject_meaning_meta BEFORE INSERT ON sync_meta BEGIN SELECT RAISE(ABORT, 'fixture failure'); END",
+        )
+        try {
+            assertTrue(sync.syncOnLaunch(source) is SyncResult.Failed)
+            assertEquals(accepted, db.content().meta(source.id) to db.content().kanji(source.id))
+        } finally {
+            db.openHelper.writableDatabase.execSQL("DROP TRIGGER reject_meaning_meta")
+        }
+        assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
+        assertEquals(ContentParser.KANJI_MEANING_PARSER_EPOCH, db.content().meta(source.id)!!.kanjiMeaningParserEpoch)
+    }
+
     @Test
     fun acceptedReadingEpochRefreshesSameHeadAndVersionWithoutResettingSchedules() = runBlocking {
         assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)

@@ -63,6 +63,10 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 
 ## Gotchas
 
+- Kanji meaning exclusions must reach both ordinary and borrowed-padding `QuizCard` mappings and both slim DAO
+  projections. Native733's filtered N1 pool exposed 剰/冗 despite unique titles and curated distractors.
+  Resolve references after duplicate-title rejection, and keep the meaning epoch separate from the reading epoch.
+
 - **EN/RU language/source implementation:** follow the [shared implementation plan](https://github.com/stop-cran/learning-japanese-ru/blob/main/docs/IMPLEMENTATION-PLAN.md).
   Custom-source edits are pending candidates until the exact package has been downloaded, parsed and verified; stale or cancelled
   completions cannot activate them. The canonical owner/repository has a stable base language across branches. New EN schema-1

@@ -23,6 +23,7 @@ import io.github.stopcran.kanji.data.MIGRATION_15_16
 import io.github.stopcran.kanji.data.MIGRATION_16_17
 import io.github.stopcran.kanji.data.MIGRATION_17_18
 import io.github.stopcran.kanji.data.MIGRATION_18_19
+import io.github.stopcran.kanji.data.MIGRATION_19_20
 import io.github.stopcran.kanji.data.rebuildGrammarReadiness
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -66,6 +67,7 @@ class KanjiApp : Application() {
                 MIGRATION_16_17,
                 MIGRATION_17_18,
                 MIGRATION_18_19,
+                MIGRATION_19_20,
             )
             .build()
     }
