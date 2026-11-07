@@ -28,6 +28,25 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 - Kanji card `kanji/<char>.md` (front matter: `kanji`, `title`, `jlpt`, `tags`, readings, `distractors`...). The file name is the identity;
   titles are editable and **must be unique** among kanji (duplicates are dropped with a problem report) because the meaning quiz offers titles
   as options.
+- Optional kanji `quiz_exclusions` records direct semantic pairs by exact single-character IDs. Strict raw
+  declarations reject malformed/shadowed or encoded/quoted/tagged/anchored aliases without tightening unrelated
+  legacy kanji fields. References resolve against the accepted full corpus after duplicate-title removal,
+  cascading rejected references, not against a selected quiz pool.
+  Meaning options exclude either endpoint symmetrically against the target and every selected wrong choice,
+  in curated and fallback paths, without transitive expansion. The target need not belong to the supplied pool.
+  Preserve unique titles, curated/tag preference and legacy seeded randomness when exclusions are absent;
+  never restore excluded choices to fill four slots (target-only is permitted, as for Words).
+  Room 20 adds empty-default exclusions and a separate source-scoped accepted meaning parser epoch (1).
+  Pending refresh bypasses unchanged HEAD/contentVersion and launch throttling; only accepted transactional
+  replacement stamps it. Full/slim queries and normal/borrowed-padding Quiz mappings all carry the metadata.
+  IDs, schedules/logs, readings and nullable reading curation remain intact. Migration 19→20 is shared with the
+  frozen 17 client only after the structural 17→18→19 bridge; schema 18/19 identities must not be repurposed.
+  Older readers ignore the field and remain unprotected; bounded upgraded owner testing does not certify
+  installed older APKs, universal semantic uniqueness, physical devices or general release.
+  In the frozen N1 backport, the 17→18 language-default columns and 18→19 `accepted_source` table/entity are
+  structural compatibility only. The table is unused and has no DAO or authority effect; the new language
+  columns remain EN/ja defaults. No locale switching, manifest-language extension, source-selection behavior,
+  resources or newer UI is adopted. The existing frozen production and publication-aware test loader remain.
 - Word `words/<word>.md` (`word`, `reading`, `title`, `type`, `kanji` list, `tags`, optional `jlpt`, `quiz_exclusions` and `quiz_distractors`).
   An explicit community vocabulary level takes precedence over kanji difficulty; only omission enables the legacy fallback (see §5).
   Word tags remain free-form: no JLPT tags are required or generated, and level metadata does not affect quiz tag scoring.

@@ -30,7 +30,7 @@ import io.github.stopcran.kanji.core.srs.ReviewRecording
 import io.github.stopcran.kanji.data.ReviewStore
 import io.github.stopcran.kanji.data.ReviewStateEntity
 import io.github.stopcran.kanji.data.inStack
-import io.github.stopcran.kanji.data.splitSep
+import io.github.stopcran.kanji.data.toQuizCard
 import io.github.stopcran.kanji.data.toEntity
 import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.focusStatus
@@ -94,7 +94,7 @@ class QuizViewModel(
             return
         }
         cards = all.associateBy { it.kanji }
-        quizCards = all.map { QuizCard(it.kanji, it.title, it.tags.splitSep(), it.distractors.splitSep()) }
+        quizCards = all.map { it.toQuizCard() }
         app.db.reviews().states(sourceId, stack, StudyMode.Quiz.name).forEach { states[it.kanji] = it.toSrs() }
 
         val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
@@ -121,7 +121,7 @@ class QuizViewModel(
         for (f in fillers) {
             val k = byKanji.getValue(f.kanji)
             cards = cards + (k.kanji to k)
-            quizCards = quizCards + QuizCard(k.kanji, k.title, k.tags.splitSep(), k.distractors.splitSep())
+            quizCards = quizCards + k.toQuizCard()
             states[k.kanji] = f.state
             owners[k.kanji] = f.owner
         }

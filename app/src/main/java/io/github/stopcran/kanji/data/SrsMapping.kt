@@ -2,6 +2,7 @@ package io.github.stopcran.kanji.data
 
 import io.github.stopcran.kanji.core.content.WordArticle
 import io.github.stopcran.kanji.core.content.WordScene
+import io.github.stopcran.kanji.core.quiz.QuizCard
 import io.github.stopcran.kanji.core.reading.ReadingId
 import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.SrsState
@@ -37,6 +38,8 @@ fun List<KanjiEntity>.inStack(stackId: String): List<KanjiEntity> {
 }
 
 fun List<KanjiEntity>.levels(): Map<String, Int?> = associate { it.kanji to it.jlpt }
+
+fun KanjiEntity.toQuizCard() = QuizCard(kanji, title, tags.splitSep(), distractors.splitSep(), quizExclusions.splitSep())
 
 fun WordArticle.toEntity(sourceId: String) = WordEntity(
     sourceId, word, reading, title, type, kanji.joinSep(), tags.joinSep(), body, jlpt,

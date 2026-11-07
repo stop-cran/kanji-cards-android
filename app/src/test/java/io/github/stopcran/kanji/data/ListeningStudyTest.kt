@@ -364,7 +364,12 @@ class ListeningStudyTest {
             )
             repeat(2) { index ->
                 val migrated = Room.databaseBuilder(context, AppDatabase::class.java, name)
-                    .addMigrations(MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17).allowMainThreadQueries().build()
+                    .addMigrations(
+                        MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15,
+                        MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20,
+                    )
+                    .allowMainThreadQueries()
+                    .build()
                 try {
                     if (index == 0) {
                         assertTrue(migrated.listening().allEncounters().isEmpty())

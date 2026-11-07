@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.room.Room
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.srs.StudyMode
+import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.SrsState
@@ -13,6 +14,7 @@ import io.github.stopcran.kanji.data.KanjiEntity
 import io.github.stopcran.kanji.data.Settings
 import io.github.stopcran.kanji.data.ReviewStore
 import io.github.stopcran.kanji.data.toSrs
+import io.github.stopcran.kanji.data.toEntity
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
@@ -78,6 +80,48 @@ class QuizViewModelTest {
         val end = System.currentTimeMillis() + 10_000
         while (states().size < n && System.currentTimeMillis() < end) Thread.sleep(10)
         return states()
+    }
+
+    @Test
+    fun ordinaryCardsRetainOneSidedMeaningExclusions() = checkMeaningExclusions(false)
+
+    @Test
+    fun borrowedPaddingCardsRetainOneSidedMeaningExclusions() = checkMeaningExclusions(true)
+
+    private fun checkMeaningExclusions(extra: Boolean) {
+        services.settings.setStack("jlpt-n5")
+        val day = card("日", "sun", 0).copy(quizExclusions = if (extra) "" else "月")
+        val moon = card("月", "moon", 1).copy(
+            tags = if (extra) "jlpt-n4" else "jlpt-n5", quizExclusions = if (extra) "日" else "",
+        )
+        seed(day, moon, card("火", "fire", 2))
+        if (extra) runBlocking {
+            db.reviews().putState(SrsState(phase = CardPhase.Review, reps = 3).toEntity(sourceId, "jlpt-n4", "月", StudyMode.Quiz))
+        }
+        val vm = QuizViewModel(services)
+        try {
+            vm.ensureStarted(extra)
+            vm.await({ it is QuizUi.Study || it is QuizUi.Question }) {}
+            val seen = mutableSetOf<String>()
+            repeat(12) {
+                if (vm.ui is QuizUi.Study) vm.startQuestion()
+                val question = vm.ui as? QuizUi.Question ?: return@repeat
+                seen += question.card.kanji
+                val options = question.options.map { it.kanji }
+                assertTrue("日" !in options || "月" !in options)
+                vm.pick(question.card.kanji)
+                vm.next()
+            }
+            assertTrue("borrowed=$extra, seen=$seen", seen.containsAll(listOf("日", "月")))
+        } finally {
+            vm.leaveSession()
+            runBlocking {
+                withTimeout(10_000) {
+                    while (db.reviews().allSessions().single().endedAtMs == null) delay(10)
+                }
+            }
+        }
+        if (extra) assertEquals("jlpt-n4", runBlocking { db.reviews().allLog().single { it.kanji == "月" }.stack })
     }
 
     @Test

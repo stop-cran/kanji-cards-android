@@ -50,6 +50,11 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 
 ## Gotchas
 
+- Kanji meaning exclusions must reach both ordinary and borrowed-padding `QuizCard` mappings and both slim DAO
+  projections. Native733's filtered N1 pool exposed 剰/冗 despite unique titles and curated distractors.
+  Resolve references after duplicate-title rejection, and keep the meaning epoch separate from the reading epoch.
+  The frozen backport retains schema-only 17→18→19 bridges for main-compatible schema 20, not source/language behavior.
+
 - **Edge-to-edge on API 35:** content draws under the status/navigation bars; a button there is visible but untouchable. Every screen goes
   through `ui/Page`, which applies `statusBarsPadding`/`navigationBarsPadding` and a scroll container. Don't build screens without it.
 - **Keyboard on older Android:** keep `MainActivity`'s `adjustResize` and use `Page(ime = true)` for text entry. Pre-Android 11 needs

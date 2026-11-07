@@ -13,6 +13,7 @@ class ContentException(message: String) : Exception(message)
 object ContentParser {
     const val GRAMMAR_PARSER_EPOCH = 6
     const val KANJI_READING_PARSER_EPOCH = 1
+    const val KANJI_MEANING_PARSER_EPOCH = 1
     const val MAX_QUIZ_DISTRACTORS = 3
     const val MAX_IMAGE_BYTES = 150 * 1024
     val IMAGE_PATH = Regex("images/[^/\\\\\\s]+\\.webp")
@@ -32,7 +33,8 @@ object ContentParser {
         val titles = HashSet<String>()
         val unique = text.kanji.filter { c ->
             titles.add(c.title).also { if (!it) problems += "kanji/${c.kanji}.md: duplicate title '${c.title}'" }
-        }
+        }.toMutableList()
+        KanjiMeaningMetadata.resolveReferences(unique, problems)
         val listeningCatalog = io.github.stopcran.kanji.core.listening.ListeningContent.read(manifest, files)
         val verified = verifiedImages(manifest, files, problems, imageValidator)
         val listeningImages = listeningCatalog.records.mapNotNullTo(hashSetOf()) { it.passage.image?.path }
@@ -457,6 +459,7 @@ object ContentParser {
             body = fm.body,
             quizOnyomi = fm.quizReadings("quizOnyomi", f.list("onyomi")),
             quizKunyomi = fm.quizReadings("quizKunyomi", f.list("kunyomi")),
+            quizExclusions = KanjiMeaningMetadata.parse(fm, kanji),
         )
     }
 
