@@ -63,6 +63,11 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 
 ## Gotchas
 
+- JLPT kanji selectors share `kanji-jlpt` state but retain exact-level new-card eligibility in all three modes,
+  including extra practice. Preserve legacy level logs for unlock/pacing and never borrow higher-level cards to pad a JLPT session.
+
+- Kanji meaning feedback for wrong and unknown answers formats both the character and its meaning; exercise both branches in EN/RU.
+
 - Kanji meaning exclusions must reach both ordinary and borrowed-padding `QuizCard` mappings and both slim DAO
   projections. Native733's filtered N1 pool exposed 剰/冗 despite unique titles and curated distractors.
   Resolve references after duplicate-title rejection, and keep the meaning epoch separate from the reading epoch.

@@ -1,6 +1,8 @@
 package io.github.stopcran.kanji.data
 
 import io.github.stopcran.kanji.core.srs.ReviewRecord
+import io.github.stopcran.kanji.core.srs.Stacks
+import io.github.stopcran.kanji.core.srs.StudyMode
 
 data class StudyStart(val id: String, val sourceId: String, val stack: String, val mode: String, val extra: Boolean, val atMs: Long)
 data class StudyEnd(val id: String, val atMs: Long, val reason: String, val answered: Int, val correct: Int)
@@ -28,12 +30,12 @@ fun interface ReviewStore {
 
 class RoomReviewStore(private val db: AppDatabase) : ReviewStore {
     override suspend fun record(value: ReviewRecord) {
-        db.reviews().record(
-            value.state.toEntity(value.sourceId, value.stack, value.itemId, value.mode),
-            ReviewLogEntity(
-                0, value.sourceId, value.stack, value.itemId, value.mode.name, value.grade.value,
-                value.at.toEpochMilli(), sessionId = value.sessionId,
-            ),
+        val state = value.state.toEntity(value.sourceId, value.stack, value.itemId, value.mode)
+        val log = ReviewLogEntity(
+            0, value.sourceId, value.stack, value.itemId, value.mode.name, value.grade.value,
+            value.at.toEpochMilli(), sessionId = value.sessionId,
         )
+        if (value.stack == Stacks.JLPT_STATE && value.mode == StudyMode.Quiz) db.recordKanjiReview(state, log)
+        else db.reviews().record(state, log)
     }
 }

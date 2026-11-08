@@ -32,6 +32,9 @@ import io.github.stopcran.kanji.data.DrawingLog
 import io.github.stopcran.kanji.data.KanjiEntity
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.inStack
+import io.github.stopcran.kanji.data.newKanjiInStack
+import io.github.stopcran.kanji.data.recordKanjiReview
+import io.github.stopcran.kanji.data.stacks
 import io.github.stopcran.kanji.data.toEntity
 import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.meaningLearned
@@ -79,7 +82,8 @@ enum class DrawEmptyReason {
 }
 
 /** Drawing session: caption + canvas -> check (recogniser gate + stroke matcher) -> graded answer with overlay. */
-class DrawViewModel(private val app: Services, private val recognizer: InkRecognition = InkRecognizer()) : StudyViewModel(app.sessionStore) {
+class DrawViewModel(private val app: Services, private val recognizer: InkRecognition = InkRecognizer()) :
+    StudyViewModel(app.sessionStore, app.kanjiWrites) {
     private val fsrs = Fsrs()
     private val matcher = StrokeMatcher()
     private val json = Json { ignoreUnknownKeys = true }
@@ -110,11 +114,12 @@ class DrawViewModel(private val app: Services, private val recognizer: InkRecogn
     }
 
     private suspend fun start(extra: Boolean) {
+        app.kanjiWrites.awaitPending()
         val source = app.settings.source.value
         val capturedSourceId = registeredCapturedSourceId()
         if (!admitDrawingSource(source, capturedSourceId)) return
         sourceId = source.id
-        stack = app.settings.stack.value
+        stack = Stacks.find(app.settings.stack.value, app.db.content().kanjiLite(sourceId).stacks()).id
         prepareDrawingSession(extra, source, capturedSourceId)
     }
 
@@ -144,7 +149,7 @@ class DrawViewModel(private val app: Services, private val recognizer: InkRecogn
             return
         }
         cards = drawable.associateBy { it.kanji }
-        app.db.reviews().states(sourceId, stack, StudyMode.Draw.name).forEach { states[it.kanji] = it.toSrs() }
+        app.db.reviews().states(sourceId, Stacks.stateId(stack), StudyMode.Draw.name).forEach { states[it.kanji] = it.toSrs() }
         val ids = DrawGate.eligible(drawable.map { it.kanji }, states, app.db.meaningLearned(app.settings, sourceId, stack))
         if (rejectFreshDrawingIfChanged(source, capturedSourceId)) return
         if (ids.isEmpty() && !extra) {
@@ -152,12 +157,13 @@ class DrawViewModel(private val app: Services, private val recognizer: InkRecogn
             return
         }
         val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
+        val newEligible = drawable.newKanjiInStack(stack)
         val items = if (extra) {
             val minimum = app.settings.practiceMinimum()
-            val base = QueueBuilder.extra(ids, states, Instant.now(), minimum).map { it.kanji }
+            val base = QueueBuilder.extra(ids, states, Instant.now(), minimum, newEligible = newEligible).map { it.kanji }
             base + pad(base, minimum - base.size, all)
         } else {
-            QueueBuilder.build(ids, states, Instant.now(), budget).map { it.kanji }
+            QueueBuilder.build(ids, states, Instant.now(), budget, newEligible = newEligible).map { it.kanji }
         }
         if (rejectFreshDrawingIfChanged(source, capturedSourceId)) return
         modelState = ModelState.Downloading
@@ -289,9 +295,9 @@ class DrawViewModel(private val app: Services, private val recognizer: InkRecogn
         val now = Instant.now()
         val updated = fsrs.review(states[a.card.kanji] ?: SrsState(), grade, now, fuzzSeed = Fsrs.seed(a.card.kanji, StudyMode.Draw.name, states[a.card.kanji]?.reps ?: 0))
         states[a.card.kanji] = updated
-        val owner = owners[a.card.kanji] ?: stack
+        val owner = owners[a.card.kanji] ?: Stacks.stateId(stack)
         recordSession {
-            app.db.reviews().record(
+            app.db.recordKanjiReview(
                 updated.toEntity(sourceId, owner, a.card.kanji, StudyMode.Draw),
                 ReviewLogEntity(0, sourceId, owner, a.card.kanji, StudyMode.Draw.name, grade.value, now.toEpochMilli(), sessionId = reviewSessionId),
             )

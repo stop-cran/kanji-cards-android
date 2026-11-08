@@ -31,6 +31,8 @@ import io.github.stopcran.kanji.core.srs.ReviewRecording
 import io.github.stopcran.kanji.data.ReviewStore
 import io.github.stopcran.kanji.data.ReviewStateEntity
 import io.github.stopcran.kanji.data.inStack
+import io.github.stopcran.kanji.data.newKanjiInStack
+import io.github.stopcran.kanji.data.stacks
 import io.github.stopcran.kanji.data.toQuizCard
 import io.github.stopcran.kanji.data.toEntity
 import io.github.stopcran.kanji.data.newAllowance
@@ -59,7 +61,7 @@ class QuizViewModel(
     private val app: Services,
     private val recording: ReviewRecording = ReviewRecording(),
     private val reviews: ReviewStore = app.reviewStore,
-) : StudyViewModel(app.sessionStore) {
+) : StudyViewModel(app.sessionStore, app.kanjiWrites) {
     private val random = Random.Default
 
     var ui: QuizUi by mutableStateOf(QuizUi.Loading)
@@ -88,28 +90,34 @@ class QuizViewModel(
     }
 
     private suspend fun start(extra: Boolean) {
+        app.kanjiWrites.awaitPending()
         val source = app.settings.source.value
         sourceId = source.id
         contentLanguage = app.settings.sync.baseLanguage(sourceId) ?: app.db.content().meta(sourceId)?.baseLanguage ?: "en"
-        stack = app.settings.stack.value
-        val all = app.db.content().kanji(sourceId).inStack(stack)
+        val content = app.db.content().kanji(sourceId)
+        stack = Stacks.find(app.settings.stack.value, content.stacks()).id
+        val all = content.inStack(stack)
         if (all.size < 2) {
             ui = QuizUi.Empty(R.string.kanji_quiz_no_cards)
             return
         }
         cards = all.associateBy { it.kanji }
         quizCards = all.map { it.toQuizCard() }
-        app.db.reviews().states(sourceId, stack, StudyMode.Quiz.name).forEach { states[it.kanji] = it.toSrs() }
+        app.db.reviews().states(sourceId, Stacks.stateId(stack), StudyMode.Quiz.name).forEach { states[it.kanji] = it.toSrs() }
 
         val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
         val capacity = app.db.focusStatus(app.settings, sourceId, stack, all, System.currentTimeMillis())?.capacity
+        val newEligible = all.newKanjiInStack(stack)
         val items = if (extra) {
-            var room = capacity ?: Int.MAX_VALUE
             val minimum = app.settings.practiceMinimum()
-            val base = QueueBuilder.extra(all.map { it.kanji }, states, Instant.now(), minimum).filter { !it.isNew || room-- > 0 }.map { it.kanji }
+            val base = QueueBuilder.extra(
+                all.map { it.kanji }, states, Instant.now(), minimum,
+                newEligible = newEligible, newCardsLimit = capacity ?: Int.MAX_VALUE,
+            ).map { it.kanji }
             base + pad(base, minimum - base.size, all)
         } else {
-            QueueBuilder.build(all.map { it.kanji }, states, Instant.now(), minOf(budget, capacity ?: budget)).map { it.kanji }
+            QueueBuilder.build(all.map { it.kanji }, states, Instant.now(), minOf(budget, capacity ?: budget), newEligible = newEligible)
+                .map { it.kanji }
         }
         session = trackSession(QuizSession(items, { it }), sourceId, stack, StudyMode.Quiz.name, extra)
         showNext()
@@ -184,7 +192,7 @@ class QuizViewModel(
         val result = session.answer(a.card.kanji, a.correct, guessed)
         val grade = result.grade
         if (result.record) {
-            val owner = owners[a.card.kanji] ?: stack
+            val owner = owners[a.card.kanji] ?: Stacks.stateId(stack)
             val record = recording.confirm(
                 ReviewIdentity(sourceId, owner, a.card.kanji, StudyMode.Quiz, reviewSessionId),
                 states, grade, Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS,
@@ -199,7 +207,7 @@ class QuizViewModel(
     private fun nudge(kanji: String) {
         val updated = Confusion.nudged(states[kanji], Instant.now()) ?: return
         states[kanji] = updated
-        val owner = owners[kanji] ?: stack
-        viewModelScope.launch(kotlinx.coroutines.NonCancellable) { app.db.reviews().putState(updated.toEntity(sourceId, owner, kanji, StudyMode.Quiz)) }
+        val owner = owners[kanji] ?: Stacks.stateId(stack)
+        recordSession { app.db.reviews().advanceDue(sourceId, owner, kanji, StudyMode.Quiz.name, "", updated.due.toEpochMilli()) }
     }
 }

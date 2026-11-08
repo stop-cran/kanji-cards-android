@@ -194,7 +194,7 @@
     <string name="kanji_focus_full">Лимит кандзи достигнут</string>
     <string name="kanji_focus_info">О лимите изучаемых кандзи</string>
     <string name="kanji_focus_title">Лимит изучаемых кандзи</string>
-    <string name="kanji_focus_explanation">Сначала завершите изучение текущих %1$d кандзи: новые добавляются по мере освоения во всех режимах.</string>
+    <string name="kanji_focus_explanation">Сначала завершите изучение текущих %1$d кандзи: новые добавляются по мере выполнения необходимых упражнений.</string>
     <string name="next">Далее</string>
     <string name="draw_the_kanji_for">Напишите кандзи со значением</string>
     <string name="tracing_practice_notice">Обводка не оценивается. Позже вы попробуете написать знак по памяти.</string>
@@ -211,9 +211,9 @@
     <string name="cards_from">Карточки: %1$s</string>
     <string name="cards">%1$s карточек</string>
     <string name="label_with_count">%1$s (%2$s)</string>
-    <string name="each_stack_keeps_its_own">У каждой колоды своё расписание повторений.</string>
+    <string name="each_stack_keeps_its_own">Колоды «Все» и «Начальный набор» имеют отдельные расписания; уровни JLPT используют общий прогресс.</string>
     <string name="level_filter_includes_easier">Включая более лёгкие уровни.</string>
-    <string name="level_filter_kanji_exact">Только карточки с меткой %1$s.</string>
+    <string name="level_filter_kanji_cumulative">Повторяются изученные кандзи до уровня %1$s включительно. Новые карточки — только уровня %1$s; прогресс уровней JLPT общий.</string>
     <string name="browse_cards">Все кандзи</string>
     <string name="all_kanji_count">Все кандзи (%1$s)</string>
     <string name="words">%1$s слов</string>

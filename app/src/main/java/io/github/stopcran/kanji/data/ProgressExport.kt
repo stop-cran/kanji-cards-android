@@ -18,13 +18,14 @@ object ProgressExport {
     /** Returns the number of logged answers written. */
     suspend fun write(db: AppDatabase, settings: Settings, out: OutputStream): Int {
         val snapshot = db.withTransaction {
-            Snapshot(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allGrammarResponses(),
+            Snapshot(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allTransitionChecks(), db.reviews().allGrammarResponses(),
                 db.reviews().allSessions(), db.listening().allEncounters(),
                 db.listeningTasks().allEncounters(), db.listeningTasks().allAssessments(), db.listeningTasks().allExposures())
         }
         ZipOutputStream(out).use { zip ->
             zip.entry("review_state.json", JsonArray(snapshot.states.map(::stateJson)))
             zip.entry("review_log.json", JsonArray(snapshot.log.map(::logJson)))
+            zip.entry("jlpt_transition_checks.json", JsonArray(snapshot.transitionChecks.map(::transitionCheckJson)))
             zip.entry("grammar_responses.json", JsonArray(snapshot.grammarResponses.map(::grammarResponseJson)))
             zip.entry("study_sessions.json", JsonArray(snapshot.sessions.map(::sessionJson)))
             zip.entry("listening_encounters.json", JsonArray(snapshot.listening.map(::listeningJson)))
@@ -34,7 +35,7 @@ object ProgressExport {
                 JsonObject(mapOf("sourceId" to primitive(it.sourceId), "exposureId" to primitive(it.exposureId),
                     "firstAtMs" to primitive(it.firstAtMs), "lastAtMs" to primitive(it.lastAtMs)))
             }))
-            zip.entry("export_manifest.json", JsonObject(mapOf("formatVersion" to JsonPrimitive(6))))
+            zip.entry("export_manifest.json", JsonObject(mapOf("formatVersion" to JsonPrimitive(7))))
             zip.entry("settings.json", JsonObject(settings.snapshot().mapValues { primitive(it.value) }))
         }
         return snapshot.log.size
@@ -43,6 +44,7 @@ object ProgressExport {
     private data class Snapshot(
         val states: List<ReviewStateEntity>,
         val log: List<ReviewLogEntity>,
+        val transitionChecks: List<JlptTransitionCheckEntity>,
         val grammarResponses: List<GrammarResponseEntity>,
         val sessions: List<StudySessionEntity>,
         val listening: List<ListeningEncounterEntity>,
@@ -80,6 +82,16 @@ object ProgressExport {
             "stack" to JsonPrimitive(l.stack), "kanji" to JsonPrimitive(l.kanji),
             "mode" to JsonPrimitive(l.mode), "reading" to JsonPrimitive(l.reading), "grade" to JsonPrimitive(l.grade),
             "atMs" to JsonPrimitive(l.atMs), "sessionId" to JsonPrimitive(l.sessionId),
+            "previousReadingStarted" to primitive(l.previousReadingStarted),
+        ),
+    )
+
+    private fun transitionCheckJson(c: JlptTransitionCheckEntity) = JsonObject(
+        mapOf(
+            "id" to primitive(c.id), "sourceId" to primitive(c.sourceId), "triggerKanji" to primitive(c.triggerKanji),
+            "kanji" to primitive(c.kanji), "mode" to primitive(c.mode), "reading" to primitive(c.reading),
+            "dueMs" to primitive(c.dueMs), "originalDueMs" to primitive(c.originalDueMs),
+            "completedAtMs" to primitive(c.completedAtMs), "cancelledAtMs" to primitive(c.cancelledAtMs),
         ),
     )
 

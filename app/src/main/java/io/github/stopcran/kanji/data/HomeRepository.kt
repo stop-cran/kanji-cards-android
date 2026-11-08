@@ -80,7 +80,7 @@ internal class RoomHomeRepository(private val db: AppDatabase, private val setti
         val reviews = db.reviews()
         val kanjiModes = listOf(StudyMode.Quiz, StudyMode.Draw, StudyMode.KanjiOn, StudyMode.KanjiKun)
         val states = (kanjiModes + WordDirection.entries.map { it.mode }).associateWith { mode ->
-            val stack = if (mode in kanjiModes) inventory.stack.id else inventory.wordStack.id
+            val stack = if (mode in kanjiModes) Stacks.stateId(inventory.stack.id) else inventory.wordStack.id
             val rows = reviews.states(source, stack, mode.name)
             if (mode == StudyMode.KanjiOn || mode == StudyMode.KanjiKun) rows.toReadingStates()
             else rows.associate { it.kanji to it.toSrs() }
@@ -104,8 +104,10 @@ internal class RoomHomeRepository(private val db: AppDatabase, private val setti
             inventory, states,
             db.newAllowance(source, now, zone, preferences.dailyNew, preferences.weekPlan),
             db.weekProgress(source, now, zone, preferences.weekPlan),
-            MeaningUnlock.learned(reviews.unlockLog(source, inventory.stack.id), preferences.unlockRule, zone),
-            reviews.readingCardsIntroducedSince(source, inventory.stack.id, now.atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()),
+            MeaningUnlock.learned(reviews.unlockLog(source, Stacks.stateId(inventory.stack.id)), preferences.unlockRule, zone),
+            reviews.readingCardsIntroducedSince(
+                source, Stacks.stateId(inventory.stack.id), now.atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli(),
+            ),
             pad, focus,
         )
     }

@@ -326,15 +326,16 @@ Task parser epoch 2 refreshes an unchanged source revision/version after upgrade
 after acceptance. No Room migration or N5 identity/approval rewrite is needed. All four guided
 formats support either accepted level; N4 diagnostic orchestration remains installment C.
 
-## Progress export v6
+## Progress export v7
 
-**Settings → Export progress** writes ten UTF-8 JSON members. Database rows are read in one transaction:
+**Settings → Export progress** writes eleven UTF-8 JSON members. Database rows are read in one transaction:
 
 | ZIP member | Meaning |
 | --- | --- |
-| `export_manifest.json` | `{"formatVersion":6}`; independent of content JSON/manifest schema versions. |
-| `review_state.json` | Current SRS rows: `sourceId`, `stack`, `kanji`, `mode`, `reading`, `phase`, `stability`, `difficulty`, `dueMs`, `lastReviewMs`, `reps`, `lapses`. |
-| `review_log.json` | Canonical recorded events: `id`, `sourceId`, `stack`, `kanji`, `mode`, `reading`, `grade`, `atMs` (Unix milliseconds), nullable `sessionId`. Grades: Again=1, Hard=2, Good=3, Easy=4. |
+| `export_manifest.json` | `{"formatVersion":7}`; independent of content JSON/manifest schema versions. |
+| `review_state.json` | Current SRS rows: `sourceId`, `stack`, `kanji`, `mode`, `reading`, `phase`, `stability`, `difficulty`, `dueMs`, `lastReviewMs`, `reps`, `lapses`. JLPT kanji levels use the shared `kanji-jlpt` stack. |
+| `review_log.json` | Recorded events: `id`, `sourceId`, `stack`, `kanji`, `mode`, `reading`, `grade`, `atMs` (Unix milliseconds), nullable `sessionId` and `previousReadingStarted`. The latter records the prior per-reading state for new reading events; null means historical or not a reading. Legacy JLPT level-stack events are preserved; new events use `kanji-jlpt`. Grades: Again=1, Hard=2, Good=3, Easy=4. |
+| `jlpt_transition_checks.json` | Spaced confusion-check reservations: `id`, `sourceId`, `triggerKanji`, target `kanji`, `mode`, `reading`, `dueMs`, `originalDueMs`, and nullable `completedAtMs` and `cancelledAtMs`. Completed reservations retain their original slot; cancelled reservations no longer occupy one. |
 | `grammar_responses.json` | `reviewLogId`, `sourceId`, `stack`, `exerciseId`, `constructionId`, `relationshipId`, `promptType` (`choose`/`type`), `response`, `correct`, nullable structured `choiceSnapshot`. |
 | `study_sessions.json` | Session `id`, `sourceId`, selected `stack`, `mode`, `extra`, `startedAtMs`, nullable `endedAtMs`, `endReason`, `answered`, `correct`. |
 | `listening_encounters.json` | Source/passage identity, captured JSON/hash/audio hash, current playback state, immutable submitted `response`, exposure/first-encounter timestamps, reservation/introduction flags, canonical review link and closure. No image/audio bytes. |
@@ -356,7 +357,7 @@ interruption and finalization time. It has no SRS grade. The parent's version-1 
 these ordered diagnostic responses, planned/example counts and full-form/interruption status.
 Assessed includes deliberate/deadline unanswered responses but excludes not-assessed items and examples.
 Diagnostic study-session counters stay zero; use the diagnostic response, not canonical answer counts.
-The v6 member set is unchanged, and the Grammar analyzer continues to exclude all Listening evidence.
+Listening data is unchanged from v6, and the Grammar analyzer continues to exclude all Listening evidence.
 
 For a recorded Grammar answer, state, canonical log and response detail are written in one transaction. Join `reviewLogId` to the unique
 log `id` for grade/time; source, stack and exercise identity must also match, with canonical mode `Grammar`. Choice `response` is an option
@@ -383,13 +384,13 @@ Room v11 preserves old state/log/detail rows; pre-tracking log rows have `sessio
 
 Legacy exports have only `review_state.json`, `review_log.json` and `settings.json`, with no version manifest, log `id` fields or Grammar details.
 They provide no Grammar evidence. V2 has five members and Grammar details, but no sessions or session links.
-A v2-v6 export missing its required files or linked details is corruption, not legacy absence.
+A v2-v7 export missing its required files or linked details is corruption, not legacy absence.
 Listening encounters retain their own captured content and bind a non-null `reviewLogId` to one canonical Listening event.
 Unscored study/discarded encounters have no event. A discarded Listening session may use `endReason="discarded"`.
 Current playback `state` may change during feedback study; the submitted `response` cannot. First-encounter status is not inferred
 from SRS absence. These timestamps are exposure markers, not proof that every sound was heard or every displayed word read.
-The grammar analyzer checks all Listening members' basic array-of-objects shape but does not audit or report their response details.
-Empty arrays remain present in v6, including before any diagnostic assessment has been created.
+The grammar analyzer checks all Listening and transition-check members' basic array-of-objects shape but does not audit or report their
+details. Empty arrays remain present even before a diagnostic assessment or transition check has been created.
 
 Other modes still have no per-answer content revision or set ID. `sha:<source>@<branch>` settings give last-synced commit hints, but cannot establish
 which snapshot a historical answer used (a session can retain questions loaded before a later sync).

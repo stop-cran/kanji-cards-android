@@ -72,7 +72,8 @@ class KanjiReadingMigrationTest {
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20,
+            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17,
+            MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21,
         )
         .allowMainThreadQueries()
         .build()
@@ -87,7 +88,53 @@ class KanjiReadingMigrationTest {
     }
 
     @Test
-    fun version17MeaningUpgradePreservesAllSourcesReadingsAndProgressAndReopensCached20() = runBlocking {
+    fun version3ReadingStatesDoNotBecomeNewWhenReviewedAfterUpgradeButLaterReadingsDo() = runBlocking {
+        val source = sources.first()
+        createMigrationSchema(context, name, 3) { sqlite ->
+            sqlite.execSQL(
+                "INSERT INTO kanji (sourceId, kanji, title, jlpt, tags, onyomi, kunyomi, distractors, body, position) " +
+                    "VALUES (?, '日', 'sun', 5, 'jlpt-n5', 'ニチ', 'ひ', '', 'body', 0)",
+                arrayOf(source),
+            )
+            for (stack in listOf("all", "jlpt-n5")) {
+                sqlite.execSQL(
+                    "INSERT INTO review_state (sourceId, stack, kanji, mode, phase, stability, difficulty, dueMs, lastReviewMs, reps, lapses) " +
+                        "VALUES (?, ?, '日', 'KanjiOn', 'Review', 12.5, 5.0, 999, 500, 3, 1)",
+                    arrayOf(source, stack),
+                )
+                sqlite.execSQL(
+                    "INSERT INTO review_log (sourceId, stack, kanji, mode, grade, atMs) VALUES (?, ?, '日', 'KanjiOn', 3, 500)",
+                    arrayOf(source, stack),
+                )
+            }
+        }
+        withDatabase { db ->
+            val stacks = listOf("all", io.github.stopcran.kanji.core.srs.Stacks.JLPT_STATE)
+            for (stack in stacks) {
+                val old = db.reviews().states(source, stack, "KanjiOn").single()
+                assertEquals("にち", old.reading)
+                db.recordKanjiReview(old, ReviewLogEntity(0, source, stack, "日", "KanjiOn", 3, 1_000, "にち"))
+            }
+            assertEquals(0, db.reviews().itemsIntroducedSince(source, 1_000))
+            for (stack in stacks) assertEquals(0, db.reviews().readingCardsIntroducedSince(source, stack, 1_000))
+
+            val card = db.content().kanji(source).single()
+            db.content().insertKanji(listOf(card.copy(onyomi = "ニチ\u001Fジツ")))
+            for (stack in stacks) {
+                val fresh = ReviewStateEntity(source, stack, "日", "KanjiOn", "New", 0.0, 0.0, 0, null, 0, 0, "じつ")
+                db.recordKanjiReview(fresh, ReviewLogEntity(0, source, stack, "日", "KanjiOn", 3, 1_000, "じつ"))
+            }
+            assertEquals(2, db.reviews().itemsIntroducedSince(source, 1_000))
+            for (stack in stacks) assertEquals(1, db.reviews().readingCardsIntroducedSince(source, stack, 1_000))
+            assertEquals(listOf(null, null, true, true, false, false), db.reviews().allLog().map { it.previousReadingStarted })
+        }
+        withDatabase { db ->
+            assertEquals(listOf(null, null, true, true, false, false), db.reviews().allLog().map { it.previousReadingStarted })
+        }
+    }
+
+    @Test
+    fun version17MeaningUpgradePreservesAllSourcesReadingsAndProgressAndReopensCached21() = runBlocking {
         createMigrationSchema(context, name, 17) { sqlite ->
             for (source in sources) {
                 sqlite.execSQL(
@@ -122,7 +169,7 @@ class KanjiReadingMigrationTest {
             db.content().putMeta(db.content().meta(sources.first())!!.copy(kanjiMeaningParserEpoch = 1))
         }
         withDatabase { db ->
-            assertEquals(20, db.openHelper.readableDatabase.version)
+            assertEquals(21, db.openHelper.readableDatabase.version)
             assertEquals("月", db.content().kanji(sources.first()).single().quizExclusions)
             assertEquals("月", db.content().kanjiLite(sources.first()).single().quizExclusions)
             assertEquals("", db.content().kanji(sources.last()).single().quizExclusions)
@@ -232,7 +279,8 @@ class DatabaseMigrationTest {
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20,
+            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17,
+            MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21,
         )
         .allowMainThreadQueries()
         .build()
@@ -306,8 +354,8 @@ class DatabaseMigrationTest {
             assertEquals(1, ProgressExport.write(db, Settings(context), output))
             val entries = zipEntries(output)
             val json = Json
-            assertEquals(6, json.parseToJsonElement(entries.getValue("export_manifest.json")).jsonObject.getValue("formatVersion").jsonPrimitive.int)
-            assertEquals(10, entries.size)
+            assertEquals(7, json.parseToJsonElement(entries.getValue("export_manifest.json")).jsonObject.getValue("formatVersion").jsonPrimitive.int)
+            assertEquals(11, entries.size)
             assertEquals(1, json.parseToJsonElement(entries.getValue("review_log.json")).jsonArray.size)
             val exported = json.parseToJsonElement(entries.getValue("grammar_responses.json")).jsonArray.single().jsonObject
             val exportedLog = json.parseToJsonElement(entries.getValue("review_log.json")).jsonArray.single().jsonObject
@@ -385,7 +433,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(20, db.openHelper.writableDatabase.version)
+                assertEquals(21, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(sources.first(), "all", "日", "KanjiOn", "Review", 12.5, 5.0, 999, 500, 3, 1, "にち"),
                     db.reviews().allStates().single(),
@@ -461,7 +509,7 @@ class DatabaseMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(20, db.openHelper.writableDatabase.version)
+                assertEquals(21, db.openHelper.writableDatabase.version)
                 assertEquals(
                     ReviewStateEntity(source, GRAMMAR_STACK, "alpha-a-0", "Grammar", "Review", 12.5, 5.0, 999, 500, 3, 1),
                     db.reviews().allStates().single(),

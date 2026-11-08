@@ -136,7 +136,7 @@ class GrammarFocusPersistenceTest {
             while (true) names += (zip.nextEntry ?: break).name
         }
         assertEquals(
-            setOf("export_manifest.json", "review_state.json", "review_log.json", "grammar_responses.json",
+            setOf("export_manifest.json", "review_state.json", "review_log.json", "jlpt_transition_checks.json", "grammar_responses.json",
                 "study_sessions.json", "listening_encounters.json", "listening_task_encounters.json",
                 "listening_assessments.json", "listening_exposures.json", "settings.json"),
             names,

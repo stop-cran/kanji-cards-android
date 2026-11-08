@@ -145,6 +145,25 @@ data class ReviewLogEntity(
     val atMs: Long,
     @ColumnInfo(defaultValue = "''") val reading: String = "",
     val sessionId: String? = null,
+    /** Null for historical or non-reading events; otherwise the prior per-reading state at recording time. */
+    val previousReadingStarted: Boolean? = null,
+)
+
+@Entity(
+    tableName = "jlpt_transition_checks",
+    indices = [Index(value = ["sourceId", "dueMs"]), Index(value = ["sourceId", "kanji", "mode", "reading"])],
+)
+data class JlptTransitionCheckEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sourceId: String,
+    val triggerKanji: String,
+    val kanji: String,
+    val mode: String,
+    val reading: String,
+    val dueMs: Long,
+    val originalDueMs: Long,
+    val completedAtMs: Long? = null,
+    val cancelledAtMs: Long? = null,
 )
 
 @Entity(tableName = "study_sessions")
@@ -491,6 +510,44 @@ interface ReviewDao {
     @Query("SELECT * FROM review_state WHERE sourceId = :sourceId AND stack = :stack AND mode = :mode")
     suspend fun states(sourceId: String, stack: String, mode: String): List<ReviewStateEntity>
 
+    @Query(
+        "UPDATE review_state SET dueMs = :dueMs WHERE sourceId = :sourceId AND stack = :stack AND kanji = :kanji " +
+            "AND mode = :mode AND reading = :reading AND phase != 'New' AND dueMs > :dueMs",
+    )
+    @Suppress("LongParameterList")
+    suspend fun advanceDue(sourceId: String, stack: String, kanji: String, mode: String, reading: String, dueMs: Long): Int
+
+    @Query("SELECT * FROM jlpt_transition_checks WHERE sourceId = :sourceId AND cancelledAtMs IS NULL " +
+        "AND (completedAtMs IS NULL OR dueMs >= :sinceMs)")
+    suspend fun transitionChecks(sourceId: String, sinceMs: Long): List<JlptTransitionCheckEntity>
+
+    @Query("SELECT * FROM jlpt_transition_checks WHERE sourceId = :sourceId AND completedAtMs IS NULL AND cancelledAtMs IS NULL")
+    suspend fun pendingTransitionChecks(sourceId: String): List<JlptTransitionCheckEntity>
+
+    @Query("SELECT * FROM jlpt_transition_checks ORDER BY id")
+    suspend fun allTransitionChecks(): List<JlptTransitionCheckEntity>
+
+    @Insert
+    suspend fun insertTransitionCheck(check: JlptTransitionCheckEntity)
+
+    @Query(
+        "UPDATE jlpt_transition_checks SET completedAtMs = :atMs WHERE sourceId = :sourceId AND kanji = :kanji " +
+            "AND mode = :mode AND reading = :reading AND completedAtMs IS NULL AND cancelledAtMs IS NULL",
+    )
+    suspend fun completeTransitionCheck(sourceId: String, kanji: String, mode: String, reading: String, atMs: Long)
+
+    @Query(
+        "UPDATE review_state SET dueMs = :originalDueMs WHERE sourceId = :sourceId AND stack = 'kanji-jlpt' " +
+            "AND kanji = :kanji AND mode = :mode AND reading = :reading AND dueMs = :reservedDueMs",
+    )
+    @Suppress("LongParameterList")
+    suspend fun restoreTransitionDue(
+        sourceId: String, kanji: String, mode: String, reading: String, reservedDueMs: Long, originalDueMs: Long,
+    ): Int
+
+    @Query("UPDATE jlpt_transition_checks SET cancelledAtMs = :atMs WHERE id = :id AND completedAtMs IS NULL AND cancelledAtMs IS NULL")
+    suspend fun cancelTransitionCheck(id: Long, atMs: Long): Int
+
     @Query("SELECT * FROM review_state WHERE sourceId = :sourceId AND mode = :mode")
     suspend fun statesAcrossStacks(sourceId: String, mode: String): List<ReviewStateEntity>
 
@@ -532,8 +589,12 @@ interface ReviewDao {
     suspend fun newCardsIntroducedSince(sourceId: String, stack: String, mode: String, sinceMs: Long): Int
 
     /** First-ever introductions in the shared pool: Kana skills and reading cards count separately per mode. */
-    @Query("SELECT COUNT(*) FROM (SELECT 1 FROM review_log WHERE sourceId = :sourceId GROUP BY stack, kanji, reading, " +
-        "CASE WHEN sourceId = '$KANA_SOURCE_ID' OR reading != '' THEN mode ELSE '' END HAVING MIN(atMs) >= :sinceMs)")
+    @Query("SELECT COUNT(*) FROM (SELECT MIN(id) AS firstId, MIN(atMs) AS firstAt FROM review_log WHERE sourceId = :sourceId GROUP BY " +
+        "CASE WHEN stack IN ('kanji-jlpt', 'jlpt-n5', 'jlpt-n4', 'jlpt-n3', 'jlpt-n2', 'jlpt-n1') " +
+        "AND mode IN ('Quiz', 'Draw', 'KanjiOn', 'KanjiKun') THEN 'kanji-jlpt' ELSE stack END, kanji, reading, " +
+        "CASE WHEN sourceId = '$KANA_SOURCE_ID' OR reading != '' THEN mode ELSE '' END) intro " +
+        "JOIN review_log initial_log ON initial_log.id = intro.firstId WHERE intro.firstAt >= :sinceMs AND " +
+        "(initial_log.mode NOT IN ('KanjiOn', 'KanjiKun') OR initial_log.reading = '' OR COALESCE(initial_log.previousReadingStarted, 0) = 0)")
     suspend fun itemsIntroducedSince(sourceId: String, sinceMs: Long): Int
 
     /** Cards that were reviewed before and are due at [nowMs], in any mode. */
@@ -551,15 +612,23 @@ interface ReviewDao {
     suspend fun reviewTimes(sourceIds: List<String>, sinceMs: Long, untilMs: Long): List<Long>
 
     /** Reading cards (kanji + reading) whose first review happened since [sinceMs]; each used a unit of the daily budget. */
-    @Query("SELECT COUNT(*) FROM (SELECT 1 FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode IN ('KanjiOn', 'KanjiKun') AND reading != '' GROUP BY mode, kanji, reading HAVING MIN(atMs) >= :sinceMs)")
+    @Query("SELECT COUNT(*) FROM (SELECT MIN(id) AS firstId, MIN(atMs) AS firstAt FROM review_log WHERE sourceId = :sourceId AND " +
+        "(stack = :stack OR (:stack = 'kanji-jlpt' AND stack IN ('jlpt-n5', 'jlpt-n4', 'jlpt-n3', 'jlpt-n2', 'jlpt-n1'))) " +
+        "AND mode IN ('KanjiOn', 'KanjiKun') AND reading != '' GROUP BY mode, kanji, reading) intro " +
+        "JOIN review_log initial_log ON initial_log.id = intro.firstId WHERE intro.firstAt >= :sinceMs AND " +
+        "COALESCE(initial_log.previousReadingStarted, 0) = 0")
     suspend fun readingCardsIntroducedSince(sourceId: String, stack: String, sinceMs: Long): Int
 
     /** Every answer of one source and stack in any mode, oldest first: the input of [io.github.stopcran.kanji.core.unlock.MeaningUnlock]. */
-    @Query("SELECT id, atMs, kanji, mode, grade FROM review_log WHERE sourceId = :sourceId AND stack = :stack ORDER BY atMs, id")
+    @Query("SELECT id, atMs, kanji, mode, grade FROM review_log WHERE sourceId = :sourceId AND " +
+        "(stack = :stack OR (:stack = 'kanji-jlpt' AND stack IN ('jlpt-n5', 'jlpt-n4', 'jlpt-n3', 'jlpt-n2', 'jlpt-n1') " +
+        "AND mode IN ('Quiz', 'Draw', 'KanjiOn', 'KanjiKun'))) ORDER BY atMs, id")
     suspend fun unlockLog(sourceId: String, stack: String): List<io.github.stopcran.kanji.core.unlock.LogEvent>
 
     /** Kanji whose first meaning answer (any grade) was logged at or after [sinceMs]: the ones a focus batch counts. */
-    @Query("SELECT kanji FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND mode = 'Quiz' GROUP BY kanji HAVING MIN(atMs) >= :sinceMs")
+    @Query("SELECT kanji FROM review_log WHERE sourceId = :sourceId AND " +
+        "(stack = :stack OR (:stack = 'kanji-jlpt' AND stack IN ('jlpt-n5', 'jlpt-n4', 'jlpt-n3', 'jlpt-n2', 'jlpt-n1'))) " +
+        "AND mode = 'Quiz' GROUP BY kanji HAVING MIN(atMs) >= :sinceMs")
     suspend fun meaningIntroducedSince(sourceId: String, stack: String, sinceMs: Long): List<String>
 
     @Transaction
@@ -586,10 +655,10 @@ interface ReviewDao {
         ListeningTaskEntity::class, ListeningTaskAssetEntity::class, ListeningAssetPinEntity::class,
         ListeningTaskIdentityEntity::class, ListeningExposureEntity::class, ListeningTaskSyncEntity::class,
         ListeningTaskEncounterEntity::class, ListeningAssessmentEntity::class,
-        ReviewStateEntity::class, ReviewLogEntity::class, StudySessionEntity::class, SyncMetaEntity::class,
+        ReviewStateEntity::class, ReviewLogEntity::class, JlptTransitionCheckEntity::class, StudySessionEntity::class, SyncMetaEntity::class,
         AcceptedSourceEntity::class,
     ],
-    version = 20,
+    version = 21,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -598,6 +667,40 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun listening(): ListeningDao
     abstract fun listeningTasks(): ListeningTaskDao
     abstract fun sourceAcceptance(): SourceAcceptanceDao
+}
+
+val MIGRATION_20_21 = object : androidx.room.migration.Migration(20, 21) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE review_log ADD COLUMN previousReadingStarted INTEGER")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS jlpt_transition_checks (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "sourceId TEXT NOT NULL, triggerKanji TEXT NOT NULL, kanji TEXT NOT NULL, mode TEXT NOT NULL, " +
+                "reading TEXT NOT NULL, dueMs INTEGER NOT NULL, originalDueMs INTEGER NOT NULL, " +
+                "completedAtMs INTEGER, cancelledAtMs INTEGER)",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_jlpt_transition_checks_sourceId_dueMs ON jlpt_transition_checks (sourceId, dueMs)")
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_jlpt_transition_checks_sourceId_kanji_mode_reading " +
+                "ON jlpt_transition_checks (sourceId, kanji, mode, reading)",
+        )
+        db.execSQL(
+            "INSERT INTO review_state (sourceId, stack, kanji, mode, phase, stability, difficulty, dueMs, lastReviewMs, reps, lapses, reading) " +
+                "SELECT s.sourceId, 'kanji-jlpt', s.kanji, s.mode, s.phase, s.stability, s.difficulty, s.dueMs, s.lastReviewMs, s.reps, s.lapses, s.reading " +
+                "FROM review_state s WHERE s.stack IN ('jlpt-n5', 'jlpt-n4', 'jlpt-n3', 'jlpt-n2', 'jlpt-n1') " +
+                "AND s.mode IN ('Quiz', 'Draw', 'KanjiOn', 'KanjiKun') AND NOT EXISTS (" +
+                "SELECT 1 FROM review_state t WHERE t.sourceId = s.sourceId AND t.kanji = s.kanji AND t.mode = s.mode AND t.reading = s.reading " +
+                "AND t.stack IN ('jlpt-n5', 'jlpt-n4', 'jlpt-n3', 'jlpt-n2', 'jlpt-n1') AND (" +
+                "COALESCE(t.lastReviewMs, -1) > COALESCE(s.lastReviewMs, -1) OR " +
+                "(COALESCE(t.lastReviewMs, -1) = COALESCE(s.lastReviewMs, -1) AND (" +
+                "(CASE WHEN t.phase = 'New' THEN 0 ELSE 1 END) > (CASE WHEN s.phase = 'New' THEN 0 ELSE 1 END) OR " +
+                "((CASE WHEN t.phase = 'New' THEN 0 ELSE 1 END) = (CASE WHEN s.phase = 'New' THEN 0 ELSE 1 END) AND " +
+                "(t.reps > s.reps OR (t.reps = s.reps AND t.stack < s.stack)))))))",
+        )
+        db.execSQL(
+            "DELETE FROM review_state WHERE stack IN ('jlpt-n5', 'jlpt-n4', 'jlpt-n3', 'jlpt-n2', 'jlpt-n1') " +
+                "AND mode IN ('Quiz', 'Draw', 'KanjiOn', 'KanjiKun')",
+        )
+    }
 }
 
 val MIGRATION_19_20 = object : androidx.room.migration.Migration(19, 20) {

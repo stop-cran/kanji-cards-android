@@ -18,6 +18,7 @@ data class QueueItem(val kanji: String, val state: SrsState, val isNew: Boolean)
  * New cards are drawn at random from the unseen pool and mixed into the due cards.
  */
 object QueueBuilder {
+    @Suppress("LongParameterList")
     fun build(
         allKanji: List<String>,
         states: Map<String, SrsState>,
@@ -26,13 +27,14 @@ object QueueBuilder {
         limit: Int = Int.MAX_VALUE,
         noise: Double = DEFAULT_NOISE,
         rnd: Random = Random.Default,
+        newEligible: Set<String>? = null,
         urgencyFactor: (String) -> Double = { 1.0 },
     ): List<QueueItem> {
         val due = allKanji.mapNotNull { k ->
             val s = states[k] ?: return@mapNotNull null
             if (s.phase != CardPhase.New && !s.due.isAfter(now)) QueueItem(k, s, false) else null
         }.let { byUrgency(it, now, noise, rnd, urgencyFactor) }
-        val fresh = allKanji.filter { states[it]?.phase.let { p -> p == null || p == CardPhase.New } }
+        val fresh = allKanji.filter { (newEligible == null || it in newEligible) && states[it]?.phase.let { p -> p == null || p == CardPhase.New } }
             .let { if (noise > 0) it.shuffled(rnd) else it }
             .take(maxOf(0, newCardsRemainingToday))
             .map { QueueItem(it, states[it] ?: SrsState(), true) }
@@ -40,6 +42,7 @@ object QueueBuilder {
     }
 
     /** Extra practice when nothing is due: overdue, then unseen, then the soonest-due cards. Early reviews simply go through FSRS. */
+    @Suppress("LongParameterList")
     fun extra(
         allKanji: List<String>,
         states: Map<String, SrsState>,
@@ -47,10 +50,15 @@ object QueueBuilder {
         limit: Int = 10,
         noise: Double = DEFAULT_NOISE,
         rnd: Random = Random.Default,
+        newEligible: Set<String>? = null,
+        newCardsLimit: Int = Int.MAX_VALUE,
     ): List<QueueItem> {
         val seen = allKanji.mapNotNull { k -> states[k]?.takeIf { it.phase != CardPhase.New }?.let { k to it } }
+        val seenIds = seen.mapTo(HashSet()) { it.first }
         val overdue = byUrgency(seen.filter { !it.second.due.isAfter(now) }.map { QueueItem(it.first, it.second, false) }, now, noise, rnd)
-        val fresh = allKanji.filter { k -> seen.none { it.first == k } }.let { if (noise > 0) it.shuffled(rnd) else it }
+        val fresh = allKanji.filter { k -> (newEligible == null || k in newEligible) && k !in seenIds }
+            .let { if (noise > 0) it.shuffled(rnd) else it }
+            .take(maxOf(0, newCardsLimit))
             .map { QueueItem(it, states[it] ?: SrsState(), true) }
         val upcoming = byUrgency(seen.filter { it.second.due.isAfter(now) }.map { QueueItem(it.first, it.second, false) }, now, noise, rnd)
         return (overdue + fresh + upcoming).take(limit)

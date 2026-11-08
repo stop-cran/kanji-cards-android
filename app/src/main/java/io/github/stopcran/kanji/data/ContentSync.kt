@@ -506,6 +506,7 @@ class ContentSync(
         val meta = parsed.toSyncMeta(source.id)
         val tasks = db.importListeningTasks(parsed, source, head)
         db.content().replaceContent(source.id, rows, meta.copy(problems = meta.problems + tasks.problems.size))
+        db.cancelUnavailableTransitionChecks(source.id, System.currentTimeMillis())
         db.listening().pruneAudio(source.id)
         if (!isCurrent()) throw StaleSourceCandidateException()
         accepted?.let { db.sourceAcceptance().put(it) }

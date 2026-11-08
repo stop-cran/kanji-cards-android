@@ -158,6 +158,47 @@ class GrammarAnalysisTest(unittest.TestCase):
                 self.read(bundle)
             bundle[name] = original
 
+    def test_v7_requires_transition_checks_without_counting_or_disclosing_them(self):
+        bundle = session_fixture()
+        expected = self.read(bundle)
+        expected["export_format_version"] = 7
+        bundle["export_manifest.json"]["formatVersion"] = 7
+        for name in ("listening_encounters.json", "listening_task_encounters.json",
+                     "listening_assessments.json", "listening_exposures.json"):
+            bundle[name] = []
+        bundle["jlpt_transition_checks.json"] = [{"kanji": "PRIVATE_TRANSITION"}]
+        self.assertEqual(expected, self.read(bundle))
+        self.assertNotIn("PRIVATE_TRANSITION", json.dumps(self.read(bundle)))
+        bundle["jlpt_transition_checks.json"] = {}
+        with self.assertRaises(ExportError):
+            self.read(bundle)
+        bundle.pop("jlpt_transition_checks.json")
+        with self.assertRaises(ExportError):
+            self.read(bundle)
+        bundle["jlpt_transition_checks.json"] = []
+        bundle["export_manifest.json"]["formatVersion"] = 6
+        with self.assertRaises(ExportError):
+            self.read(bundle)
+
+    def test_v7_shared_kanji_reviews_link_to_the_selected_level_session(self):
+        bundle = session_fixture()
+        bundle["export_manifest.json"]["formatVersion"] = 7
+        for name in ("listening_encounters.json", "listening_task_encounters.json",
+                     "listening_assessments.json", "listening_exposures.json", "jlpt_transition_checks.json"):
+            bundle[name] = []
+        bundle["grammar_responses.json"] = []
+        bundle["study_sessions.json"] = [
+            dict(id="kanji", sourceId="owner/repo", stack="jlpt-n4", mode="Quiz", extra=False,
+                 startedAtMs=50, endedAtMs=300, endReason="completed", answered=1, correct=1),
+        ]
+        bundle["review_log.json"] = [
+            dict(id=1, sourceId="owner/repo", stack="kanji-jlpt", kanji="x", mode="Quiz",
+                 reading="", grade=3, atMs=100, sessionId="kanji"),
+        ]
+        report = self.read(bundle)
+        self.assertEqual(1, report["canonical_review_count"])
+        self.assertEqual("no_recorded_grammar_reviews", report["grammar_evidence"])
+
     def test_v4_choice_snapshots_do_not_duplicate_events_or_disclose_option_text(self):
         bundle = session_fixture()
         expected = self.read(bundle)

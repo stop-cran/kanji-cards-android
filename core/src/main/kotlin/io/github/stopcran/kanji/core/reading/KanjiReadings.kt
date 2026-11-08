@@ -146,12 +146,15 @@ object KanjiReadingQueue {
     }
 
     /** "Practice more": overdue, unseen and upcoming cards of both kinds, [limit] in total. */
+    @Suppress("LongParameterList")
     fun extraQueue(
         cards: List<ReadingCard>, states: Map<ReadingKind, Map<String, SrsState>>, unlocked: Set<String>, now: Instant, limit: Int = EXTRA_LIMIT,
+        newEligible: Set<String>? = null,
     ): List<ReadingItem> {
         val rnd = Random.Default
         val lists = ReadingKind.entries.map { kind ->
-            val ids = cards.flatMap { eligible(it, kind, states[kind].orEmpty(), it.kanji in unlocked) }.map { it.id }
+            val ids = cards.flatMap { eligible(it, kind, states[kind].orEmpty(), it.kanji in unlocked) }
+                .filter { !it.isNew || newEligible == null || it.kanji in newEligible }.map { it.id }
             QueueBuilder.extra(ids, states[kind].orEmpty(), now, limit, rnd = rnd).map {
                 ReadingItem(ReadingId.kanji(it.kanji), kind, ReadingId.key(it.kanji), it.isNew)
             }
@@ -159,6 +162,7 @@ object KanjiReadingQueue {
         return interleave(merge(lists, rnd, true).take(limit))
     }
 
+    @Suppress("LongParameterList")
     fun build(
         cards: List<ReadingCard>,
         states: Map<ReadingKind, Map<String, SrsState>>,
@@ -169,10 +173,11 @@ object KanjiReadingQueue {
         extra: Boolean = false,
         noise: Double = QueueBuilder.DEFAULT_NOISE,
         rnd: Random = Random.Default,
+        newEligible: Set<String>? = null,
     ): List<ReadingItem> {
         val kinds = ReadingKind.entries
         val shuffle = noise > 0
-        if (extra) return extraQueue(cards, states, unlocked, now)
+        if (extra) return extraQueue(cards, states, unlocked, now, newEligible = newEligible)
         fun eligible(kind: ReadingKind) = cards.flatMap { eligible(it, kind, states[kind].orEmpty(), it.kanji in unlocked) }
         val due = rankDue(
             kinds.flatMap { kind ->
@@ -181,7 +186,8 @@ object KanjiReadingQueue {
             },
             now, noise, rnd,
         )
-        val candidates = kinds.flatMap { kind -> eligible(kind).filter { it.isNew } }.let { if (shuffle) it.shuffled(rnd) else it }
+        val candidates = kinds.flatMap { kind -> eligible(kind).filter { it.isNew && (newEligible == null || it.kanji in newEligible) } }
+            .let { if (shuffle) it.shuffled(rnd) else it }
         val fresh = candidates.take(maxOf(0, dailyNew - introducedToday))
         return interleave(merge(listOf(due, fresh), rnd, shuffle))
     }

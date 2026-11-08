@@ -5,6 +5,7 @@ import io.github.stopcran.kanji.core.reading.ReadingCard
 import io.github.stopcran.kanji.core.reading.ReadingItem
 import io.github.stopcran.kanji.core.reading.ReadingKind
 import io.github.stopcran.kanji.core.srs.SrsState
+import io.github.stopcran.kanji.core.srs.Stacks
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -33,18 +34,20 @@ suspend fun AppDatabase.readingData(settings: Settings, kanji: List<KanjiEntity>
     val now = request.now
     val extra = request.extra
     val cards = kanji.map { it.toReadingCard() }
-    val states = ReadingKind.entries.associateWith { kind -> reviews().states(sourceId, stack, kind.mode.name).toReadingStates() }
-    val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    val introducedToday = reviews().readingCardsIntroducedSince(sourceId, stack, startOfDay)
+    val stateStack = Stacks.stateId(stack)
+    val states = ReadingKind.entries.associateWith { kind -> reviews().states(sourceId, stateStack, kind.mode.name).toReadingStates() }
+    val startOfDay = now.atZone(ZoneId.systemDefault()).toLocalDate().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    val introducedToday = reviews().readingCardsIntroducedSince(sourceId, stateStack, startOfDay)
+    val newEligible = kanji.newKanjiInStack(stack)
     val items = if (extra) {
-        KanjiReadingQueue.extraQueue(cards, states, meaningLearned(settings, sourceId, stack), now, request.extraLimit)
+        KanjiReadingQueue.extraQueue(cards, states, meaningLearned(settings, sourceId, stack), now, request.extraLimit, newEligible)
     } else {
         KanjiReadingQueue.build(
             cards, states,
             unlocked = meaningLearned(settings, sourceId, stack),
             introducedToday = introducedToday,
             // The queue subtracts the reading cards already started today; the shared allowance has already accounted for them.
-            dailyNew = newRemaining + introducedToday, now = now,
+            dailyNew = newRemaining + introducedToday, now = now, newEligible = newEligible,
         )
     }
     return ReadingData(cards, states, items)

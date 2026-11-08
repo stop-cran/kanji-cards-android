@@ -20,6 +20,8 @@ import io.github.stopcran.kanji.core.kana.KANA_SOURCE_ID
 import io.github.stopcran.kanji.core.grammar.GrammarScope
 import io.github.stopcran.kanji.core.listening.ListeningScope
 import io.github.stopcran.kanji.core.listening.ListeningTaskContent
+import io.github.stopcran.kanji.core.srs.KanjiTransitionChecks
+import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.approvedTask
 import io.github.stopcran.kanji.core.taskTone
 import kotlinx.coroutines.flow.first
@@ -553,6 +555,55 @@ class KanjiReadingSyncTest {
         "kanji/日.md" to kanjiMd("日", "sun").replace("distractors:", "$declaration\ndistractors:").toByteArray(),
         "kanji/月.md" to kanjiMd("月", "moon").toByteArray(),
     ))
+
+    @Test
+    fun removingAnAskableReadingCancelsItsTransitionAndRestoresItsNaturalDueDate() = runBlocking {
+        fun snapshot(removeReading: Boolean): ByteArray {
+            val rest = kanjiMd("休", "rest")
+                .replace("onyomi: [ニチ]", "onyomi: [キュウ]")
+                .replace("distractors:", "${if (removeReading) "quizOnyomi: []\n" else ""}distractors:")
+            val body = kanjiMd("体", "body")
+                .replace("jlpt: 5", "jlpt: 4")
+                .replace("jlpt-n5", "jlpt-n4")
+                .replace("onyomi: [ニチ]", "onyomi: [タイ]")
+            return archiveFiles("v1", mapOf(
+                "kanji/休.md" to rest.toByteArray(), "kanji/体.md" to body.toByteArray(),
+                "kanji/白.md" to kanjiMd("白", "white").replace("onyomi: [ニチ]", "onyomi: [ハク]").toByteArray(),
+            ))
+        }
+        http.archiveBytes = snapshot(false)
+        assertTrue(sync.sync(source) is SyncResult.Updated)
+        val now = System.currentTimeMillis()
+        val naturalDue = now + 90 * KanjiTransitionChecks.DAY_MS
+        val target = ReviewStateEntity(source.id, Stacks.JLPT_STATE, "休", "KanjiOn", "Review", 30.0, 4.0,
+            naturalDue, now - KanjiTransitionChecks.DAY_MS, 8, 1, "きゅう")
+        db.reviews().putState(target)
+        val trigger = ReviewStateEntity(source.id, Stacks.JLPT_STATE, "体", "KanjiOn", "Review", 1.0, 5.0,
+            now + KanjiTransitionChecks.DAY_MS, now, 1, 0, "たい")
+        db.recordKanjiReview(trigger, ReviewLogEntity(0, source.id, Stacks.JLPT_STATE, "体", "KanjiOn", 3, now, "たい"))
+        val reserved = db.reviews().allTransitionChecks().single()
+        assertEquals(reserved.dueMs, db.reviews().states(source.id, Stacks.JLPT_STATE, "KanjiOn").single { it.kanji == "休" }.dueMs)
+
+        http.archiveBytes = snapshot(true)
+        db.openHelper.writableDatabase.execSQL(
+            "CREATE TRIGGER reject_transition_cancel BEFORE UPDATE OF cancelledAtMs ON jlpt_transition_checks " +
+                "BEGIN SELECT RAISE(ABORT, 'fixture failure'); END",
+        )
+        try {
+            assertTrue(sync.sync(source, force = true) is SyncResult.Failed)
+            assertEquals(reserved, db.reviews().allTransitionChecks().single())
+            assertEquals(reserved.dueMs, db.reviews().states(source.id, Stacks.JLPT_STATE, "KanjiOn").single { it.kanji == "休" }.dueMs)
+            assertNull(db.content().kanji(source.id).single { it.kanji == "休" }.quizOnyomi)
+        } finally {
+            db.openHelper.writableDatabase.execSQL("DROP TRIGGER reject_transition_cancel")
+        }
+        assertTrue(sync.sync(source, force = true) is SyncResult.Updated)
+        val cancelled = db.reviews().allTransitionChecks().single()
+        assertNotNull(cancelled.cancelledAtMs)
+        assertNull(cancelled.completedAtMs)
+        assertEquals(target, db.reviews().states(source.id, Stacks.JLPT_STATE, "KanjiOn").single { it.kanji == "休" })
+        assertEquals(1, db.reviews().allLog().size)
+    }
 
     @Test
     fun meaningEpochRefreshesSameHeadVersionAndThrottledLaunchThroughFullAndSlimMappings() = runBlocking {

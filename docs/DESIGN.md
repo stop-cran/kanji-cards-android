@@ -179,8 +179,27 @@ Android/native pilot acceptance is a separate gate; archive parsing and resource
 
 - Every recorded review goes through `Fsrs.review`; there is one `SrsState` per **(sourceId, stack, item, mode, reading)**. The key is never a title or
   position. `sourceId` is the lower-case `owner/repo`, so switching to a fork keeps separate progress.
-- **Stacks have independent state** on purpose: a kanji learned in a small set may be confused in a larger one and must be re-learned there.
-  Kanji stacks are tag filters (`all`, `starter`, `jlpt-n5`...). Word stacks are `words-n5`, `words-n4`, `words-all` (cumulative by level) and the tag stack `words-onomatopoeia`.
+- **Cumulative JLPT kanji (#135):** N5 through the selected level form the review and answer-option range; only cards of the selected
+  level may be introduced, in Meaning, Drawing and each reading kind. This applies to normal and extra practice. A previously started
+  lower-level mode/reading keeps its schedule, but an unseen lower-level mode/reading is not introduced. Higher levels are excluded.
+  The JLPT selectors share the internal `kanji-jlpt` state identity, separately by source, mode and reading. `all` and `starter` retain
+  their own schedules. Word stacks remain `words-n5`, `words-n4`, `words-all` and the tag stack `words-onomatopoeia`, with independent state.
+  Room v21 moves old JLPT kanji states into the shared identity, choosing the most recently reviewed row per source/item/mode/reading;
+  ties prefer a started row, then more repetitions, then stack ID. Review logs and sessions are not rewritten. Unlock and introduction
+  queries logically combine the old JLPT log scopes with the shared scope, without merging unrelated sources or stacks.
+- **Transition checks:** `KanjiTransitionChecks` holds explicit, symmetric look-alike pairs rather than treating every authored answer
+  distractor as a confusion. On a first recorded introduction of a higher-level kanji in a skill (for readings, the first reading of
+  each kind), at most one already-started related lower-level card in that same skill can be brought forward. Checks are at least two
+  days after introduction and reserve at most two slots per UTC day across skills, persisted across sessions and restarts. A natural
+  earlier due date or an existing pending check is never duplicated; the target's stability, difficulty, repetitions and lapses are
+  unchanged until it is actually answered. An early answer completes its pending check, while the reserved slot stays counted for its
+  original day. Targets must remain askable in the relevant cumulative pool, including current reading keys/options or drawing strokes.
+  A content replacement cancels unavailable checks in the same transaction, restoring the natural due date only when its reservation
+  still owns the due date; cancelled checks no longer occupy a slot. New review, log, check and due-date change commit together.
+  A miss grades only the tested card. Separately, the existing wrong-option nudge can bring an explicitly mis-picked, already-started
+  card's due date forward to two days from now without changing its score; "I don't know" does not nudge another card.
+  Kanji session writes are ordered across routes, new sessions await pending writes, and shared JLPT reviews apply to the persisted state
+  transactionally rather than overwriting it with an older session snapshot. Historical introductions are not retroactively checked.
 - **Kanji/word modes** include `Quiz`, `Draw`, `WordJpEn`, `WordEnJp`, `WordReading`, `WordType`; these modes have independent state.
   **Grammar** deliberately treats choose/type as presentations of one exercise, not two modes: one state under
   `(sourceId, "grammar", exerciseId, "Grammar", "")`. Construction/relationship IDs are analytical labels, not extra schedules.
@@ -224,7 +243,10 @@ Android/native pilot acceptance is a separate gate; archive parsing and resource
   Feedback uses neutral Next, including tracing (whose memory attempt is deferred), not a prediction about this answer's retry.
   Reinsertion/confirmation rules and the existing recording boundary remain unchanged; feedback/article navigation does not advance.
 - **Pacing** (`core/srs/Pacing.kt`, `data/Pacing.kt`): one shared pool per source, with built-in Kana separate from the selected content repository.
-  Repository modes count distinct stack+item whose first log entry is today (`itemsIntroducedSince`); Kana counts per-mode introductions as below.
+  Repository modes count distinct stack+item whose first log entry is today (`itemsIntroducedSince`), combining legacy and shared JLPT
+  kanji scopes before counting; Kana counts per-mode introductions as below. New reading logs record whether that individual reading
+  was already started, so a first typed review of a migrated per-kind state does not consume another introduction. Historical typed
+  logs lack that provenance and retain the prior counting behavior; their origin cannot be reconstructed reliably from blank older logs.
   Allowance = base (`dailyNewCards`) x weekday level (Full 1, Light 0.5, Rest 0; default Sat/Sun
   Light, editable in Settings) x backlog factor. Backlog factor is 1 while due reviews <= capacity and falls linearly to 0 at twice capacity;
   capacity = median reviews on active days of the last 14 days, at least 40. Reviews are never capped; the home page explains a reduced
@@ -297,7 +319,13 @@ Android/native pilot acceptance is a separate gate; archive parsing and resource
   Home previews are read-only;
   session reservations and revision checks prevent stale answers from spending a
   newer activation's quota. Extra practice bypasses focus/prerequisites but not unseen-item level scope.
-- **Feedback and relearning:** every question offers "I don't know" (graded Again, no wrong pick; all three quizzes). A wrong pick says what it was ("that is 月", the word, or which kanji the reading belongs to) and the article is collapsed behind "Read the article" after a miss (open after a correct answer). A failed card is relearned in-session by `Relearn`: re-asked 3 cards later (recorded) and, if right, once more 7 cards later; that confirmation is practice only and is recorded only when wrong. Drawing with stroke mistakes (graded Hard) gets one re-ask; not-recognised is Again and re-asked. A repeat is never asked straight after itself: when no other card is queued the repeat is dropped (the answer is still recorded and FSRS schedules it), so a one-card "Practice more" session ends instead of looping. "Practice more" in Meaning, Drawing and Readings is padded to a minimum size (`Settings.practiceMinimum()` = max(10, batch size)) by `core/srs/PracticePadding`: the shortfall is filled with the weakest (lowest FSRS retrievability) already-started cards of the same mode from the source's other stacks (never from `all`, never kanji of the current stack, never a New card), with a bounded boost for kanji sharing a radical or reading with the session ("confusable"). Gates are never loosened: no card is introduced. A borrowed card is answered and recorded in its owning stack (`owners` map in the view models); if several stacks hold it the lowest retrievability, then stack id, wins. The home "Practice more" button also appears when only padding candidates exist. Normal due sessions are not padded. The word quizzes (all four directions) pad the same way from the other word stacks: stacks keep separate states for a word, so a word learned in N5 and still unstarted in N4 qualifies (it must belong to the current stack for that direction, have no state here, and be started in another stack); similarity is a shared kanji. When a word session ends and its own "Practice more" would hold fewer than `PracticeSuggestion.WORTHWHILE` (5) cards, the button instead offers the best-stocked other direction ("Practice more: Japanese → English"); gated directions (Type, EN→JP, Reading) are short until their gate direction has been learned.
+- **Feedback and relearning:** every question offers "I don't know" (graded Again, no wrong pick; all three quizzes). A wrong pick says what it was ("that is 月", the word, or which kanji the reading belongs to) and the article is collapsed behind "Read the article" after a miss (open after a correct answer). A failed card is relearned in-session by `Relearn`: re-asked 3 cards later (recorded) and, if right, once more 7 cards later; that confirmation is practice only and is recorded only when wrong. Drawing with stroke mistakes (graded Hard) gets one re-ask; not-recognised is Again and re-asked. A repeat is never asked straight after itself: when no other card is queued the repeat is dropped (the answer is still recorded and FSRS schedules it), so a one-card "Practice more" session ends instead of looping.
+- **Extra-practice padding:** for non-JLPT kanji stacks, `core/srs/PracticePadding` fills a short session to `Settings.practiceMinimum()`
+  (max(10, batch size)) with weak, already-started cards of the same mode from other stacks (never from `all`, the current stack or New),
+  with a bounded boost for shared radicals/readings. Borrowed cards are recorded in their owning stack; the weakest state then stack ID
+  breaks duplicate ownership ties. JLPT sessions do not borrow from other stacks or higher levels: their own cumulative pool already
+  contains eligible started reviews. Normal due sessions are not padded. Word quizzes retain their existing other-word-stack padding and
+  shared-kanji similarity; when a word direction's extra practice is short, the button can offer another worthwhile learned direction.
 - **Tracing before drawing:** the first time a kanji with no Draw state is asked (setting "Trace new kanji first", on by default) the pad shows a light numbered reference to trace (`DrawGate.shouldTrace`). That attempt is practice only: checked and shown, but not graded, logged, saved as a diagnostic drawing or counted, and it creates no FSRS state. "Next" re-queues the kanji 3 cards later (`QuizSession.defer`) and that attempt is from memory and graded. Nothing is persisted, so an unfinished session traces again.
   Kana and Kanji tracing questions share a localized notice before the canvas: ungraded practice, followed by a later memory attempt.
   It is absent from graded recall and does not promise the next question or a fixed queue distance (#98).
@@ -307,7 +335,7 @@ Android/native pilot acceptance is a separate gate; archive parsing and resource
   asked. Showing it is not a review and records nothing; it is skipped for cards already started and not repeated after an "Again". **Drawing is gated behind
   recognition** (`DrawGate`): a kanji enters Draw once its meaning was answered well on two days (the readings' unlock) or was already drawn; home counts, the session
   and reminders all use the same predicate.
-- **Unlock rule and focus batch (settings):** `data/Unlock.kt` is the single provider of "meaning learned" (`meaningLearned(settings, …)`, over `ReviewDao.unlockLog`), used by Draw, readings, home and reminders. `UnlockRule.NextDay` (default) = two answers above Again on two local dates. `SpacedSameDay` additionally accepts two answers above Again after the latest Again that are ≥ 10 min apart with ≥ 10 other answers (any mode) in between (relaxation: next-day still unlocks). Practice-only repeats are never logged so never count. The optional **focus batch** (`core/focus/FocusBatch`, off by default, size 5–30) limits only first meaning introductions: a kanji is "in learning" when it was first answered after the per-stack cutoff (`Settings.focusSince`, set lazily, cleared when switched off) and any required card (meaning, Draw if stroke data exists, askable readings) is not yet in Review. New meaning cards = min(daily allowance, capacity); started kanji, due cards, unlocked Draw/readings and words are never blocked. With the default next-day unlock a full batch deliberately blocks new intake until its members unlock and finish. No index was added on the review log (per-stack logs are small).
+- **Unlock rule and focus batch (settings):** `data/Unlock.kt` is the single provider of "meaning learned" (`meaningLearned(settings, …)`, over `ReviewDao.unlockLog`), used by Draw, readings, home and reminders. `UnlockRule.NextDay` (default) = two answers above Again on two local dates. `SpacedSameDay` additionally accepts two answers above Again after the latest Again that are ≥ 10 min apart with ≥ 10 other answers (any mode) in between (relaxation: next-day still unlocks). Practice-only repeats are never logged so never count. The optional **focus batch** (`core/focus/FocusBatch`, off by default, size 5–30) limits only first meaning introductions: a kanji is "in learning" when it was first answered after the scope cutoff (`Settings.focusSince`, set lazily, cleared when switched off) and any required card is not yet in Review. The shared JLPT cutoff adopts the earliest existing JLPT cutoff on upgrade. While a higher level is selected, lower-level members count only their already-started skills; otherwise an unintroducible lower-level Draw/reading could permanently block new intake. Switching back restores those level's full requirements. New meaning cards = min(daily allowance, capacity); due cards and words are never blocked.
 
 - Meaning quiz options are titles, unique by title, so exactly one answer is correct. Preference for wrong options: the card's own
   `distractors`, then most shared tags, then random.
@@ -609,9 +637,9 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   (practice and diagnostics) share horizontally scrollable filter chips. Show only offered choices, ordered N5 to N1,
   then All, then named thematic/unclassified choices. Chip labels omit "JLPT", counts and cumulative suffixes.
   Counts live outside the chips; Kanji reports the selected stack's count. Scope explanations remain outside the row:
-  Kanji matches only the selected tag, Words/Listening N4 and counters N4/N3 include easier levels, Grammar filters cumulative
-  new material separately from exact-level browsing, and diagnostics select an exact level. IDs, saved selections,
-  fallback behavior, unlock rules, membership and review schedules are unchanged.
+  Kanji reviews/options include easier levels while new kanji skills are selected-level only. Words/Listening N4 and counters N4/N3
+  include easier levels, Grammar filters cumulative new material separately from exact-level browsing, and diagnostics select an exact
+  level. The JLPT kanji state migration does not alter the other selectors' membership or schedules.
 - Word stacks are cumulative in *membership* (`words-n4` includes N5 words) but keyed independently in SRS state, so switching from `words-n5`
   to `words-n4` starts those words afresh. Never share state across stacks.
 - **Onomatopoeia stack** (`words-onomatopoeia`, a `WordStack` with `tag = "onomatopoeia"`): membership is the word's tag alone, independent of
@@ -659,7 +687,7 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   An unlabelled word with no kanji or an unknown kanji level appears only in "All words". Shared `inWordStack` filtering keeps home counts,
   advancement, session queues and reminders consistent; changing level changes membership, not identity or stored SRS state.
 - Word scope defaults to N5. N4 (and All) appear only after the user unlocks them; the unlock is **offered, never forced** (`Advancement`). The Words page always names the active deck, and Settings has a switch that sets the same `n4Unlocked` flag manually (turning it off falls back to N5).
-  It evaluates the N5 kanji of the *currently selected kanji stack* (quiz and draw state of that stack) and, when the `words-n5` stack is
+  It evaluates the N5 kanji in the currently selected kanji scope (using the shared JLPT quiz and draw states for a JLPT selection) and, when the `words-n5` stack is
   selected, the N5 words in every direction (the reading quiz counts only N5 words with kanji). An item is solid at stability of at least 7 days and recall of at least 85%; the offer needs 85%
   solid overall, 60% in each non-empty mode (modes with no items, e.g. kanji without stroke data, are ignored) and at least 20 item-mode
   entries. Dismissal hides the offer for 7 days.
@@ -856,7 +884,7 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
 3. A hash mismatch or malformed manifest file skips that file only; an unsafe zip entry or limit violation aborts the whole sync.
 4. Each quiz grades one designated target. Meaning-quiz word options enforce exact title/form deduplication and curated exclusions; these
    checks do not guarantee semantic uniqueness for uncurated meanings. Reading options have distinct reading keys.
-5. Stacks, modes, word directions and reading kinds have independent SRS state; Grammar choose/type are two presentations of one mode and deliberately share exercise state.
+5. JLPT kanji levels share state; other stacks, modes, word directions and reading kinds remain independent. Grammar choose/type are two presentations of one mode and deliberately share exercise state.
 6. Grading uses raw/regularised drawn points and the unmodified reference; display jitter and brush smoothing never leak into grading.
 7. No network use beyond: GitHub (`api.github.com` head lookup, `codeload.github.com` download), the one-off ML Kit model download, and links the
    user taps (any `https://` link opens the browser; repo links must be exactly `kanji|words|articles/<file>.md`).

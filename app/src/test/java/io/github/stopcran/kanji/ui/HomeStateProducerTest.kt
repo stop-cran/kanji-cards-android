@@ -1,6 +1,8 @@
 package io.github.stopcran.kanji.ui
 
 import io.github.stopcran.kanji.core.content.RepoSource
+import io.github.stopcran.kanji.core.home.ModeState
+import io.github.stopcran.kanji.core.reading.ReadingId
 import io.github.stopcran.kanji.core.srs.NewAllowance
 import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.SrsState
@@ -129,6 +131,47 @@ class HomeStateProducerTest {
         assertTrue(events.nextReady().data.n4Offer)
         assertEquals(listOf(now to zone, now.plusSeconds(60) to zone), times)
         job.cancel()
+    }
+
+    @Test fun cumulativeKanjiCountsKeepNewCardsOnTheSelectedLevelInAllThreeModes() {
+        fun card(id: String, level: Int, on: String, kun: String, position: Int) =
+            KanjiEntity(source.id, id, id, level, "jlpt-n$level", 4, null, null, on, kun, "", "", "{}", position)
+        val cards = listOf(
+            card("白", 5, "ハク", "しろ", 0), card("休", 5, "キュウ", "やす.む", 1),
+            card("自", 4, "ジ", "みずか.ら", 2), card("太", 3, "タイ", "ふと.い", 3),
+        )
+        val due = SrsState(CardPhase.Review, 10.0, 5.0, now.minusSeconds(1), now.minusSeconds(86_400), 3)
+        val states = StudyMode.entries.associateWith { emptyMap<String, SrsState>() }.toMutableMap()
+        states[StudyMode.Quiz] = mapOf("白" to due, "太" to due)
+        states[StudyMode.Draw] = mapOf("白" to due, "太" to due)
+        states[StudyMode.KanjiOn] = mapOf(ReadingId.of("白", "はく") to due, ReadingId.of("太", "たい") to due)
+        val n4 = selection.copy(stackId = "jlpt-n4")
+        val projected = projectHome(snapshot(n4).copy(
+            inventory = HomeInventory(n4, cards, emptyList()), states = states, learned = setOf("休", "自"),
+            allowance = NewAllowance(5, 5, PacingNote.None, 0, 40),
+        ), now)
+        assertEquals(ModeState.Start(1, 1), projected.mode(HomeMode.Meaning))
+        assertEquals(ModeState.Start(1, 1), projected.mode(HomeMode.Drawing))
+        assertEquals(ModeState.Start(1, 2), projected.mode(HomeMode.Readings))
+        assertEquals(setOf("白", "休", "自"), projected.kanji.filter {
+            io.github.stopcran.kanji.core.srs.Stacks.includes(projected.stack, it.tags.split('\u001F'))
+        }.map { it.kanji }.toSet())
+    }
+
+    @Test fun cumulativeHomeDoesNotOfferEmptyExtraPracticeForIneligibleLowerSkills() {
+        val cards = listOf(
+            KanjiEntity(source.id, "休", "rest", 5, "jlpt-n5", 4, null, null, "キュウ", "やす.む", "", "", "{}", 0),
+            KanjiEntity(source.id, "白", "white", 5, "jlpt-n5", 4, null, null, "ハク", "しろ", "", "", "{}", 1),
+            KanjiEntity(source.id, "体", "body", 4, "jlpt-n4", 4, null, null, "タイ", "からだ", "", "", "{}", 2),
+        )
+        val n4 = selection.copy(stackId = "jlpt-n4")
+        val projected = projectHome(snapshot(n4).copy(
+            inventory = HomeInventory(n4, cards, emptyList()), learned = setOf("休"),
+            focus = io.github.stopcran.kanji.data.FocusStatus(size = 5, occupancy = 5),
+        ), now)
+        assertEquals(ModeState.Locked("Kanji focus full"), projected.mode(HomeMode.Meaning))
+        assertEquals(ModeState.Locked(UnlockRule.NextDay.hint), projected.mode(HomeMode.Drawing))
+        assertEquals(ModeState.Locked(UnlockRule.NextDay.hint), projected.mode(HomeMode.Readings))
     }
 
     private fun producer(repository: HomeRepository, activity: Flow<Map<RepoSource, SyncActivity>> = flowOf(emptyMap())) =

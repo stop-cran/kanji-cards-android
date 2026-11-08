@@ -300,10 +300,15 @@ class Settings(context: Context) {
         _focusSize.value = v
     }
 
-    /** Start of the focus batch for one source and stack, set the first time that scope is used while the batch is on. */
+    /** A shared JLPT batch adopts the earliest existing level cutoff on upgrade. */
     fun focusSince(sourceId: String, stack: String, nowMs: Long): Long {
-        val key = "$FOCUS_SINCE$sourceId|$stack"
-        return if (prefs.contains(key)) prefs.getLong(key, nowMs) else nowMs.also { prefs.edit().putLong(key, it).apply() }
+        val scope = Stacks.stateId(stack)
+        val key = "$FOCUS_SINCE$sourceId|$scope"
+        if (prefs.contains(key)) return prefs.getLong(key, nowMs)
+        val previous = if (scope == Stacks.JLPT_STATE) {
+            Stacks.jlpt.map { "$FOCUS_SINCE$sourceId|${it.id}" }.filter { prefs.contains(it) }.map { prefs.getLong(it, nowMs) }.minOrNull()
+        } else null
+        return (previous ?: nowMs).also { prefs.edit().putLong(key, it).apply() }
     }
 
     private val _stack = MutableStateFlow(prefs.getString(KEY_STACK, Stacks.ALL) ?: Stacks.ALL)

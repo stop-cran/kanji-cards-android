@@ -23,6 +23,7 @@ import io.github.stopcran.kanji.data.KanjiEntity
 import io.github.stopcran.kanji.data.HomeSnapshot
 import io.github.stopcran.kanji.data.forDirection
 import io.github.stopcran.kanji.data.inWordStack
+import io.github.stopcran.kanji.data.newKanjiInStack
 import io.github.stopcran.kanji.data.toReadingCard
 import java.time.Instant
 
@@ -107,7 +108,7 @@ private class Unlocks(
 
 private class Extras(
     val allowance: NewAllowance, val unlocks: Unlocks,
-    val focus: io.github.stopcran.kanji.data.FocusStatus?,
+    val focus: io.github.stopcran.kanji.data.FocusStatus?, val newEligible: Set<String>?,
 )
 
 /** All seven scheduling-state maps, each non-null; exists so loading is decided once instead of with !! at each use. */
@@ -157,6 +158,7 @@ internal fun projectHome(snapshot: HomeSnapshot, now: Instant): HomeData {
     val extras = Extras(
         snapshot.allowance,
         Unlocks(snapshot.learned, selection.study.unlockRule, snapshot.introducedReadings, snapshot.padModes, states), snapshot.focus,
+        inventory.inStack.newKanjiInStack(inventory.stack.id),
     )
     val projection = computeModes(inventory.inStack, inventory.wordsInStack, extras, now, stateSet)
     val n4Offer = shouldOfferN4(
@@ -173,18 +175,37 @@ internal fun projectHome(snapshot: HomeSnapshot, now: Instant): HomeData {
     )
 }
 
+private fun meaningMode(inStack: List<KanjiEntity>, quiz: Map<String, SrsState>, ex: Extras, now: Instant): ModeState {
+    val ids = inStack.map { it.kanji }
+    val newLeft = ex.allowance.remaining
+    val meaningNew = ex.focus?.let { minOf(newLeft, it.capacity) } ?: newLeft
+    val q = QueueBuilder.build(ids, quiz, now, meaningNew, noise = 0.0, newEligible = ex.newEligible)
+    val extra = QueueBuilder.extra(
+        ids, quiz, now, limit = 1, noise = 0.0, newEligible = ex.newEligible,
+        newCardsLimit = ex.focus?.capacity ?: Int.MAX_VALUE,
+    )
+    val reason = if (ex.focus?.capacity == 0) "Kanji focus full"
+        else "Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings."
+    return ModeState.of(
+        inStack.size >= 2, "Needs at least 2 kanji in this stack", q.count { !it.isNew }, q.count { it.isNew },
+        extra.isNotEmpty() || StudyMode.Quiz in ex.unlocks.padModes, reason,
+    )
+}
+
 /** Counts use strict (noise-free) queues so the numbers are stable; sessions build their own randomised queues. */
 private fun computeModes(
     inStack: List<KanjiEntity>, words: List<io.github.stopcran.kanji.data.WordEntity>, ex: Extras, now: Instant, states: StateSet,
 ): HomeModes {
     val (quiz, draw, on, kun, jp, en, rd) = states
     val newLeft = ex.allowance.remaining
+    val newEligible = ex.newEligible
     val readiness = mutableMapOf<WordDirection, WordReadiness>()
     fun plain(
         ids: List<String>, states: Map<String, SrsState>, min: Int, what: String, locked: String = "", pool: Int = ids.size, pad: Boolean = false,
     ): ModeState {
-        val q = QueueBuilder.build(ids, states, now, newLeft, noise = 0.0)
-        return ModeState.of(pool >= min, "Needs at least $min $what", q.count { !it.isNew }, q.count { it.isNew }, ids.size >= min || pad, locked)
+        val q = QueueBuilder.build(ids, states, now, newLeft, noise = 0.0, newEligible = newEligible)
+        val extra = QueueBuilder.extra(ids, states, now, limit = 1, noise = 0.0, newEligible = newEligible)
+        return ModeState.of(pool >= min, "Needs at least $min $what", q.count { !it.isNew }, q.count { it.isNew }, extra.isNotEmpty() || pad, locked)
     }
     fun word(d: WordDirection, own: Map<String, SrsState>, other: Map<String, SrsState>, locked: String): ModeState {
         val ids = words.forDirection(d).map { it.word }
@@ -197,16 +218,14 @@ private fun computeModes(
     }
     val cards = inStack.map { it.toReadingCard() }
     val readingStates = mapOf(ReadingKind.On to on, ReadingKind.Kun to kun)
-    fun readings(extra: Boolean) = KanjiReadingQueue.build(cards, readingStates, ex.unlocks.learned, ex.unlocks.introducedReadings, newLeft + ex.unlocks.introducedReadings, now, extra, noise = 0.0)
+    fun readings(extra: Boolean) = KanjiReadingQueue.build(
+        cards, readingStates, ex.unlocks.learned, ex.unlocks.introducedReadings,
+        newLeft + ex.unlocks.introducedReadings, now, extra, noise = 0.0, newEligible = newEligible,
+    )
     val rq = readings(false)
     val locked = ex.unlocks.rule.hint
-    val meaningNew = ex.focus?.let { minOf(newLeft, it.capacity) } ?: newLeft
-    val meaning = run {
-        val q = QueueBuilder.build(inStack.map { it.kanji }, quiz, now, meaningNew, noise = 0.0)
-        ModeState.of(inStack.size >= 2, "Needs at least 2 kanji in this stack", q.count { !it.isNew }, q.count { it.isNew }, inStack.size >= 2, "")
-    }
     val modes = mapOf(
-        HomeMode.Meaning to meaning,
+        HomeMode.Meaning to meaningMode(inStack, quiz, ex, now),
         HomeMode.Drawing to inStack.filter { it.strokesJson != null }.map { it.kanji }.let { strokeIds ->
             plain(
                 DrawGate.eligible(strokeIds, draw, ex.unlocks.learned), draw, 1, "kanji with stroke data", locked,

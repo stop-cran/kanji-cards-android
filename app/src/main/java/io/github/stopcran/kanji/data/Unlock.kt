@@ -1,7 +1,10 @@
 package io.github.stopcran.kanji.data
 
 import io.github.stopcran.kanji.core.focus.FocusBatch
+import io.github.stopcran.kanji.core.reading.ReadingId
 import io.github.stopcran.kanji.core.reading.ReadingKind
+import io.github.stopcran.kanji.core.srs.CardPhase
+import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.srs.StudyMode
 import io.github.stopcran.kanji.core.unlock.MeaningUnlock
 
@@ -10,7 +13,7 @@ import io.github.stopcran.kanji.core.unlock.MeaningUnlock
  * unlock rule applies identically everywhere. Home recomputes when review states change, which are written with the log in one transaction.
  */
 suspend fun AppDatabase.meaningLearned(settings: Settings, sourceId: String, stack: String): Set<String> =
-    MeaningUnlock.learned(reviews().unlockLog(sourceId, stack), settings.unlockRule.value)
+    MeaningUnlock.learned(reviews().unlockLog(sourceId, Stacks.stateId(stack)), settings.unlockRule.value)
 
 /**
  * Stroke data is stored only when it parsed at import (`ContentSync` writes `StrokeData` it decoded), so presence means drawable.
@@ -33,17 +36,26 @@ suspend fun AppDatabase.focusStatus(settings: Settings, sourceId: String, stack:
 }
 
 internal suspend fun AppDatabase.focusStatus(sourceId: String, stack: String, kanji: List<KanjiEntity>, size: Int, since: Long): FocusStatus {
-    val introduced = reviews().meaningIntroducedSince(sourceId, stack, since).toSet()
+    val stateStack = Stacks.stateId(stack)
+    val introduced = reviews().meaningIntroducedSince(sourceId, stateStack, since).toSet()
     if (introduced.isEmpty()) return FocusStatus(size, 0)
     val cards = kanji.map { it.toReadingCard() }
-    val requirements = FocusBatch.requirements(cards.filter { it.kanji in introduced }, kanji.drawableKanji(), cards)
     val reviews = reviews()
-    suspend fun states(mode: StudyMode) = reviews.states(sourceId, stack, mode.name)
+    suspend fun states(mode: StudyMode) = reviews.states(sourceId, stateStack, mode.name)
+    val quiz = states(StudyMode.Quiz).associate { it.kanji to it.toSrs() }
+    val draw = states(StudyMode.Draw).associate { it.kanji to it.toSrs() }
+    val readings = ReadingKind.entries.associateWith { states(it.mode).toReadingStates() }
+    val newEligible = kanji.newKanjiInStack(stack)
+    val requirements = FocusBatch.requirements(cards.filter { it.kanji in introduced }, kanji.drawableKanji(), cards).mapValues { (id, r) ->
+        if (newEligible == null || id in newEligible) r else r.copy(
+            drawable = r.drawable && draw[id]?.phase?.let { it != CardPhase.New } == true,
+            readingKeys = r.readingKeys.mapValues { (kind, keys) ->
+                keys.filter { key -> readings[kind]?.get(ReadingId.of(id, key))?.phase?.let { it != CardPhase.New } == true }
+            },
+        )
+    }
     val inLearning = FocusBatch.inLearning(
-        introduced, requirements,
-        states(StudyMode.Quiz).associate { it.kanji to it.toSrs() },
-        states(StudyMode.Draw).associate { it.kanji to it.toSrs() },
-        ReadingKind.entries.associateWith { states(it.mode).toReadingStates() },
+        introduced, requirements, quiz, draw, readings,
     )
     return FocusStatus(size, inLearning.size)
 }

@@ -21,6 +21,7 @@ import io.github.stopcran.kanji.MainActivity
 import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.srs.QueueBuilder
 import io.github.stopcran.kanji.core.srs.ReminderPolicy
+import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.srs.StudyMode
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.WordQueues
@@ -42,18 +43,20 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
             val zone = ZoneId.systemDefault()
             val now = System.currentTimeMillis()
             val source = app.settings.source.value
-            val stack = app.settings.stack.value
-            val cards = app.db.content().kanjiLite(source.id).inStack(stack)
+            val content = app.db.content().kanjiLite(source.id)
+            val stack = Stacks.find(app.settings.stack.value, content.stacks()).id
+            val cards = content.inStack(stack)
+            val newEligible = cards.newKanjiInStack(stack)
             val newRemaining = app.db.newAllowance(app.settings, source.id, Instant.ofEpochMilli(now)).remaining
             var due = 0
             val learned = app.db.meaningLearned(app.settings, source.id, stack)
             val focus = app.db.focusStatus(app.settings, source.id, stack, cards, now)
             for (mode in listOf(StudyMode.Quiz, StudyMode.Draw)) {
-                val states = app.db.reviews().states(source.id, stack, mode.name).associate { it.kanji to it.toSrs() }
+                val states = app.db.reviews().states(source.id, Stacks.stateId(stack), mode.name).associate { it.kanji to it.toSrs() }
                 val ids = cards.filter { mode == StudyMode.Quiz || it.strokesJson != null }.map { it.kanji }
                     .let { if (mode == StudyMode.Draw) DrawGate.eligible(it, states, learned) else it }
                 val newLeft = if (mode == StudyMode.Quiz) minOf(newRemaining, focus?.capacity ?: newRemaining) else newRemaining
-                due += QueueBuilder.build(ids, states, Instant.ofEpochMilli(now), newLeft).size
+                due += QueueBuilder.build(ids, states, Instant.ofEpochMilli(now), newLeft, newEligible = newEligible).size
             }
             val allWords = app.db.content().words(source.id)
             val wordStack = WordStacks.find(app.settings.wordStack.value, allWords.offeredStacks(app.settings.n4Unlocked.value))

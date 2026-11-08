@@ -24,6 +24,7 @@ import io.github.stopcran.kanji.data.MIGRATION_16_17
 import io.github.stopcran.kanji.data.MIGRATION_17_18
 import io.github.stopcran.kanji.data.MIGRATION_18_19
 import io.github.stopcran.kanji.data.MIGRATION_19_20
+import io.github.stopcran.kanji.data.MIGRATION_20_21
 import io.github.stopcran.kanji.data.rebuildGrammarReadiness
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -37,11 +38,13 @@ import io.github.stopcran.kanji.data.Settings
 import io.github.stopcran.kanji.data.SyncWorker
 import io.github.stopcran.kanji.ui.ArtSet
 import io.github.stopcran.kanji.ui.StudySessionRegistry
+import io.github.stopcran.kanji.ui.StudyWriteCoordinator
 import io.github.stopcran.kanji.data.AppLocale
 
 /** What a ViewModel may use; passed in by a factory so ViewModels never reach for the Application. */
 class Services(val db: AppDatabase, val settings: Settings, val context: Context) {
     val studySessions = StudySessionRegistry()
+    internal val kanjiWrites = StudyWriteCoordinator()
     val sessionStore: io.github.stopcran.kanji.data.StudySessionStore = io.github.stopcran.kanji.data.RoomStudySessionStore(db)
     val reviewStore: io.github.stopcran.kanji.data.ReviewStore = io.github.stopcran.kanji.data.RoomReviewStore(db)
     val counters: io.github.stopcran.kanji.data.CounterRepository = io.github.stopcran.kanji.data.RoomCounterRepository(db, settings, reviewStore)
@@ -68,6 +71,7 @@ class KanjiApp : Application() {
                 MIGRATION_17_18,
                 MIGRATION_18_19,
                 MIGRATION_19_20,
+                MIGRATION_20_21,
             )
             .build()
     }

@@ -193,7 +193,7 @@
     <string name="kanji_focus_full">Kanji focus full</string>
     <string name="kanji_focus_info">About the Kanji focus limit</string>
     <string name="kanji_focus_title">Kanji focus limit</string>
-    <string name="kanji_focus_explanation">Finish your current %1$d kanji first: new kanji come in as they are learned in every mode.</string>
+    <string name="kanji_focus_explanation">Finish your current %1$d kanji first: new kanji come in as required practice is completed.</string>
     <string name="next">Next</string>
     <string name="draw_the_kanji_for">Draw the kanji for</string>
     <string name="tracing_practice_notice">Ungraded tracing practice. You\'ll try from memory later.</string>
@@ -210,9 +210,9 @@
     <string name="cards_from">Cards from %1$s</string>
     <string name="cards">%1$s cards</string>
     <string name="label_with_count">%1$s (%2$s)</string>
-    <string name="each_stack_keeps_its_own">Each stack keeps its own review schedule.</string>
+    <string name="each_stack_keeps_its_own">All and Starter have separate schedules; JLPT levels share progress.</string>
     <string name="level_filter_includes_easier">Includes easier levels.</string>
-    <string name="level_filter_kanji_exact">Only cards tagged %1$s.</string>
+    <string name="level_filter_kanji_cumulative">Reviews include learned kanji through %1$s. New cards come from %1$s only; JLPT levels share progress.</string>
     <string name="browse_cards">Browse all kanji</string>
     <string name="all_kanji_count">All kanji (%1$s)</string>
     <string name="words">%1$s words</string>

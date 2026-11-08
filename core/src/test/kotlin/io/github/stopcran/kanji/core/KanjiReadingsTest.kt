@@ -150,6 +150,24 @@ class KanjiReadingsTest {
     }
 
     @Test
+    fun cumulativeReadingsReviewStartedLowerLevelButDoNotIntroduceItsOtherReadings() {
+        val lower = card("白", listOf("ハク", "ビャク"), listOf("しろ"))
+        val upper = card("自", listOf("ジ"), listOf("みずか.ら"))
+        val states = mapOf(ReadingKind.On to mapOf(id("白", "はく") to review(now.minusSeconds(1))))
+        val eligible = setOf("自")
+        val normal = KanjiReadingQueue.build(listOf(lower, upper), states, setOf("白", "自"), 0, 10, now,
+            noise = 0.0, newEligible = eligible)
+        assertTrue(normal.any { it.kanji == "白" && it.reading == "はく" && !it.isNew })
+        assertTrue(normal.any { it.kanji == "自" && it.isNew })
+        assertTrue(normal.none { it.kanji == "白" && it.isNew })
+        val extra = KanjiReadingQueue.extraQueue(listOf(lower, upper), states, setOf("白", "自"), now, newEligible = eligible)
+        assertTrue(extra.any { it.kanji == "白" && it.reading == "はく" && !it.isNew })
+        assertTrue(extra.none { it.kanji == "白" && it.isNew })
+        assertTrue(KanjiReadingQueue.build(listOf(lower, upper), states, setOf("白", "自"), 0, 0, now,
+            noise = 0.0, newEligible = eligible).none { it.isNew })
+    }
+
+    @Test
     fun lapsingOneReadingLeavesTheOthersScheduleAlone() {
         val sei = cards.first { it.kanji == "生" }
         val states = mapOf(

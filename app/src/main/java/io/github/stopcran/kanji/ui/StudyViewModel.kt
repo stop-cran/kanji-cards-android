@@ -6,6 +6,8 @@ import io.github.stopcran.kanji.core.quiz.QuizSession
 import io.github.stopcran.kanji.data.StudySessionStore
 import io.github.stopcran.kanji.data.StudyStart
 import io.github.stopcran.kanji.data.StudyEnd
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancel
@@ -13,6 +15,30 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import java.util.UUID
+
+/** Orders Kanji session writes even when one route is replaced before its previous writes finish. */
+class StudyWriteCoordinator {
+    private var tail: Job? = null
+
+    fun enqueue(scope: CoroutineScope, block: suspend () -> Unit): Job {
+        val next = synchronized(this) {
+            val previous = tail
+            scope.launch(NonCancellable, start = CoroutineStart.LAZY) {
+                previous?.join()
+                check(previous?.isCancelled != true) { "Previous kanji write failed" }
+                block()
+            }.also { tail = it }
+        }
+        next.start()
+        return next
+    }
+
+    suspend fun awaitPending() {
+        val previous = synchronized(this) { tail }
+        previous?.join()
+        check(previous?.isCancelled != true) { "Previous kanji write failed" }
+    }
+}
 
 /** Route removal, unlike leaving composition for an article or rotation, ends a session. */
 class StudySessionRegistry {
@@ -38,7 +64,10 @@ class StudySessionRegistry {
     }
 }
 
-abstract class StudyViewModel(private val store: StudySessionStore) : ViewModel() {
+abstract class StudyViewModel(
+    private val store: StudySessionStore,
+    private val coordinator: StudyWriteCoordinator? = null,
+) : ViewModel() {
     private var registeredRoute: String? = null
     private var registry: StudySessionRegistry? = null
     private var id: String? = null
@@ -101,11 +130,13 @@ abstract class StudyViewModel(private val store: StudySessionStore) : ViewModel(
     /** Keep the end marker behind every review, including writes still pending when the route is removed. */
     private fun persist(block: suspend () -> Unit): Job {
         val previous = writeJob
-        return viewModelScope.launch(NonCancellable) {
+        val operation: suspend () -> Unit = {
             previous?.join()
             check(previous?.isCancelled != true) { "Previous study-session write failed" }
             block()
-        }.also { writeJob = it }
+        }
+        return (coordinator?.enqueue(viewModelScope, operation) ?: viewModelScope.launch(NonCancellable) { operation() })
+            .also { writeJob = it }
     }
 
     override fun onCleared() {

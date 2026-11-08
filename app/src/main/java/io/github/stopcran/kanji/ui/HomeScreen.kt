@@ -36,6 +36,7 @@ import io.github.stopcran.kanji.core.content.RepoSource
 import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.core.kana.KanaMode
 import io.github.stopcran.kanji.core.kana.KanaScript
+import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.WordStacks
 import io.github.stopcran.kanji.core.unlock.UnlockRule
@@ -111,9 +112,11 @@ internal fun KanjiPage(data: HomeData, preferences: HomePreferencesActions, onBa
         Text(context.getString(stackLabel(data.stack.id)) + " · " + stringResource(R.string.cards, data.kanji.inStack(data.stack.id).size))
         if (data.stacks.size > 1) {
             LevelFilter(data.stacks, data.stack, { preferences.selectStack(it.id) }, { context.getString(stackLabel(it.id)) },
-                description = if (data.stack.tag?.startsWith("jlpt-") == true)
-                    stringResource(R.string.level_filter_kanji_exact, context.getString(stackLabel(data.stack.id))) else null)
-            Text(stringResource(R.string.each_stack_keeps_its_own), style = MaterialTheme.typography.bodySmall)
+                description = if (Stacks.jlptLevel(data.stack.id) != null)
+                    stringResource(R.string.level_filter_kanji_cumulative, context.getString(stackLabel(data.stack.id))) else null)
+            if (Stacks.jlptLevel(data.stack.id) == null) {
+                Text(stringResource(R.string.each_stack_keeps_its_own), style = MaterialTheme.typography.bodySmall)
+            }
         }
         KanjiFocusGuidance(data.focus)
         ModeRow(stringResource(R.string.mode_meaning), data.mode(HomeMode.Meaning), onStart = a.onQuiz)
@@ -206,6 +209,7 @@ internal fun localizedModeReason(reason: String): String {
     }
     return when {
         reason == "Needs at least 2 kanji in this stack" -> stringResource(R.string.mode_needs_kanji)
+        reason == "Kanji focus full" -> stringResource(R.string.kanji_focus_full)
         reason == "Needs at least 1 kanji with stroke data" -> stringResource(R.string.mode_needs_stroke_kanji)
         reason == "Needs at least 2 words" -> stringResource(R.string.mode_needs_words)
         reason == "Needs at least two words with kanji" -> stringResource(R.string.mode_needs_reading_words)

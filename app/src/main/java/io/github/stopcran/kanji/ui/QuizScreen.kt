@@ -80,8 +80,8 @@ private fun AnswerState(s: QuizUi.Answer, vm: QuizViewModel, onOpenDoc: (String)
     Text(
         when {
             s.correct -> stringResource(R.string.answer_correct)
-            s.picked == NO_ANSWER -> stringResource(R.string.kanji_no_problem_answer, s.card.title)
-            else -> stringResource(R.string.kanji_not_quite_answer, s.card.title)
+            s.picked == NO_ANSWER -> stringResource(R.string.kanji_no_problem_answer, s.card.kanji, s.card.title)
+            else -> stringResource(R.string.kanji_not_quite_answer, s.card.kanji, s.card.title)
         },
         color = if (s.correct) correctTextColor() else wrongTextColor(),
         style = MaterialTheme.typography.titleMedium,

@@ -117,8 +117,32 @@ class HomePresentationTest {
         rule.onNodeWithText("Kanji focus full").assertIsDisplayed()
         rule.onNodeWithText("Finish your current 10 kanji first", substring = true).assertDoesNotExist()
         rule.onNodeWithContentDescription("About the Kanji focus limit").performClick()
-        rule.onNodeWithText("Finish your current 10 kanji first: new kanji come in as they are learned in every mode.")
+        rule.onNodeWithText("Finish your current 10 kanji first: new kanji come in as required practice is completed.")
             .assertIsDisplayed()
+    }
+
+    @Test fun fullFocusLockedReasonStaysLocalizedAcrossLocaleChanges() {
+        val application = ApplicationProvider.getApplicationContext<Application>()
+        val english = application.createConfigurationContext(Configuration(application.resources.configuration).apply {
+            setLocale(Locale.ENGLISH)
+        })
+        val russian = english.createConfigurationContext(Configuration(english.resources.configuration).apply {
+            setLocale(Locale.forLanguageTag("ru"))
+        })
+        val context = mutableStateOf<android.content.Context>(english)
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalContext provides context.value,
+                LocalConfiguration provides context.value.resources.configuration,
+            ) {
+                MaterialTheme { ModeRow("Mode", ModeState.Locked("Kanji focus full")) {} }
+            }
+        }
+        for (localeContext in listOf(english, russian, english)) {
+            rule.runOnIdle { context.value = localeContext }
+            rule.onNodeWithText(localeContext.getString(R.string.kanji_focus_full)).assertIsDisplayed()
+            rule.onNodeWithText(localeContext.getString(R.string.mode_status_unavailable)).assertDoesNotExist()
+        }
     }
 
     @Test fun kanjiFocusGuidanceIsHiddenWhenTheFocusIsNotFull() {

@@ -16,7 +16,7 @@ private const val PRACTICE_BASE = 10
  * Kanji that belong to the current stack are left out so its unlock rules are never bypassed; the "all" stack borrows nothing.
  */
 suspend fun AppDatabase.padCandidates(sourceId: String, stack: String, mode: StudyMode, content: List<KanjiEntity>, inStack: Set<String>): List<PadCandidate> {
-    if (stack == Stacks.ALL) return emptyList()
+    if (stack == Stacks.ALL || Stacks.jlptLevel(stack) != null) return emptyList()
     val known = content.mapTo(HashSet()) { it.kanji }
     val reading = mode == StudyMode.KanjiOn || mode == StudyMode.KanjiKun
     return reviews().borrowable(sourceId, mode.name, stack)

@@ -388,13 +388,13 @@ class ListeningTaskStudyTest {
         val files = ZipInputStream(output.toByteArray().inputStream()).use { zip ->
             buildMap { while (true) { val entry = zip.nextEntry ?: break; put(entry.name, Json.parseToJsonElement(zip.readBytes().decodeToString())) } }
         }
-        assertEquals(6, files.getValue("export_manifest.json").jsonObject.getValue("formatVersion").jsonPrimitive.int)
+        assertEquals(7, files.getValue("export_manifest.json").jsonObject.getValue("formatVersion").jsonPrimitive.int)
         assertEquals(Json.parseToJsonElement(requireNotNull(frozen)),
             files.getValue("listening_task_encounters.json").jsonArray.single().jsonObject.getValue("response"))
         assertEquals(order, Json.decodeFromString(ListeningTaskAttempt.serializer(), requireNotNull(frozen)).optionOrder)
         assertTrue(files.getValue("listening_assessments.json").jsonArray.isEmpty())
         assertEquals("example", files.getValue("listening_exposures.json").jsonArray.single().jsonObject.getValue("exposureId").jsonPrimitive.content)
-        assertEquals(10, files.size)
+        assertEquals(11, files.size)
     }
 
     @Test fun submittingAfterOnlyPartOfAnOtherwiseNormalReplayIsAssisted() = runBlocking {

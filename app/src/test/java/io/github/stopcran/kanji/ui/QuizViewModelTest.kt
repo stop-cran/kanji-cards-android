@@ -8,6 +8,7 @@ import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.Grade
 import io.github.stopcran.kanji.core.srs.SrsState
+import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.srs.ReviewRecording
 import io.github.stopcran.kanji.data.AppDatabase
 import io.github.stopcran.kanji.data.KanjiEntity
@@ -56,7 +57,7 @@ class QuizViewModelTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val context = RuntimeEnvironment.getApplication()
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
-        services = Services(db, Settings(context), context)
+        services = Services(db, Settings(context).also { it.setStack(Stacks.ALL) }, context)
     }
 
     @After
@@ -74,7 +75,7 @@ class QuizViewModelTest {
         return then()
     }
 
-    private fun states() = runBlocking { db.reviews().states(sourceId, services.settings.stack.value, StudyMode.Quiz.name) }
+    private fun states() = runBlocking { db.reviews().states(sourceId, Stacks.stateId(services.settings.stack.value), StudyMode.Quiz.name) }
 
     private fun awaitStates(n: Int): List<io.github.stopcran.kanji.data.ReviewStateEntity> {
         val end = System.currentTimeMillis() + 10_000
@@ -88,16 +89,22 @@ class QuizViewModelTest {
     @Test
     fun borrowedPaddingCardsRetainOneSidedMeaningExclusions() = checkMeaningExclusions(true)
 
-    private fun checkMeaningExclusions(extra: Boolean) {
-        services.settings.setStack("jlpt-n5")
-        val day = card("日", "sun", 0).copy(quizExclusions = if (extra) "" else "月")
+    private fun prepareMeaningExclusions(extra: Boolean) {
+        services.settings.setStack(if (extra) "starter" else "jlpt-n5")
+        val day = card("日", "sun", 0).copy(
+            tags = if (extra) "jlpt-n5\u001Fstarter" else "jlpt-n5", quizExclusions = if (extra) "" else "月",
+        )
         val moon = card("月", "moon", 1).copy(
             tags = if (extra) "jlpt-n4" else "jlpt-n5", quizExclusions = if (extra) "日" else "",
         )
-        seed(day, moon, card("火", "fire", 2))
+        seed(day, moon, card("火", "fire", 2).let { if (extra) it.copy(tags = "jlpt-n5\u001Fstarter") else it })
         if (extra) runBlocking {
-            db.reviews().putState(SrsState(phase = CardPhase.Review, reps = 3).toEntity(sourceId, "jlpt-n4", "月", StudyMode.Quiz))
+            db.reviews().putState(SrsState(phase = CardPhase.Review, reps = 3).toEntity(sourceId, Stacks.JLPT_STATE, "月", StudyMode.Quiz))
         }
+    }
+
+    private fun checkMeaningExclusions(extra: Boolean) {
+        prepareMeaningExclusions(extra)
         val vm = QuizViewModel(services)
         try {
             vm.ensureStarted(extra)
@@ -121,7 +128,7 @@ class QuizViewModelTest {
                 }
             }
         }
-        if (extra) assertEquals("jlpt-n4", runBlocking { db.reviews().allLog().single { it.kanji == "月" }.stack })
+        if (extra) assertEquals(Stacks.JLPT_STATE, runBlocking { db.reviews().allLog().single { it.kanji == "月" }.stack })
     }
 
     @Test
@@ -147,6 +154,120 @@ class QuizViewModelTest {
         assertTrue((vm.ui as QuizUi.Answer).correct)
         vm.next()
         assertEquals(1, awaitStates(1).size)
+    }
+
+    @Test
+    fun cumulativeQuestionUsesLowerDueHistoryAndNeverOffersHigherLevelOptions() {
+        services.settings.setStack("jlpt-n4")
+        services.settings.setWeekPlan("FFFFFFF")
+        services.settings.setDailyNewCards(0)
+        seed(
+            card("白", "white", 0), card("休", "rest", 1),
+            card("自", "self", 2).copy(jlpt = 4, tags = "jlpt-n4"),
+            card("体", "body", 3).copy(jlpt = 4, tags = "jlpt-n4"),
+            card("太", "thick", 4).copy(jlpt = 3, tags = "jlpt-n3"),
+        )
+        val now = Instant.now()
+        val due = SrsState(CardPhase.Review, 10.0, 5.0, now.minusSeconds(60), now.minusSeconds(86_400), 4, 0)
+        runBlocking {
+            db.reviews().putState(due.toEntity(sourceId, Stacks.JLPT_STATE, "白", StudyMode.Quiz))
+            db.reviews().putState(due.toEntity(sourceId, Stacks.JLPT_STATE, "太", StudyMode.Quiz))
+        }
+        val first = QuizViewModel(services)
+        first.ensureStarted(false)
+        val question = first.await({ it is QuizUi.Question }) { first.ui as QuizUi.Question }
+        assertEquals("白", question.card.kanji)
+        assertEquals(setOf("白", "休", "自", "体"), question.options.map { it.kanji }.toSet())
+        first.pick("白")
+        first.next()
+        val recorded = runBlocking {
+            withTimeout(10_000) { while (db.reviews().allLog().size < 1) delay(10) }
+            db.reviews().states(sourceId, Stacks.JLPT_STATE, StudyMode.Quiz.name).single { it.kanji == "白" }
+        }
+        first.leaveSession()
+        assertEquals(5, recorded.reps)
+        runBlocking { db.reviews().putState(recorded.copy(dueMs = System.currentTimeMillis() - 1)) }
+
+        services.settings.setStack("jlpt-n5")
+        val second = QuizViewModel(services)
+        second.ensureStarted(false)
+        val n5 = second.await({ it is QuizUi.Question }) { second.ui as QuizUi.Question }
+        assertEquals("白", n5.card.kanji)
+        assertEquals(setOf("白", "休"), n5.options.map { it.kanji }.toSet())
+        second.pick("白")
+        second.next()
+        runBlocking {
+            withTimeout(10_000) { while (db.reviews().allLog().size < 2) delay(10) }
+            val rows = db.reviews().states(sourceId, Stacks.JLPT_STATE, StudyMode.Quiz.name)
+            assertEquals(6, rows.single { it.kanji == "白" }.reps)
+            assertTrue(db.reviews().allLog().all { it.stack == Stacks.JLPT_STATE })
+        }
+        second.leaveSession()
+    }
+
+    @Test
+    fun overlappingLevelSessionsApplyBothAnswersToTheSharedState() {
+        services.settings.setStack("jlpt-n5")
+        services.settings.setDailyNewCards(0)
+        seed(card("日", "sun", 0), card("月", "moon", 1), card("体", "body", 2).copy(jlpt = 4, tags = "jlpt-n4"))
+        val now = Instant.now()
+        val due = SrsState(CardPhase.Review, 10.0, 5.0, now.minusSeconds(60), now.minusSeconds(86_400), 3)
+        runBlocking { db.reviews().putState(due.toEntity(sourceId, Stacks.JLPT_STATE, "日", StudyMode.Quiz)) }
+        val first = QuizViewModel(services)
+        val second = QuizViewModel(services)
+        try {
+            first.ensureStarted(false)
+            assertEquals("日", first.await({ it is QuizUi.Question }) { (first.ui as QuizUi.Question).card.kanji })
+            services.settings.setStack("jlpt-n4")
+            second.ensureStarted(false)
+            assertEquals("日", second.await({ it is QuizUi.Question }) { (second.ui as QuizUi.Question).card.kanji })
+            first.pick("日")
+            first.next()
+            second.pick("日")
+            second.next()
+            runBlocking {
+                withTimeout(10_000) { while (db.reviews().allLog().size < 2) delay(10) }
+                assertEquals(5, db.reviews().states(sourceId, Stacks.JLPT_STATE, "Quiz").single().reps)
+            }
+        } finally {
+            first.leaveSession()
+            second.leaveSession()
+        }
+    }
+
+    @Test
+    fun switchingLevelsWaitsForPendingReviewBeforeLoadingTheQueue() {
+        services.settings.setStack("jlpt-n5")
+        services.settings.setDailyNewCards(0)
+        seed(card("日", "sun", 0), card("月", "moon", 1), card("体", "body", 2).copy(jlpt = 4, tags = "jlpt-n4"))
+        val now = Instant.now()
+        val due = SrsState(CardPhase.Review, 10.0, 5.0, now.minusSeconds(60), now.minusSeconds(86_400), 3)
+        runBlocking { db.reviews().putState(due.toEntity(sourceId, Stacks.JLPT_STATE, "日", StudyMode.Quiz)) }
+        val allowWrite = CompletableDeferred<Unit>()
+        val first = QuizViewModel(services, reviews = ReviewStore {
+            allowWrite.await()
+            services.reviewStore.record(it)
+        })
+        val second = QuizViewModel(services)
+        try {
+            first.ensureStarted(false)
+            first.await({ it is QuizUi.Question }) {}
+            first.pick("日")
+            first.next()
+            first.leaveSession()
+            services.settings.setStack("jlpt-n4")
+            second.ensureStarted(false)
+            assertTrue(second.ui is QuizUi.Loading)
+            allowWrite.complete(Unit)
+            second.await({ it !is QuizUi.Loading }) { assertTrue(second.ui is QuizUi.Empty) }
+            runBlocking {
+                assertEquals(4, db.reviews().states(sourceId, Stacks.JLPT_STATE, "Quiz").single().reps)
+            }
+        } finally {
+            allowWrite.complete(Unit)
+            first.leaveSession()
+            second.leaveSession()
+        }
     }
 
     @Test

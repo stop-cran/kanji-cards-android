@@ -23,6 +23,8 @@ import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.data.KanjiEntity
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.inStack
+import io.github.stopcran.kanji.data.recordKanjiReview
+import io.github.stopcran.kanji.data.stacks
 import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.ReadingRequest
 import io.github.stopcran.kanji.data.readingData
@@ -51,7 +53,7 @@ sealed interface ReadingUi {
 enum class ReadingEmptyReason { NoCards, UnlockBlocked }
 
 /** Kanji readings session over on'yomi and kun'yomi; each (kanji, kind, reading) has its own scheduling state. */
-class KanjiReadingViewModel(private val app: Services) : StudyViewModel(app.sessionStore) {
+class KanjiReadingViewModel(private val app: Services) : StudyViewModel(app.sessionStore, app.kanjiWrites) {
     private val fsrs = Fsrs()
     private val random = Random.Default
 
@@ -76,9 +78,11 @@ class KanjiReadingViewModel(private val app: Services) : StudyViewModel(app.sess
     }
 
     private suspend fun start(extra: Boolean) {
+        app.kanjiWrites.awaitPending()
         sourceId = app.settings.source.value.id
-        stack = app.settings.stack.value
-        val all = app.db.content().kanji(sourceId).inStack(stack)
+        val content = app.db.content().kanji(sourceId)
+        stack = Stacks.find(app.settings.stack.value, content.stacks()).id
+        val all = content.inStack(stack)
         if (all.isEmpty()) {
             ui = ReadingUi.Empty(ReadingEmptyReason.NoCards)
             return
@@ -176,10 +180,10 @@ class KanjiReadingViewModel(private val app: Services) : StudyViewModel(app.sess
                 firstSuccessCapDays = Fsrs.GUESSABLE_FIRST_SUCCESS_DAYS, fuzzSeed = Fsrs.seed(id, kind.mode.name, states.getValue(kind)[id]?.reps ?: 0),
             )
             states.getValue(kind)[id] = updated
-            val owner = owners[padKey(kind, id)] ?: stack
+            val owner = owners[padKey(kind, id)] ?: Stacks.stateId(stack)
             recordSession {
                 val log = ReviewLogEntity(0, sourceId, owner, kanji, kind.mode.name, grade.value, now.toEpochMilli(), a.question.correctKey, reviewSessionId)
-                app.db.reviews().record(updated.toEntity(sourceId, owner, kanji, kind.mode, a.question.correctKey), log)
+                app.db.recordKanjiReview(updated.toEntity(sourceId, owner, kanji, kind.mode, a.question.correctKey), log)
             }
         }
         showNext()

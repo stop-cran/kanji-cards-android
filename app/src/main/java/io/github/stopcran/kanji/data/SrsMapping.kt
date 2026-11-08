@@ -34,8 +34,12 @@ fun List<KanjiEntity>.stacks(): List<Stack> = Stacks.available(map { it.tags.spl
 /** The cards of [stackId]; an unknown or empty stack falls back to all cards. */
 fun List<KanjiEntity>.inStack(stackId: String): List<KanjiEntity> {
     val stack = Stacks.find(stackId, stacks())
-    return filter { stack.contains(it.tags.splitSep()) }
+    return filter { Stacks.includes(stack, it.tags.splitSep()) }
 }
+
+/** A JLPT selection reviews an inclusive range but introduces only its own level. */
+fun List<KanjiEntity>.newKanjiInStack(stackId: String): Set<String>? =
+    if (Stacks.jlptLevel(stackId) == null) null else filter { stackId in it.tags.splitSep() }.mapTo(HashSet()) { it.kanji }
 
 fun List<KanjiEntity>.levels(): Map<String, Int?> = associate { it.kanji to it.jlpt }
 
