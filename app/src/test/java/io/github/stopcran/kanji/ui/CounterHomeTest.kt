@@ -53,23 +53,51 @@ class CounterHomeTest {
     @get:Rule val rule = createComposeRule()
 
     @Test
-    fun summaryShowsEligibleNewOpportunitiesCappedByTheSharedAllowance() {
+    fun summaryShowsModeLearningOpportunitiesSeparatelyFromTheSharedAllowance() {
         val home = mutableStateOf(CounterHome(10, emptyMap()))
         rule.setContent { MaterialTheme { Text(home.value.summary()) } }
         val cases = listOf(
             CounterHome(10, mapOf(
                 CounterMode.Choose to ModeState.Start(2, 1),
                 CounterMode.Type to ModeState.Locked("Not ready"),
-            ), 10) to "2 due, 1 new",
+            ), 10) to "2 due, 1 ready to learn",
             CounterHome(10, mapOf(
                 CounterMode.Expression to ModeState.Start(6, 4),
                 CounterMode.Reading to ModeState.Start(2, 6),
-            ), 5) to "8 due, 5 new",
-            CounterHome(10, mapOf(CounterMode.Choose to ModeState.Start(7, 0)), 10) to "7 due, 0 new",
-            CounterHome(10, mapOf(CounterMode.Choose to ModeState.Start(7, 0)), 0) to "7 due, 0 new",
+            ), 5) to "8 due, 10 ready to learn",
+            CounterHome(10, mapOf(CounterMode.Type to ModeState.Start(0, 10)), 0) to "0 due, 10 ready to learn",
+            CounterHome(10, mapOf(CounterMode.Choose to ModeState.Start(7, 0)), 10) to "7 due, 0 ready to learn",
+            CounterHome(10, mapOf(CounterMode.Choose to ModeState.Start(7, 0)), 0) to "7 due, 0 ready to learn",
         )
         for ((snapshot, expected) in cases) {
             rule.runOnIdle { home.value = snapshot }
+            rule.onNodeWithText(expected).assertIsDisplayed()
+        }
+    }
+
+    @Test
+    fun localizedLearningSummaryIsIndependentOfTheNewContentAllowance() {
+        val context = RuntimeEnvironment.getApplication()
+        fun localized(language: String) =
+            context.createConfigurationContext(Configuration(context.resources.configuration).apply {
+                setLocales(LocaleList(Locale.forLanguageTag(language)))
+            })
+        val uiContext = mutableStateOf(localized("en"))
+        val home = CounterHome(23, mapOf(CounterMode.Type to ModeState.Start(0, 10)), allowance = 0)
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalContext provides uiContext.value,
+                LocalConfiguration provides uiContext.value.resources.configuration,
+            ) {
+                MaterialTheme { Text(home.localizedSummary()) }
+            }
+        }
+        for ((language, expected) in listOf(
+            "en" to "0 due, 10 ready to learn",
+            "ru" to "0 к повторению, 10 к изучению",
+            "en" to "0 due, 10 ready to learn",
+        )) {
+            rule.runOnIdle { uiContext.value = localized(language) }
             rule.onNodeWithText(expected).assertIsDisplayed()
         }
     }

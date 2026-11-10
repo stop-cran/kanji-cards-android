@@ -61,7 +61,8 @@ private fun wordDirectionLabel(direction: WordDirection): Int = when (direction)
 
 /** Session key: "wquiz:<timestamp>:<jp|en|rd|ty|pc|wp>[:extra]". */
 @Composable
-fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit, onPracticeMore: (WordDirection?) -> Unit, vm: WordQuizViewModel = serviceViewModel(sessionKey) { WordQuizViewModel(it) }) {
+fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -> Unit, onPracticeMore: (WordDirection?) -> Unit,
+    vm: WordQuizViewModel = serviceViewModel(sessionKey) { WordQuizViewModel(it) }, onContinue: () -> Unit) {
     val parts = sessionKey.split(':')
     val direction = WordDirection.fromCode(parts.getOrNull(2))
     val extra = sessionKey.endsWith(":extra")
@@ -88,6 +89,9 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
                 Text(stringResource(R.string.session_complete), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
                 Text(stringResource(R.string.of_answers_correct, s.correct, s.answered))
                 Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.done)) }
+                if (s.canContinue) {
+                    Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.mode_continue_batch)) }
+                }
                 OutlinedButton(onClick = { onPracticeMore(s.suggestion) }, modifier = Modifier.fillMaxWidth()) {
                     Text(if (s.suggestion == null) stringResource(R.string.practice_more)
                         else stringResource(R.string.word_practice_more_suggestion, stringResource(wordDirectionLabel(s.suggestion))))

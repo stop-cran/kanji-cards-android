@@ -29,4 +29,10 @@ object CounterRoutes {
         CounterScope.fromRoute(route),
         extra = true,
     )
+
+    fun nextBatch(route: String): String = create(
+        CounterMode.fromCode(route.split(':').getOrNull(2)),
+        CounterGroup.fromRoute(route),
+        CounterScope.fromRoute(route),
+    )
 }

@@ -45,6 +45,7 @@ internal data class HomeSnapshot(
     val introducedReadings: Int,
     val padModes: Set<StudyMode>,
     val focus: FocusStatus?,
+    val introducedWords: Set<String> = emptySet(),
 )
 
 internal interface HomeRepository {
@@ -108,7 +109,7 @@ internal class RoomHomeRepository(private val db: AppDatabase, private val setti
             reviews.readingCardsIntroducedSince(
                 source, Stacks.stateId(inventory.stack.id), now.atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli(),
             ),
-            pad, focus,
+            pad, focus, reviews.introducedItems(source, inventory.wordStack.id).toSet(),
         )
     }
 }

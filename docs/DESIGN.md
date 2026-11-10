@@ -114,9 +114,9 @@ Android/native pilot acceptance is a separate gate; archive parsing and resource
   All five extra-practice modes disclose normal review-history and scheduling effects in their shared session chrome.
   This describes the existing mode, not an immediate save on entry/feedback or a separate record for every re-ask;
   selection, allowances and record-on-advance remain unchanged.
-  Home uses the same "X due, Y new" summary as Kanji and Words: due reviews are summed across actionable modes,
-  while eligible per-mode new opportunities are summed and capped by the remaining shared content allowance.
-  This is not a count of unique exercises or a separate budget; detailed shared-limit guidance stays separate.
+  Home shows "X due, Y ready to learn": due reviews are summed across actionable modes, while eligible
+  first-in-mode opportunities in their next batches are summed without capping that sum by the shared allowance.
+  This is not a count of unique content items or a separate budget; the remaining new-content allowance is shown separately.
   New writing uses exact authored NFKC/whitespace-normalized forms, not legacy numeral arithmetic;
   reading additionally folds kana script and grades a correct complete reading Good. Preserve small kana and vowels.
   Legacy `readingAnswers` describe only the canonical phrase, never every alternative counter in `kana`.
@@ -253,8 +253,16 @@ Android/native pilot acceptance is a separate gate; archive parsing and resource
   allowance and shows "This week: X of Y study days" (Y = non-rest days, max 5; a hint, not a streak: missing a day never resets anything). Settings offers commitment presets (Light 5, Steady 10, Intensive 20 new a day; the
   number field stays for custom values). Allowance is shared by every consumer through `AppDatabase.newAllowance`.
   Home and Settings expose optional daily-count help: mode/section new opportunities are not additive budgets.
-  Counter summaries show eligible new opportunities capped by that allowance, not the raw allowance itself;
-  locked modes add no opportunities, and due reviews remain uncapped.
+  **Mode-specific batches (#137):** Counter and Word queues admit already-introduced content independently of the remaining
+  new-content allowance. Lifetime `review_log` introductions for the exact source/stack/item (blank reading) determine
+  familiarity, not another mode's current SRS phase. Gates, per-mode state, word deck identities and counter scopes remain
+  unchanged; distinct reverse-question IDs still consume their own first introduction. Each ordinary session captures at most
+  `max(10, remaining allowance)` new-in-mode skills (reusing the ten-card practice convention and preserving larger daily intake).
+  Truly unseen items within that batch cannot exceed the remaining shared allowance; due reviews remain uncapped.
+  Sessions never refill automatically. After ordered review/end writes finish, Continue is offered if more ordinary work remains;
+  it opens a fresh ordinary route and rechecks allowance/gates, retaining the Counter mode/group/level. Practice more remains
+  a separate, explicitly allowance-exempt action. Counts label next-batch skills "ready to learn", not new content, and show
+  the shared new-content allowance separately. Locked modes add no opportunities. This does not change Kana's per-skill budget.
   Listening additionally limits introductions/time and reserves repository slots before recorded introductions.
   Home's backlog notice is explicitly for content; expanded help shows each pool's remaining amount and reason separately.
 - **Weekly study days (#94):** the home indicator counts distinct local dates, Monday through Sunday, with

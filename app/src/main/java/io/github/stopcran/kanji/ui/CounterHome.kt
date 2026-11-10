@@ -43,9 +43,9 @@ class CounterHome(
         cards == 0 -> "No cards yet"
         else -> {
             val starts = modes.values.mapNotNull { it as? ModeState.Start }
-            val new = minOf(allowance, starts.sumOf { it.new })
+            val new = starts.sumOf { it.new }
             when {
-                starts.isNotEmpty() -> "${starts.sumOf { it.due }} due, $new new"
+                starts.isNotEmpty() -> "${starts.sumOf { it.due }} due, $new ready to learn"
                 modes.values.any { it == ModeState.PracticeMore } -> "All caught up"
                 else -> "Nothing to study yet"
             }
@@ -58,9 +58,9 @@ class CounterHome(
         cards == 0 -> stringResource(R.string.counter_no_cards)
         else -> {
             val starts = modes.values.mapNotNull { it as? ModeState.Start }
-            val new = minOf(allowance, starts.sumOf { it.new })
+            val new = starts.sumOf { it.new }
             when {
-                starts.isNotEmpty() -> stringResource(R.string.study_due_new, starts.sumOf { it.due }, new)
+                starts.isNotEmpty() -> stringResource(R.string.study_due_learning, starts.sumOf { it.due }, new)
                 modes.values.any { it == ModeState.PracticeMore } -> stringResource(R.string.mode_nothing_due)
                 else -> stringResource(R.string.counter_nothing_to_study)
             }
@@ -125,8 +125,9 @@ internal fun CountersPage(
         Text(stringResource(R.string.counter_levels_disclaimer))
         Text(stringResource(R.string.counter_shared_allowance, home.allowance))
         Text(stringResource(R.string.counter_page_guidance))
+        Text(stringResource(R.string.mode_batch_help))
         home.modes.forEach { (mode, state) ->
-            ModeRow(stringResource(counterModeLabel(mode)), state, onStart = { onCounters(mode, it, group, scope) })
+            ModeRow(stringResource(counterModeLabel(mode)), state, modeLearning = true, onStart = { onCounters(mode, it, group, scope) })
         }
         home.articles.forEach { (path, label) ->
             TextButton(onClick = { onOpenDoc(path) }) { Text(label) }

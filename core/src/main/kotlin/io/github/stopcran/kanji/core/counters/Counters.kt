@@ -175,6 +175,7 @@ object CounterGate {
 }
 
 /** What a queue is built from: this mode's states, the choose-mode states that gate the others, and the day's new-card budget. */
+@Suppress("LongParameterList")
 class CounterQueueRequest(
     val mode: CounterMode,
     val own: Map<String, SrsState>,
@@ -183,6 +184,8 @@ class CounterQueueRequest(
     val newBudget: Int,
     /** Non-null asks for extra practice of at most this many cards instead of the due queue. */
     val extraLimit: Int? = null,
+    /** Lifetime introductions in the exact source/stack, across all modes. */
+    val introduced: Set<String> = emptySet(),
 )
 
 object CounterQueues {
@@ -198,6 +201,7 @@ object CounterQueues {
 
     fun build(index: CounterIndex, r: CounterQueueRequest): List<QueueItem> {
         val ids = eligible(r.mode, index, r.own, r.choose)
-        return if (r.extraLimit != null) QueueBuilder.extra(ids, r.own, r.now, r.extraLimit) else QueueBuilder.build(ids, r.own, r.now, r.newBudget)
+        return if (r.extraLimit != null) QueueBuilder.extra(ids, r.own, r.now, r.extraLimit)
+        else QueueBuilder.modeBatch(ids, r.own, r.introduced, r.now, r.newBudget)
     }
 }

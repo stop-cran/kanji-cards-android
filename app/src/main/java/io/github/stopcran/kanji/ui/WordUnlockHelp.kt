@@ -46,5 +46,5 @@ internal fun WordModeRow(
     val detail = readiness?.takeIf { direction.gated }?.let {
         stringResource(R.string.word_unlock_count, it.unlocked, it.candidates)
     }
-    ModeRow(title, state, supportingText = detail, localizedReason = reason, onStart = onStart)
+    ModeRow(title, state, supportingText = detail, localizedReason = reason, modeLearning = true, onStart = onStart)
 }

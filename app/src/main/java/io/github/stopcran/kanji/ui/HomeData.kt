@@ -95,8 +95,10 @@ class HomeData(
         } else {
             stringResource(R.string.grammar_nothing_to_study)
         }
-        val new = starts.sumOf { it.new }.let { n -> pacing?.let { minOf(n, it.remaining) } ?: n }
-        return stringResource(R.string.study_due_new, starts.sumOf { it.due }, new)
+        val words = ms.all { it in setOf(HomeMode.WordJp, HomeMode.WordEn, HomeMode.WordReading, HomeMode.WordType,
+            HomeMode.WordPicture, HomeMode.WordToPicture) }
+        val new = starts.sumOf { it.new }.let { n -> if (words) n else pacing?.let { minOf(n, it.remaining) } ?: n }
+        return stringResource(if (words) R.string.study_due_learning else R.string.study_due_new, starts.sumOf { it.due }, new)
     }
 }
 
@@ -109,6 +111,7 @@ private class Unlocks(
 private class Extras(
     val allowance: NewAllowance, val unlocks: Unlocks,
     val focus: io.github.stopcran.kanji.data.FocusStatus?, val newEligible: Set<String>?,
+    val introducedWords: Set<String>,
 )
 
 /** All seven scheduling-state maps, each non-null; exists so loading is decided once instead of with !! at each use. */
@@ -159,6 +162,7 @@ internal fun projectHome(snapshot: HomeSnapshot, now: Instant): HomeData {
         snapshot.allowance,
         Unlocks(snapshot.learned, selection.study.unlockRule, snapshot.introducedReadings, snapshot.padModes, states), snapshot.focus,
         inventory.inStack.newKanjiInStack(inventory.stack.id),
+        snapshot.introducedWords,
     )
     val projection = computeModes(inventory.inStack, inventory.wordsInStack, extras, now, stateSet)
     val n4Offer = shouldOfferN4(
@@ -210,7 +214,7 @@ private fun computeModes(
     fun word(d: WordDirection, own: Map<String, SrsState>, other: Map<String, SrsState>, locked: String): ModeState {
         val ids = words.forDirection(d).map { it.word }
         readiness[d] = WordReadiness(ids.size, WordQueues.eligible(d, ids, own, other).size)
-        val q = WordQueues.build(d, ids, own, other, now, newLeft, noise = 0.0)
+        val q = WordQueues.build(d, ids, own, other, now, newLeft, noise = 0.0, introduced = ex.introducedWords)
         val extra = WordQueues.build(d, ids, own, other, now, 0, extra = true, noise = 0.0)
         val offerExtra = extra.isNotEmpty() || d.mode in ex.unlocks.padModes
         val unavailable = if (d == WordDirection.Reading) "Needs at least two words with kanji" else "Needs at least 2 words"

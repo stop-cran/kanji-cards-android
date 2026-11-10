@@ -62,6 +62,9 @@
     <string name="word_tag_verb">verb</string>
     <string name="word_tag_voiced">voiced</string>
     <string name="study_due_new">%1$d due, %2$d new</string>
+    <string name="study_due_learning">%1$d due, %2$d ready to learn</string>
+    <string name="mode_continue_batch">Continue</string>
+    <string name="mode_batch_help">Ready to learn counts first practice in each mode’s next finite batch, including content already introduced in another mode. Continue starts another batch within the shared allowance; Practice more can exceed it. Due reviews are not capped.</string>
     <string name="daily_counts_show">Daily counts &amp; shared limits</string>
     <string name="daily_counts_hide">Hide daily-count help</string>
     <string name="daily_counts_settings">The limit applies separately to Kana and to content study. Each allowance follows your weekly rhythm and slows new introductions when reviews build up. Due reviews have no daily cap.</string>
@@ -69,9 +72,9 @@
     <string name="daily_counts_content">Kanji, Words, Numbers &amp; counters, Grammar and Listening share a separate allowance for the selected content repository.</string>
     <string name="kana_allowance_remaining">Kana allowance: %1$d of %2$d left today</string>
     <string name="content_allowance_remaining">Content allowance: %1$d of %2$d left today</string>
-    <string name="counter_shared_allowance">Shared content allowance: %1$d new items left today. Mode counts are not added together.</string>
+    <string name="counter_shared_allowance">Shared new-content allowance: %1$d unseen items left today. Learning another mode for previously introduced content does not spend this allowance. Mode counts are not added together.</string>
     <string name="content_pacing_notice">Content: %1$s</string>
-    <string name="daily_counts_opportunities">New counts show available first-time practice, within its limits. Do not add mode or section counts. An allowance is a maximum, not a count of unlocked exercises; prerequisites or filters may leave nothing eligible.</string>
+    <string name="daily_counts_opportunities">New counts show available first-time practice, within its limits. Words and counters show ready-to-learn skills in each mode’s next finite batch; previously introduced content does not spend the new-content allowance again. Do not add mode or section counts. An allowance is a maximum, not a count of unlocked exercises; prerequisites or filters may leave nothing eligible.</string>
     <string name="daily_counts_listening">Listening also limits new tasks and planned time. Starting a new scored task can reserve a shared content slot before an answer is recorded.</string>
     <string name="daily_counts_reviews">Due reviews have no daily cap. Extra practice is separate and may exceed these limits.</string>
     <string name="daily_counts_disabled">New items are turned off by the daily limit in Settings.</string>

@@ -21,6 +21,7 @@ interface CounterRepository {
     suspend fun index(sourceId: String): CounterIndex
     suspend fun states(sourceId: String, mode: CounterMode): Map<String, SrsState>
     suspend fun newBudget(sourceId: String, now: Instant): Int
+    suspend fun introduced(sourceId: String): Set<String>
     suspend fun record(value: ReviewRecord)
 }
 
@@ -34,6 +35,7 @@ class RoomCounterRepository(
     override suspend fun index(sourceId: String): CounterIndex = db.counterIndex(sourceId)
     override suspend fun states(sourceId: String, mode: CounterMode): Map<String, SrsState> = db.counterStates(sourceId, mode)
     override suspend fun newBudget(sourceId: String, now: Instant): Int = db.newAllowance(settings, sourceId, now).remaining
+    override suspend fun introduced(sourceId: String): Set<String> = db.reviews().introducedItems(sourceId, COUNTER_STACK).toSet()
     override suspend fun record(value: ReviewRecord) = reviews.record(value)
 }
 
@@ -52,18 +54,20 @@ suspend fun AppDatabase.counterStates(sourceId: String, mode: CounterMode): Map<
 suspend fun AppDatabase.counterWaitingCount(settings: Settings, sourceId: String, now: Instant, newBudget: Int): Int {
     val index = counterIndex(sourceId).inScope(scope = settings.counterScopeFor(sourceId))
     val choose = counterStates(sourceId, CounterMode.Choose)
+    val introduced = reviews().introducedItems(sourceId, COUNTER_STACK).toSet()
     return CounterMode.entries.sumOf { mode ->
         val own = if (mode == CounterMode.Choose) choose else counterStates(sourceId, mode)
-        CounterQueues.build(index, CounterQueueRequest(mode, own, choose, now, newBudget)).size
+        CounterQueues.build(index, CounterQueueRequest(mode, own, choose, now, newBudget, introduced = introduced)).size
     }
 }
 
 /** Home rows of the Counters page, computed from the same queue builder the quiz uses. */
 suspend fun AppDatabase.counterModeStates(sourceId: String, index: CounterIndex, newBudget: Int, now: Instant): Map<CounterMode, ModeState> {
     val choose = counterStates(sourceId, CounterMode.Choose)
+    val introduced = reviews().introducedItems(sourceId, COUNTER_STACK).toSet()
     return CounterMode.entries.filter { index.ids(it).isNotEmpty() }.associateWith { mode ->
         val own = if (mode == CounterMode.Choose) choose else counterStates(sourceId, mode)
-        val queue = CounterQueues.build(index, CounterQueueRequest(mode, own, choose, now, newBudget))
+        val queue = CounterQueues.build(index, CounterQueueRequest(mode, own, choose, now, newBudget, introduced = introduced))
         val extra = CounterQueues.build(index, CounterQueueRequest(mode, own, choose, now, newBudget, extraLimit = 1))
         ModeState.of(
             available = index.ids(mode).isNotEmpty(),

@@ -96,7 +96,7 @@ class TypingFocusFlowTest {
         val vm = WordQuizViewModel(fixture.services)
         val route = "wquiz:${UUID.randomUUID()}:ty"
         fixture.models.put(route, vm)
-        show { WordQuizScreen(route, {}, {}, {}, vm) }
+        show { WordQuizScreen(route, {}, {}, {}, vm, onContinue = {}) }
         repeat(3) { step ->
             rule.waitUntil(10_000) { vm.ui is WordQuizUi.TypeQuestion }
             assertAutomaticKeyboard("I don't know")
@@ -143,7 +143,7 @@ class TypingFocusFlowTest {
         val vm = CounterQuizViewModel(fixture.services.counters, fixture.services.sessionStore)
         val route = CounterRoutes.create(mode, CounterGroup.All, CounterScope.N5)
         fixture.models.put(route, vm)
-        show { CounterQuizScreen(route, {}, {}, { _, _ -> }, vm) }
+        show { CounterQuizScreen(route, {}, {}, { _, _ -> }, vm, onContinue = {}) }
         repeat(3) { step ->
             rule.waitUntil(10_000) { vm.ui is CounterUi.TypeQuestion || vm.ui is CounterUi.ExpressionQuestion }
             assertAutomaticKeyboard("I don't know")

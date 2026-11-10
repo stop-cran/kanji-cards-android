@@ -322,6 +322,7 @@ private fun LegacyRouteBody(
                 onBack = pop,
                 onOpenDoc = { push(sourceDocRoute(sessionSourceId, it, sessionBound = true)) },
                 onPracticeMore = { d -> pop(); push("wquiz:${System.currentTimeMillis()}:${d?.code ?: route.split(":")[2]}:extra") },
+                onContinue = { pop(); push("wquiz:${System.currentTimeMillis()}:${route.split(":")[2]}") },
             )
         } else if (route.startsWith("cquiz:")) {
             CounterQuizScreen(
@@ -332,6 +333,10 @@ private fun LegacyRouteBody(
                     pop(); push(next)
                 },
                 onOpenDoc = { source, path -> push(sourceDocRoute(source, path, sessionBound = true)) },
+                onContinue = {
+                    val next = CounterRoutes.nextBatch(route)
+                    pop(); push(next)
+                },
             )
         } else if (route.startsWith("grammarquiz:")) {
             val target = remember(route) {

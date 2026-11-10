@@ -144,6 +144,8 @@ internal fun WordsPage(
                 description = if (data.wordStack == WordStacks.n4) stringResource(R.string.level_filter_includes_easier) else null)
         }
         WordUnlockHelp()
+        data.pacing?.let { Text(stringResource(R.string.counter_shared_allowance, it.remaining)) }
+        Text(stringResource(R.string.mode_batch_help))
         WordModeRow(data, stringResource(R.string.mode_japanese_english), HomeMode.WordJp, WordDirection.JpToEn) { onStart(WordDirection.JpToEn, it) }
         WordModeRow(data, stringResource(R.string.mode_english_japanese), HomeMode.WordEn, WordDirection.EnToJp) { onStart(WordDirection.EnToJp, it) }
         WordModeRow(data, stringResource(R.string.mode_reading), HomeMode.WordReading, WordDirection.Reading) { onStart(WordDirection.Reading, it) }
@@ -181,11 +183,12 @@ internal fun ModeRow(
     state: ModeState,
     supportingText: String? = null,
     localizedReason: String? = null,
+    modeLearning: Boolean = false,
     onStart: (extra: Boolean) -> Unit,
 ) {
     val summary = when (state) {
         ModeState.Loading -> stringResource(R.string.loading)
-        is ModeState.Start -> stringResource(R.string.study_due_new, state.due, state.new)
+        is ModeState.Start -> stringResource(if (modeLearning) R.string.study_due_learning else R.string.study_due_new, state.due, state.new)
         ModeState.PracticeMore -> stringResource(R.string.mode_nothing_due)
         is ModeState.Locked -> localizedReason ?: localizedModeReason(state.reason)
         is ModeState.Unavailable -> localizedReason ?: localizedModeReason(state.reason)

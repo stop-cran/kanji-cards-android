@@ -110,6 +110,12 @@ abstract class StudyViewModel(
 
     protected fun finishSession() = endSession("completed")
 
+    protected suspend fun awaitSessionWrites() {
+        val pending = writeJob
+        pending?.join()
+        check(pending?.isCancelled != true) { "Study-session write failed" }
+    }
+
     fun leaveSession() {
         endSession("left")
         viewModelScope.cancel()

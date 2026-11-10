@@ -19,6 +19,7 @@ object WordQueues {
      * started); [other] is that gate direction's state (the caller passes the states of `direction.gate`). The other direction's
      * memory slightly defers urgency (see [WordBlend]).
      */
+    @Suppress("LongParameterList")
     fun build(
         direction: WordDirection,
         words: List<String>,
@@ -30,10 +31,11 @@ object WordQueues {
         limit: Int = if (extra) 10 else Int.MAX_VALUE,
         noise: Double = QueueBuilder.DEFAULT_NOISE,
         rnd: Random = Random.Default,
+        introduced: Set<String> = emptySet(),
     ): List<QueueItem> {
         val eligible = eligible(direction, words, own, other)
         return if (extra) QueueBuilder.extra(eligible, own, now, limit, noise, rnd)
-        else QueueBuilder.build(eligible, own, now, newBudget, limit, noise, rnd) { w ->
+        else QueueBuilder.modeBatch(eligible, own, introduced, now, newBudget, limit, noise, rnd) { w ->
             if (direction == WordDirection.Reading || direction == WordDirection.Type) 1.0 else WordBlend.urgencyFactor(other[w], now)
         }
     }

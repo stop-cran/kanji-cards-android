@@ -175,7 +175,11 @@ class CounterFlowTest {
                                     vm.value.leaveSession()
                                     route.value = CounterRoutes.extra(requireNotNull(route.value))
                                     vm.value = CounterQuizViewModel(services.counters, services.sessionStore)
-                                }, { owner, path -> assertEquals(source, owner); document.value = path }, vm.value)
+                                }, { owner, path -> assertEquals(source, owner); document.value = path }, vm.value, onContinue = {
+                                    vm.value.leaveSession()
+                                    route.value = CounterRoutes.nextBatch(requireNotNull(route.value))
+                                    vm.value = CounterQuizViewModel(services.counters, services.sessionStore)
+                                })
                             }
                         }
                     }

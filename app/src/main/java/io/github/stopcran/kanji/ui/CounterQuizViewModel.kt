@@ -35,7 +35,7 @@ data class NounOption(val id: String, val label: String)
 sealed interface CounterUi {
     data object Loading : CounterUi
     data class Empty(val reason: CounterEmptyReason) : CounterUi
-    data class Done(val answered: Int, val correct: Int) : CounterUi
+    data class Done(val answered: Int, val correct: Int, val canContinue: Boolean = false) : CounterUi
 
     data class Choose(val card: CounterCard, val file: CounterFile, val options: List<String>, val remaining: Int) : CounterUi
     data class ChooseAnswer(val card: CounterCard, val file: CounterFile, val options: List<String>, val picked: String, val remaining: Int) : CounterUi {
@@ -81,6 +81,7 @@ class CounterQuizViewModel(private val data: CounterRepository, sessions: StudyS
     private val states = mutableMapOf<String, SrsState>()
     private var session = QuizSession<String>(emptyList(), { it })
     private var started = false
+    private var extra = false
 
     fun ensureStarted(
         mode: CounterMode, extra: Boolean, group: CounterGroup = CounterGroup.All, scope: CounterScope = CounterScope.All,
@@ -88,6 +89,7 @@ class CounterQuizViewModel(private val data: CounterRepository, sessions: StudyS
         if (started) return
         started = true
         this.mode = mode
+        this.extra = extra
         viewModelScope.launch { start(extra, group, scope) }
     }
 
@@ -102,7 +104,7 @@ class CounterQuizViewModel(private val data: CounterRepository, sessions: StudyS
         val choose = if (mode == CounterMode.Choose) states else data.states(sourceId, CounterMode.Choose)
         val budget = data.newBudget(sourceId, Instant.now())
         val limit = if (extra) data.practiceMinimum() else null
-        val queue = CounterQueues.build(index, CounterQueueRequest(mode, states, choose, Instant.now(), budget, limit))
+        val queue = CounterQueues.build(index, CounterQueueRequest(mode, states, choose, Instant.now(), budget, limit, data.introduced(sourceId)))
         session = trackSession(QuizSession(queue.map { it.kanji }, { it }), sourceId, COUNTER_STACK, mode.mode.name, extra)
         showNext()
     }
@@ -112,8 +114,10 @@ class CounterQuizViewModel(private val data: CounterRepository, sessions: StudyS
         if (id == null) {
             finishSession()
             ui = if (session.answered == 0) CounterUi.Empty(emptyReason()) else CounterUi.Done(session.answered, session.correct)
+            if (!extra && ui is CounterUi.Done) checkContinuation()
             return
         }
+
         val remaining = session.pending + 1
         draft = ""
         ui = when (mode) {
@@ -130,6 +134,20 @@ class CounterQuizViewModel(private val data: CounterRepository, sessions: StudyS
                 val options = CounterOptions.nouns(reverse).map { NounOption(it, index.nounLabel(index.referenceCard(it))) }
                 CounterUi.NounQuestion(id, index.reverseFile(id)!!, options, remaining)
             }
+        }
+    }
+
+    private fun checkContinuation() {
+        val done = ui as CounterUi.Done
+        viewModelScope.launch {
+            awaitSessionWrites()
+            val now = Instant.now()
+            val own = data.states(sourceId, mode)
+            val choose = if (mode == CounterMode.Choose) own else data.states(sourceId, CounterMode.Choose)
+            val next = CounterQueues.build(index, CounterQueueRequest(
+                mode, own, choose, now, data.newBudget(sourceId, now), introduced = data.introduced(sourceId),
+            ))
+            if (ui === done) ui = done.copy(canContinue = next.isNotEmpty())
         }
     }
 

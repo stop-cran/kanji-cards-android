@@ -62,10 +62,12 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
             val wordStack = WordStacks.find(app.settings.wordStack.value, allWords.offeredStacks(app.settings.n4Unlocked.value))
             val wordEntities = allWords.inWordStack(wordStack, app.db.content().kanjiLite(source.id).levels())
             val wordStates = WordDirection.entries.associateWith { d -> app.db.reviews().states(source.id, wordStack.id, d.mode.name).associate { it.kanji to it.toSrs() } }
+            val introducedWords = app.db.reviews().introducedItems(source.id, wordStack.id).toSet()
             due += app.db.readingData(app.settings, cards, ReadingRequest(source.id, stack, newRemaining, Instant.ofEpochMilli(now))).items.size
             for (d in WordDirection.entries) {
                 val ids = wordEntities.forDirection(d).map { it.word }
-                due += WordQueues.build(d, ids, wordStates.getValue(d), wordStates.getValue(d.gate), Instant.ofEpochMilli(now), newRemaining).size
+                due += WordQueues.build(d, ids, wordStates.getValue(d), wordStates.getValue(d.gate), Instant.ofEpochMilli(now), newRemaining,
+                    introduced = introducedWords).size
             }
             due += app.db.counterWaitingCount(app.settings, source.id, Instant.ofEpochMilli(now), newRemaining)
             val grammar = app.db.grammarStudy(app.settings, source.id, Instant.ofEpochMilli(now))

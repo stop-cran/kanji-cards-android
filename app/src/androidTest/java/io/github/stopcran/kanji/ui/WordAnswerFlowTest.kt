@@ -253,7 +253,7 @@ class WordAnswerFlowTest {
                     ))
                 }
             }
-            rule.setContent { MaterialTheme { WordQuizScreen(route, {}, {}, {}, vm) } }
+            rule.setContent { MaterialTheme { WordQuizScreen(route, {}, {}, {}, vm, onContinue = {}) } }
             exercise(vm, db)
         } finally {
             rule.runOnIdle { models.clear() }

@@ -44,6 +44,7 @@ class CounterBoundaryTest {
             vm.submit()
             vm.next()
             runCurrent()
+            assertFalse((vm.ui as CounterUi.Done).canContinue)
             vm.leaveSession()
             assertEquals(listOf("start", "pending"), data.events)
             data.allowReview.complete(Unit)
@@ -101,6 +102,7 @@ class CounterBoundaryTest {
         private val file = CounterFile(2, "days", "日", "にち", "Days", group = "time", level = 3, expressions = listOf(item))
 
         override fun practiceMinimum() = 10
+        override suspend fun introduced(sourceId: String): Set<String> = records.mapTo(HashSet()) { it.itemId }
         override suspend fun index(sourceId: String): CounterIndex {
             requestedSources += sourceId
             loaded.await()

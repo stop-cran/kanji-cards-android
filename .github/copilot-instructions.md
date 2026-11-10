@@ -63,6 +63,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 
 ## Gotchas
 
+- Counter/Word mode-new batches use lifetime source/stack/item introductions, not gate-mode state or the remaining
+  new-content budget. Continue is ordinary (not `:extra`) and appears only after session writes persist; keep due reviews uncapped.
+
 - JLPT kanji selectors share `kanji-jlpt` state but retain exact-level new-card eligibility in all three modes,
   including extra practice. Preserve legacy level logs for unlock/pacing and never borrow higher-level cards to pad a JLPT session.
 
@@ -275,8 +278,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - Counter reading metadata belongs to the displayed canonical phrase, not every counter in legacy `kana`.
   Whole-expression modes use narrow authored-answer matching, never legacy numeral arithmetic (十十 must not become 二十).
   Keep v2 files separate from v1, advance the source-scoped counter parser epoch for newly retained metadata,
-  and distinguish the shared allowance from summed per-mode new opportunities. Counter Home summaries show
-  `min(remaining shared allowance, summed eligible per-mode new)`; a positive allowance alone is not available work.
+  and distinguish the shared allowance from summed per-mode learning opportunities. Counter Home summaries show
+  summed eligible next-batch skills, not a second cap by the shared allowance; a positive allowance alone is not available work.
   Intersect counter level and group against the source once; sequential source-restoring filters can silently undo
   the first restriction. Retain foreign reverse-choice references without adding them to scoped queues.
   Native cumulative-scope fixtures must retain easier content and isolate target-level questions with test-only due states.

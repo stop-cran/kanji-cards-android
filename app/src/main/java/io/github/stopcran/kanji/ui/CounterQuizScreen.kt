@@ -43,6 +43,7 @@ fun CounterQuizScreen(
     onPracticeMore: () -> Unit,
     onOpenDoc: (String, String) -> Unit,
     vm: CounterQuizViewModel = serviceViewModel(sessionKey) { CounterQuizViewModel(it.counters, it.sessionStore) },
+    onContinue: () -> Unit,
 ) {
     val mode = CounterMode.fromCode(sessionKey.split(':').getOrNull(2))
     val extra = sessionKey.endsWith(":extra")
@@ -66,6 +67,9 @@ fun CounterQuizScreen(
                 Text(stringResource(R.string.session_complete), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
                 Text(stringResource(R.string.of_answers_correct, s.correct, s.answered))
                 Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.done)) }
+                if (s.canContinue) {
+                    Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.mode_continue_batch)) }
+                }
                 OutlinedButton(onClick = onPracticeMore, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.practice_more)) }
             }
             is CounterUi.Choose -> {

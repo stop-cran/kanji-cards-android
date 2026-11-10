@@ -18,6 +18,33 @@ data class QueueItem(val kanji: String, val state: SrsState, val isNew: Boolean)
  * New cards are drawn at random from the unseen pool and mixed into the due cards.
  */
 object QueueBuilder {
+    /**
+     * A finite intake of new-in-mode skills, independent of the shared content allowance for items
+     * already introduced in another mode. Due reviews keep their ordinary, uncapped scheduling.
+     */
+    @Suppress("LongParameterList")
+    fun modeBatch(
+        ids: List<String>,
+        states: Map<String, SrsState>,
+        introduced: Set<String>,
+        now: Instant,
+        newBudget: Int,
+        limit: Int = Int.MAX_VALUE,
+        noise: Double = DEFAULT_NOISE,
+        rnd: Random = Random.Default,
+        urgencyFactor: (String) -> Double = { 1.0 },
+    ): List<QueueItem> {
+        val unseen = ids.filter { it !in introduced && states[it]?.phase.let { p -> p == null || p == CardPhase.New } }
+            .let { if (noise > 0) it.shuffled(rnd) else it }
+            .take(newBudget.coerceAtLeast(0))
+        return build(
+            ids, states, now, maxOf(MODE_BATCH_SIZE, newBudget), limit, noise, rnd,
+            newEligible = introduced + unseen, urgencyFactor = urgencyFactor,
+        )
+    }
+
+    const val MODE_BATCH_SIZE = 10
+
     @Suppress("LongParameterList")
     fun build(
         allKanji: List<String>,

@@ -74,7 +74,7 @@ sealed interface WordQuizUi {
         val key: String get() = if (direction == WordDirection.Reading) word.reading else word.word
         val correct: Boolean get() = picked == key
     }
-    data class Done(val answered: Int, val correct: Int, val suggestion: WordDirection? = null) : WordQuizUi
+    data class Done(val answered: Int, val correct: Int, val suggestion: WordDirection? = null, val canContinue: Boolean = false) : WordQuizUi
 
     /** Typed mode: the English prompt and a free-text answer; the draft text lives in the view model. */
     data class TypeQuestion(val word: WordEntity, val remaining: Int, val font: KanjiFont) : WordQuizUi
@@ -168,7 +168,9 @@ class WordQuizViewModel(
         val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
         val ids = all.forDirection(direction).map { it.word }
         val minimum = app.settings.practiceMinimum()
-        val base = WordQueues.build(direction, ids, states, other, Instant.now(), budget, extra, limit = if (extra) minimum else Int.MAX_VALUE).map { it.kanji }
+        val introduced = app.db.reviews().introducedItems(sourceId, stackId).toSet()
+        val base = WordQueues.build(direction, ids, states, other, Instant.now(), budget, extra,
+            limit = if (extra) minimum else Int.MAX_VALUE, introduced = introduced).map { it.kanji }
         val items = if (extra) base + pad(base, minimum - base.size, ids, all) else base
         session = trackSession(QuizSession(items, { it }), sourceId, stackId, direction.mode.name, extra)
         showNext()
@@ -360,6 +362,7 @@ class WordQuizViewModel(
     private fun suggest() {
         val done = ui as? WordQuizUi.Done ?: return
         viewModelScope.launch {
+            awaitSessionWrites()
             val minimum = app.settings.practiceMinimum()
             val now = Instant.now()
             val stored = WordDirection.entries.associateWith { d ->
@@ -372,7 +375,12 @@ class WordQuizViewModel(
                 if (n >= minimum) n else n + app.db.padWordCandidates(sourceId, stackId, d.mode, ids.toSet(), own.keys).size.coerceAtMost(minimum - n)
             }
             val alternative = PracticeSuggestion.alternative(direction, sizes)
-            if (alternative != null && ui === done) ui = done.copy(suggestion = alternative)
+            val next = if (extra) emptyList() else WordQueues.build(
+                direction, wordList.forDirection(direction).map { it.word }, stored.getValue(direction),
+                stored.getValue(direction.gate), now, app.db.newAllowance(app.settings, sourceId, now).remaining,
+                introduced = app.db.reviews().introducedItems(sourceId, stackId).toSet(),
+            )
+            if (ui === done) ui = done.copy(suggestion = alternative, canContinue = next.isNotEmpty())
         }
     }
 

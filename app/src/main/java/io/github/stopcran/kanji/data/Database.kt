@@ -597,6 +597,10 @@ interface ReviewDao {
         "(initial_log.mode NOT IN ('KanjiOn', 'KanjiKun') OR initial_log.reading = '' OR COALESCE(initial_log.previousReadingStarted, 0) = 0)")
     suspend fun itemsIntroducedSince(sourceId: String, sinceMs: Long): Int
 
+    /** Content identities already introduced in any mode; matches the non-reading shared allowance key. */
+    @Query("SELECT DISTINCT kanji FROM review_log WHERE sourceId = :sourceId AND stack = :stack AND reading = ''")
+    suspend fun introducedItems(sourceId: String, stack: String): List<String>
+
     /** Cards that were reviewed before and are due at [nowMs], in any mode. */
     @Query("SELECT COUNT(*) FROM review_state WHERE sourceId = :sourceId AND phase != 'New' AND dueMs <= :nowMs " +
         "AND (:excludedMode IS NULL OR mode != :excludedMode)")
