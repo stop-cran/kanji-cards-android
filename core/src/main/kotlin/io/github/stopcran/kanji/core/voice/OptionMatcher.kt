@@ -33,9 +33,8 @@ object OptionMatcher {
     internal fun normalize(text: String, language: String = "en"): String {
         val russian = language == "ru"
         val words = if (russian) russianNumberWords else numberWords
-        val tokens = text.lowercase()
+        val tokens = withoutQualifiers(text).lowercase()
             .replace('ё', 'е')
-            .replace(Regex("\\([^)]*\\)"), " ")
             .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
             .trim()
             .split(' ')
@@ -52,9 +51,25 @@ object OptionMatcher {
     }
 
     /** The whole title plus each part of a multi-meaning title ("up, above", "cooked rice; meal"). */
-    internal fun variants(option: String, language: String = "en"): List<String> =
-        (listOf(option) + option.split(Regex(";|,\\s")))
+    internal fun variants(option: String, language: String = "en"): List<String> {
+        val title = withoutQualifiers(option)
+        return (listOf(title) + title.split(Regex(";|,\\s")))
             .map { normalize(it, language) }.filter { it.isNotEmpty() }.distinct()
+    }
+
+    private fun withoutQualifiers(text: String): String = buildString {
+        var depth = 0
+        for (char in text) {
+            when {
+                char == '(' -> {
+                    if (depth == 0) append(' ')
+                    depth++
+                }
+                char == ')' && depth > 0 -> depth--
+                depth == 0 -> append(char)
+            }
+        }
+    }
 
     internal fun score(heard: String, variant: String): Double {
         if (heard == variant) return 1.0

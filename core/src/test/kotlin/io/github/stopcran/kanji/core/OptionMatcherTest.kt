@@ -52,6 +52,30 @@ class OptionMatcherTest {
         assertNull(OptionMatcher.match(listOf("water"), listOf("вода", "дерево"), "ru"))
     }
 
+    @Test fun parentheticalQualifierIsNotASpokenMeaning() {
+        val words = listOf("дверь", "позади", "старший брат", "все (уважительно, о людях)")
+        assertNull(OptionMatcher.match(listOf("о людях"), words, "ru"))
+        assertEquals(3, OptionMatcher.match(listOf("все"), words, "ru"))
+
+        val kanji = listOf("дерево", "вода", "огонь", "толстый (например, в слове со значением «солнце»)")
+        assertNull(OptionMatcher.match(listOf("солнце"), kanji, "ru"))
+        assertEquals(3, OptionMatcher.match(listOf("толстый"), kanji, "ru"))
+    }
+
+    @Test fun meaningsOutsideQualifiersRemainVoiceVariants() {
+        val title = "cooked rice (food, not raw; often served (warm, plain)); meal, dinner"
+        assertEquals(listOf("cooked rice meal dinner", "cooked rice", "meal", "dinner"), OptionMatcher.variants(title))
+        assertEquals(0, OptionMatcher.match(listOf("cooked"), listOf(title, "water")))
+        assertEquals(0, OptionMatcher.match(listOf("meal"), listOf(title, "water")))
+        assertEquals(0, OptionMatcher.match(listOf("dinner"), listOf(title, "water")))
+        assertNull(OptionMatcher.match(listOf("plain"), listOf(title, "water")))
+    }
+
+    @Test fun unfinishedQualifierDoesNotLeakItsContents() {
+        assertEquals(listOf("все каждый", "все", "каждый"), OptionMatcher.variants("все, каждый (уважительно, о людях", "ru"))
+        assertNull(OptionMatcher.match(listOf("о людях"), listOf("все, каждый (уважительно, о людях", "вода"), "ru"))
+    }
+
     @Test fun curatedWordDistractorsAppearAndRespectExclusionsAndLeaveASlotForScoring() {
         fun word(id: String, title: String, distractors: List<String> = emptyList(), exclusions: List<String> = emptyList()) =
             WordCard(id, id, title, "noun", emptyList(), quizExclusions = exclusions, quizDistractors = distractors)
