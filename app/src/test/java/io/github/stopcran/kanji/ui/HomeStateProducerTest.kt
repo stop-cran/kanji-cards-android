@@ -8,6 +8,7 @@ import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.PacingNote
 import io.github.stopcran.kanji.core.srs.StudyMode
+import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.srs.WeekProgress
 import io.github.stopcran.kanji.core.unlock.UnlockRule
 import io.github.stopcran.kanji.data.HomeInventory
@@ -17,6 +18,7 @@ import io.github.stopcran.kanji.data.HomeSnapshot
 import io.github.stopcran.kanji.data.HomeStudyPreferences
 import io.github.stopcran.kanji.data.KanjiEntity
 import io.github.stopcran.kanji.data.WordEntity
+import io.github.stopcran.kanji.data.joinSep
 import io.github.stopcran.kanji.data.SyncActivity
 import io.github.stopcran.kanji.data.SyncResult
 import kotlinx.coroutines.CompletableDeferred
@@ -156,6 +158,81 @@ class HomeStateProducerTest {
         assertEquals(setOf("白", "休", "自"), projected.kanji.filter {
             io.github.stopcran.kanji.core.srs.Stacks.includes(projected.stack, it.tags.split('\u001F'))
         }.map { it.kanji }.toSet())
+    }
+
+    @Test fun levelProgressUsesExactInventoriesAndIndependentSkillStates() {
+        val cards = listOf(
+            KanjiEntity(source.id, "k5", "N5", 5, "jlpt-n5", 4, null, null, "オン", "くん", "", "", "{}", 0),
+            KanjiEntity(source.id, "k4", "N4", 4, "jlpt-n4", 4, null, null, "オン", "くん", "", "", "{}", 1),
+        )
+        val words = listOf(
+            WordEntity(source.id, "w5", "w5", "N5", null, "", "", "", 5),
+            WordEntity(source.id, "w4", "w4", "N4 fallback", null, listOf("k4").joinSep(), "", ""),
+            WordEntity(source.id, "unclassified", "unclassified", "Unclassified", null, "", "", ""),
+        )
+        val state = SrsState(CardPhase.Review, 20.0, 5.0, now, now, 3)
+        val statesByStack = mapOf(
+            Stacks.JLPT_STATE to mapOf(
+                StudyMode.Quiz to mapOf("k5" to state),
+                StudyMode.Draw to mapOf("k4" to state),
+                StudyMode.KanjiOn to mapOf(ReadingId.of("k5", "おん") to state),
+                StudyMode.KanjiKun to mapOf(ReadingId.of("k4", "くん") to state),
+            ),
+            "words-n5" to mapOf(StudyMode.WordJpEn to mapOf("w5" to state)),
+            "words-n4" to mapOf(StudyMode.WordJpEn to mapOf("w4" to state)),
+            "words-all" to mapOf(StudyMode.WordJpEn to mapOf("w5" to state, "w4" to state)),
+        )
+        val selected = selection.copy(stackId = "jlpt-n4", wordStackId = "words-n4", n4Unlocked = true)
+        val selectedStates = StudyMode.entries.associateWith { emptyMap<String, SrsState>() }
+        val projected = projectHome(
+            snapshot(selected).copy(
+                inventory = HomeInventory(selected, cards, words),
+                states = selectedStates,
+                statesByStack = statesByStack,
+            ),
+            now,
+        )
+
+        assertEquals(1, projected.kanjiProgress.getValue("jlpt-n5").skills.getValue("meaning").solid)
+        assertEquals(1, projected.kanjiProgress.getValue("jlpt-n5").skills.getValue("meaning").total)
+        assertEquals(0, projected.kanjiProgress.getValue("jlpt-n4").skills.getValue("meaning").solid)
+        assertEquals(1, projected.kanjiProgress.getValue("jlpt-n4").skills.getValue("meaning").total)
+        assertEquals(1, projected.kanjiProgress.getValue("jlpt-n5").skills.getValue("onReading").solid)
+        assertEquals(1, projected.kanjiProgress.getValue("jlpt-n4").skills.getValue("kunReading").solid)
+        assertEquals(1, projected.wordProgress.getValue("words-n5").skills.getValue("JpToEn").total)
+        assertEquals(1, projected.wordProgress.getValue("words-n4").skills.getValue("JpToEn").total)
+        assertEquals(3, projected.wordProgress.getValue("words-all").skills.getValue("JpToEn").total)
+    }
+
+    @Test fun kanjiProgressUsesEachStackStateAndUniqueLevelTags() {
+        val cards = listOf(
+            KanjiEntity(source.id, "n5", "N5", 5, "jlpt-n5", null, null, null, "", "", "", "", null, 0),
+            KanjiEntity(source.id, "tag-n4", "N4 tag only", null, "jlpt-n4", null, null, null, "", "", "", "", null, 1),
+            KanjiEntity(source.id, "ambiguous", "Conflicting tags", null, "jlpt-n4\u001Fjlpt-n3", null, null, null, "", "", "", "", null, 2),
+            KanjiEntity(source.id, "starter", "Starter", null, "starter", null, null, null, "", "", "", "", null, 3),
+        )
+        val solid = SrsState(CardPhase.Review, 20.0, 5.0, now, now, 3)
+        val selected = selection.copy(stackId = "jlpt-n5")
+        val statesByStack = mapOf(
+            Stacks.JLPT_STATE to mapOf(StudyMode.Quiz to mapOf("tag-n4" to solid)),
+            "all" to mapOf(StudyMode.Quiz to mapOf("n5" to solid, "starter" to solid)),
+            "starter" to mapOf(StudyMode.Quiz to mapOf("starter" to solid)),
+        )
+        val projected = projectHome(
+            snapshot(selected).copy(
+                inventory = HomeInventory(selected, cards, emptyList()),
+                states = StudyMode.entries.associateWith { emptyMap() },
+                statesByStack = statesByStack,
+            ),
+            now,
+        )
+
+        assertEquals(1, projected.kanjiProgress.getValue("jlpt-n4").total.total)
+        assertEquals(1, projected.kanjiProgress.getValue("jlpt-n4").total.solid)
+        assertEquals(0, projected.kanjiProgress.getValue("jlpt-n3").total.total)
+        assertEquals(4, projected.kanjiProgress.getValue("all").total.total)
+        assertEquals(2, projected.kanjiProgress.getValue("all").total.solid)
+        assertEquals(1, projected.kanjiProgress.getValue("starter").total.solid)
     }
 
     @Test fun cumulativeHomeDoesNotOfferEmptyExtraPracticeForIneligibleLowerSkills() {

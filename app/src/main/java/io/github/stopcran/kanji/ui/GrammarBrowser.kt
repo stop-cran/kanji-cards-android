@@ -108,6 +108,9 @@ internal fun GrammarMapBrowser(
     var filter by rememberSaveable { mutableStateOf(GrammarTopicFilter.All) }
     var tools by rememberSaveable { mutableStateOf(false) }
     var selectedRoute by rememberSaveable { mutableStateOf<String?>(null) }
+    val progress = remember(snapshot.study.sets, snapshot.study.states, snapshot.study.now) {
+        grammarProgress(snapshot.study.sets.flatMap { it.exercises }, snapshot.study.states, snapshot.study.now)
+    }
     val missingChapters = root && requestedKind == GrammarTargetKind.Chapter && snapshot.curriculum !is GrammarCurriculumState.Ready
     val kind = if (!root || missingChapters) GrammarTargetKind.Group else requestedKind
     fun save() { if (root) onPreferences?.invoke(GrammarBrowserPreferences(requestedKind, diagram)) }
@@ -131,7 +134,7 @@ internal fun GrammarMapBrowser(
     )
     TextButton(onClick = { tools = !tools }) { Text(stringResource(R.string.grammar_browser_tools)) }
     if (tools) {
-        GrammarScopeChips(snapshot.study.preferences.browseScope, actions.browseScope)
+        GrammarScopeChips(snapshot.study.preferences.browseScope, progress, actions.browseScope)
         Text(stringResource(R.string.grammar_map_filter_help), style = MaterialTheme.typography.bodySmall)
         if (root && kind == GrammarTargetKind.Group) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -62,6 +62,12 @@
     <string name="word_tag_verb">verb</string>
     <string name="word_tag_voiced">voiced</string>
     <string name="study_due_new">%1$d due, %2$d new</string>
+    <string name="level_progress_accessibility">%1$s, %2$d%% solid progress, %3$d of %4$d skill-item entries</string>
+    <string name="level_progress_summary">Solid progress: %1$d%% (%2$d of %3$d skill-item entries)</string>
+    <string name="level_progress_skill">%1$s: %2$d%% (%3$d of %4$d)</string>
+    <string name="level_progress_unavailable">%1$s, no level-specific progress available</string>
+    <string name="level_skill_on_reading">On’yomi</string>
+    <string name="level_skill_kun_reading">Kun’yomi</string>
     <string name="daily_counts_show">Daily counts &amp; shared limits</string>
     <string name="daily_counts_hide">Hide daily-count help</string>
     <string name="daily_counts_settings">The limit applies separately to Kana and to content study. Each allowance follows your weekly rhythm and slows new introductions when reviews build up. Due reviews have no daily cap.</string>

@@ -16,6 +16,8 @@ import io.github.stopcran.kanji.core.kana.KanaScript
 import io.github.stopcran.kanji.core.srs.NewAllowance
 import io.github.stopcran.kanji.core.srs.QueueBuilder
 import io.github.stopcran.kanji.core.srs.SrsState
+import io.github.stopcran.kanji.core.srs.StudyProgress
+import io.github.stopcran.kanji.core.words.Advancement
 import io.github.stopcran.kanji.data.ReviewStateEntity
 import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.toSrs
@@ -32,6 +34,24 @@ internal class KanaOverview(
     val allowance: NewAllowance?,
     private val now: Instant,
 ) {
+    fun progress(script: KanaScript): StudyProgress = Advancement.progress(
+        KanaMode.entries.associate { mode ->
+            mode.name to KanaCatalog.all(script).map { card ->
+                states[KanaStateKey(script, mode)]?.firstOrNull { it.kanji == card.kana }?.toSrs()
+            }
+        },
+        now,
+    )
+
+    fun progress(script: KanaScript, mode: KanaMode): StudyProgress = Advancement.progress(
+        mapOf(
+            mode.name to KanaCatalog.all(script).map { card ->
+                states[KanaStateKey(script, mode)]?.firstOrNull { it.kanji == card.kana }?.toSrs()
+            },
+        ),
+        now,
+    )
+
     fun lockedCount(script: KanaScript, mode: KanaMode): Int? {
         val rows = states[KanaStateKey(script, mode)] ?: return null
         val byId = rows.associate { it.kanji to it.toSrs() }

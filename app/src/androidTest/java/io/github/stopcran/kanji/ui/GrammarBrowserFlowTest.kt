@@ -116,7 +116,13 @@ class GrammarBrowserFlowTest {
                 LaunchedEffect(preferences, budget, active.value) {
                     if (active.value == null) {
                         val study = db.grammarStudy(settings, source, Instant.now())
-                        home.value = GrammarHome(source, study.preferences, study.sets, study.mode, study.focus, study.learnerMessages)
+                        home.value = GrammarHome(
+                            source,
+                            study.preferences,
+                            study.sets,
+                            study.mode,
+                            GrammarHomeEvidence(study.focus, study.learnerMessages, study.states),
+                        )
                     }
                 }
                 KanjiTheme {

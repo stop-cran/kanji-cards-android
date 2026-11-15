@@ -25,6 +25,8 @@ import io.github.stopcran.kanji.core.grammar.GrammarPracticeTarget
 import io.github.stopcran.kanji.core.grammar.GrammarFocusDecision
 import io.github.stopcran.kanji.core.grammar.FocusCandidate
 import io.github.stopcran.kanji.core.home.ModeState
+import io.github.stopcran.kanji.core.srs.StudyProgress
+import io.github.stopcran.kanji.core.words.Advancement
 import io.github.stopcran.kanji.data.GrammarPreferences
 import io.github.stopcran.kanji.data.GrammarMessage
 import io.github.stopcran.kanji.data.GrammarMessageId
@@ -56,14 +58,24 @@ import java.time.Instant
 import androidx.compose.ui.res.stringResource
 import io.github.stopcran.kanji.R
 
+internal data class GrammarHomeEvidence(
+    val focus: GrammarFocusDecision? = null,
+    val notices: List<GrammarMessage> = emptyList(),
+    val states: Map<String, io.github.stopcran.kanji.core.srs.SrsState> = emptyMap(),
+)
+
 internal class GrammarHome(
     val sourceId: String,
     val preferences: GrammarPreferences,
     val sets: List<GrammarSet>?,
     val mode: ModeState,
-    val focus: GrammarFocusDecision? = null,
-    val notices: List<GrammarMessage> = emptyList(),
+    private val evidence: GrammarHomeEvidence = GrammarHomeEvidence(),
 ) {
+    val focus get() = evidence.focus
+    val notices get() = evidence.notices
+    val progress: Map<GrammarScope, StudyProgress> =
+        grammarProgress(sets.orEmpty().flatMap { it.exercises }, evidence.states, Instant.now())
+
     @Composable
     fun summary(): String = when {
         sets == null -> stringResource(R.string.loading)
@@ -93,7 +105,13 @@ internal fun rememberGrammarHome(app: KanjiApp): State<GrammarHome> {
                 app.db.reviews().observeGrammarReadinessStatus(source.id),
             ) { _, _, _, _, _ -> Unit }.collectLatest {
                 val study = app.db.grammarStudy(app.settings, source.id, Instant.now())
-                value = GrammarHome(source.id, study.preferences, study.sets, study.mode, study.focus, study.learnerMessages)
+                value = GrammarHome(
+                    source.id,
+                    study.preferences,
+                    study.sets,
+                    study.mode,
+                    GrammarHomeEvidence(study.focus, study.learnerMessages, study.states),
+                )
             }
         }
     }
@@ -119,7 +137,13 @@ fun GrammarPage(
                 is GrammarMapState.Unavailable -> Text(state.message, color = MaterialTheme.colorScheme.error)
                 is GrammarMapState.Ready -> {
                     val study = state.snapshot.study
-                    val home = GrammarHome(source.id, study.preferences, study.sets, study.mode, study.focus, study.learnerMessages)
+                    val home = GrammarHome(
+                        source.id,
+                        study.preferences,
+                        study.sets,
+                        study.mode,
+                        GrammarHomeEvidence(study.focus, study.learnerMessages, study.states),
+                    )
                     GrammarStudyControls(app, home, onStart)
                     Text(stringResource(R.string.grammar_browser_title), style = MaterialTheme.typography.titleLarge)
                     GrammarCatalogNotice(state.snapshot.curriculum)
@@ -143,9 +167,9 @@ private fun GrammarStudyControls(app: KanjiApp, home: GrammarHome, onStart: (Boo
         .let { Text(it) }
     else Text(stringResource(R.string.loading))
     Text(stringResource(R.string.grammar_new_scope, grammarScopeIntroduction(preferences.newScope)))
-    GrammarScopeChips(preferences.newScope) {
+    GrammarScopeChips(preferences.newScope, onSelect = {
         coroutineScope.launch { app.db.changeGrammarScope(app.settings, home.sourceId, it) }
-    }
+    }, progress = home.progress)
     Text(
         stringResource(R.string.grammar_new_scope_help),
         style = MaterialTheme.typography.bodySmall,
@@ -374,10 +398,46 @@ internal fun GrammarRecommendationReadout(candidate: FocusCandidate) {
 }
 
 @Composable
-internal fun GrammarScopeChips(selected: GrammarScope, onSelect: (GrammarScope) -> Unit) {
+internal fun GrammarScopeChips(
+    selected: GrammarScope,
+    progress: Map<GrammarScope, StudyProgress> = emptyMap(),
+    onSelect: (GrammarScope) -> Unit,
+) {
     val context = LocalContext.current
     val levels = GrammarScope.entries.filter { it != GrammarScope.All && it != GrammarScope.Unclassified }
-    LevelFilter(levels + listOf(GrammarScope.All, GrammarScope.Unclassified), selected, onSelect, { context.getString(grammarScopeLabel(it)) })
+    LevelFilter(
+        levels + listOf(GrammarScope.All, GrammarScope.Unclassified), selected, onSelect,
+        { context.getString(grammarScopeLabel(it)) },
+        progress = { progress[it] },
+        skillLabel = { stringResource(R.string.home_grammar) },
+    )
+}
+
+internal fun grammarProgress(
+    exercises: List<io.github.stopcran.kanji.core.content.GrammarExercise>,
+    states: Map<String, io.github.stopcran.kanji.core.srs.SrsState>,
+    now: Instant,
+): Map<GrammarScope, StudyProgress> = GrammarScope.entries.associateWith { scope ->
+    val items = exercises.filter { exercise ->
+        when (scope) {
+            GrammarScope.All -> true
+            GrammarScope.Unclassified -> exercise.jlpt == null
+            else -> exercise.jlpt == scope.levelNumber()
+        }
+    }
+    Advancement.progress(
+        mapOf("grammar" to items.map { states[it.id] }),
+        now,
+    )
+}
+
+private fun GrammarScope.levelNumber(): Int? = when (this) {
+    GrammarScope.N5 -> 5
+    GrammarScope.N4 -> 4
+    GrammarScope.N3 -> 3
+    GrammarScope.N2 -> 2
+    GrammarScope.N1 -> 1
+    GrammarScope.All, GrammarScope.Unclassified -> null
 }
 
 @Composable

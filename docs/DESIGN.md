@@ -640,6 +640,24 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   Kanji reviews/options include easier levels while new kanji skills are selected-level only. Words/Listening N4 and counters N4/N3
   include easier levels, Grammar filters cumulative new material separately from exact-level browsing, and diagnostics select an exact
   level. The JLPT kanji state migration does not alter the other selectors' membership or schedules.
+- **Level progress (#141):** each selector's partial left-to-right fill and accessible description use that choice's exact
+  authored level inventory, even when the selected study scope is cumulative. A progress entry is one item in one skill; it is
+  solid only when its own persisted SRS state is in Review, has at least 7 days of stability, and at least 85% FSRS
+  retrievability. Counts are therefore skill-item evidence, not unique cards, correct answers in one session, due work, or an
+  allowance. Per-skill counts are shown for the selected choice. Empty inventories have no percentage; items without a
+  level-specific membership remain unclassified and cannot increase an exact-level numerator or denominator.
+- Kanji progress uses the selector's unique `jlpt-nN` tag membership (not the nullable entity-level field), and keeps meaning,
+  drawing, on'yomi and kun'yomi separate; conflicting/missing level tags are unclassified, and a kanji without strokes
+  contributes no drawing entry.
+  Word level uses the same explicit-level/kanji fallback as `inWordStack`, with each displayed level measured in that stack's
+  own SRS history. Counter modes are separate skills, and exact file levels are distinct from their cumulative N4/N3 scopes.
+  Grammar uses the exercise's authored `jlpt` and its single shared Grammar state; choose/type are not independent evidence.
+  Listening passage and task evidence remains separate and requires completed graded SRS state; exposure or a partial encounter
+  alone is not progress. Kana has no JLPT level, so script/mode progress is shown separately from its existing stability-based
+  unlock counts.
+- The optional N4 offer remains dismissible and never changes levels automatically. Its evidence is section/skill-specific:
+  the existing overall and per-mode thresholds apply to Kanji meaning, drawing when strokes exist, both reading kinds when
+  authored, and the Words directions the offer represents. "All caught up" is not evidence of advancement.
 - Word stacks are cumulative in *membership* (`words-n4` includes N5 words) but keyed independently in SRS state, so switching from `words-n5`
   to `words-n4` starts those words afresh. Never share state across stacks.
 - **Onomatopoeia stack** (`words-onomatopoeia`, a `WordStack` with `tag = "onomatopoeia"`): membership is the word's tag alone, independent of

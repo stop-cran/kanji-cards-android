@@ -27,16 +27,23 @@ import io.github.stopcran.kanji.core.counters.CounterMode
 import io.github.stopcran.kanji.core.counters.CounterGroup
 import io.github.stopcran.kanji.core.counters.CounterScope
 import io.github.stopcran.kanji.core.home.ModeState
+import io.github.stopcran.kanji.core.srs.StudyProgress
+import io.github.stopcran.kanji.core.words.Advancement
 import io.github.stopcran.kanji.data.counterIndex
 import io.github.stopcran.kanji.data.counterModeStates
 import io.github.stopcran.kanji.data.newAllowance
+import io.github.stopcran.kanji.data.counterStates
+import io.github.stopcran.kanji.data.COUNTER_STACK
 import java.time.Instant
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.collectLatest
 
 /** Counts for the Counters entry and page; loaded on entry, so they are fresh after every session. */
 class CounterHome(
     val cards: Int?, val modes: Map<CounterMode, ModeState>, val allowance: Int = 0,
     val articles: Map<String, String> = emptyMap(),
+    val progress: Map<CounterScope, StudyProgress> = emptyMap(),
 ) {
     fun summary(): String = when {
         cards == null -> "Loading…"
@@ -81,13 +88,23 @@ internal fun rememberCounterHome(app: Services, group: CounterGroup = CounterGro
     val articleLabel = stringResource(R.string.counter_article_reference)
     val state: State<CounterHome> = produceState(CounterHome(null, emptyMap()), source.id, group to scope, daily to week, articleLabel) {
         value = CounterHome(null, emptyMap())
-        app.db.content().observeMeta(source.id).collectLatest {
-            val index = app.db.counterIndex(source.id).inScope(group, scope)
+        val stateFlows = CounterMode.entries.map { mode ->
+            app.db.reviews().observeStates(source.id, COUNTER_STACK, mode.mode.name)
+                .map { Unit }
+        }
+        combine(listOf(app.db.content().observeMeta(source.id).map { Unit }) + stateFlows) { Unit }
+            .collectLatest {
+            val allIndex = app.db.counterIndex(source.id)
+            val index = allIndex.inScope(group, scope)
+            val stateByMode = CounterMode.entries.associateWith { mode ->
+                app.db.counterStates(source.id, mode)
+            }
             val now = Instant.now()
             val budget = app.db.newAllowance(app.settings, source.id, now).remaining
             value = CounterHome(
                 index.cards.size + index.expressions.size, app.db.counterModeStates(source.id, index, budget, now), budget,
                 index.files.mapNotNull { f -> f.article?.let { it to articleLabel } }.toMap(),
+                CounterScope.entries.associateWith { counterProgress(allIndex, stateByMode, it, group, now) },
             )
         }
     }
@@ -114,11 +131,14 @@ internal fun CountersPage(
     Page(stringResource(R.string.counter_page_title), onBack, scrollable = home.cards != null) {
         LevelFilter(CounterScope.entries, scope, { app.settings.setCounterScope(source.id, it) }, { context.getString(counterScopeLabel(it)) },
             description = if (scope == CounterScope.N4 || scope == CounterScope.N3)
-                stringResource(R.string.level_filter_includes_easier) else null)
+                stringResource(R.string.level_filter_includes_easier) else null,
+            progress = { home.progress[it] },
+            skillLabel = { context.getString(counterModeLabel(CounterMode.valueOf(it))) })
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CounterGroup.entries.forEach { item ->
                 FilterChip(selected = group == item, onClick = { selected = item.code }, label = { Text(stringResource(counterGroupLabel(item))) })
             }
+
         }
         if (home.cards == null) Text(stringResource(R.string.loading))
         else Text(pluralStringResource(R.plurals.counter_prompts, home.cards, home.cards))
@@ -132,6 +152,33 @@ internal fun CountersPage(
             TextButton(onClick = { onOpenDoc(path) }) { Text(label) }
         }
     }
+}
+
+internal fun counterProgress(
+    index: io.github.stopcran.kanji.core.counters.CounterIndex,
+    states: Map<CounterMode, Map<String, io.github.stopcran.kanji.core.srs.SrsState>>,
+    scope: CounterScope,
+    group: CounterGroup,
+    now: Instant,
+): StudyProgress {
+    val exactLevel = when (scope) {
+        CounterScope.N5 -> 5
+        CounterScope.N4 -> 4
+        CounterScope.N3 -> 3
+        CounterScope.All -> null
+    }
+    val selected = io.github.stopcran.kanji.core.counters.CounterIndex(
+        index.files.filter { file ->
+            (exactLevel == null || file.level == exactLevel) &&
+                (group == CounterGroup.All || file.group == group.code)
+        },
+    )
+    return Advancement.progress(
+        CounterMode.entries.associate { mode ->
+            mode.name to selected.ids(mode).map { states[mode]?.get(it) }
+        },
+        now,
+    )
 }
 
 private fun counterScopeLabel(scope: CounterScope): Int = when (scope) {

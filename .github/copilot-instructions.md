@@ -233,6 +233,11 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   size floor. Preserve annotated reading links and test their bold metrics/clicks under narrow widths and enlarged text.
 - Level chips use bare N5-N1/All labels; explain cumulative versus exact scope outside the shared `LevelFilter` row.
   Never infer membership or saved identity from a chip's text or position; concise labels do not unify scope semantics.
+- Progress fill for a cumulative level chip is computed from its exact authored-level inventory and that section's own
+  persisted skill states, not the current cumulative queue. Keep each skill's evidence separate, exclude unclassified items
+  from exact JLPT levels, and do not treat empty/due-free queues or transient answers as durable progress.
+- Kanji exact-level progress follows a unique `jlpt-nN` membership tag, matching `Stacks` selectors; conflicting or absent
+  level tags remain unclassified even if other fields suggest a level.
 - Native browser tests must reveal the outer Page's chip row/list before scrolling the inner viewport.
   Returning from a vocabulary article restores its lookup dialog; close that dialog before testing question controls.
 - Candidate Grammar chapters can span several article sets. Derive expected membership from the catalog and authored groups;
