@@ -604,6 +604,10 @@ internal fun SettingsScreen(
             style = MaterialTheme.typography.bodySmall,
         )
         if (progressStatus.isNotEmpty()) Text(progressStatus, style = MaterialTheme.typography.bodySmall)
+        OutlinedButton(onClick = {
+            context.startActivity(android.content.Intent(context, io.github.stopcran.kanji.CrashReportActivity::class.java)
+                .putExtra(io.github.stopcran.kanji.CrashReportActivity.EXTRA_SHOW_LAST, true))
+        }) { Text(stringResource(R.string.crash_report_settings)) }
         TextButton(onClick = onAbout) { Text(stringResource(R.string.about_sources_and_licences)) }
         Text(
             stringResource(R.string.app_version, io.github.stopcran.kanji.BuildConfig.VERSION_NAME, io.github.stopcran.kanji.BuildConfig.GIT_SHA),

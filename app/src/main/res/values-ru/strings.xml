@@ -1043,4 +1043,14 @@
     <string name="advancement_title">Попробовать %1$s?</string>
     <string name="advancement_explanation">Ваши навыки уровня %1$s показывают устойчивый прогресс. Можно начать следующий уровень и продолжать повторения.</string>
     <string name="advancement_start">Начать %1$s</string>
+    <string name="crash_report_settings">Последний отчёт о сбое</string>
+    <string name="crash_report_title">Отчёт о сбое приложения</string>
+    <string name="crash_report_privacy">Отчёт сохранён на этом устройстве. Он может содержать личные данные, пути к файлам и другую конфиденциальную информацию. Проверьте его перед копированием или отправкой. Автоматически ничего не отправляется.</string>
+    <string name="crash_report_none">Отчётов о сбоях пока нет.</string>
+    <string name="crash_report_copy">Копировать</string>
+    <string name="crash_report_share">Поделиться</string>
+    <string name="crash_report_dismiss">Закрыть</string>
+    <string name="crash_report_copied">Отчёт скопирован.</string>
+    <string name="crash_report_share_unavailable">Нет приложения для отправки отчёта.</string>
+    <string name="crash_report_error">Не удалось открыть отчёт о сбое. Попробуйте снова в настройках.</string>
 </resources>

@@ -1029,4 +1029,14 @@
     <string name="advancement_title">Try %1$s?</string>
     <string name="advancement_explanation">Your %1$s skills have sustained progress. You can start the next level while continuing your reviews.</string>
     <string name="advancement_start">Start %1$s</string>
+    <string name="crash_report_settings">Last crash report</string>
+    <string name="crash_report_title">App crash report</string>
+    <string name="crash_report_privacy">The app saved this report on this device. It may contain personal information, file paths or other sensitive details. Review it before copying or sharing. Nothing is sent automatically.</string>
+    <string name="crash_report_none">No crash report is available.</string>
+    <string name="crash_report_copy">Copy</string>
+    <string name="crash_report_share">Share</string>
+    <string name="crash_report_dismiss">Dismiss</string>
+    <string name="crash_report_copied">Crash report copied.</string>
+    <string name="crash_report_share_unavailable">No app is available to share the report.</string>
+    <string name="crash_report_error">Could not access the crash report. Try again from Settings.</string>
 </resources>

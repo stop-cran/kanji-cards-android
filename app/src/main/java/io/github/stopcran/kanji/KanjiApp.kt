@@ -56,6 +56,16 @@ class Services(val db: AppDatabase, val settings: Settings, val context: Context
 }
 
 class KanjiApp : Application() {
+    private var recoveryProcess = false
+
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(base)
+        val name = if (android.os.Build.VERSION.SDK_INT >= 28) Application.getProcessName()
+        else java.io.File("/proc/self/cmdline").readText().substringBefore('\u0000')
+        recoveryProcess = name == "${base.packageName}:crash_recovery"
+        if (!recoveryProcess) io.github.stopcran.kanji.data.installCrashHandler(this)
+    }
+
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, error ->
         android.util.Log.e("ContentSync", "Sync owner stopped unexpectedly.", error)
     })
@@ -94,6 +104,7 @@ class KanjiApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        if (recoveryProcess) return
         val recoveredLanguageSelection = runBlocking { contentSync.recoverCommittedCandidate(settings) }
         ArtSet.choose(settings)
         AppLocale.initialize(this, settings.appLanguage.value, force = recoveredLanguageSelection != null)

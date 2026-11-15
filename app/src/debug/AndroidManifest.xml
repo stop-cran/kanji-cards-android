@@ -4,5 +4,10 @@
         <activity
             android:name="androidx.activity.ComponentActivity"
             android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".CrashProbeActivity" android:exported="true" />
+        <provider
+            android:name=".CrashProbeProvider"
+            android:authorities="${applicationId}.crashprobe"
+            android:exported="false" />
     </application>
 </manifest>

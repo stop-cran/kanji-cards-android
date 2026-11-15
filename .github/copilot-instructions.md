@@ -63,6 +63,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 
 ## Gotchas
 
+- Crash reports are written before delegation and mirrored best-effort to app-owned MediaStore Downloads on Android 10+.
+  Repeated native startup probes need `am start -S`: otherwise an existing top activity can receive the intent without
+  recreating the provider, so repeated starts do not prove repeated crashes.
 - JLPT kanji selectors share `kanji-jlpt` state but retain exact-level new-card eligibility in all three modes,
   including extra practice. Preserve legacy level logs for unlock/pacing and never borrow higher-level cards to pad a JLPT session.
 

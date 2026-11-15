@@ -23,6 +23,18 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 6. **Never trust simulated tuning alone.** Matcher thresholds were first tuned on simulated hands; real exported drawings are fixtures
    (`RealDrawingsTest`). Prefer adding real fixtures over adjusting numbers blindly.
 
+### Local crash reports
+
+The main process installs a synchronous uncaught-exception handler in `Application.attachBaseContext`, before providers and normal
+application initialization. It atomically stores up to three size-bounded reports in private, no-backup storage, then delegates to
+Android's previous handler even if saving fails. For the immediate device diagnostic, Android 10+ also saves a copy to
+`Download/Enso Nihongo/Crash reports` before termination, so it can be retrieved over MTP without a working app or USB debugging.
+This shared folder can be read by the device user and apps with access to Downloads; reports contain a stack trace and device/build
+metadata and may contain sensitive details. The app does not upload reports. There is no automatic dialog during this diagnostic; Settings can
+open the latest private report for explicit Copy, Share or Dismiss if the app opens. Crashes before the handler is installed, native
+crashes, force-kills and low-memory termination cannot be captured. Public export is best effort; private persistence remains independent
+of a failure to write shared storage. Android 8–9 do not export to Downloads without a storage permission.
+
 ### EN/RU edition and repository-language binding
 
 The [shared language/source design](https://github.com/stop-cran/learning-japanese-ru/blob/main/docs/DESIGN.md)
