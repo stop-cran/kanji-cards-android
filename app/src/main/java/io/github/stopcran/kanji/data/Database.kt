@@ -196,6 +196,8 @@ data class SyncMetaEntity(
     @ColumnInfo(defaultValue = "'en'") val baseLanguage: String = "en",
     @ColumnInfo(defaultValue = "'ja'") val targetLanguage: String = "ja",
     @ColumnInfo(defaultValue = "0") val kanjiMeaningParserEpoch: Int = 0,
+    @ColumnInfo(defaultValue = "0") val readingParserEpoch: Int = 0,
+    val readingProblem: String? = null,
 )
 
 /** Durable source authority for the last accepted candidate or intentional built-in selection. */
@@ -423,7 +425,12 @@ interface ContentDao {
         insertScenes(rows.scenes)
         insertListening(rows.listening)
         insertListeningAudio(rows.audio)
-        putMeta(meta)
+        // This build cannot refresh the experimental Reading cache, so retain its metadata too.
+        val previous = this.meta(sourceId)
+        putMeta(meta.copy(
+            readingParserEpoch = previous?.readingParserEpoch ?: meta.readingParserEpoch,
+            readingProblem = if (previous != null) previous.readingProblem else meta.readingProblem,
+        ))
         invalidateGrammarFocus(sourceId)
         invalidateGrammarReadiness(sourceId)
     }
@@ -665,8 +672,9 @@ interface ReviewDao {
         ListeningTaskEncounterEntity::class, ListeningAssessmentEntity::class,
         ReviewStateEntity::class, ReviewLogEntity::class, JlptTransitionCheckEntity::class, StudySessionEntity::class, SyncMetaEntity::class,
         AcceptedSourceEntity::class,
+        PreservedReadingText::class, PreservedReadingImage::class, PreservedReadingReader::class, PreservedReadingReaderImage::class,
     ],
-    version = 21,
+    version = 25,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -675,6 +683,35 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun listening(): ListeningDao
     abstract fun listeningTasks(): ListeningTaskDao
     abstract fun sourceAcceptance(): SourceAcceptanceDao
+}
+
+val MIGRATION_22_25 = object : androidx.room.migration.Migration(22, 25) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) = Unit
+}
+
+val MIGRATION_21_25 = object : androidx.room.migration.Migration(21, 25) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE sync_meta ADD COLUMN readingParserEpoch INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE sync_meta ADD COLUMN readingProblem TEXT")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS reading_texts (sourceId TEXT NOT NULL, id TEXT NOT NULL, json TEXT NOT NULL, " +
+                "contentHash TEXT NOT NULL, title TEXT NOT NULL, jlpt INTEGER NOT NULL, position INTEGER NOT NULL, PRIMARY KEY(sourceId, id))",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS reading_images (sourceId TEXT NOT NULL, path TEXT NOT NULL, sha256 TEXT NOT NULL, " +
+                "bytes BLOB NOT NULL, PRIMARY KEY(sourceId, path))",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS reading_readers (sourceId TEXT NOT NULL, textId TEXT NOT NULL, branch TEXT NOT NULL, " +
+                "revision TEXT, contentVersion TEXT NOT NULL, contentJson TEXT NOT NULL, contentHash TEXT NOT NULL, wordsJson TEXT NOT NULL, " +
+                "openedAtMs INTEGER NOT NULL, sectionIndex INTEGER NOT NULL, scrollOffset INTEGER NOT NULL, furigana INTEGER NOT NULL, " +
+                "completedAtMs INTEGER, PRIMARY KEY(sourceId, textId))",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS reading_reader_images (sourceId TEXT NOT NULL, textId TEXT NOT NULL, path TEXT NOT NULL, " +
+                "sha256 TEXT NOT NULL, bytes BLOB NOT NULL, PRIMARY KEY(sourceId, textId, path))",
+        )
+    }
 }
 
 val MIGRATION_20_21 = object : androidx.room.migration.Migration(20, 21) {

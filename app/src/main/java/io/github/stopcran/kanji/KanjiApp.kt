@@ -25,6 +25,8 @@ import io.github.stopcran.kanji.data.MIGRATION_17_18
 import io.github.stopcran.kanji.data.MIGRATION_18_19
 import io.github.stopcran.kanji.data.MIGRATION_19_20
 import io.github.stopcran.kanji.data.MIGRATION_20_21
+import io.github.stopcran.kanji.data.MIGRATION_21_25
+import io.github.stopcran.kanji.data.MIGRATION_22_25
 import io.github.stopcran.kanji.data.rebuildGrammarReadiness
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -74,6 +76,7 @@ class KanjiApp : Application() {
     })
     val db: AppDatabase by lazy {
         Room.databaseBuilder(this, AppDatabase::class.java, "kanji.db")
+            .openHelperFactory(io.github.stopcran.kanji.data.PreservingSQLiteOpenHelperFactory())
             .addMigrations(
                 MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
                 MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16,
@@ -82,6 +85,8 @@ class KanjiApp : Application() {
                 MIGRATION_18_19,
                 MIGRATION_19_20,
                 MIGRATION_20_21,
+                MIGRATION_21_25,
+                MIGRATION_22_25,
             )
             .build()
     }
@@ -105,6 +110,7 @@ class KanjiApp : Application() {
     override fun onCreate() {
         super.onCreate()
         if (recoveryProcess) return
+        io.github.stopcran.kanji.data.checkDatabaseCompatibility(this)
         val recoveredLanguageSelection = runBlocking { contentSync.recoverCommittedCandidate(settings) }
         ArtSet.choose(settings)
         AppLocale.initialize(this, settings.appLanguage.value, force = recoveredLanguageSelection != null)

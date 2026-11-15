@@ -66,6 +66,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - Crash reports are written before delegation and mirrored best-effort to app-owned MediaStore Downloads on Android 10+.
   Repeated native startup probes need `am start -S`: otherwise an existing top activity can receive the intent without
   recreating the provider, so repeated starts do not prove repeated crashes.
+- Experimental Reading used Room 22, 23 and 24 on a separate branch. Main's 25 preserves the recorded v22 Reading
+  tables and metadata; reconcile the branch's later schemas explicitly rather than reusing version numbers or dropping data.
+  Use the non-deleting corruption handlers for both read-only SQLite inspection and Room: Android's defaults can delete corrupt files.
 - JLPT kanji selectors share `kanji-jlpt` state but retain exact-level new-card eligibility in all three modes,
   including extra practice. Preserve legacy level logs for unlock/pacing and never borrow higher-level cards to pad a JLPT session.
 

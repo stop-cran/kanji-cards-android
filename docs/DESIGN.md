@@ -931,6 +931,17 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
 8. Room schema changes need a migration; there is no destructive fallback and `exportSchema` is on (schemas in `app/schemas`), so a missing migration crashes.
 9. Source files have mixed LF/CRLF: check before multi-line text replacements.
 
+An experimental Reading build used Room 22 before that feature was merged. Room 25 preserves its four Reading tables and sync metadata
+without exposing the unfinished feature; source sync must not replace that metadata or those tables. Version 21 and the recorded
+Reading 22 schema migrate without dropping data, and Room rejects incompatible schemas transactionally. Reading checkpoints also
+used versions 23 and 24 for different schemas: their future integration must reconcile those versions with 25 explicitly; no
+compatibility with them is implied. Before Room opens an existing database, a read-only check admits v22 only with the recorded
+Reading identity and rejects 23/24; an unsupported identity produces a local crash report containing only version, identity and
+table/column metadata, never table rows. Room still validates the migrated schema and rolls back if it differs. The phone's exact
+v22 identity cannot be verified until that diagnostic is retrieved or it successfully opens. Both the read-only inspector and
+Room's open helper use non-deleting corruption callbacks; Android's default corruption handlers otherwise delete database files
+even when the initial inspection requested read-only access.
+
 The Kotlin/JVM `:core` module enforces the platform-independent boundary; `:app` owns Android, Room/KSP and UI.
 Existing Kotlin package names are unchanged. Shared test builders and media use JVM test fixtures rather than a core-to-app dependency.
 `-PcoreOnly :core:check` excludes Android project configuration and checks without an SDK; normal CI also runs the app suite.

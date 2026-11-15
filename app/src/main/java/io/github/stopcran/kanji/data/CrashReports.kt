@@ -18,7 +18,7 @@ internal class CrashReports(private val directory: File) {
     constructor(context: Context) : this(File(context.noBackupFilesDir, "crash-reports"))
 
     @Synchronized
-    fun record(thread: Thread, error: Throwable): File {
+    fun record(thread: Thread, error: Throwable, databaseSchema: String? = null): File {
         check(directory.isDirectory || directory.mkdirs()) { "Cannot create crash report directory" }
         val lastStamp = reports().firstOrNull()?.name?.substring(6, 19)?.toLongOrNull() ?: 0L
         val stamp = maxOf(System.currentTimeMillis(), lastStamp + 1)
@@ -37,6 +37,10 @@ internal class CrashReports(private val directory: File) {
                 out.println("Build fingerprint: ${Build.FINGERPRINT}")
                 out.println("Thread: ${thread.name}")
                 out.println()
+                if (databaseSchema != null) {
+                    out.println(databaseSchema)
+                    out.println()
+                }
                 error.printStackTrace(out)
             } catch (_: ReportLimitReached) {
                 // Complete the truncated report without traversing the rest of the exception tree.
@@ -147,7 +151,17 @@ private class CrashHandler(
         try {
             synchronized(writeLock) {
                 val report = try {
-                    CrashReports(context).record(thread, error)
+                    val schema = if (isDatabaseMigrationFailure(error) && error !is UnsupportedDatabaseSchemaException) {
+                        try {
+                            readDatabaseSchemaMetadata(context)
+                        } catch (failure: Throwable) {
+                            Log.e("CrashReports", "Unable to inspect database schema", failure)
+                            "Database schema metadata unavailable."
+                        }
+                    } else {
+                        null
+                    }
+                    CrashReports(context).record(thread, error, schema)
                 } catch (failure: Throwable) {
                     Log.e("CrashReports", "Unable to save private crash report", failure)
                     null
@@ -167,5 +181,13 @@ private class CrashHandler(
                 kotlin.system.exitProcess(10)
             }
         }
+
     }
+
+    private fun isDatabaseMigrationFailure(error: Throwable): Boolean =
+        generateSequence(error) { it.cause }.take(12).any {
+            val message = it.message.orEmpty()
+            message.contains("migration", ignoreCase = true) ||
+                message.contains("Room cannot verify", ignoreCase = true)
+        }
 }
