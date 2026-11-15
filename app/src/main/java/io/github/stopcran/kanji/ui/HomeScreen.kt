@@ -7,6 +7,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -41,6 +42,7 @@ import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.WordStacks
 import io.github.stopcran.kanji.core.unlock.UnlockRule
 import io.github.stopcran.kanji.data.inStack
+import io.github.stopcran.kanji.data.AdvancementSection
 
 /** Where the user can go from the home pages; sessions are started by the caller. */
 @Suppress("LongParameterList")
@@ -86,7 +88,6 @@ internal fun MainPage(state: HomeState, overview: HomeOverview, preferences: Hom
         if (content.usable) LoadingBar(data)
         val defaultId = remember { RepoSource.parse(Defaults.CONTENT_REPO_URL, Defaults.CONTENT_BRANCH)?.id }
         if (data.sourceId != defaultId) Text(stringResource(R.string.cards_from, data.sourceId))
-        N4Offer(preferences, data)
         PacingHint(data)
         StartingGuide(overview.startingGuideVisible, preferences.showStartingGuide, a.onKanaPage, a.onWordsPage, a.onGrammarPage)
         DailyCountsHelp(overview.kanaAllowance, data.pacing)
@@ -117,6 +118,14 @@ internal fun KanjiPage(data: HomeData, preferences: HomePreferencesActions, onBa
                 progress = { data.kanjiProgress[it.id] }, skillLabel = { homeProgressSkillLabel(it) })
             if (Stacks.jlptLevel(data.stack.id) == null) {
                 Text(stringResource(R.string.each_stack_keeps_its_own), style = MaterialTheme.typography.bodySmall)
+            }
+            data.kanjiOffer?.let { next ->
+                val level = requireNotNull(Stacks.jlptLevel(data.stack.id))
+                AdvancementOffer(
+                    context.getString(stackLabel(data.stack.id)), context.getString(stackLabel(next)),
+                    onStart = { preferences.selectStack(next) },
+                    onLater = { preferences.dismissLevel(AdvancementSection.Kanji, level) },
+                )
             }
         }
         KanjiFocusGuidance(data.focus)
@@ -287,13 +296,21 @@ internal fun pacingExplanation(p: NewAllowance, context: android.content.Context
 @Composable
 private fun N4Offer(preferences: HomePreferencesActions, data: HomeData) {
     if (!data.n4Offer) return
+    AdvancementOffer(
+        stringResource(R.string.level_n5), stringResource(R.string.level_n4),
+        onStart = preferences.acceptN4, onLater = preferences.dismissN4,
+    )
+}
+
+@Composable
+internal fun AdvancementOffer(current: String, next: String, onStart: () -> Unit, onLater: () -> Unit) {
     Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.you_know_n5_well), style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(R.string.most_n5_kanji_and_words))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = preferences.acceptN4) { Text(stringResource(R.string.add_n4_words)) }
-                TextButton(onClick = preferences.dismissN4) { Text(stringResource(R.string.not_yet)) }
+            Text(stringResource(R.string.advancement_title, next), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.advancement_explanation, current))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onStart) { Text(stringResource(R.string.advancement_start, next)) }
+                TextButton(onClick = onLater) { Text(stringResource(R.string.not_yet)) }
             }
         }
     }

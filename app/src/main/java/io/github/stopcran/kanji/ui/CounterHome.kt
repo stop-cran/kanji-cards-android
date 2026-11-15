@@ -5,6 +5,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -20,6 +21,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.room.withTransaction
 import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.R
@@ -34,16 +36,24 @@ import io.github.stopcran.kanji.data.counterModeStates
 import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.counterStates
 import io.github.stopcran.kanji.data.COUNTER_STACK
+import io.github.stopcran.kanji.data.AdvancementKey
+import io.github.stopcran.kanji.data.AdvancementSection
+import io.github.stopcran.kanji.data.DurableReviewKey
 import java.time.Instant
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.collectLatest
 
 /** Counts for the Counters entry and page; loaded on entry, so they are fresh after every session. */
+data class CounterAdvancement(val observedAt: Instant, val progress: Map<CounterScope, StudyProgress>)
+
 class CounterHome(
     val cards: Int?, val modes: Map<CounterMode, ModeState>, val allowance: Int = 0,
     val articles: Map<String, String> = emptyMap(),
     val progress: Map<CounterScope, StudyProgress> = emptyMap(),
+    val advancement: CounterAdvancement? = null,
 ) {
     fun summary(): String = when {
         cards == null -> "Loading…"
@@ -86,29 +96,38 @@ internal fun rememberCounterHome(app: Services, group: CounterGroup = CounterGro
     val daily = app.settings.dailyNewCards.collectAsState().value
     val week = app.settings.weekPlan.collectAsState().value
     val articleLabel = stringResource(R.string.counter_article_reference)
-    val state: State<CounterHome> = produceState(CounterHome(null, emptyMap()), source.id, group to scope, daily to week, articleLabel) {
-        value = CounterHome(null, emptyMap())
-        val stateFlows = CounterMode.entries.map { mode ->
-            app.db.reviews().observeStates(source.id, COUNTER_STACK, mode.mode.name)
-                .map { Unit }
-        }
-        combine(listOf(app.db.content().observeMeta(source.id).map { Unit }) + stateFlows) { Unit }
-            .collectLatest {
-            val allIndex = app.db.counterIndex(source.id)
-            val index = allIndex.inScope(group, scope)
-            val stateByMode = CounterMode.entries.associateWith { mode ->
-                app.db.counterStates(source.id, mode)
+    return key(source.id, group, scope, daily, week, articleLabel) {
+        val state: State<CounterHome> = produceState(CounterHome(null, emptyMap())) {
+            val stateFlows = CounterMode.entries.map { mode ->
+                app.db.reviews().observeStates(source.id, COUNTER_STACK, mode.mode.name).map { Unit }
             }
-            val now = Instant.now()
-            val budget = app.db.newAllowance(app.settings, source.id, now).remaining
-            value = CounterHome(
-                index.cards.size + index.expressions.size, app.db.counterModeStates(source.id, index, budget, now), budget,
-                index.files.mapNotNull { f -> f.article?.let { it to articleLabel } }.toMap(),
-                CounterScope.entries.associateWith { counterProgress(allIndex, stateByMode, it, group, now) },
-            )
+            val ticks = flow { while (true) { emit(Unit); delay(60_000) } }
+            val logs = app.db.invalidationTracker.createFlow("review_log").map { Unit }
+            combine(listOf(app.db.content().observeMeta(source.id).map { Unit }, ticks, logs) + stateFlows) { Unit }
+                .collectLatest {
+                    value = app.db.withTransaction {
+                        val allIndex = app.db.counterIndex(source.id)
+                        val index = allIndex.inScope(group, scope)
+                        val stateByMode = CounterMode.entries.associateWith { mode ->
+                            app.db.counterStates(source.id, mode)
+                        }
+                        val now = Instant.now()
+                        val durableKeys = app.db.reviews().durableReviewKeys(source.id, now.toEpochMilli()).toSet()
+                        val durableStates = stateByMode.mapValues { (mode, states) ->
+                            states.filterKeys { DurableReviewKey(COUNTER_STACK, it, mode.mode.name, "") in durableKeys }
+                        }
+                        val budget = app.db.newAllowance(app.settings, source.id, now).remaining
+                        CounterHome(
+                            index.cards.size + index.expressions.size, app.db.counterModeStates(source.id, index, budget, now), budget,
+                            index.files.mapNotNull { f -> f.article?.let { it to articleLabel } }.toMap(),
+                            CounterScope.entries.associateWith { counterProgress(allIndex, stateByMode, it, group, now) },
+                            CounterAdvancement(now, CounterScope.entries.associateWith { counterProgress(allIndex, durableStates, it, group, now) }),
+                        )
+                    }
+                }
         }
+        state.value
     }
-    return state.value
 }
 
 @Composable
@@ -128,6 +147,7 @@ internal fun CountersPage(
     var selected by rememberSaveable(source.id, source.branch) { mutableStateOf(CounterGroup.All.code) }
     val group = CounterGroup.fromCode(selected)
     val home = rememberCounterHome(app, group)
+    val dismissals by app.settings.advancementDismissals.collectAsState()
     Page(stringResource(R.string.counter_page_title), onBack, scrollable = home.cards != null) {
         LevelFilter(CounterScope.entries, scope, { app.settings.setCounterScope(source.id, it) }, { context.getString(counterScopeLabel(it)) },
             description = if (scope == CounterScope.N4 || scope == CounterScope.N3)
@@ -138,7 +158,27 @@ internal fun CountersPage(
             CounterGroup.entries.forEach { item ->
                 FilterChip(selected = group == item, onClick = { selected = item.code }, label = { Text(stringResource(counterGroupLabel(item))) })
             }
-
+        }
+        val next = when (scope) {
+            CounterScope.N5 -> CounterScope.N4
+            CounterScope.N4 -> CounterScope.N3
+            else -> null
+        }
+        val level = when (scope) {
+            CounterScope.N5 -> 5
+            CounterScope.N4 -> 4
+            else -> null
+        }
+        val key = level?.let { AdvancementKey(source.id, AdvancementSection.Counters, it) }
+        if (group == CounterGroup.All && next != null && key != null) {
+            val advancement = home.advancement
+            if (advancement != null && offerNextLevel(advancement.progress[scope], home.progress[next], dismissals[key] ?: 0L, advancement.observedAt)) {
+                AdvancementOffer(
+                    stringResource(counterScopeLabel(scope)), stringResource(counterScopeLabel(next)),
+                    onStart = { app.settings.setCounterScope(source.id, next) },
+                    onLater = { app.settings.dismissAdvancement(key, Instant.now().toEpochMilli()) },
+                )
+            }
         }
         if (home.cards == null) Text(stringResource(R.string.loading))
         else Text(pluralStringResource(R.plurals.counter_prompts, home.cards, home.cards))

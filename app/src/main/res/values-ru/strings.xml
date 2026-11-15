@@ -1040,4 +1040,7 @@
     <string name="word_unlocks_after_english_japanese">Открывается после изучения слов в режиме «Русский → японский».</string>
     <string name="grammar_nothing_due">Повторять пока нечего. Вернитесь позже или увеличьте дневной лимит новых заданий в настройках.</string>
     <string name="mode_status_unavailable">Этот режим временно недоступен. Проверьте статус материалов в настройках.</string>
+    <string name="advancement_title">Попробовать %1$s?</string>
+    <string name="advancement_explanation">Ваши навыки уровня %1$s показывают устойчивый прогресс. Можно начать следующий уровень и продолжать повторения.</string>
+    <string name="advancement_start">Начать %1$s</string>
 </resources>

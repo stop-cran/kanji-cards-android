@@ -233,6 +233,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   size floor. Preserve annotated reading links and test their bold metrics/clicks under narrow widths and enlarged text.
 - Level chips use bare N5-N1/All labels; explain cumulative versus exact scope outside the shared `LevelFilter` row.
   Never infer membership or saved identity from a chip's text or position; concise labels do not unify scope semantics.
+- Advancement recommendations use exact-level per-skill solid states plus two successful same-key reviews at least 24 hours apart;
+  visible progress alone is not proof of spaced evidence. Dismissals are source/section/level-scoped.
 - Progress fill for a cumulative level chip is computed from its exact authored-level inventory and that section's own
   persisted skill states, not the current cumulative queue. Keep each skill's evidence separate, exclude unclassified items
   from exact JLPT levels, and do not treat empty/due-free queues or transient answers as durable progress.

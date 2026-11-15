@@ -32,6 +32,9 @@ import io.github.stopcran.kanji.core.home.ModeState
 import io.github.stopcran.kanji.data.AppDatabase
 import io.github.stopcran.kanji.data.CounterEntity
 import io.github.stopcran.kanji.data.Settings
+import io.github.stopcran.kanji.data.ReviewLogEntity
+import io.github.stopcran.kanji.data.ReviewStateEntity
+import io.github.stopcran.kanji.data.COUNTER_STACK
 import io.github.stopcran.kanji.data.newAllowance
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -51,6 +54,94 @@ import java.util.Locale
 @SQLiteMode(SQLiteMode.Mode.NATIVE)
 class CounterHomeTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test
+    fun durableEvidenceRequiresTwoSuccessfulSameKeyReviewsSeparatedByTwentyFourHours() = runBlocking {
+        val context = RuntimeEnvironment.getApplication()
+        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
+        val now = Instant.parse("2026-11-15T12:00:00Z").toEpochMilli()
+        try {
+            fun log(source: String, item: String, mode: String, reading: String, grade: Int, at: Long) =
+                ReviewLogEntity(sourceId = source, stack = COUNTER_STACK, kanji = item, mode = mode,
+                    reading = reading, grade = grade, atMs = at)
+            val day = 86_400_000L
+            listOf(
+                log("a", "yes", "mode", "", 3, now - day),
+                log("a", "yes", "mode", "", 2, now),
+                log("a", "short", "mode", "", 3, now - day + 1),
+                log("a", "short", "mode", "", 3, now),
+                log("a", "failure", "mode", "", 1, now - day),
+                log("a", "failure", "mode", "", 3, now),
+                log("a", "reading", "mode", "a", 3, now - day),
+                log("a", "reading", "mode", "b", 3, now),
+                log("a", "future", "mode", "", 3, now - day),
+                log("a", "future", "mode", "", 3, now + 1),
+                log("b", "foreign", "mode", "", 3, now - day),
+                log("b", "foreign", "mode", "", 3, now),
+            ).forEach { db.reviews().putLog(it) }
+            assertEquals(listOf("yes"), db.reviews().durableReviewKeys("a", now).map { it.kanji })
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun advancementNeedsSeparateDayEvidenceAndStartOrLaterPreservesReviews() {
+        val context = RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("settings", 0).edit().clear().commit()
+        val settings = Settings(context)
+        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
+        val services = Services(db, settings, context)
+        val source = settings.source.value.id
+        val now = Instant.now()
+        val visible = mutableStateOf(true)
+        try {
+            runBlocking {
+                val files = (0..10).map { i ->
+                    val id = "recommend-$i"
+                    CounterFile(2, id, "日", "にち", "Days", level = if (i == 10) 4 else 5,
+                        expressions = listOf(CounterExpression("$id-expression", "One day.", "一日",
+                            listOf("一日"), "いちにち", listOf("いちにち"), "A duration.")))
+                }
+                db.content().insertCounters(files.mapIndexed { i, file ->
+                    CounterEntity(source, file.id, Json.encodeToString(CounterFile.serializer(), file), i)
+                })
+                for (i in 0 until 10) for (mode in listOf(CounterMode.Expression, CounterMode.Reading)) {
+                    val id = "recommend-$i-expression"
+                    db.reviews().putState(ReviewStateEntity(source, COUNTER_STACK, id, mode.mode.name,
+                        "Review", 30.0, 5.0, now.plusSeconds(86400).toEpochMilli(), now.toEpochMilli(), 3, 0))
+                    db.reviews().putLog(ReviewLogEntity(sourceId = source, stack = COUNTER_STACK, kanji = id,
+                        mode = mode.mode.name, grade = 3, atMs = now.minusSeconds(3600).toEpochMilli()))
+                }
+            }
+            rule.setContent { MaterialTheme { if (visible.value) CountersPage(services, {}, { _, _, _, _ -> }, {}) } }
+            awaitCount(10)
+            rule.onNodeWithText("Start N4").assertDoesNotExist()
+            runBlocking {
+                for (i in 0 until 10) for (mode in listOf(CounterMode.Expression, CounterMode.Reading)) {
+                    db.reviews().putLog(ReviewLogEntity(sourceId = source, stack = COUNTER_STACK,
+                        kanji = "recommend-$i-expression", mode = mode.mode.name, grade = 3,
+                        atMs = now.minusSeconds(2 * 86400).toEpochMilli()))
+                }
+            }
+            rule.waitUntil(10_000) { rule.onAllNodesWithText("Start N4").fetchSemanticsNodes().isNotEmpty() }
+            rule.onNodeWithText("Start N4").performScrollTo().assertIsDisplayed()
+            rule.onNodeWithText("Not yet").performScrollTo().performClick()
+            rule.onNodeWithText("Start N4").assertDoesNotExist()
+            assertEquals(CounterScope.N5, settings.counterScopeFor(source))
+            val saved = settings.advancementDismissals.value.keys.single()
+            rule.runOnIdle { settings.dismissAdvancement(saved, now.minusSeconds(8 * 86400).toEpochMilli()) }
+            rule.waitUntil(10_000) { rule.onAllNodesWithText("Start N4").fetchSemanticsNodes().isNotEmpty() }
+            rule.onNodeWithText("Start N4").performScrollTo().performClick()
+            assertEquals(CounterScope.N4, settings.counterScopeFor(source))
+            assertEquals(20, runBlocking { db.reviews().allStates().size })
+            assertEquals(40, runBlocking { db.reviews().allLog().size })
+        } finally {
+            rule.runOnIdle { visible.value = false }
+            rule.waitForIdle()
+            db.close()
+        }
+    }
 
     @Test
     fun summaryShowsEligibleNewOpportunitiesCappedByTheSharedAllowance() {

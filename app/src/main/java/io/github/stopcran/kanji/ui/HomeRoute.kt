@@ -10,6 +10,8 @@ import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.core.srs.NewAllowance
 import io.github.stopcran.kanji.core.words.WordStacks
 import io.github.stopcran.kanji.data.Settings
+import io.github.stopcran.kanji.data.AdvancementKey
+import io.github.stopcran.kanji.data.AdvancementSection
 import kotlinx.coroutines.flow.first
 import java.time.Clock
 
@@ -19,12 +21,15 @@ internal class HomePreferencesActions(
     val acceptN4: () -> Unit,
     val dismissN4: () -> Unit,
     val showStartingGuide: (Boolean) -> Unit,
+    val dismissLevel: (AdvancementSection, Int) -> Unit = { _, _ -> },
 )
 
 internal fun homePreferences(settings: Settings, clock: Clock = Clock.systemDefaultZone()) = HomePreferencesActions(
     settings::setStack, settings::setWordStack,
     { settings.setN4Unlocked(true); settings.setWordStack(WordStacks.n4.id) },
-    { settings.dismissAdvance(clock.millis()) }, settings::setStartingGuideVisible,
+    { settings.dismissAdvancement(AdvancementKey(settings.source.value.id, AdvancementSection.Words, 5), clock.millis()) },
+    settings::setStartingGuideVisible,
+    { section, level -> settings.dismissAdvancement(AdvancementKey(settings.source.value.id, section, level), clock.millis()) },
 )
 
 internal class HomeOverview(

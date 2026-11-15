@@ -24,6 +24,8 @@ import io.github.stopcran.kanji.core.words.WordStacks
 import io.github.stopcran.kanji.core.words.wordLevel
 import io.github.stopcran.kanji.data.KanjiEntity
 import io.github.stopcran.kanji.data.HomeSnapshot
+import io.github.stopcran.kanji.data.AdvancementKey
+import io.github.stopcran.kanji.data.AdvancementSection
 import io.github.stopcran.kanji.data.forDirection
 import io.github.stopcran.kanji.data.inWordStack
 import io.github.stopcran.kanji.data.inStack
@@ -48,10 +50,11 @@ class StackChoices(
 data class HomeProgress(
     val kanji: Map<String, StudyProgress> = emptyMap(),
     val words: Map<String, StudyProgress> = emptyMap(),
+    val kanjiOffer: String? = null,
 )
 
 class HomeGuidance(
-    val n4Offer: Boolean,
+    val wordOffer: Boolean,
     val pacing: NewAllowance? = null,
     val week: WeekProgress? = null,
     val focus: io.github.stopcran.kanji.data.FocusStatus? = null,
@@ -88,7 +91,8 @@ class HomeData(
     val wordStack get() = choices.wordStack
     val wordCount get() = choices.wordCount
     val pictureWordCount get() = choices.pictureWordCount
-    val n4Offer get() = guidance.n4Offer
+    val n4Offer get() = guidance.wordOffer
+    val kanjiOffer get() = guidance.progress.kanjiOffer
     val pacing get() = guidance.pacing
     val week get() = guidance.week
     val focus get() = guidance.focus
@@ -137,36 +141,10 @@ internal data class StateSet(
     }
 }
 
-/** Whether to suggest unlocking N4: enough of the N5 kanji, drawings and words are firm, and the offer was not dismissed recently. */
-internal fun shouldOfferN4(
-    inStack: List<KanjiEntity>, words: List<io.github.stopcran.kanji.data.WordEntity>, levels: Map<String, Int?>, wordStack: WordStack,
-    s: StateSet, n4Unlocked: Boolean, dismissedMs: Long, now: Instant, nowMs: Long,
-): Boolean {
-    val n5Kanji = inStack.filter { Stacks.jlptLevel(it.tags.splitSep()) == 5 }
-    val n5Words = words.inWordStack(WordStacks.n5, levels)
-    val onN5 = wordStack.id == WordStacks.n5.id
-    // The word signals come from the selected stack's own states, so judge readiness only on the N5 stack.
-    if (!onN5) return false
-    val onReadings = n5Kanji.flatMap { card ->
-        card.toReadingCard().quizKeys(ReadingKind.On).map { s.on[ReadingId.of(card.kanji, it)] }
-    }
-    val kunReadings = n5Kanji.flatMap { card ->
-        card.toReadingCard().quizKeys(ReadingKind.Kun).map { s.kun[ReadingId.of(card.kanji, it)] }
-    }
-    val ready = Advancement.ready(
-        listOf(
-            n5Kanji.map { s.quiz[it.kanji] },
-            n5Kanji.filter { it.strokesJson != null }.map { s.draw[it.kanji] },
-            onReadings,
-            kunReadings,
-            n5Words.map { s.jp[it.word] },
-            n5Words.map { s.en[it.word] },
-            n5Words.forDirection(WordDirection.Reading).map { s.rd[it.word] },
-        ),
-        now,
-    )
-    return Advancement.shouldOffer(ready, n4Unlocked, dismissedMs, nowMs)
-}
+internal fun offerNextLevel(current: StudyProgress?, target: StudyProgress?, dismissedMs: Long, now: Instant): Boolean =
+    current != null && target != null && target.total.total > 0 &&
+        Advancement.shouldOffer(Advancement.ready(current), false, dismissedMs, now.toEpochMilli())
+
 internal fun projectHome(snapshot: HomeSnapshot, now: Instant): HomeData {
     val inventory = snapshot.inventory
     val selection = inventory.selection
@@ -183,17 +161,29 @@ internal fun projectHome(snapshot: HomeSnapshot, now: Instant): HomeData {
     )
     val projection = computeModes(inventory.inStack, inventory.wordsInStack, extras, now, stateSet)
     val progress = homeProgress(snapshot, stateSet, now)
-    val n4Offer = shouldOfferN4(
-        inventory.inStack, inventory.words, inventory.levels, inventory.wordStack, stateSet,
-        selection.n4Unlocked, selection.dismissedMs, now, now.toEpochMilli(),
+    val noStates = StateSet(emptyMap(), emptyMap(), emptyMap(), emptyMap(), emptyMap(), emptyMap(), emptyMap())
+    val recommendationProgress = homeProgress(snapshot.copy(statesByStack = snapshot.durableStatesByStack), noStates, now)
+    val level = Stacks.jlptLevel(inventory.stack.id)
+    val nextKanji = level?.takeIf { it > 1 }?.let { "jlpt-n${it - 1}" }
+    val kanjiDismissed = level?.let { selection.advancementDismissals[AdvancementKey(selection.source.id, AdvancementSection.Kanji, it)] } ?: 0L
+    val kanjiOffer = nextKanji?.takeIf {
+        offerNextLevel(recommendationProgress.kanji[inventory.stack.id], progress.kanji[it], kanjiDismissed, now)
+    }
+    val wordDismissed = maxOf(
+        selection.dismissedMs, selection.advancementDismissals[AdvancementKey(selection.source.id, AdvancementSection.Words, 5)] ?: 0L,
     )
+    val nextWordExists = inventory.words.any { word ->
+        wordLevel(word.kanji.splitSep(), inventory.levels, word.jlpt) == 4
+    }
+    val wordOffer = inventory.wordStack.id == WordStacks.n5.id && !selection.n4Unlocked && nextWordExists &&
+        Advancement.shouldOffer(Advancement.ready(recommendationProgress.words.getValue(WordStacks.n5.id)), false, wordDismissed, now.toEpochMilli())
     return HomeData(
         false, selection.source.id, inventory.kanji,
         StackChoices(
             inventory.stacks, inventory.stack, inventory.wordStacks, inventory.wordStack,
             inventory.wordsInStack.size, inventory.wordsInStack.count { it.quizImage != null },
         ), projection.states,
-        HomeGuidance(n4Offer, snapshot.allowance, snapshot.week, snapshot.focus, projection.wordReadiness, progress),
+        HomeGuidance(wordOffer, snapshot.allowance, snapshot.week, snapshot.focus, projection.wordReadiness, progress.copy(kanjiOffer = kanjiOffer)),
     )
 }
 

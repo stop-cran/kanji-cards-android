@@ -73,4 +73,20 @@ class LevelFilterProgressTest {
         ).assertExists()
         rule.onNodeWithText("Katakana").performClick().assertIsSelected()
     }
+
+    @Test
+    fun recommendationExposesSeparateStartAndLaterActions() {
+        var started = false
+        var deferred = false
+        rule.setContent {
+            MaterialTheme { AdvancementOffer("N5", "N4", { started = true }, { deferred = true }) }
+        }
+        rule.onNodeWithText("Try N4?").assertExists()
+        rule.onNodeWithText("Start N4").performClick()
+        rule.onNodeWithText("Not yet").performClick()
+        rule.runOnIdle {
+            assertEquals(true, started)
+            assertEquals(true, deferred)
+        }
+    }
 }

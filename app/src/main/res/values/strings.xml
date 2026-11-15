@@ -1026,4 +1026,7 @@
     <string name="word_unlocks_after_english_japanese">Unlocks as you learn English → Japanese.</string>
     <string name="grammar_nothing_due">Nothing is due. Come back later or raise the daily new-item limit in Settings.</string>
     <string name="mode_status_unavailable">This mode is temporarily unavailable. Review content status in Settings.</string>
+    <string name="advancement_title">Try %1$s?</string>
+    <string name="advancement_explanation">Your %1$s skills have sustained progress. You can start the next level while continuing your reviews.</string>
+    <string name="advancement_start">Start %1$s</string>
 </resources>

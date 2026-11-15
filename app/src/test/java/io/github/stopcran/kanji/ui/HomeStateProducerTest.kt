@@ -118,10 +118,15 @@ class HomeStateProducerTest {
         repository.loader = { scope, at, inZone ->
             times += at to inZone
             val kanji = (1..20).map { KanjiEntity(source.id, "k$it", "Kanji", 5, "jlpt-n5", null, null, null, "", "", "", "", null, it) }
-            val words = (1..20).map { WordEntity(source.id, "w$it", "w$it", "Word", null, "", "", "", 5) }
+            val words = (1..20).map { WordEntity(source.id, "w$it", "w$it", "Word", null, "", "", "", 5) } +
+                WordEntity(source.id, "next", "next", "Word", null, "", "", "", 4)
             val solid = SrsState(CardPhase.Review, 30.0, 5.0, now.plusSeconds(86_400), now.minusSeconds(86_400), 3)
             val states = (kanji.map { it.kanji } + words.map { it.word }).associateWith { solid }
-            flowOf(snapshot(scope).copy(inventory = HomeInventory(scope, kanji, words), states = StudyMode.entries.associateWith { states }))
+            flowOf(snapshot(scope).copy(
+                inventory = HomeInventory(scope, kanji, words), states = StudyMode.entries.associateWith { states },
+                statesByStack = mapOf("words-n5" to StudyMode.entries.associateWith { states }),
+                durableStatesByStack = mapOf("words-n5" to StudyMode.entries.associateWith { states }),
+            ))
         }
         val ticks = MutableStateFlow(now)
         val events = Channel<HomeState>(Channel.UNLIMITED)
@@ -233,6 +238,34 @@ class HomeStateProducerTest {
         assertEquals(4, projected.kanjiProgress.getValue("all").total.total)
         assertEquals(2, projected.kanjiProgress.getValue("all").total.solid)
         assertEquals(1, projected.kanjiProgress.getValue("starter").total.solid)
+    }
+
+    @Test fun sectionRecommendationsUseOnlyTheirOwnSpacedSkillEvidence() {
+        val cards = (1..20).map {
+            KanjiEntity(source.id, "k$it", "N5", 5, "jlpt-n5", null, null, null, "", "", "", "", null, it)
+        } + KanjiEntity(source.id, "next", "N4", 4, "jlpt-n4", null, null, null, "", "", "", "", null, 21)
+        val words = (1..20).map { WordEntity(source.id, "w$it", "w$it", "N5", null, "", "", "", 5) } +
+            WordEntity(source.id, "next-word", "next-word", "N4", null, "", "", "", 4)
+        val solid = SrsState(CardPhase.Review, 20.0, 5.0, now, now, 3)
+        val kanjiState = mapOf(StudyMode.Quiz to cards.take(20).associate { it.kanji to solid })
+        val wordState = listOf(StudyMode.WordJpEn, StudyMode.WordEnJp, StudyMode.WordType)
+            .associateWith { words.take(20).associate { it.word to solid } }
+        val selected = selection.copy(stackId = "jlpt-n5")
+        val base = snapshot(selected).copy(
+            inventory = HomeInventory(selected, cards, words),
+            statesByStack = mapOf(Stacks.JLPT_STATE to kanjiState, "words-n5" to wordState),
+        )
+        val unspaced = projectHome(base, now)
+        assertEquals(null, unspaced.kanjiOffer)
+        assertFalse(unspaced.n4Offer)
+
+        val kanjiOnly = projectHome(base.copy(durableStatesByStack = mapOf(Stacks.JLPT_STATE to kanjiState)), now)
+        assertEquals("jlpt-n4", kanjiOnly.kanjiOffer)
+        assertFalse(kanjiOnly.n4Offer)
+
+        val wordsOnly = projectHome(base.copy(durableStatesByStack = mapOf("words-n5" to wordState)), now)
+        assertEquals(null, wordsOnly.kanjiOffer)
+        assertTrue(wordsOnly.n4Offer)
     }
 
     @Test fun cumulativeHomeDoesNotOfferEmptyExtraPracticeForIneligibleLowerSkills() {

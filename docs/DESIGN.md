@@ -655,9 +655,19 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   Listening passage and task evidence remains separate and requires completed graded SRS state; exposure or a partial encounter
   alone is not progress. Kana has no JLPT level, so script/mode progress is shown separately from its existing stability-based
   unlock counts.
-- The optional N4 offer remains dismissible and never changes levels automatically. Its evidence is section/skill-specific:
-  the existing overall and per-mode thresholds apply to Kanji meaning, drawing when strokes exist, both reading kinds when
-  authored, and the Words directions the offer represents. "All caught up" is not evidence of advancement.
+- Optional recommendations are separate for Kanji, Words and Counters. They require a nonempty next-level inventory,
+  at least 20 exact-level skill-item entries, at least 85% solid overall and 60% in every nonempty skill. Each credited
+  solid entry must also have two successful recorded reviews at least 24 hours apart for that same source, stack, item,
+  mode and reading. This additional history requirement avoids treating same-session repetition as durable readiness;
+  old or incomplete histories are conservatively not credited. Kanji offers the next available adjacent JLPT level;
+  Words offers N4 from its own N5 stack, including all available directions; Counters offers N4 or N3 from the full
+  section rather than a selected group. Acceptance changes only the chosen section's selection; reviews are retained.
+  Later is persisted by source, section and current level for seven days, with the old global N4 dismissal honored
+  for its remaining interval. Neither empty target inventories nor "all caught up" imply advancement.
+- Grammar recommendations are deferred: its shared exercise schedule cannot distinguish choice from productive typing,
+  while group familiarity is not a level-wide skill criterion. Listening recommendations are deferred: a scored state does
+  not by itself distinguish independent comprehension from repeated or assisted exposure. Progress remains visible without
+  claiming next-level readiness; validated section-specific evidence and thresholds are needed before prompting.
 - Word stacks are cumulative in *membership* (`words-n4` includes N5 words) but keyed independently in SRS state, so switching from `words-n5`
   to `words-n4` starts those words afresh. Never share state across stacks.
 - **Onomatopoeia stack** (`words-onomatopoeia`, a `WordStack` with `tag = "onomatopoeia"`): membership is the word's tag alone, independent of
@@ -665,8 +675,8 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   `MIN_TAG_STACK_WORDS` (4) tagged words exist, even before N4 is unlocked, so a quiz always has distractors. It uses the normal word quiz
   directions, its own SRS state (a word studied here and in "All" has two schedules, as for N5/N4) and the shared daily new-card
   allowance. Distractors come only from the stack's own words, so options are all onomatopoeia. `offeredStacks()` keeps home, quizzes and
-  reminders in agreement; an unavailable saved stack falls back to N5. The N4 advancement offer needs the N5 word states, which exist only for
-  the selected stack, so `shouldOfferN4` makes no offer while any other stack (including this one) is selected.
+  reminders in agreement; an unavailable saved stack falls back to N5. The Words N4 offer uses the N5 stack's own history
+  and is shown only while that stack is selected.
 - **Named scenes and picture practice** (#45): optional `scenes/<word>.json` catalogs declare stable word-scoped scene IDs, taught-sense
   labels, English descriptions, image paths and explicit `quizEligible` booleans. Scene JSON uses a separate LF-normalized manifest
   `scenes` map; images use the raw-byte-hashed `images` map. Both contribute to the content version without creating errors on older

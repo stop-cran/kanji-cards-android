@@ -128,6 +128,8 @@ data class ReviewStateEntity(
     @ColumnInfo(defaultValue = "''") val reading: String = "",
 )
 
+data class DurableReviewKey(val stack: String, val kanji: String, val mode: String, val reading: String)
+
 @Entity(
     tableName = "review_log",
     indices = [
@@ -563,6 +565,12 @@ interface ReviewDao {
 
     @Query("SELECT * FROM review_log ORDER BY atMs, id")
     suspend fun allLog(): List<ReviewLogEntity>
+
+    @Query(
+        "SELECT stack, kanji, mode, reading FROM review_log WHERE sourceId = :sourceId AND grade > 1 AND atMs <= :nowMs " +
+            "GROUP BY stack, kanji, mode, reading HAVING MAX(atMs) - MIN(atMs) >= 86400000",
+    )
+    suspend fun durableReviewKeys(sourceId: String, nowMs: Long): List<DurableReviewKey>
 
     @Query("SELECT * FROM grammar_responses ORDER BY reviewLogId")
     suspend fun allGrammarResponses(): List<GrammarResponseEntity>
