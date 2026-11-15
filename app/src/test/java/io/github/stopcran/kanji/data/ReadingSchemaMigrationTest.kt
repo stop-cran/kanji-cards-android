@@ -147,6 +147,86 @@ class ReadingSchemaMigrationTest {
     }
 
     @Test
+    fun queueVersion22PreservesProgressAndQueueThroughMigrationAndReopen() = runBlocking {
+        createMigrationSchema(context, name, 21) { sqlite ->
+            seedProgress(sqlite)
+            sqlite.execSQL(
+                "CREATE TABLE learning_queue (sourceId TEXT NOT NULL, kind TEXT NOT NULL, itemId TEXT NOT NULL, " +
+                    "position INTEGER NOT NULL, addedAtMs INTEGER NOT NULL, PRIMARY KEY(sourceId, kind, itemId))",
+            )
+            sqlite.execSQL(
+                "CREATE INDEX index_learning_queue_sourceId_kind_position ON learning_queue (sourceId, kind, position)",
+            )
+            sqlite.execSQL("INSERT INTO learning_queue VALUES (?, 'word', 'item', 2, 123)", arrayOf(source))
+            sqlite.execSQL("UPDATE room_master_table SET identity_hash = ? WHERE id = 42", arrayOf(QUEUE_22_IDENTITY))
+        }
+        context.openOrCreateDatabase(name, 0, null).use { it.version = 22 }
+        val beforeGate = databaseHash()
+        checkDatabaseCompatibility(fixtureContext())
+        assertEquals(beforeGate, databaseHash())
+        repeat(2) { attempt ->
+            val db = openDatabase()
+            try {
+                assertEquals(3, db.reviews().states(source, "all", "KanjiOn").single().reps)
+                assertEquals(1, db.reviews().allLog().size)
+                assertEquals(0, db.content().meta(source)!!.readingParserEpoch)
+                if (attempt == 0) {
+                    db.content().replaceContent(
+                        source, ContentRows(emptyList(), emptyList(), emptyList()), SyncMetaEntity(source, "v2", 99, 0),
+                    )
+                }
+                db.openHelper.writableDatabase.query("SELECT sourceId, kind, itemId, position, addedAtMs FROM learning_queue").use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals(source, it.getString(0))
+                    assertEquals("word", it.getString(1))
+                    assertEquals("item", it.getString(2))
+                    assertEquals(2, it.getInt(3))
+                    assertEquals(123L, it.getLong(4))
+                    assertTrue(!it.moveToNext())
+                }
+                db.openHelper.writableDatabase.query(
+                    "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'index_learning_queue_sourceId_kind_position'",
+                ).use { assertTrue(it.moveToFirst()) }
+            } finally {
+                db.close()
+            }
+        }
+    }
+
+    @Test
+    fun queueVersion22WithIncompatibleBaselineRollsBackAndKeepsQueue() {
+        createMigrationSchema(context, name, 21) { sqlite ->
+            sqlite.execSQL("CREATE TABLE learning_queue (itemId TEXT NOT NULL)")
+            sqlite.execSQL("INSERT INTO learning_queue VALUES ('retained')")
+            sqlite.execSQL("ALTER TABLE review_state RENAME TO unknown_review_state")
+            sqlite.execSQL("UPDATE room_master_table SET identity_hash = ? WHERE id = 42", arrayOf(QUEUE_22_IDENTITY))
+        }
+        context.openOrCreateDatabase(name, 0, null).use { it.version = 22 }
+        checkDatabaseCompatibility(fixtureContext())
+        val db = openDatabase()
+        try {
+            try {
+                db.openHelper.writableDatabase
+                fail("An incompatible v22 schema must not be accepted")
+            } catch (expected: IllegalStateException) {
+                assertTrue(expected.message.orEmpty().contains("Migration"))
+            }
+        } finally {
+            db.close()
+        }
+        context.openOrCreateDatabase(name, 0, null).use { sqlite ->
+            assertEquals(22, sqlite.version)
+            sqlite.rawQuery("SELECT itemId FROM learning_queue", null).use {
+                assertTrue(it.moveToFirst())
+                assertEquals("retained", it.getString(0))
+            }
+            sqlite.rawQuery("SELECT name FROM sqlite_master WHERE name = 'reading_texts'", null).use {
+                assertTrue(!it.moveToFirst())
+            }
+        }
+    }
+
+    @Test
     fun incompatibleVersion22RollsBackWithoutDestroyingData() {
         createMigrationSchema(context, name, 22) { sqlite ->
             seedProgress(sqlite)
@@ -198,6 +278,24 @@ class ReadingSchemaMigrationTest {
             assertTrue(!message.contains("owner/repo"))
         }
         assertEquals(before, databaseHash())
+        val db = openDatabase()
+        try {
+            try {
+                db.openHelper.writableDatabase
+                fail("An unknown identity must not be migrated even if the preflight is bypassed")
+            } catch (expected: IllegalStateException) {
+                assertTrue(expected.message.orEmpty().contains("Unsupported version 22"))
+            }
+        } finally {
+            db.close()
+        }
+        context.openOrCreateDatabase(name, 0, null).use { sqlite ->
+            assertEquals(22, sqlite.version)
+            sqlite.rawQuery("SELECT scrollOffset FROM reading_readers", null).use {
+                assertTrue(it.moveToFirst())
+                assertEquals(25, it.getInt(0))
+            }
+        }
     }
 
     @Test

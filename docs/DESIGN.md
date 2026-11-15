@@ -935,10 +935,13 @@ An experimental Reading build used Room 22 before that feature was merged. Room 
 without exposing the unfinished feature; source sync must not replace that metadata or those tables. Version 21 and the recorded
 Reading 22 schema migrate without dropping data, and Room rejects incompatible schemas transactionally. Reading checkpoints also
 used versions 23 and 24 for different schemas: their future integration must reconcile those versions with 25 explicitly; no
-compatibility with them is implied. Before Room opens an existing database, a read-only check admits v22 only with the recorded
-Reading identity and rejects 23/24; an unsupported identity produces a local crash report containing only version, identity and
-table/column metadata, never table rows. Room still validates the migrated schema and rolls back if it differs. The phone's exact
-v22 identity cannot be verified until that diagnostic is retrieved or it successfully opens. Both the read-only inspector and
+compatibility with them is implied. A second v22 identity, `c15c3d949cdafd3afc602dec4a00e947`, was observed in the phone's
+schema-only report and traced to an uncommitted queued-learning build on top of `10d98d0`. Its exported schema is v21 plus a
+`learning_queue` table and index. For this identity the migration adds the missing Reading schema without
+touching the queue; Room validates its managed tables transactionally and rejects incompatible schemas. The queue is retained
+as an unmanaged table, not exposed or modified by this build. Before Room opens an existing database, a read-only check admits
+only these two v22 identities and rejects 23/24; migration checks the identity again inside the transaction. An unsupported
+identity produces a local crash report containing only version, identity and table/column metadata, never table rows. Both the read-only inspector and
 Room's open helper use non-deleting corruption callbacks; Android's default corruption handlers otherwise delete database files
 even when the initial inspection requested read-only access.
 

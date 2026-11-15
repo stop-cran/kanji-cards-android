@@ -5,7 +5,8 @@ import android.database.DatabaseErrorHandler
 import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 
-private const val READING_22_IDENTITY = "bb4bd6ed0ae5d551d26ef9d695be95b2"
+internal const val READING_22_IDENTITY = "bb4bd6ed0ae5d551d26ef9d695be95b2"
+internal const val QUEUE_22_IDENTITY = "c15c3d949cdafd3afc602dec4a00e947"
 private const val MAX_SCHEMA_CHARS = 10_000
 private val preserveCorruptDatabase = DatabaseErrorHandler {
     Log.e("DatabaseCompatibility", "Database corruption detected; preserving database files.")
@@ -24,7 +25,7 @@ internal fun checkDatabaseCompatibility(context: Context) {
         }
         if (version !in 22..24) return
         val identity = databaseIdentity(db)
-        if (version != 22 || identity != READING_22_IDENTITY) {
+        if (version != 22 || identity !in setOf(READING_22_IDENTITY, QUEUE_22_IDENTITY)) {
             throw UnsupportedDatabaseSchemaException(
                 "Unsupported historical database schema. Database was not migrated.\n" + schemaMetadata(db, version, identity),
             )

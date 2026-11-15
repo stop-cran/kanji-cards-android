@@ -69,6 +69,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - Experimental Reading used Room 22, 23 and 24 on a separate branch. Main's 25 preserves the recorded v22 Reading
   tables and metadata; reconcile the branch's later schemas explicitly rather than reusing version numbers or dropping data.
   Use the non-deleting corruption handlers for both read-only SQLite inspection and Room: Android's defaults can delete corrupt files.
+  The phone's other v22 identity came from an uncommitted queued-learning build based on `10d98d0`: v21 plus `learning_queue`.
+  Preserve that unmanaged table and its index, and gate its migration by identity plus Room's transactional schema validation.
 - JLPT kanji selectors share `kanji-jlpt` state but retain exact-level new-card eligibility in all three modes,
   including extra practice. Preserve legacy level logs for unlock/pacing and never borrow higher-level cards to pad a JLPT session.
 

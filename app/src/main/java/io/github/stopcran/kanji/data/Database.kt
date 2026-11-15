@@ -686,7 +686,16 @@ abstract class AppDatabase : RoomDatabase() {
 }
 
 val MIGRATION_22_25 = object : androidx.room.migration.Migration(22, 25) {
-    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) = Unit
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        val identity = db.query("SELECT identity_hash FROM room_master_table WHERE id = 42").use {
+            if (it.moveToFirst()) it.getString(0) else null
+        }
+        when (identity) {
+            READING_22_IDENTITY -> Unit
+            QUEUE_22_IDENTITY -> MIGRATION_21_25.migrate(db)
+            else -> error("Unsupported version 22 database identity; migration refused")
+        }
+    }
 }
 
 val MIGRATION_21_25 = object : androidx.room.migration.Migration(21, 25) {
