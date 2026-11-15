@@ -34,6 +34,9 @@ The current module inventory lives in `settings.gradle.kts`; build tasks and int
   Pilot A expectations. Rerun `:core:cleanTest :core:test` with the selected cases when only the
   external archive changes, and check XML for actual executions rather than assumption skips.
 - Emulator (Pixel 9, API 35), adb driving, screenshots and copying an APK to the phone: see the `android-emulator` skill in `.github/skills/`.
+- Crash investigation and private phone reports: load the `android-crash-triage` skill.
+- Reserve new Room versions in `docs/DB-VERSIONS.md` before changing or exporting a schema; record every identity and resolve
+  branch collisions explicitly. The registry check runs with Android unit tests.
 - Gradle treats `RealContentTest.parsesRealContentRepoWhenPresent` as up to date when only the sibling content clone changed; re-run it with
   `.\gradlew.bat :core:cleanTest :core:test cleanTestDebugUnitTest testDebugUnitTest --tests '*ContentTest*'` after pulling or editing the sibling
   content checkout (`..\learning-japanese` from the repository root, `..\..\learning-japanese` from `app` or `core`).

@@ -931,6 +931,9 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
 8. Room schema changes need a migration; there is no destructive fallback and `exportSchema` is on (schemas in `app/schemas`), so a missing migration crashes.
 9. Source files have mixed LF/CRLF: check before multi-line text replacements.
 
+`docs/DB-VERSIONS.md` reserves Room versions across branches and records known identity collisions. Android unit tests
+compare each checked-out export's version and identity with the registry; this guard does not replace migration validation.
+
 An experimental Reading build used Room 22 before that feature was merged. Room 25 preserves its four Reading tables and sync metadata
 without exposing the unfinished feature; source sync must not replace that metadata or those tables. Version 21 and the recorded
 Reading 22 schema migrate without dropping data, and Room rejects incompatible schemas transactionally. Reading checkpoints also

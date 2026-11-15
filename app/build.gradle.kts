@@ -11,6 +11,11 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+tasks.withType<Test>().configureEach {
+    inputs.dir(layout.projectDirectory.dir("schemas"))
+    inputs.file(rootProject.file("docs/DB-VERSIONS.md"))
+}
+
 val listeningAuthorPreview = providers.gradleProperty("listeningAuthorPreview").isPresent
 
 android {
