@@ -107,6 +107,7 @@ fun DrawScreen(
             }
             is DrawUi.Question -> QuestionState(s, vm)
             is DrawUi.Checking -> Text(stringResource(R.string.checking))
+            is DrawUi.Ambiguous -> DrawAmbiguityContent(s, { vm.resolve(s, it) }, { vm.retry(s) })
             is DrawUi.Answer -> AnswerState(s, vm, onOpenDoc)
         }
     }
@@ -114,8 +115,7 @@ fun DrawScreen(
 }
 
 @Composable
-private fun QuestionState(s: DrawUi.Question, vm: DrawViewModel) {
-    val strokes = vm.ink
+private fun QuestionCaption(s: DrawUi.Question) {
     SessionRemaining(s.remaining)
     Text(
         stringResource(if (s.trace) R.string.draw_trace_for else R.string.draw_the_kanji_for),
@@ -123,6 +123,12 @@ private fun QuestionState(s: DrawUi.Question, vm: DrawViewModel) {
         textAlign = TextAlign.Center,
     )
     Text(s.card.title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+}
+
+@Composable
+private fun QuestionState(s: DrawUi.Question, vm: DrawViewModel) {
+    val strokes = vm.ink
+    QuestionCaption(s)
     if (s.trace) {
         Text(stringResource(R.string.tracing_practice_notice), style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
@@ -142,12 +148,33 @@ private fun QuestionState(s: DrawUi.Question, vm: DrawViewModel) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = { if (strokes.isNotEmpty()) strokes.removeAt(strokes.lastIndex) }, enabled = strokes.isNotEmpty()) { Text(stringResource(R.string.undo)) }
         OutlinedButton(onClick = { strokes.clear() }, enabled = strokes.isNotEmpty()) { Text(stringResource(R.string.clear)) }
-        Button(onClick = { vm.check(strokes.toList(), vm.inkSize) }, enabled = strokes.isNotEmpty(), modifier = Modifier.weight(1f)) { Text(stringResource(R.string.check)) }
+        Button(onClick = { vm.check(strokes.toList(), vm.inkSize, origin = s) }, enabled = strokes.isNotEmpty(), modifier = Modifier.weight(1f)) { Text(stringResource(R.string.check)) }
     }
     if (!s.trace) {
-        OutlinedButton(onClick = { vm.check(emptyList(), vm.inkSize) }, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = { vm.check(emptyList(), vm.inkSize, origin = s) }, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.i_don_t_remember))
         }
+    }
+}
+
+@Composable
+internal fun DrawAmbiguityContent(
+    state: DrawUi.Ambiguous,
+    onResolve: (DrawResolution) -> Unit,
+    onRetry: () -> Unit,
+) {
+    QuestionCaption(state.question)
+    Text(stringResource(R.string.draw_ambiguity_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+    Text(stringResource(R.string.draw_ambiguity_detail, state.alternative.kanji))
+    Overlay(Modifier.fillMaxWidth()) { YourDrawing(state.answer.drawn, state.answer.canvasPx, emptySet(), rejected = false) }
+    Text(stringResource(R.string.your_drawing), style = MaterialTheme.typography.labelMedium)
+    Text(stringResource(R.string.draw_ambiguity_no_grade), style = MaterialTheme.typography.bodySmall)
+    Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.draw_ambiguity_retry)) }
+    OutlinedButton(onClick = { onResolve(DrawResolution.TargetWithMistakes) }, modifier = Modifier.fillMaxWidth()) {
+        Text(stringResource(R.string.draw_ambiguity_target))
+    }
+    OutlinedButton(onClick = { onResolve(DrawResolution.OtherCharacter) }, modifier = Modifier.fillMaxWidth()) {
+        Text(stringResource(R.string.draw_ambiguity_other))
     }
 }
 
@@ -191,7 +218,7 @@ private fun AnswerState(s: DrawUi.Answer, vm: DrawViewModel, onOpenDoc: (String)
     }
     if (showIssues) s.match.issues.forEach { StrokeIssueText(it) }
     if (!s.recognizerUsed && s.drawn.isNotEmpty()) Text(stringResource(R.string.graded_by_stroke_shapes_only), style = MaterialTheme.typography.bodySmall)
-    Button(onClick = { vm.next() }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.next)) }
+    Button(onClick = { vm.next(origin = s) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.next)) }
     HorizontalDivider(Modifier.padding(vertical = 4.dp))
     MarkdownView(s.card.body, "kanji/${s.card.kanji}.md", onOpenDoc)
 }

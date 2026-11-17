@@ -625,6 +625,12 @@
     <string name="draw_outcome_lookalike">Похоже на %1$s (%2$s)</string>
     <string name="draw_outcome_lookalike_no_title">Похоже на %1$s</string>
     <string name="draw_outcome_not_recognized">Не распознано</string>
+    <string name="draw_ambiguity_title">Уточните результат этой попытки</string>
+    <string name="draw_ambiguity_detail">Распознавание рукописного ввода недоступно. Эти штрихи могут быть ожидаемым кандзи с ошибками или другим знаком, например %1$s.</string>
+    <string name="draw_ambiguity_no_grade">Попытка ещё не оценена. Попробуйте снова без оценки или выберите, как её оценить. Расписание повторений обновится только после нажатия «Далее».</string>
+    <string name="draw_ambiguity_retry">Повторить без оценки</string>
+    <string name="draw_ambiguity_target">Считать ожидаемым кандзи с ошибками в чертах</string>
+    <string name="draw_ambiguity_other">Считать другим знаком</string>
     <string name="draw_trace_practice_only">Только тренировка: эта попытка не оценивается.</string>
     <string name="drawing_area_description">Область для рисования: %1$s. Нарисовано черт: %2$d. Рисуйте касанием; чтобы пропустить, нажмите «Не помню».</string>
     <string name="drawing_subject_kanji">кандзи</string>

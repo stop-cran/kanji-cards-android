@@ -540,6 +540,12 @@
     <string name="draw_outcome_lookalike">That looks like %1$s (%2$s)</string>
     <string name="draw_outcome_lookalike_no_title">That looks like %1$s</string>
     <string name="draw_outcome_not_recognized">Not recognised</string>
+    <string name="draw_ambiguity_title">Please check this attempt</string>
+    <string name="draw_ambiguity_detail">Handwriting recognition is unavailable. These strokes could be the expected character with mistakes or a different character such as %1$s.</string>
+    <string name="draw_ambiguity_no_grade">Nothing has been graded. Try again without grading, or choose how to treat this attempt. Your learning schedule is updated only when you tap Next.</string>
+    <string name="draw_ambiguity_retry">Try again without grading</string>
+    <string name="draw_ambiguity_target">Treat as the expected character with stroke mistakes</string>
+    <string name="draw_ambiguity_other">Treat as a different character</string>
     <string name="draw_trace_practice_only">Practice only: this attempt is not graded.</string>
     <string name="drawing_area_description">Drawing area for %1$s, %2$d strokes drawn. Drawing needs touch input; use “I don’t remember” to skip.</string>
     <string name="drawing_subject_kanji">the kanji</string>

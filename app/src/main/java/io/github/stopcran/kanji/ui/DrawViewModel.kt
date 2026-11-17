@@ -11,6 +11,7 @@ import io.github.stopcran.kanji.core.draw.DrawGate
 import io.github.stopcran.kanji.core.draw.DrawGrader
 import io.github.stopcran.kanji.core.draw.DrawOutcome
 import io.github.stopcran.kanji.core.draw.LookalikeGate
+import io.github.stopcran.kanji.core.draw.LookalikeReference
 import io.github.stopcran.kanji.core.draw.lookalikeFromCandidates
 import io.github.stopcran.kanji.core.draw.MatchResult
 import io.github.stopcran.kanji.core.draw.Pt
@@ -57,6 +58,7 @@ sealed interface DrawUi {
     data class Empty(val reason: DrawEmptyReason) : DrawUi
     data class Question(val card: KanjiEntity, val remaining: Int, val seq: Int, val trace: Boolean = false) : DrawUi
     data class Checking(val card: KanjiEntity) : DrawUi
+    data class Ambiguous(val question: Question, val answer: Answer, val alternative: Lookalike) : DrawUi
     data class Answer(
         val card: KanjiEntity,
         val remaining: Int,
@@ -71,6 +73,8 @@ sealed interface DrawUi {
     ) : DrawUi
     data class Done(val answered: Int, val clean: Int) : DrawUi
 }
+
+enum class DrawResolution { TargetWithMistakes, OtherCharacter }
 
 enum class DrawEmptyReason {
     NoStrokeCards,
@@ -106,6 +110,7 @@ class DrawViewModel(private val app: Services, private val recognizer: InkRecogn
     private val owners = mutableMapOf<String, String>()
     private var session = QuizSession<String>(emptyList(), { it }, confirm = false)
     private var started = false
+    private var acceptingAnswers = true
 
     fun ensureStarted(extra: Boolean) {
         if (started) return
@@ -253,8 +258,10 @@ class DrawViewModel(private val app: Services, private val recognizer: InkRecogn
     private val traced = mutableSetOf<String>()
 
     /** [strokes] are in canvas pixels; an empty list means the user gave up. */
-    fun check(strokes: List<List<TimedPt>>, canvasPx: Float) {
+    fun check(strokes: List<List<TimedPt>>, canvasPx: Float, origin: DrawUi.Question? = null) {
+        if (!acceptingAnswers) return
         val q = ui as? DrawUi.Question ?: return
+        if (origin != null && origin !== q) return
         ui = DrawUi.Checking(q.card)
         viewModelScope.launch {
             val ref = references.getValue(q.card.kanji)
@@ -262,29 +269,64 @@ class DrawViewModel(private val app: Services, private val recognizer: InkRecogn
             val match = matcher.match(ref, drawn, orderVariants[q.card.kanji].orEmpty())
             val candidates = if (strokes.isEmpty()) emptyList() else recognizer.candidates(strokes)
             val byStrokes = if (match.clean && match.drawnStrokes > 0) {
-                withContext(Dispatchers.Default) { LookalikeGate(matcher).find(q.card.kanji, match, drawn, pool().filter { it.second.size == ref.size }) }
+                withContext(Dispatchers.Default) {
+                    val canonicalPool = pool().filter { it.strokes.size == ref.size }.map { it.kanji to it.strokes }
+                    LookalikeGate(matcher).find(q.card.kanji, match, drawn, canonicalPool)
+                }
             } else null
             val outcome = DrawGrader.outcome(candidates, q.card.kanji, match, strokeLookalike = byStrokes)
             val guess = byStrokes ?: if (outcome == DrawOutcome.NotRecognized && strokes.isNotEmpty()) lookalikeFromCandidates(candidates, q.card.kanji) else null
             val lookalike = guess?.let { g -> app.db.content().kanji(sourceId).firstOrNull { it.kanji == g }.let { Lookalike(g, it?.title, it != null) } }
-            if (app.settings.saveDrawings.value && !q.trace) DrawingLog.save(app.context, q.card.kanji, canvasPx, strokes, outcome, match, candidates)
-            ui = DrawUi.Answer(q.card, q.remaining, ref, strokes, canvasPx, outcome, match, candidates != null, lookalike, q.trace)
+            val alternative = if (!q.trace && candidates == null && outcome == DrawOutcome.Mistakes) {
+                withContext(Dispatchers.Default) { LookalikeGate(matcher).fallbackAlternative(q.card.kanji, match, drawn, pool()) }
+            } else null
+            val answer = DrawUi.Answer(q.card, q.remaining, ref, strokes, canvasPx, outcome, match, candidates != null, lookalike, q.trace)
+            if (alternative == null) {
+                showAnswer(answer, candidates)
+            } else {
+                val other = app.db.content().kanji(sourceId).firstOrNull { it.kanji == alternative }
+                ui = DrawUi.Ambiguous(q, answer, Lookalike(alternative, other?.title, other != null))
+            }
         }
     }
 
-    private var poolCache: List<Pair<String, List<Stroke>>>? = null
+    fun resolve(ambiguity: DrawUi.Ambiguous, choice: DrawResolution) {
+        if (!acceptingAnswers || ui !== ambiguity) return
+        val answer = when (choice) {
+            DrawResolution.TargetWithMistakes -> ambiguity.answer
+            DrawResolution.OtherCharacter -> ambiguity.answer.copy(outcome = DrawOutcome.NotRecognized, lookalike = ambiguity.alternative)
+        }
+        showAnswer(answer, null)
+    }
+
+    fun retry(ambiguity: DrawUi.Ambiguous) {
+        if (!acceptingAnswers || ui !== ambiguity) return
+        ink.clear()
+        ui = ambiguity.question.copy()
+    }
+
+    private fun showAnswer(answer: DrawUi.Answer, candidates: List<String>?) {
+        if (app.settings.saveDrawings.value && !answer.trace) {
+            DrawingLog.save(app.context, answer.card.kanji, answer.canvasPx, answer.drawn, answer.outcome, answer.match, candidates)
+        }
+        ui = answer
+    }
+
+    private var poolCache: List<LookalikeReference>? = null
 
     /** Reference strokes of every kanji in the source, whatever the stack, parsed once on first use. */
-    private suspend fun pool(): List<Pair<String, List<Stroke>>> = poolCache ?: withContext(Dispatchers.Default) {
+    private suspend fun pool(): List<LookalikeReference> = poolCache ?: withContext(Dispatchers.Default) {
         app.db.content().kanji(sourceId).mapNotNull { k ->
             val data = k.strokesJson?.let { runCatching { json.decodeFromString(StrokeData.serializer(), it) }.getOrNull() } ?: return@mapNotNull null
-            k.kanji to data.strokes.map { s -> s.points.map { Pt(it[0], it[1]) } }
+            LookalikeReference(k.kanji, data.strokes.map { s -> s.points.map { Pt(it[0], it[1]) } }, data.orderVariants)
         }
     }.also { poolCache = it }
 
     /** Not recognised = Again (relearned), recognised with stroke mistakes = Hard (asked once more), clean = Good. */
-    fun next() {
+    fun next(origin: DrawUi.Answer? = null) {
+        if (!acceptingAnswers) return
         val a = ui as? DrawUi.Answer ?: return
+        if (origin != null && origin !== a) return
         if (a.trace) {
             session.defer(a.card.kanji, 3)
             showNext()
@@ -305,7 +347,12 @@ class DrawViewModel(private val app: Services, private val recognizer: InkRecogn
         showNext()
     }
 
+    override fun onSessionLeft() {
+        acceptingAnswers = false
+    }
+
     override fun onCleared() {
+        acceptingAnswers = false
         recognizer.close()
         super.onCleared()
     }

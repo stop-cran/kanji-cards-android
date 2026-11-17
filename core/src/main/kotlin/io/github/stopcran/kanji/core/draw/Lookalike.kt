@@ -1,5 +1,11 @@
 package io.github.stopcran.kanji.core.draw
 
+data class LookalikeReference(
+    val kanji: String,
+    val strokes: List<Stroke>,
+    val orderVariants: List<List<Int>> = emptyList(),
+)
+
 /**
  * Catches a drawing that is clean for the asked kanji but fits another kanji clearly better, e.g. 牛 drawn for 午:
  * the two differ by one stroke relation (crossing vs attaching) that the per-stroke tolerance cannot see, but the other
@@ -15,12 +21,37 @@ class LookalikeGate(
     /** The better-fitting kanji from [pool] (kanji to reference strokes), or null when the drawing is just the asked one. */
     fun find(target: String, targetMatch: MatchResult, drawn: List<Stroke>, pool: Iterable<Pair<String, List<Stroke>>>): String? {
         if (!targetMatch.clean || targetMatch.drawnStrokes == 0) return null
+        val canonicalPool = pool.asSequence().map { LookalikeReference(it.first, it.second) }.asIterable()
+        return betterCleanMatch(
+            target, drawn, canonicalPool, targetMatch.referenceStrokes,
+            minOf(targetMatch.fitCost * relative, targetMatch.fitCost - absolute),
+        )
+    }
+
+    /** Advisory only. Fit costs of partial targets do not establish identity; authored competitor orders are supported. */
+    fun fallbackAlternative(
+        target: String,
+        targetMatch: MatchResult,
+        drawn: List<Stroke>,
+        pool: Iterable<LookalikeReference>,
+    ): String? {
+        if (targetMatch.clean || !targetMatch.recognizable || targetMatch.drawnStrokes == 0) return null
+        return betterCleanMatch(target, drawn, pool, targetMatch.drawnStrokes, Double.POSITIVE_INFINITY)
+    }
+
+    private fun betterCleanMatch(
+        target: String,
+        drawn: List<Stroke>,
+        pool: Iterable<LookalikeReference>,
+        strokeCount: Int,
+        maxCost: Double,
+    ): String? {
         var best: String? = null
-        var bestCost = minOf(targetMatch.fitCost * relative, targetMatch.fitCost - absolute)
-        for ((kanji, ref) in pool) {
-            if (kanji == target || ref.size != targetMatch.referenceStrokes) continue
-            val r = matcher.match(ref, drawn)
-            if (r.clean && r.fitCost < bestCost) { best = kanji; bestCost = r.fitCost }
+        var bestCost = maxCost
+        for (reference in pool) {
+            if (reference.kanji == target || reference.strokes.size != strokeCount) continue
+            val r = matcher.match(reference.strokes, drawn, reference.orderVariants)
+            if (r.clean && r.fitCost < bestCost) { best = reference.kanji; bestCost = r.fitCost }
         }
         return best
     }

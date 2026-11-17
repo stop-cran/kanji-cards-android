@@ -717,6 +717,39 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   fits the drawing clearly better (`LookalikeGate`; catches 牛 for 午, where only a crossing-vs-attachment relation differs). Otherwise, when not
   recognised, the recogniser's top-1 candidate, if a single Han character other than the target, is shown as "That looks like X (meaning)" with a link to
   its article when it has a card. The per-stroke issue list and red flags are shown only for the Mistakes outcome.
+- **Unresolved unavailable-recognizer identity tradeoff:** the 60%-matched-strokes fallback can return Mistakes for a different
+  canonical character (frozen examples: 封 drawn with 判 strokes, 到 or 達 drawn with 届 strokes). Extending the clean-reference
+  competitor veto to nonclean targets, using the existing 0.8/0.01 fit margins and actual drawn stroke count, rejected those
+  examples but also rejected two constructed intended 日 drawings with a noisy omitted middle stroke as 口 instead of retaining
+  missing-stroke feedback. The proposal was withdrawn without changing grading or thresholds. The initial 368 ideal-derived
+  controls and replay of 25 phone exports (10 nonclean) had not exposed this; a focused 1,068-case noisy intended-target probe
+  did. These are bounded constructed-intent counterexamples, not a representative error rate, learner-intent inference,
+  device/ML Kit result or release acceptance. Neither partial coverage nor a better competing fit alone resolves this ambiguity.
+- **Explicit-resolution revision 001, archived and not adopted:** a follow-up prototype offered an ungraded retry or deliberate
+  target-with-mistakes/different-character choice only for a nontracing Mistakes result with unavailable recognition and a
+  clearly better clean competitor. Retry reused the already-taken question; explicit choices retained the existing final
+  outcomes and left review persistence to Next. Its focused core checks passed, but the capped Android build exhausted
+  metaspace, then a sequential retry hit the physical-memory stop before app compilation finished. The unvalidated
+  production/test edits were preserved outside the repository and removed, not adopted. Lifecycle, exactly-once persistence,
+  localized Compose behavior and native/device/ML Kit acceptance remain unverified. This neither protects legacy clients
+  nor detects ambiguity when no suitable competing reference is available.
+- **Explicit-resolution revision 002, unaccepted working candidate:** any clean same-drawn-count competitor now triggers the
+  nontracing null-recognizer Mistakes advisory, including authored competitor `orderVariants`. Partial-target fit cost is not
+  identity confidence: both an exact cost tie and ideal 日 missing its middle stroke require a choice even when the target
+  fits better. The existing clean-target veto and `DrawGrader` remain unchanged. No choice defaults or submits a review;
+  retry reuses the taken question without revealing the target glyph. The ambiguity page retains the original meaning
+  caption and remaining-question context; explicit resolution retains stroke feedback or
+  chooses NotRecognized. Next alone updates SRS; the optional local drawing log is saved at explicit resolution.
+  The completed 1,526-row comparison used canonical orders. Its hypothetical 705-reference pool combined 690 published and
+  15 unpublished references, all omitting variants; phone replay used the 690-reference pool. No new pool was published.
+  Its constructed noisy-missing controls prompted 94/478 eligible cases versus
+  the old margin's 2/478: **92 additional missing-stroke prompts**, plus two additional broken-stroke prompts. One of 368
+  ideal-derived controls also prompted (任 missing stroke index 2, clean 仕); none of 25 hypothetical null-recognizer phone
+  replays prompted. These are bounded decision-burden counts, not population rates or intent/handwriting evidence.
+  岩/石 canonical cross cases were both recognizable; 岩 with its own first three strokes omitted matched only four of eight
+  and remained NotRecognized despite a clean 石 competitor. Fresh standalone core compilation and 14 JUnit checks passed,
+  including the supported-order-only competitor, but they are not Gradle/Android validation. The revised ViewModel/lifecycle,
+  exactly-once SRS/logging and EN/RU Compose regressions remain uncompiled/unrun; no device, ML Kit or release acceptance.
 - Shape matching uses regularised strokes (Douglas-Peucker at 2% of drawing size, resampled to 24 points), so tiny kinks are ignored. Small
   details, including a tiny hook, are removed and not counted. Hook detection deliberately uses the Douglas-Peucker-simplified but
   **not resampled** points (resampling would erase the corners); never feed `regularize()` output into `endHook`.

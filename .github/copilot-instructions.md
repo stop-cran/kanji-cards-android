@@ -411,6 +411,13 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - Downloadable Google Fonts (`ui-text-google-fonts`) do NOT work for CJK: the provider serves only the Latin subset, and Compose falls back to the system face silently. Bundle subsetted fonts instead (see README "Fonts").
 
 ## Stroke matcher (`core/draw`)
+- Do not extend the clean-only lookalike veto to nonclean fallback matches on reference-pair evidence alone.
+  The existing 0.8/0.01 margins caught canonical wrong-glyph examples but also rejected constructed noisy 日 drawings
+  missing the middle stroke as 口, suppressing missing-stroke feedback. That proposal was withdrawn; ideal-derived controls
+  and phone-fixture replay had missed the tradeoff. See `docs/DESIGN.md`; this is not a representative handwriting rate.
+  The unaccepted explicit-resolution prototype must carry competitor `orderVariants` through its pool and use the supported-order
+  matcher; canonical-only reference inventories cannot verify custom-source variants. Conceal the target before an ungraded retry,
+  and distinguish SRS-on-Next from the optional drawing log saved at explicit resolution. Android acceptance is still outstanding.
 - `StrokeMatcher.match(reference, drawn)` is pure Kotlin. It normalises the drawing onto the reference box (per-axis scale, refit on matched strokes), links drawn to reference strokes greedily by mean resampled distance (single, joined, broken candidates), then reports `Reversed`, `WrongOrder` (strokes outside the longest increasing run of reference indexes), `WrongShape`, `Joined`, `Broken`, `Missing`, `Extra`.
 - Tolerances are in `MatcherConfig` (fractions of the 109 box). They were tuned only on SIMULATED hands (`StrokeMatcherTest.Hand`), so re-tune with real recorded drawings from a device before trusting them; add them as fixtures.
 - `WrongShape` issues carry `faults` from `ShapeDiagnosis` (position, length, angle, curvature) so `describe()` can say e.g. "too low". Describe a position/lean by an unambiguous reference (a lean is named by where the stroke's top is). When two neighbouring strokes are both off, the leftover pairing can name the neighbour; verify against the exported drawing before changing a threshold.
