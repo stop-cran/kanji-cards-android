@@ -10,7 +10,9 @@ import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.Stacks
 import io.github.stopcran.kanji.core.srs.StudyMode
 import io.github.stopcran.kanji.data.AppDatabase
+import io.github.stopcran.kanji.data.LearningItemKind
 import io.github.stopcran.kanji.data.KanjiEntity
+import io.github.stopcran.kanji.data.QueueAddResult
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.Settings
 import io.github.stopcran.kanji.data.toEntity
@@ -137,6 +139,35 @@ class CumulativeKanjiSessionTest {
             vm.ensureStarted(true)
             await { vm.ui !is QuizUi.Loading }
             assertTrue((vm.ui as QuizUi.Question).card.kanji in started)
+        } finally {
+            finish(vm)
+        }
+    }
+
+    @Test fun queuedHigherLevelMeaningBypassesSelectedLevelAndLeavesQueueAfterPersistedAnswer() {
+        services.settings.setDailyNewCards(1)
+        val later = System.currentTimeMillis() + 86_400_000
+        runBlocking {
+            db.reviews().allStates().forEach { db.reviews().putState(it.copy(dueMs = later)) }
+            assertEquals(
+                QueueAddResult.Added,
+                services.learningQueue.addKanji(source, "jlpt-n4", "太", System.currentTimeMillis()),
+            )
+        }
+
+        val vm = QuizViewModel(services)
+        try {
+            vm.ensureStarted(false)
+            await { vm.ui !is QuizUi.Loading }
+            val study = vm.ui as QuizUi.Study
+            assertEquals("太", study.card.kanji)
+            assertEquals(1, study.remaining)
+
+            vm.startQuestion()
+            vm.pick("太")
+            vm.next()
+            await { runBlocking { db.learningQueue().items(source, LearningItemKind.Kanji).isEmpty() } }
+            assertEquals(1, runBlocking { db.reviews().states(source, Stacks.JLPT_STATE, StudyMode.Quiz.name).single { it.kanji == "太" }.reps })
         } finally {
             finish(vm)
         }

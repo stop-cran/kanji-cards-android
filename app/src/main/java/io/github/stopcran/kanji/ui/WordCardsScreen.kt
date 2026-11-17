@@ -19,6 +19,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -26,12 +27,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.core.content.WordSearch
+import io.github.stopcran.kanji.core.srs.StudyMode
+import io.github.stopcran.kanji.data.LearningItemKind
+import io.github.stopcran.kanji.data.QueueAddResult
+import kotlinx.coroutines.launch
 
 @Composable
 fun WordCardsScreen(app: KanjiApp, onBack: () -> Unit, onOpen: (String) -> Unit, onOpenDoc: (String) -> Unit = {}) {
     val source by app.settings.source.collectAsState()
     val words by remember(source) { app.db.content().observeWordsLite(source.id) }.collectAsState(emptyList())
+    val selectedStack by app.settings.wordStack.collectAsState()
+    val queue by remember(source) { app.services.learningQueue.observe(source.id) }.collectAsState(emptyList())
+    val jpStates by remember(source, selectedStack) {
+        app.db.reviews().observeStates(source.id, selectedStack, StudyMode.WordJpEn.name)
+    }.collectAsState(emptyList())
+    val queuedIds = remember(queue) { queue.filter { it.kind == LearningItemKind.Word }.mapTo(HashSet()) { it.itemId } }
+    val learningIds = remember(jpStates) { jpStates.filter { it.phase != "New" }.mapTo(HashSet()) { it.kanji } }
+    val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
+    var queueError by rememberSaveable { mutableStateOf<Int?>(null) }
     val shown = remember(words, query) {
         words.map { it to WordSearch.score(it.word, it.reading, it.title, query) }
             .filter { it.second > 0 }
@@ -55,6 +69,7 @@ fun WordCardsScreen(app: KanjiApp, onBack: () -> Unit, onOpen: (String) -> Unit,
             label = { Text(stringResource(R.string.search_word_meaning_or_reading)) },
             trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text(stringResource(R.string.clear)) } },
         )
+        queueError?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
         if (shown.isEmpty() && words.isNotEmpty()) Text(stringResource(R.string.no_words_match), color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(Modifier.weight(1f), state = listState) {
             items(shown, key = { it.word }) { w ->
@@ -63,6 +78,22 @@ fun WordCardsScreen(app: KanjiApp, onBack: () -> Unit, onOpen: (String) -> Unit,
                     Column(Modifier.weight(0.6f)) {
                         Text(w.title)
                         if (w.reading != w.word) Text(w.reading, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    LearningQueueButton(w.word in queuedIds, w.word in learningIds) {
+                        if (w.word in queuedIds) {
+                            scope.launch {
+                                app.services.learningQueue.remove(source.id, LearningItemKind.Word, w.word)
+                                queueError = null
+                            }
+                        } else {
+                            scope.launch {
+                                queueError = when (app.services.learningQueue.addWord(source.id, selectedStack, w.word, System.currentTimeMillis())) {
+                                    QueueAddResult.Added, QueueAddResult.AlreadyQueued -> null
+                                    QueueAddResult.AlreadyLearning -> R.string.learning_queue_already_learning_error
+                                    QueueAddResult.Missing -> R.string.learning_queue_item_missing_error
+                                }
+                            }
+                        }
                     }
                 }
             }

@@ -326,16 +326,17 @@ Task parser epoch 2 refreshes an unchanged source revision/version after upgrade
 after acceptance. No Room migration or N5 identity/approval rewrite is needed. All four guided
 formats support either accepted level; N4 diagnostic orchestration remains installment C.
 
-## Progress export v7
+## Progress export v8
 
-**Settings → Export progress** writes eleven UTF-8 JSON members. Database rows are read in one transaction:
+**Settings → Export progress** writes twelve UTF-8 JSON members. Database rows are read in one transaction:
 
 | ZIP member | Meaning |
 | --- | --- |
-| `export_manifest.json` | `{"formatVersion":7}`; independent of content JSON/manifest schema versions. |
+| `export_manifest.json` | `{"formatVersion":8}`; independent of content JSON/manifest schema versions. |
 | `review_state.json` | Current SRS rows: `sourceId`, `stack`, `kanji`, `mode`, `reading`, `phase`, `stability`, `difficulty`, `dueMs`, `lastReviewMs`, `reps`, `lapses`. JLPT kanji levels use the shared `kanji-jlpt` stack. |
 | `review_log.json` | Recorded events: `id`, `sourceId`, `stack`, `kanji`, `mode`, `reading`, `grade`, `atMs` (Unix milliseconds), nullable `sessionId` and `previousReadingStarted`. The latter records the prior per-reading state for new reading events; null means historical or not a reading. Legacy JLPT level-stack events are preserved; new events use `kanji-jlpt`. Grades: Again=1, Hard=2, Good=3, Easy=4. |
 | `jlpt_transition_checks.json` | Spaced confusion-check reservations: `id`, `sourceId`, `triggerKanji`, target `kanji`, `mode`, `reading`, `dueMs`, `originalDueMs`, and nullable `completedAtMs` and `cancelledAtMs`. Completed reservations retain their original slot; cancelled reservations no longer occupy one. |
+| `learning_queue.json` | Queued items: `sourceId`, `kind` (`kanji`/`word`), `itemId`, per-source/type `position`, and `addedAtMs`. Queue entries survive content replacement so unavailable items can be restored or removed later. |
 | `grammar_responses.json` | `reviewLogId`, `sourceId`, `stack`, `exerciseId`, `constructionId`, `relationshipId`, `promptType` (`choose`/`type`), `response`, `correct`, nullable structured `choiceSnapshot`. |
 | `study_sessions.json` | Session `id`, `sourceId`, selected `stack`, `mode`, `extra`, `startedAtMs`, nullable `endedAtMs`, `endReason`, `answered`, `correct`. |
 | `listening_encounters.json` | Source/passage identity, captured JSON/hash/audio hash, current playback state, immutable submitted `response`, exposure/first-encounter timestamps, reservation/introduction flags, canonical review link and closure. No image/audio bytes. |

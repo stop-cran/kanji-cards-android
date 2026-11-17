@@ -28,14 +28,24 @@ object QueueBuilder {
         noise: Double = DEFAULT_NOISE,
         rnd: Random = Random.Default,
         newEligible: Set<String>? = null,
+        prioritizedNew: List<String> = emptyList(),
         urgencyFactor: (String) -> Double = { 1.0 },
     ): List<QueueItem> {
         val due = allKanji.mapNotNull { k ->
             val s = states[k] ?: return@mapNotNull null
             if (s.phase != CardPhase.New && !s.due.isAfter(now)) QueueItem(k, s, false) else null
         }.let { byUrgency(it, now, noise, rnd, urgencyFactor) }
-        val fresh = allKanji.filter { (newEligible == null || it in newEligible) && states[it]?.phase.let { p -> p == null || p == CardPhase.New } }
-            .let { if (noise > 0) it.shuffled(rnd) else it }
+        val candidateIds = allKanji.toHashSet()
+        val prioritized = prioritizedNew.distinct().filter { id ->
+            id in candidateIds &&
+            states[id]?.phase.let { it == null || it == CardPhase.New }
+        }
+        val prioritizedSet = prioritized.toSet()
+        val ordinary = allKanji.filter { id ->
+            id !in prioritizedSet && (newEligible == null || id in newEligible) &&
+                states[id]?.phase.let { it == null || it == CardPhase.New }
+        }.let { if (noise > 0) it.shuffled(rnd) else it }
+        val fresh = (prioritized + ordinary)
             .take(maxOf(0, newCardsRemainingToday))
             .map { QueueItem(it, states[it] ?: SrsState(), true) }
         return (if (noise > 0) interleave(due, fresh, rnd) else due + fresh).take(limit)

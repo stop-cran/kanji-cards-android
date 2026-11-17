@@ -45,6 +45,7 @@ internal data class HomeSnapshot(
     val introducedReadings: Int,
     val padModes: Set<StudyMode>,
     val focus: FocusStatus?,
+    val queuedItems: List<LearningQueueEntity> = emptyList(),
 )
 
 internal interface HomeRepository {
@@ -71,7 +72,7 @@ internal class RoomHomeRepository(private val db: AppDatabase, private val setti
 
     override fun observe(selection: HomeSelection, now: Instant, zone: ZoneId): Flow<HomeSnapshot> =
         db.invalidationTracker.createFlow(
-            "kanji", "words", "review_state", "review_log", "listening_encounters", "listening_task_encounters",
+            "kanji", "words", "review_state", "review_log", "learning_queue", "listening_encounters", "listening_task_encounters",
         ).map { load(selection, now, zone) }
 
     private suspend fun load(selection: HomeSelection, now: Instant, zone: ZoneId): HomeSnapshot = db.withTransaction {
@@ -109,6 +110,7 @@ internal class RoomHomeRepository(private val db: AppDatabase, private val setti
                 source, Stacks.stateId(inventory.stack.id), now.atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli(),
             ),
             pad, focus,
+            db.learningQueue().items(source, LearningItemKind.Kanji) + db.learningQueue().items(source, LearningItemKind.Word),
         )
     }
 }

@@ -46,6 +46,7 @@ import io.github.stopcran.kanji.data.inStack
 @Suppress("LongParameterList")
 class HomeActions(
     val onSettings: () -> Unit,
+    val onLearningQueue: () -> Unit,
     val onCards: () -> Unit,
     val onWordCards: () -> Unit,
     val onKanjiPage: () -> Unit,
@@ -84,6 +85,9 @@ internal fun MainPage(state: HomeState, overview: HomeOverview, preferences: Hom
     ) {
         HomeContentNotice(content, onRetry)
         if (content.usable) LoadingBar(data)
+        OutlinedButton(onClick = a.onLearningQueue, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.learning_queue))
+        }
         val defaultId = remember { RepoSource.parse(Defaults.CONTENT_REPO_URL, Defaults.CONTENT_BRANCH)?.id }
         if (data.sourceId != defaultId) Text(stringResource(R.string.cards_from, data.sourceId))
         N4Offer(preferences, data)

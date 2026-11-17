@@ -151,7 +151,12 @@ class WordQuizViewModel(
         val offered = allWords.offeredStacks(n4Unlocked)
         val stack = WordStacks.find(selectedStack, offered)
         stackId = stack.id
-        val all = allWords.inWordStack(stack, levels)
+        val selectedWords = allWords.inWordStack(stack, levels)
+        val queued = if (extra || direction != WordDirection.JpToEn) emptyList() else app.db.learningQueue()
+            .items(sourceId, io.github.stopcran.kanji.data.LearningItemKind.Word).map { it.itemId }
+        val queuedWords = queued.mapNotNull { id -> allWords.firstOrNull { it.word == id } }
+        val queuedIds = queuedWords.map { it.word }
+        val all = (selectedWords + queuedWords).distinctBy { it.word }
         kanjiHelp = allWords.mapNotNull { word ->
             WordKanjiHelp.build(word.word, word.reading, stack, levels)?.let { word.word to it }
         }.toMap()
@@ -168,7 +173,10 @@ class WordQuizViewModel(
         val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
         val ids = all.forDirection(direction).map { it.word }
         val minimum = app.settings.practiceMinimum()
-        val base = WordQueues.build(direction, ids, states, other, Instant.now(), budget, extra, limit = if (extra) minimum else Int.MAX_VALUE).map { it.kanji }
+        val base = WordQueues.build(
+            direction, ids, states, other, Instant.now(), budget, extra,
+            limit = if (extra) minimum else Int.MAX_VALUE, prioritizedNew = queuedIds,
+        ).map { it.kanji }
         val items = if (extra) base + pad(base, minimum - base.size, ids, all) else base
         session = trackSession(QuizSession(items, { it }), sourceId, stackId, direction.mode.name, extra)
         showNext()

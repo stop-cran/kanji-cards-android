@@ -27,7 +27,7 @@ class CumulativeJlptMigrationTest {
 
     private suspend fun withDatabase(block: suspend (AppDatabase) -> Unit) {
         val db = Room.databaseBuilder(context, AppDatabase::class.java, name)
-            .addMigrations(MIGRATION_20_21).allowMainThreadQueries().build()
+            .addMigrations(MIGRATION_20_21, MIGRATION_21_22).allowMainThreadQueries().build()
         try { block(db) } finally { db.close() }
     }
 
@@ -76,7 +76,7 @@ class CumulativeJlptMigrationTest {
         }
         repeat(2) {
             withDatabase { db ->
-                assertEquals(21, db.openHelper.readableDatabase.version)
+                assertEquals(22, db.openHelper.readableDatabase.version)
                 val states = db.reviews().allStates()
                 val own = states.filter { it.sourceId == owner && it.stack == Stacks.JLPT_STATE }
                 assertEquals(7, own.size)

@@ -30,11 +30,12 @@ object WordQueues {
         limit: Int = if (extra) 10 else Int.MAX_VALUE,
         noise: Double = QueueBuilder.DEFAULT_NOISE,
         rnd: Random = Random.Default,
+        prioritizedNew: List<String> = emptyList(),
     ): List<QueueItem> {
         val eligible = eligible(direction, words, own, other)
         return if (extra) QueueBuilder.extra(eligible, own, now, limit, noise, rnd)
-        else QueueBuilder.build(eligible, own, now, newBudget, limit, noise, rnd) { w ->
-            if (direction == WordDirection.Reading || direction == WordDirection.Type) 1.0 else WordBlend.urgencyFactor(other[w], now)
-        }
+        else QueueBuilder.build(
+            eligible, own, now, newBudget, limit, noise, rnd, prioritizedNew = prioritizedNew,
+        ) { w -> if (direction == WordDirection.Reading || direction == WordDirection.Type) 1.0 else WordBlend.urgencyFactor(other[w], now) }
     }
 }

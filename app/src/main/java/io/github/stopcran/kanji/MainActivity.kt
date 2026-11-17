@@ -33,6 +33,7 @@ import io.github.stopcran.kanji.ui.QuizScreen
 import io.github.stopcran.kanji.ui.SettingsScreen
 import io.github.stopcran.kanji.ui.WordQuizScreen
 import io.github.stopcran.kanji.ui.WordCardsScreen
+import io.github.stopcran.kanji.ui.LearningQueueScreen
 import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.ui.KanaStudyScreen
 import io.github.stopcran.kanji.ui.GrammarPracticeRoutes
@@ -293,6 +294,10 @@ private fun LegacyRouteBody(
             onOpen = { push(sourceDocRoute(app.settings.source.value.id, "words/$it.md")) },
             onOpenDoc = { push(sourceDocRoute(app.settings.source.value.id, it)) },
         )
+        "learning-queue" -> LearningQueueScreen(
+            app, onBack = pop,
+            onOpenDoc = { push(sourceDocRoute(app.settings.source.value.id, it)) },
+        )
         "listening-home" -> io.github.stopcran.kanji.ui.ListeningPage(app, pop, push)
         GrammarPracticeRoutes.UNAVAILABLE -> GrammarPracticeUnavailable(pop, browseGrammar)
         else -> if (route.startsWith("listening-assessment-preview:")) {
@@ -386,6 +391,7 @@ private fun LegacyRouteBody(
                 onBack = pop,
                 actions = HomeActions(
                     onSettings = { push("settings") },
+                    onLearningQueue = { push("learning-queue") },
                     onCards = { push("cards") },
                     onWordCards = { push("word-cards") },
                     onKanjiPage = { push("kanji-home") },

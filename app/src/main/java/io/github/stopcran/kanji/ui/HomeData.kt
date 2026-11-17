@@ -20,6 +20,7 @@ import io.github.stopcran.kanji.core.words.WordQueues
 import io.github.stopcran.kanji.core.words.WordStack
 import io.github.stopcran.kanji.core.words.WordStacks
 import io.github.stopcran.kanji.data.KanjiEntity
+import io.github.stopcran.kanji.data.LearningItemKind
 import io.github.stopcran.kanji.data.HomeSnapshot
 import io.github.stopcran.kanji.data.forDirection
 import io.github.stopcran.kanji.data.inWordStack
@@ -109,6 +110,7 @@ private class Unlocks(
 private class Extras(
     val allowance: NewAllowance, val unlocks: Unlocks,
     val focus: io.github.stopcran.kanji.data.FocusStatus?, val newEligible: Set<String>?,
+    val queuedKanji: List<String>, val queuedWords: List<String>,
 )
 
 /** All seven scheduling-state maps, each non-null; exists so loading is decided once instead of with !! at each use. */
@@ -150,6 +152,8 @@ internal fun projectHome(snapshot: HomeSnapshot, now: Instant): HomeData {
     val inventory = snapshot.inventory
     val selection = inventory.selection
     val states = snapshot.states
+    val kanjiIds = inventory.kanji.mapTo(HashSet()) { it.kanji }
+    val wordIds = inventory.words.mapTo(HashSet()) { it.word }
     val stateSet = StateSet(
         states.getValue(StudyMode.Quiz), states.getValue(StudyMode.Draw),
         states.getValue(StudyMode.KanjiOn), states.getValue(StudyMode.KanjiKun),
@@ -159,6 +163,8 @@ internal fun projectHome(snapshot: HomeSnapshot, now: Instant): HomeData {
         snapshot.allowance,
         Unlocks(snapshot.learned, selection.study.unlockRule, snapshot.introducedReadings, snapshot.padModes, states), snapshot.focus,
         inventory.inStack.newKanjiInStack(inventory.stack.id),
+        snapshot.queuedItems.filter { it.kind == LearningItemKind.Kanji && it.itemId in kanjiIds }.map { it.itemId },
+        snapshot.queuedItems.filter { it.kind == LearningItemKind.Word && it.itemId in wordIds }.map { it.itemId },
     )
     val projection = computeModes(inventory.inStack, inventory.wordsInStack, extras, now, stateSet)
     val n4Offer = shouldOfferN4(
@@ -176,10 +182,10 @@ internal fun projectHome(snapshot: HomeSnapshot, now: Instant): HomeData {
 }
 
 private fun meaningMode(inStack: List<KanjiEntity>, quiz: Map<String, SrsState>, ex: Extras, now: Instant): ModeState {
-    val ids = inStack.map { it.kanji }
+    val ids = (inStack.map { it.kanji } + ex.queuedKanji).distinct()
     val newLeft = ex.allowance.remaining
     val meaningNew = ex.focus?.let { minOf(newLeft, it.capacity) } ?: newLeft
-    val q = QueueBuilder.build(ids, quiz, now, meaningNew, noise = 0.0, newEligible = ex.newEligible)
+    val q = QueueBuilder.build(ids, quiz, now, meaningNew, noise = 0.0, newEligible = ex.newEligible, prioritizedNew = ex.queuedKanji)
     val extra = QueueBuilder.extra(
         ids, quiz, now, limit = 1, noise = 0.0, newEligible = ex.newEligible,
         newCardsLimit = ex.focus?.capacity ?: Int.MAX_VALUE,
@@ -187,7 +193,7 @@ private fun meaningMode(inStack: List<KanjiEntity>, quiz: Map<String, SrsState>,
     val reason = if (ex.focus?.capacity == 0) "Kanji focus full"
         else "Nothing is due. Come back later or raise the daily new-card limit in ⚙ settings."
     return ModeState.of(
-        inStack.size >= 2, "Needs at least 2 kanji in this stack", q.count { !it.isNew }, q.count { it.isNew },
+        ids.size >= 2, "Needs at least 2 kanji in this stack", q.count { !it.isNew }, q.count { it.isNew },
         extra.isNotEmpty() || StudyMode.Quiz in ex.unlocks.padModes, reason,
     )
 }
@@ -208,9 +214,10 @@ private fun computeModes(
         return ModeState.of(pool >= min, "Needs at least $min $what", q.count { !it.isNew }, q.count { it.isNew }, extra.isNotEmpty() || pad, locked)
     }
     fun word(d: WordDirection, own: Map<String, SrsState>, other: Map<String, SrsState>, locked: String): ModeState {
-        val ids = words.forDirection(d).map { it.word }
+        val prioritized = if (d == WordDirection.JpToEn) ex.queuedWords else emptyList()
+        val ids = (words.forDirection(d).map { it.word } + prioritized).distinct()
         readiness[d] = WordReadiness(ids.size, WordQueues.eligible(d, ids, own, other).size)
-        val q = WordQueues.build(d, ids, own, other, now, newLeft, noise = 0.0)
+        val q = WordQueues.build(d, ids, own, other, now, newLeft, noise = 0.0, prioritizedNew = prioritized)
         val extra = WordQueues.build(d, ids, own, other, now, 0, extra = true, noise = 0.0)
         val offerExtra = extra.isNotEmpty() || d.mode in ex.unlocks.padModes
         val unavailable = if (d == WordDirection.Reading) "Needs at least two words with kanji" else "Needs at least 2 words"

@@ -121,6 +121,24 @@ class WordsTest {
     }
 
     @Test
+    fun queuedWordsArePrioritizedWithinTheNewCardBudget() {
+        val due = review(3.0, dueOffsetSec = -10)
+        val queue = WordQueues.build(
+            WordDirection.JpToEn,
+            listOf("ordinary", "queued-first", "queued-second", "due"),
+            own = mapOf("due" to due),
+            other = emptyMap(),
+            now = now,
+            newBudget = 2,
+            noise = 0.0,
+            prioritizedNew = listOf("queued-second", "queued-first"),
+        )
+
+        assertEquals(listOf("due", "queued-second", "queued-first"), queue.map { it.kanji })
+        assertEquals(listOf(false, true, true), queue.map { it.isNew })
+    }
+
+    @Test
     fun otherDirectionOnlyDefersOrderingSlightly() {
         assertEquals(1.0, WordBlend.urgencyFactor(null, now), 0.0)
         assertEquals(1.0, WordBlend.urgencyFactor(SrsState(), now), 0.0)

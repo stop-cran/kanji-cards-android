@@ -34,7 +34,7 @@ class GrammarCurriculumMigrationTest {
         val db = Room.databaseBuilder(context, AppDatabase::class.java, name)
             .addMigrations(
                 MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17,
-                MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21,
+                MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22,
             )
             .allowMainThreadQueries().build()
         try {

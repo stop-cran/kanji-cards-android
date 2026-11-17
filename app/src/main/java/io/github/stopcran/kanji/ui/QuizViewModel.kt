@@ -96,7 +96,12 @@ class QuizViewModel(
         contentLanguage = app.settings.sync.baseLanguage(sourceId) ?: app.db.content().meta(sourceId)?.baseLanguage ?: "en"
         val content = app.db.content().kanji(sourceId)
         stack = Stacks.find(app.settings.stack.value, content.stacks()).id
-        val all = content.inStack(stack)
+        val selected = content.inStack(stack)
+        val queued = if (extra) emptyList() else app.db.learningQueue()
+            .items(sourceId, io.github.stopcran.kanji.data.LearningItemKind.Kanji).map { it.itemId }
+        val queuedCards = content.filter { it.kanji in queued }
+        val queuedIds = queuedCards.map { it.kanji }
+        val all = (selected + queuedCards).distinctBy { it.kanji }
         if (all.size < 2) {
             ui = QuizUi.Empty(R.string.kanji_quiz_no_cards)
             return
@@ -106,8 +111,8 @@ class QuizViewModel(
         app.db.reviews().states(sourceId, Stacks.stateId(stack), StudyMode.Quiz.name).forEach { states[it.kanji] = it.toSrs() }
 
         val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
-        val capacity = app.db.focusStatus(app.settings, sourceId, stack, all, System.currentTimeMillis())?.capacity
-        val newEligible = all.newKanjiInStack(stack)
+        val capacity = app.db.focusStatus(app.settings, sourceId, stack, selected, System.currentTimeMillis())?.capacity
+        val newEligible = selected.newKanjiInStack(stack)
         val items = if (extra) {
             val minimum = app.settings.practiceMinimum()
             val base = QueueBuilder.extra(
@@ -116,7 +121,10 @@ class QuizViewModel(
             ).map { it.kanji }
             base + pad(base, minimum - base.size, all)
         } else {
-            QueueBuilder.build(all.map { it.kanji }, states, Instant.now(), minOf(budget, capacity ?: budget), newEligible = newEligible)
+            QueueBuilder.build(
+                all.map { it.kanji }, states, Instant.now(), minOf(budget, capacity ?: budget),
+                newEligible = newEligible, prioritizedNew = queuedIds,
+            )
                 .map { it.kanji }
         }
         session = trackSession(QuizSession(items, { it }), sourceId, stack, StudyMode.Quiz.name, extra)

@@ -14,6 +14,7 @@ import androidx.room.Transaction
 import io.github.stopcran.kanji.core.kana.KANA_SOURCE_ID
 import io.github.stopcran.kanji.core.reading.ReadingCard
 import io.github.stopcran.kanji.core.reading.ReadingKind
+import io.github.stopcran.kanji.core.srs.StudyMode
 import kotlinx.coroutines.flow.Flow
 
 /** List-valued columns are stored joined with this separator (never occurs in front-matter values). */
@@ -635,7 +636,16 @@ interface ReviewDao {
     suspend fun record(state: ReviewStateEntity, log: ReviewLogEntity) {
         putState(state)
         putLog(log)
+        val queueKind = when (log.mode) {
+            StudyMode.Quiz.name -> LearningItemKind.Kanji
+            StudyMode.WordJpEn.name -> LearningItemKind.Word
+            else -> null
+        }
+        queueKind?.let { removeQueuedItem(log.sourceId, it, log.kanji) }
     }
+
+    @Query("DELETE FROM learning_queue WHERE sourceId = :sourceId AND kind = :kind AND itemId = :itemId")
+    suspend fun removeQueuedItem(sourceId: String, kind: String, itemId: String)
 
     @Transaction
     suspend fun recordGrammar(state: ReviewStateEntity, log: ReviewLogEntity, response: GrammarResponseEntity) {
@@ -656,14 +666,16 @@ interface ReviewDao {
         ListeningTaskIdentityEntity::class, ListeningExposureEntity::class, ListeningTaskSyncEntity::class,
         ListeningTaskEncounterEntity::class, ListeningAssessmentEntity::class,
         ReviewStateEntity::class, ReviewLogEntity::class, JlptTransitionCheckEntity::class, StudySessionEntity::class, SyncMetaEntity::class,
+        LearningQueueEntity::class,
         AcceptedSourceEntity::class,
     ],
-    version = 21,
+    version = 22,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun content(): ContentDao
     abstract fun reviews(): ReviewDao
+    abstract fun learningQueue(): LearningQueueDao
     abstract fun listening(): ListeningDao
     abstract fun listeningTasks(): ListeningTaskDao
     abstract fun sourceAcceptance(): SourceAcceptanceDao
@@ -699,6 +711,20 @@ val MIGRATION_20_21 = object : androidx.room.migration.Migration(20, 21) {
         db.execSQL(
             "DELETE FROM review_state WHERE stack IN ('jlpt-n5', 'jlpt-n4', 'jlpt-n3', 'jlpt-n2', 'jlpt-n1') " +
                 "AND mode IN ('Quiz', 'Draw', 'KanjiOn', 'KanjiKun')",
+        )
+    }
+}
+
+val MIGRATION_21_22 = object : androidx.room.migration.Migration(21, 22) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS learning_queue (" +
+                "sourceId TEXT NOT NULL, kind TEXT NOT NULL, itemId TEXT NOT NULL, position INTEGER NOT NULL, " +
+                "addedAtMs INTEGER NOT NULL, PRIMARY KEY(sourceId, kind, itemId))",
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_learning_queue_sourceId_kind_position " +
+                "ON learning_queue (sourceId, kind, position)",
         )
     }
 }

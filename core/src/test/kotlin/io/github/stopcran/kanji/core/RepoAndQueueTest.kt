@@ -67,6 +67,32 @@ class RepoAndQueueTest {
     }
 
     @Test
+    fun prioritizedNewCardsPrecedeOrdinaryNewCardsWithoutChangingDueCardsOrBudget() {
+        val now = Instant.parse("2026-01-10T00:00:00Z")
+        val due = SrsState(CardPhase.Review, 3.0, 5.0, now.minusSeconds(1), now.minusSeconds(1000), 2)
+        val pool = listOf("due", "ordinary", "queued-a", "queued-b")
+        val queue = QueueBuilder.build(
+            pool,
+            mapOf("due" to due),
+            now,
+            newCardsRemainingToday = 2,
+            noise = 0.0,
+            newEligible = setOf("ordinary"),
+            prioritizedNew = listOf("queued-b", "missing", "queued-a", "queued-b"),
+        )
+
+        assertEquals(listOf("due", "queued-b", "queued-a"), queue.map { it.kanji })
+        assertEquals(listOf(false, true, true), queue.map { it.isNew })
+        assertEquals(
+            listOf("due", "queued-b"),
+            QueueBuilder.build(
+                pool, mapOf("due" to due), now, 1, noise = 0.0,
+                newEligible = setOf("ordinary"), prioritizedNew = listOf("queued-b", "queued-a"),
+            ).map { it.kanji },
+        )
+    }
+
+    @Test
     fun extraPracticeLimitsNewCardsBeforeFillingTheSession() {
         val now = Instant.parse("2026-01-10T00:00:00Z")
         val upcoming = SrsState(CardPhase.Review, 3.0, 5.0, now.plusSeconds(1000), now.minusSeconds(1000), 2)

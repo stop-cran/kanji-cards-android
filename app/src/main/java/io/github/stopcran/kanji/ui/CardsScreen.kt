@@ -19,6 +19,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import io.github.stopcran.kanji.core.content.CardSearch
@@ -26,13 +27,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.stopcran.kanji.KanjiApp
+import io.github.stopcran.kanji.core.srs.Stacks
+import io.github.stopcran.kanji.core.srs.StudyMode
+import io.github.stopcran.kanji.data.LearningItemKind
+import io.github.stopcran.kanji.data.QueueAddResult
 import io.github.stopcran.kanji.data.splitSep
+import kotlinx.coroutines.launch
 
 @Composable
 fun CardsScreen(app: KanjiApp, onBack: () -> Unit, onOpen: (String) -> Unit, onOpenDoc: (String) -> Unit = {}) {
     val source by app.settings.source.collectAsState()
     val kanji by remember(source) { app.db.content().observeKanji(source.id) }.collectAsState(emptyList())
+    val selectedStack by app.settings.stack.collectAsState()
+    val stateStack = remember(selectedStack) { Stacks.stateId(selectedStack) }
+    val queue by remember(source) { app.services.learningQueue.observe(source.id) }.collectAsState(emptyList())
+    val quizStates by remember(source, stateStack) {
+        app.db.reviews().observeStates(source.id, stateStack, StudyMode.Quiz.name)
+    }.collectAsState(emptyList())
+    val queuedIds = remember(queue) { queue.filter { it.kind == LearningItemKind.Kanji }.mapTo(HashSet()) { it.itemId } }
+    val learningIds = remember(quizStates) { quizStates.filter { it.phase != "New" }.mapTo(HashSet()) { it.kanji } }
+    val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
+    var queueError by rememberSaveable { mutableStateOf<Int?>(null) }
     val shown = remember(kanji, query) {
         kanji.map { it to CardSearch.score(it.kanji, it.title, it.onyomi.splitSep(), it.kunyomi.splitSep(), query) }
             .filter { it.second > 0 }
@@ -56,15 +72,32 @@ fun CardsScreen(app: KanjiApp, onBack: () -> Unit, onOpen: (String) -> Unit, onO
             label = { Text(stringResource(R.string.search_kanji_meaning_or_reading)) },
             trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text(stringResource(R.string.clear)) } },
         )
+        queueError?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
         if (shown.isEmpty() && kanji.isNotEmpty()) Text(stringResource(R.string.no_cards_match), color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(Modifier.weight(1f), state = listState) {
             items(shown, key = { it.kanji }) { k ->
                 Row(Modifier.fillMaxWidth().clickable { if (wide) selected = k.kanji else { focusManager.clearFocus(); onOpen(k.kanji) } }.padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text(k.kanji, fontSize = 28.sp)
-                    Column {
+                    Column(Modifier.weight(1f)) {
                         Text(k.title)
                         val readings = (k.onyomi.splitSep() + k.kunyomi.splitSep()).joinToString("  ")
                         if (readings.isNotEmpty()) Text(readings, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    LearningQueueButton(k.kanji in queuedIds, k.kanji in learningIds) {
+                        if (k.kanji in queuedIds) {
+                            scope.launch {
+                                app.services.learningQueue.remove(source.id, LearningItemKind.Kanji, k.kanji)
+                                queueError = null
+                            }
+                        } else {
+                            scope.launch {
+                                queueError = when (app.services.learningQueue.addKanji(source.id, selectedStack, k.kanji, System.currentTimeMillis())) {
+                                    QueueAddResult.Added, QueueAddResult.AlreadyQueued -> null
+                                    QueueAddResult.AlreadyLearning -> R.string.learning_queue_already_learning_error
+                                    QueueAddResult.Missing -> R.string.learning_queue_item_missing_error
+                                }
+                            }
+                        }
                     }
                 }
             }

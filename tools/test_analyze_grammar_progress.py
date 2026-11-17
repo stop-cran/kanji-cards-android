@@ -57,6 +57,22 @@ class GrammarAnalysisTest(unittest.TestCase):
                     archive.writestr(name, raw[name] if raw and name in raw else json.dumps(value))
             return analyze(path)
 
+    def test_reads_version_eight_learning_queue_export(self):
+        bundle = session_fixture()
+        bundle["export_manifest.json"]["formatVersion"] = 8
+        bundle.update({
+            "listening_encounters.json": [],
+            "listening_task_encounters.json": [],
+            "listening_assessments.json": [],
+            "listening_exposures.json": [],
+            "jlpt_transition_checks.json": [],
+            "learning_queue.json": [
+            dict(sourceId="owner/repo", kind="word", itemId="日本語", position=0, addedAtMs=123),
+            ],
+        })
+        report = self.read(bundle)
+        self.assertEqual(8, report["export_format_version"])
+
     def test_joined_views_keep_sources_modes_and_exposures_separate_without_private_text(self):
         report = self.read(fixture())
         self.assertEqual(4, report["canonical_review_count"])
