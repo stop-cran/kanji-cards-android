@@ -76,6 +76,94 @@ class OptionMatcherTest {
         assertNull(OptionMatcher.match(listOf("о людях"), listOf("все, каждый (уважительно, о людях", "вода"), "ru"))
     }
 
+    @Test fun completeThickMeaningsBeatPartialFoil() {
+        val thick = listOf("небо", "дерево", "толстый (в том числе о толщине книги); сердечный",
+            "толстый (в обхвате); полный; великий (в том числе в слове со значением «солнце»)")
+        assertEquals(3, OptionMatcher.match(listOf("толстый полный"), thick, "ru"))
+        assertNull(OptionMatcher.match(listOf("толстый"), thick, "ru"))
+    }
+
+    @Test fun completeBusinessMeaningsBeatPartialFoil() {
+        val business = listOf("сверху", "дело; случай", "разговор",
+            "вести дело; деятельность; управлять (в том числе предприятием)")
+        assertEquals(3, OptionMatcher.match(listOf("вести дело управлять"), business, "ru"))
+        assertNull(OptionMatcher.match(listOf("управлять вести дело"), business, "ru"))
+        assertNull(OptionMatcher.match(listOf("деятельность"), listOf(
+            "сверху", "жизнь; деятельность", "разговор", business[3],
+        ), "ru"))
+        assertEquals(1, OptionMatcher.match(listOf("деятельность"), listOf(
+            "сверху", "жизнь; деятельность", "разговор", "вести дело; осуществлять деятельность; управлять",
+        ), "ru"))
+    }
+
+    @Test fun completeGroupMeaningsBeatPartialFoil() {
+        val options = listOf("вверх; над", "группа; соединять", "говорить; разговаривать",
+            "группа; объединение; скопление")
+        assertEquals(3, OptionMatcher.match(listOf("группа объединение"), options, "ru"))
+        assertNull(OptionMatcher.match(listOf("группа"), options, "ru"))
+    }
+
+    @Test fun combinedMeaningsRequireCompleteDistinctUnambiguousComponents() {
+        val options = listOf("red; blue; green", "red; yellow", "water", "stone")
+        assertEquals(0, OptionMatcher.match(listOf("red blue"), options))
+        assertEquals(0, OptionMatcher.match(listOf("red green"), options))
+        assertNull(OptionMatcher.match(listOf("blue red green"), options))
+        assertEquals(0, OptionMatcher.match(listOf("blue red"), listOf("red; blue; green", "water")))
+        assertNull(OptionMatcher.match(listOf("red yellow"), listOf("red; yellow; green", "red; yellow; blue")))
+        assertEquals(1, OptionMatcher.match(listOf("red blue"), listOf("red; blue; green", "red blue")))
+        assertNull(OptionMatcher.match(listOf("red water"), options))
+        assertNull(OptionMatcher.match(listOf("red banana"), options))
+        assertNull(OptionMatcher.match(listOf("red blue banana"), options))
+        assertNull(OptionMatcher.match(listOf("banana"), options))
+        assertNull(OptionMatcher.match(listOf("red red"), options))
+        assertEquals(0, OptionMatcher.match(listOf("blue red"), listOf("red; blue; red; green", "red; yellow")))
+        assertNull(OptionMatcher.match(listOf("red red"), listOf("red; blue; red; green", "red; yellow")))
+        assertEquals(0, OptionMatcher.match(listOf("quarter", "red blue"), options))
+    }
+
+    @Test fun combinationsDoNotOverrideConflictingHypotheses() {
+        val cases = listOf(
+            Triple(
+                listOf("небо", "дерево", "толстый (в том числе о толщине книги); сердечный",
+                    "толстый (в обхвате); полный; великий (в том числе в слове со значением «солнце»)"),
+                "сердечный", "толстый полный",
+            ),
+            Triple(
+                listOf("вверх; над", "группа; соединять", "говорить; разговаривать",
+                    "группа; объединение; скопление"),
+                "соединять", "группа объединение",
+            ),
+            Triple(
+                listOf("вверх; над", "дело; случай", "говорить; разговаривать",
+                    "вести дело; деятельность; управлять (в том числе предприятием)"),
+                "случай", "вести дело управлять",
+            ),
+        )
+        for ((options, primary, alternative) in cases) {
+            val foil = options.indexOfFirst { primary in it }
+            assertEquals(foil, OptionMatcher.match(listOf(primary), options, "ru"))
+            assertEquals(foil, OptionMatcher.match(listOf(primary, alternative), options, "ru"))
+            assertEquals(foil, OptionMatcher.match(listOf(alternative, primary), options, "ru"))
+            assertEquals(foil, OptionMatcher.match(listOf("$primary пожалуйста"), options, "ru"))
+            assertNull(OptionMatcher.match(listOf("$primary пожалуйста", alternative), options, "ru"))
+            assertNull(OptionMatcher.match(listOf(alternative, "$primary пожалуйста"), options, "ru"))
+            assertEquals(3, OptionMatcher.match(listOf("неизвестно", alternative), options, "ru"))
+        }
+    }
+
+    @Test fun combinationDoesNotOverrideAmbiguousEvidenceForOtherOptions() {
+        val options = listOf("вверх; над", "дело; случай", "край; случай",
+            "вести дело; деятельность; управлять (в том числе предприятием)")
+        val ambiguous = "случай пожалуйста"
+        val combination = "вести дело управлять"
+        assertNull(OptionMatcher.match(listOf(ambiguous), options, "ru"))
+        assertEquals(3, OptionMatcher.match(listOf(combination), options, "ru"))
+        assertNull(OptionMatcher.match(listOf(ambiguous, combination), options, "ru"))
+        assertNull(OptionMatcher.match(listOf(combination, ambiguous), options, "ru"))
+        assertNull(OptionMatcher.match(listOf("случай", combination), options, "ru"))
+        assertEquals(3, OptionMatcher.match(listOf("неизвестно", combination), options, "ru"))
+    }
+
     @Test fun curatedWordDistractorsAppearAndRespectExclusionsAndLeaveASlotForScoring() {
         fun word(id: String, title: String, distractors: List<String> = emptyList(), exclusions: List<String> = emptyList()) =
             WordCard(id, id, title, "noun", emptyList(), quizExclusions = exclusions, quizDistractors = distractors)
