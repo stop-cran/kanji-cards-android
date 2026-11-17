@@ -3,26 +3,31 @@ package io.github.stopcran.kanji.ui
 import androidx.compose.foundation.layout.Box
 import io.github.stopcran.kanji.R
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 
 private val CorrectGreen = Color(0xFF2E7D32)
@@ -57,8 +62,43 @@ const val NO_ANSWER = ""
 
 @Composable
 internal fun SessionRemaining(count: Int) {
-    Text(stringResource(R.string.session_remaining, count), style = MaterialTheme.typography.labelMedium)
-    Text(stringResource(R.string.session_repeats_hint), style = MaterialTheme.typography.bodySmall)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(stringResource(R.string.session_questions_remaining, count), style = MaterialTheme.typography.labelMedium)
+        InfoDisclosureButton(
+            actionDescription = stringResource(R.string.session_repeats_action),
+            title = stringResource(R.string.session_repeats_title),
+            message = stringResource(R.string.session_repeats_explanation),
+        )
+    }
+}
+
+@Composable
+internal fun InfoDisclosureButton(actionDescription: String, title: String, message: String) {
+    var showExplanation by rememberSaveable { mutableStateOf(false) }
+    IconButton(
+        onClick = { showExplanation = true },
+        modifier = Modifier.semantics {
+            contentDescription = actionDescription
+        },
+    ) {
+        Text("(i)", color = MaterialTheme.colorScheme.primary, fontSize = 14.sp)
+    }
+    if (showExplanation) {
+        AlertDialog(
+            onDismissRequest = { showExplanation = false },
+            title = { Text(title) },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { showExplanation = false }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+        )
+    }
 }
 
 @Composable

@@ -1,0 +1,19 @@
+diff a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml	(rejected hunks)
+@@ -130,8 +130,15 @@
+     <string name="done">Done</string>
+     <string name="practice_more">Practice more</string>
+     <string name="checking">Checking…</string>
+-    <string name="session_remaining">Attempts left: %1$d</string>
+-    <string name="session_repeats_hint">Includes queued repeats, so the total may stay unchanged after an answer. Repeats follow other questions when available.</string>
++    <string name="session_questions_remaining">Questions left: %1$d</string>
++    <string name="session_repeats_action">Why can questions repeat?</string>
++    <string name="session_repeats_title">About questions left</string>
++    <string name="session_repeats_explanation">This count includes queued repeats. A missed question may return after other questions when available, so the count can stay the same after you answer.</string>
++    <string name="close">Close</string>
++    <string name="kanji_focus_full">Kanji focus full</string>
++    <string name="kanji_focus_info">About the Kanji focus limit</string>
++    <string name="kanji_focus_title">Kanji focus limit</string>
++    <string name="kanji_focus_explanation">Finish your current %1$d kanji first: new kanji come in as they are learned in every mode.</string>
+     <string name="next">Next</string>
+     <string name="draw_the_kanji_for">Draw the kanji for</string>
+     <string name="tracing_practice_notice">Ungraded tracing practice. You\'ll try from memory later.</string>

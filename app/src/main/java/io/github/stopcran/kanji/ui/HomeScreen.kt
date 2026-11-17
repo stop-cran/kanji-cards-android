@@ -109,6 +109,7 @@ internal fun KanjiPage(data: HomeData, preferences: HomePreferencesActions, onBa
                     stringResource(R.string.level_filter_kanji_exact, data.stack.label) else null)
             Text(stringResource(R.string.each_stack_keeps_its_own), style = MaterialTheme.typography.bodySmall)
         }
+        KanjiFocusGuidance(data.focus)
         ModeRow("Meaning quiz", data.mode(HomeMode.Meaning), onStart = a.onQuiz)
         ModeRow("Drawing", data.mode(HomeMode.Drawing), onStart = a.onDraw)
         ModeRow("Readings (on'yomi and kun'yomi)", data.mode(HomeMode.Readings), onStart = a.onReadings)
@@ -194,12 +195,22 @@ private fun PacingHint(data: HomeData) {
         Text(stringResource(R.string.this_week_of_study_days, w.studied, w.goal, tail), style = MaterialTheme.typography.bodySmall)
     }
     val p = data.pacing
-    data.focus?.takeIf { it.full }?.let {
-        Text("Finish your current ${it.occupancy} kanji first: new kanji come in as they are learned in every mode.", style = MaterialTheme.typography.bodySmall)
-    }
     if (p == null) return
     val text = pacingExplanation(p) ?: return
     Text(stringResource(R.string.content_pacing_notice, text), style = MaterialTheme.typography.bodySmall)
+}
+
+@Composable
+internal fun KanjiFocusGuidance(focus: io.github.stopcran.kanji.data.FocusStatus?) {
+    if (focus?.full != true) return
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.kanji_focus_full), style = MaterialTheme.typography.bodySmall)
+        InfoDisclosureButton(
+            actionDescription = stringResource(R.string.kanji_focus_info),
+            title = stringResource(R.string.kanji_focus_title),
+            message = stringResource(R.string.kanji_focus_explanation, focus.occupancy),
+        )
+    }
 }
 
 internal fun pacingExplanation(p: NewAllowance): String? = when (p.note) {

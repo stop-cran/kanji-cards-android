@@ -60,7 +60,7 @@ class WordAnswerFlowTest {
             val question = question(vm)
             seen += question.word.word
             assertEquals(count, question.remaining)
-            rule.onNodeWithText("Attempts left: $count").performScrollTo().assertIsDisplayed()
+            rule.onNodeWithText("Questions left: $count").performScrollTo().assertIsDisplayed()
             if (index == 1) assertTrue(seen[0] != seen[1])
             if (index == 4 || index == 7) assertEquals(seen[0], question.word.word)
             rule.onNodeWithText(if (index == 0) "I don't know" else question.word.title)
@@ -91,7 +91,7 @@ class WordAnswerFlowTest {
         val last = question(vm)
         assertTrue(first.word.word != last.word.word)
         assertEquals(1, last.remaining)
-        rule.onNodeWithText("Attempts left: 1").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Questions left: 1").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText(last.word.title).performScrollTo().performClick()
         rule.onNodeWithText("Next").performScrollTo().performClick()
         rule.onNodeWithText("Session complete").assertIsDisplayed()

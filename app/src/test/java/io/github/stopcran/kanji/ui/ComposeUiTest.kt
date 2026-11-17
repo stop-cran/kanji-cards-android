@@ -295,6 +295,24 @@ class ComposeUiTest {
     }
 
     @Test
+    fun sessionCounterExplainsQueuedRepeatsOnDemand() {
+        rule.setContent {
+            MaterialTheme {
+                SessionRemaining(3)
+            }
+        }
+        rule.onNodeWithText("Questions left: 3").assertIsDisplayed()
+        rule.onNodeWithText("This count includes queued repeats.", substring = true).assertDoesNotExist()
+        rule.onNodeWithContentDescription("Why can questions repeat?").performClick()
+        rule.onNodeWithText("About questions left").assertIsDisplayed()
+        rule.onNodeWithText(
+            "This count includes queued repeats. A missed question may return after other questions when available, so the count can stay the same after you answer.",
+        ).assertIsDisplayed()
+        rule.onNodeWithText("Close").performClick()
+        rule.onNodeWithText("About questions left").assertDoesNotExist()
+    }
+
+    @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun pictureChoicesExposeScenesButNotJapaneseAnswersUntilChecked() {
         val words = listOf("correct", "wrong").map {
