@@ -24,7 +24,7 @@ Ensō Nihongo is a personal study app. It has no accounts, no advertising, no an
   This data stays local and is not sent to Azure or another speech service.
 - If you turn on **"Save my drawings"** (off by default), your checked handwriting is stored in the app's private storage. It is never uploaded. You can export it as a zip file yourself.
 - The optional daily reminder is a local notification; nothing is sent anywhere.
-- If you turn on **voice input** (off by default; offered only when your device has an on-device English speech recognizer), the app uses the microphone while you press the button. Recognition runs on the device only; audio is never sent anywhere or saved, and there is no online fallback.
+- If you turn on **voice input** (off by default), the app uses the microphone while you press the button and requests English or Russian recognition according to the active content language. Voice input requires an on-device recognizer on Android 12 (API 31) or later; on API 33+ it also requires an installed on-device pack for that language. On API 31–32 the app does not check whether that language pack is installed. Recognition runs on the device only; audio is never sent anywhere or saved, and there is no online fallback.
 - Android's automatic backup may copy this data to your own Google account backup, under your device's backup settings.
 
 ## What the app downloads
