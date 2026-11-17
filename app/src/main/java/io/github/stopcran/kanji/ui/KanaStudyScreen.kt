@@ -15,7 +15,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -46,7 +49,8 @@ fun KanaStudyScreen(
     val app = LocalContext.current.applicationContext as KanjiApp
     val brush by app.settings.brush.collectAsState()
     androidx.compose.runtime.CompositionLocalProvider(LocalBrush provides brush, LocalBrushLook provides vm.look) {
-        Page(mode.title, onBack, scrollToTopOnBack = true) {
+        Page(mode.title, onBack, ime = mode == KanaMode.TypeKanaToRomaji || mode == KanaMode.TypeRomajiToKana,
+            scrollToTopOnBack = true) {
             when (val state = vm.ui) {
                 KanaStudyUi.Loading -> Text("Loading kana…")
                 is KanaStudyUi.Empty -> Text(state.message)
@@ -124,6 +128,8 @@ private fun QuizAnswer(state: KanaStudyUi.QuizAnswer, mode: KanaMode, vm: KanaSt
 @Composable
 private fun TypeQuestion(kana: String, romaji: String, remaining: Int, mode: KanaMode, vm: KanaStudyViewModel) {
     val forward = mode == KanaMode.TypeKanaToRomaji
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(kana, mode) { focus.requestFocus() }
     SessionRemaining(remaining)
     Text(
         if (forward) kana else romaji,
@@ -141,7 +147,7 @@ private fun TypeQuestion(kana: String, romaji: String, remaining: Int, mode: Kan
             keyboardType = if (forward) KeyboardType.Ascii else KeyboardType.Text,
             imeAction = ImeAction.Done,
         ),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().focusRequester(focus),
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = { vm.submit(giveUp = true) }, modifier = Modifier.weight(1f)) { Text("I don't remember") }
