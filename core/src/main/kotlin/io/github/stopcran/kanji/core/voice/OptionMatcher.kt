@@ -58,15 +58,16 @@ object OptionMatcher {
     }
 
     private fun withoutQualifiers(text: String): String = buildString {
-        var depth = 0
+        val openers = mutableListOf<Char>()
         for (char in text) {
             when {
-                char == '(' -> {
-                    if (depth == 0) append(' ')
-                    depth++
+                char == '(' || char == '\uFF08' -> {
+                    if (openers.isEmpty()) append(' ')
+                    openers.add(char)
                 }
-                char == ')' && depth > 0 -> depth--
-                depth == 0 -> append(char)
+                char == ')' && openers.lastOrNull() == '(' -> openers.removeAt(openers.lastIndex)
+                char == '\uFF09' && openers.lastOrNull() == '\uFF08' -> openers.removeAt(openers.lastIndex)
+                openers.isEmpty() -> append(char)
             }
         }
     }
