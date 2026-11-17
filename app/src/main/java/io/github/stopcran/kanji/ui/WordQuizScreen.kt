@@ -79,6 +79,9 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
             Text(stringResource(R.string.word_extra_practice), style = MaterialTheme.typography.bodySmall)
         }
         vm.pictureNoticeId?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall) }
+        vm.selectedWordDeferrals.forEach {
+            Text(stringResource(it.messageId, it.word), style = MaterialTheme.typography.bodySmall)
+        }
         when (val s = vm.ui) {
             WordQuizUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
             is WordQuizUi.Empty -> Text(stringResource(s.messageId))

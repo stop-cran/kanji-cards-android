@@ -60,5 +60,5 @@ internal suspend fun AppDatabase.newAllowance(sourceId: String, now: Instant, zo
         capacity = Pacing.capacity(perDay),
     )
     return allowance.copy(remaining = (allowance.remaining - listening().reservedNew(sourceId) -
-        listeningTasks().reservedNew(sourceId)).coerceAtLeast(0))
+        listeningTasks().reservedNew(sourceId) - reading().reservedNew(sourceId)).coerceAtLeast(0))
 }

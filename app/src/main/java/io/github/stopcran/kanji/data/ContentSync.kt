@@ -26,6 +26,7 @@ sealed interface SyncResult {
     data class Updated(
         val kanji: Int, val words: Int, val problems: List<String>,
         val grammar: Int = 0, val listening: Int = 0, val rejected: ContentRejections = ContentRejections(),
+        val reading: Int = 0,
     ) : SyncResult
     data object UpToDate : SyncResult
     data class Failed(
@@ -112,6 +113,8 @@ private fun io.github.stopcran.kanji.core.content.ParsedContent.toSyncMeta(sourc
     kanjiMeaningParserEpoch = ContentParser.KANJI_MEANING_PARSER_EPOCH,
     baseLanguage = manifest.baseLanguage,
     targetLanguage = manifest.targetLanguage,
+    readingParserEpoch = io.github.stopcran.kanji.core.readingtext.ReadingContent.PARSER_EPOCH,
+    readingProblem = reading.problems.takeIf { it.isNotEmpty() }?.joinToString("\n"),
 )
 
 private fun io.github.stopcran.kanji.core.content.ParsedContent.toRows(sourceId: String): ContentRows {
@@ -143,6 +146,10 @@ private fun io.github.stopcran.kanji.core.content.ParsedContent.toRows(sourceId:
                 record.passage.audio?.sha256, record.passage.audio?.durationMs, record.ready, record.reason, index)
         },
         audio.map { (hash, bytes) -> ListeningAudioEntity(sourceId, hash, bytes) },
+        reading.records.mapIndexed { index, record ->
+            ReadingEntity(sourceId, record.content.id, record.json, record.hash, record.content.title, record.content.jlpt, index)
+        },
+        reading.images.map { (path, bytes) -> ReadingImageEntity(sourceId, path, ContentParser.rawSha256(bytes), bytes) },
     )
 }
 
@@ -276,9 +283,15 @@ class ContentSync(
         result
     } }
 
+    private suspend fun needsRoomParserRefresh(source: RepoSource): Boolean {
+        val meta = db.content().meta(source.id)
+        return (meta?.kanjiReadingParserEpoch ?: 0) < ContentParser.KANJI_READING_PARSER_EPOCH ||
+            (meta?.readingParserEpoch ?: 0) < io.github.stopcran.kanji.core.readingtext.ReadingContent.PARSER_EPOCH ||
+            (meta?.kanjiMeaningParserEpoch ?: 0) < ContentParser.KANJI_MEANING_PARSER_EPOCH
+    }
+
     private suspend fun needsParserRefresh(source: RepoSource): Boolean =
-        (db.content().meta(source.id)?.kanjiReadingParserEpoch ?: 0) < ContentParser.KANJI_READING_PARSER_EPOCH ||
-            (db.content().meta(source.id)?.kanjiMeaningParserEpoch ?: 0) < ContentParser.KANJI_MEANING_PARSER_EPOCH ||
+        needsRoomParserRefresh(source) ||
             syncState.grammarParserEpoch(source.id) < ContentParser.GRAMMAR_PARSER_EPOCH ||
             syncState.counterParserEpoch(source.id) < io.github.stopcran.kanji.core.counters.CounterExpressions.PARSER_EPOCH ||
             syncState.sceneParserEpoch(source.id) < SceneCatalog.PARSER_EPOCH ||
@@ -503,7 +516,7 @@ class ContentSync(
     ): SyncResult.Updated = db.withTransaction {
         if (!isCurrent()) throw StaleSourceCandidateException()
         val rows = parsed.toRows(source.id)
-        val meta = parsed.toSyncMeta(source.id)
+        val meta = parsed.toSyncMeta(source.id).copy(contentRevision = head)
         val tasks = db.importListeningTasks(parsed, source, head)
         db.content().replaceContent(source.id, rows, meta.copy(problems = meta.problems + tasks.problems.size))
         db.cancelUnavailableTransitionChecks(source.id, System.currentTimeMillis())
@@ -516,6 +529,7 @@ class ContentSync(
             rows.kanji.size, rows.words.size, parsed.problems + tasks.problems,
             parsed.grammar.sumOf { it.exercises.size }, rows.listening.size + db.listeningTasks().importedCount(source.id),
             parsed.rejectedContent(tasks.rejectedPaths),
+            rows.reading.size,
         )
     }
 

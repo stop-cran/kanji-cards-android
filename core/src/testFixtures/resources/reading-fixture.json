@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "id": "reading-fixture-peach",
+  "jlpt": 5,
+  "title": "A small peach",
+  "japaneseTitle": "小さい桃",
+  "levelRationale": "Parser fixture only. Two short polite sentences and one local fact question. Not an N5 certification or the Momotaro pilot.",
+  "provenance": {
+    "originalTitle": "小さい桃",
+    "adaptation": {
+      "label": "Original example",
+      "basis": "original"
+    },
+    "credits": [
+      "Parser fixture only. Not a reading pilot and not copied from a published text."
+    ],
+    "rights": {
+      "status": "original-wording",
+      "note": "Original fixture wording. An empty reviewed-jurisdiction list is not worldwide clearance."
+    },
+    "distribution": {
+      "reviewed": [],
+      "note": "No distribution jurisdiction has been reviewed for this fixture."
+    }
+  },
+  "sections": [
+    {
+      "id": "river",
+      "text": "小さい桃があります。",
+      "translation": "There is a small peach.",
+      "vocabulary": [
+        {
+          "start": 3,
+          "end": 4,
+          "text": "桃",
+          "reading": "もも",
+          "headword": "桃",
+          "gloss": "peach",
+          "word": "桃"
+        }
+      ]
+    },
+    {
+      "id": "home",
+      "text": "おばあさんのうちにあります。",
+      "translation": "It is at the old woman's house.",
+      "vocabulary": [
+        {
+          "start": 0,
+          "end": 5,
+          "text": "おばあさん",
+          "reading": "おばあさん",
+          "headword": "おばあさん",
+          "gloss": "old woman"
+        }
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "id": "where",
+      "tier": 1,
+      "prompt": "Where is the peach?",
+      "options": [
+        {"id": "house", "text": "At the old woman's house"},
+        {"id": "mountain", "text": "On a mountain"}
+      ],
+      "correctOptionId": "house",
+      "explanation": "The second section says the peach is at the old woman's house.",
+      "evidence": [
+        {"sectionId": "home", "start": 0, "end": 12}
+      ]
+    }
+  ]
+}

@@ -212,6 +212,14 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   Use those implementations rather than a duplicated route roster. `docs/DESIGN.md` owns the behavioral rationale.
 - Source-bound docs encode source/path and optional captured Grammar topic separately. Never resolve a session's reference context
   from later settings/content. Contents jumps use real lazy indices, including leading items, and must not rerun on nested Back.
+- Reading admission belongs to the exact retained source/text/hash route, not every route to a saved text.
+  Captured word bodies use separate capture-keyed Room rows; never pack a large vocabulary's bodies
+  into one CursorWindow row. Migrate older aggregates using bounded SQL slices before decoding.
+  Verify the durable capture before restoring its locale exception or onward reading-document links. Keep reader list state
+  outside the captured-card conditional and its holder across Loading; serialize position/furigana/completion writes.
+  Chunk long vocabulary-reference queries below SQLite's portable 999-bind limit (the source parameter also counts).
+  Select a newly added regression by its exact method at least once: Kotlin permits an annotated local function that JUnit
+  never discovers, so an otherwise green class run can omit it.
 - **Manifest hashes** are computed over LF-normalised bytes (`tools/build_manifest.py` in the content repo and `ContentParser.sha256`). Keep
   both in sync, otherwise files fail with "hash mismatch" on Windows checkouts with CRLF.
 - Raw stroke provenance is separate from normalized manifest hashes: verify the actual public export against frozen source
@@ -446,3 +454,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - In view-model tests, a DAO read or a barrier on the underlying executor does not drain Room's separately serialized transaction queue.
   With `UnconfinedTestDispatcher`, enqueue an empty `db.withTransaction {}` after advancing the answer and await it before asserting
   recorded events or their absence (see `GrammarQuizViewModelTest`). This also covers unrecorded successful confirmations without sleeps.
+- JUnit coroutine expression-body tests must return `Unit`: use `runBlocking<Unit>` when the last expression is a value-returning
+  assertion such as `assertThrows`, or JUnit rejects the whole class before executing any case.
+- Robolectric Compose waits on asynchronous Room/ViewModel state must pump the main looper, as in
+  `ReadingQuizUiTest.await` and `ListeningAssessmentLifecycleTest.await`. A bare state predicate can stall while a semantics
+  query happens to drain the queue; adjudicate that harness difference before changing production coroutine behavior.

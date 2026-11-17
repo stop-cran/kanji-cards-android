@@ -10,6 +10,9 @@ import io.github.stopcran.kanji.core.words.WordStacks
 import io.github.stopcran.kanji.data.AppDatabase
 import io.github.stopcran.kanji.data.ImageEntity
 import io.github.stopcran.kanji.data.ReviewStateEntity
+import io.github.stopcran.kanji.data.ReviewLogEntity
+import io.github.stopcran.kanji.data.ReadingWordIntentEntity
+import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.data.SceneImageResult
 import io.github.stopcran.kanji.data.Settings
 import io.github.stopcran.kanji.data.WordEntity
@@ -101,6 +104,61 @@ class WordPictureViewModelTest {
         vm.next(guessed)
         runBlocking { withTimeout(10_000) { db.withTransaction {} } }
         awaitQuestionOrEnd(vm)
+    }
+
+    @Test
+    fun unavailableSelectedPictureReleasesItsSlotForTheNextAskableSelection() = runBlocking {
+        install(count = 5)
+        services.settings.setDailyNewCards(1)
+        db.reading().putWordIntent(ReadingWordIntentEntity(source, "word-0", "broken", 1))
+        db.reading().putWordIntent(ReadingWordIntentEntity(source, "word-1", "ready", 2))
+        val vm = WordQuizViewModel(services) { owner, scene ->
+            if (scene.scene.image == "images/word-0--0.webp") SceneImageResult.Unavailable("Fixture target unavailable")
+            else db.content().sceneImage(owner, scene.scene.image, scene.imageHash)
+        }
+        vm.ensureStarted(WordDirection.WordToPicture, extra = false)
+        awaitQuestionOrEnd(vm)
+        val question = vm.ui as WordQuizUi.Question
+        assertEquals("word-1", question.word.word)
+        assertEquals(1, db.newAllowance(services.settings, source, Instant.now()).remaining)
+        assertEquals(listOf(SelectedWordDeferral("word-0", R.string.reading_selection_picture)), vm.selectedWordDeferrals)
+        vm.pick(question.word.word, origin = question)
+        advance(vm)
+        assertEquals("word-1", db.reviews().allLog().single().kanji)
+        assertEquals("broken", db.reading().wordIntents(source).single().token)
+        assertEquals(0, db.newAllowance(services.settings, source, Instant.now()).remaining)
+    }
+
+    @Test
+    fun pictureRefillCannotDuplicateBorrowedPaddingOrConsumeItsSelection() = runBlocking {
+        install(count = 5)
+        services.settings.setDailyNewCards(1)
+        db.reviews().insertLog(ReviewLogEntity(
+            sourceId = source, stack = stack, kanji = "word-4", mode = "WordJpEn", grade = 3, atMs = Instant.now().toEpochMilli(),
+        ))
+        db.reviews().putState(ReviewStateEntity(source, stack, "word-0", "WordToPicture", "Review", 3.0, 5.0, 999, 500, 2, 0))
+        db.reviews().putState(ReviewStateEntity(source, "word-other", "word-1", "WordToPicture", "Review", 3.0, 5.0, 999, 500, 2, 0))
+        db.reading().putWordIntent(ReadingWordIntentEntity(source, "word-1", "deferred", 1))
+        val vm = WordQuizViewModel(services) { owner, scene ->
+            if (scene.scene.image == "images/word-0--0.webp") SceneImageResult.Unavailable("Fixture target unavailable")
+            else db.content().sceneImage(owner, scene.scene.image, scene.imageHash)
+        }
+        vm.ensureStarted(WordDirection.WordToPicture, extra = true)
+        awaitQuestionOrEnd(vm)
+        assertEquals(listOf(SelectedWordDeferral("word-1", R.string.reading_selection_limit)), vm.selectedWordDeferrals)
+        val asked = mutableListOf<String>()
+        repeat(5) {
+            val question = vm.ui as? WordQuizUi.Question ?: return@repeat
+            asked += question.word.word
+            vm.pick(question.word.word, origin = question)
+            advance(vm)
+        }
+        assertTrue(vm.ui is WordQuizUi.Done)
+        assertEquals(setOf("word-1", "word-2", "word-3", "word-4"), asked.toSet())
+        assertEquals(asked.distinct(), asked)
+        assertEquals("word-other", db.reviews().allLog().single { it.mode == "WordToPicture" && it.kanji == "word-1" }.stack)
+        assertEquals("deferred", db.reading().wordIntents(source).single().token)
+        assertEquals(0, db.newAllowance(services.settings, source, Instant.now()).remaining)
     }
 
     @Test

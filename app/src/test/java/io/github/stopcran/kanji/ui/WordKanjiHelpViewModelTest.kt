@@ -14,12 +14,14 @@ import io.github.stopcran.kanji.data.ImageEntity
 import io.github.stopcran.kanji.data.KanjiEntity
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.ReviewStateEntity
+import io.github.stopcran.kanji.data.ReadingWordIntentEntity
 import io.github.stopcran.kanji.data.Settings
 import io.github.stopcran.kanji.data.WordEntity
 import io.github.stopcran.kanji.data.WordSceneEntity
 import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.joinSep
 import io.github.stopcran.kanji.data.sceneWebp
+import io.github.stopcran.kanji.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -108,6 +110,47 @@ class WordKanjiHelpViewModelTest {
         for (word in db.content().words(source)) for (mode in modes) {
             db.reviews().putState(ReviewStateEntity(source, owner, word.word, mode, "Review", 3.0, 5.0, 999, 500, 2, 0))
         }
+    }
+
+    @Test
+    fun selectedWordIsPrioritizedAndConsumedOnlyWithItsCapturedSourcesRecordedAnswer() = runBlocking {
+        install()
+        val capturedSource = source
+        db.reading().putWordIntent(ReadingWordIntentEntity(source, "京音", "selected", 1))
+        val vm = WordQuizViewModel(services)
+        vm.ensureStarted(WordDirection.JpToEn, false)
+        val q = question(vm)
+        assertEquals("京音", q.word.word)
+        assertEquals(1, db.reading().wordIntents(capturedSource).size)
+        vm.pick(q.word.word, origin = q)
+        assertEquals(1, db.reading().wordIntents(capturedSource).size)
+        services.settings.setSource("https://github.com/other/content", "main")
+        db.reading().putWordIntent(ReadingWordIntentEntity(source, q.word.word, "other-source", 2))
+        advance(vm)
+        assertTrue(db.reading().wordIntents(capturedSource).isEmpty())
+        assertEquals("other-source", db.reading().wordIntents(source).single().token)
+        assertEquals(capturedSource, db.reviews().allLog().single().sourceId)
+        vm.leaveSession()
+        db.withTransaction {}
+    }
+
+    @Test
+    fun selectedWordsDeferVisiblyForWrongDeckMissingCardAndDirectionalGate() = runBlocking {
+        install()
+        db.content().insertWords(listOf(WordEntity(source, "上級", "じょうきゅう", "advanced", null, "", "", "Body", 4)))
+        for (word in listOf("京音", "上級", "missing")) db.reading().putWordIntent(ReadingWordIntentEntity(source, word, word, 1))
+        db.reviews().putState(ReviewStateEntity(source, stack, "卵音", "WordJpEn", "Review", 3.0, 5.0, 999, 500, 2, 0))
+        val vm = WordQuizViewModel(services)
+        vm.ensureStarted(WordDirection.EnToJp, false)
+        question(vm)
+        val reasons = vm.selectedWordDeferrals.associate { it.word to it.messageId }
+        assertEquals(R.string.reading_selection_locked, reasons["京音"])
+        assertEquals(R.string.reading_selection_deck, reasons["上級"])
+        assertEquals(R.string.reading_selection_missing, reasons["missing"])
+        assertEquals(3, db.reading().wordIntents(source).size)
+        vm.leaveSession()
+        db.withTransaction {}
+        assertEquals(3, db.reading().wordIntents(source).size)
     }
 
     @Test

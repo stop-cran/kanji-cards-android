@@ -20,7 +20,12 @@ object ProgressExport {
         val snapshot = db.withTransaction {
             Snapshot(db.reviews().allStates(), db.reviews().allLog(), db.reviews().allTransitionChecks(), db.reviews().allGrammarResponses(),
                 db.reviews().allSessions(), db.listening().allEncounters(),
-                db.listeningTasks().allEncounters(), db.listeningTasks().allAssessments(), db.listeningTasks().allExposures())
+                db.listeningTasks().allEncounters(), db.listeningTasks().allAssessments(), db.listeningTasks().allExposures(),
+                db.reading().allQuizzes().map { quiz ->
+                    ReadingAttemptSnapshot(quiz, requireNotNull(db.reading().reader(quiz.sourceId, quiz.textId, quiz.captureId)) {
+                        "A Reading quiz has lost its captured text"
+                    }, db.reading().readerWords(quiz.sourceId, quiz.textId, quiz.captureId))
+                }, db.reading().allProgress())
         }
         ZipOutputStream(out).use { zip ->
             zip.entry("review_state.json", JsonArray(snapshot.states.map(::stateJson)))
@@ -35,7 +40,11 @@ object ProgressExport {
                 JsonObject(mapOf("sourceId" to primitive(it.sourceId), "exposureId" to primitive(it.exposureId),
                     "firstAtMs" to primitive(it.firstAtMs), "lastAtMs" to primitive(it.lastAtMs)))
             }))
-            zip.entry("export_manifest.json", JsonObject(mapOf("formatVersion" to JsonPrimitive(7))))
+            zip.entry("reading_quizzes.json", JsonArray(snapshot.reading.map(::readingJson)))
+            zip.entry("reading_progress.json", JsonArray(snapshot.readingProgress.map {
+                JsonObject(mapOf("sourceId" to primitive(it.sourceId), "textId" to primitive(it.textId), "unlockedTier" to primitive(it.unlockedTier)))
+            }))
+            zip.entry("export_manifest.json", JsonObject(mapOf("formatVersion" to JsonPrimitive(8))))
             zip.entry("settings.json", JsonObject(settings.snapshot().mapValues { primitive(it.value) }))
         }
         return snapshot.log.size
@@ -51,7 +60,31 @@ object ProgressExport {
         val tasks: List<ListeningTaskEncounterEntity>,
         val assessments: List<ListeningAssessmentEntity>,
         val exposures: List<ListeningExposureEntity>,
+        val reading: List<ReadingAttemptSnapshot>,
+        val readingProgress: List<ReadingProgressEntity>,
     )
+
+    private data class ReadingAttemptSnapshot(
+        val quiz: ReadingQuizEntity, val reader: ReadingReaderEntity, val words: List<ReadingReaderWordEntity>,
+    )
+
+    private fun readingJson(value: ReadingAttemptSnapshot): JsonObject {
+        val quiz = value.quiz
+        val reader = value.reader
+        return JsonObject(mapOf(
+            "id" to primitive(quiz.id), "sourceId" to primitive(quiz.sourceId), "textId" to primitive(quiz.textId),
+            "captureId" to primitive(quiz.captureId), "branch" to primitive(reader.branch), "revision" to primitive(reader.revision),
+            "contentVersion" to primitive(reader.contentVersion), "contentHash" to primitive(reader.contentHash),
+            "content" to json.parseToJsonElement(reader.contentJson), "wordBodies" to JsonArray(value.words.map {
+                JsonObject(mapOf("word" to primitive(it.word), "reading" to primitive(it.reading),
+                    "title" to primitive(it.title), "body" to primitive(it.body)))
+            }),
+            "plan" to json.parseToJsonElement(quiz.planJson), "answers" to json.parseToJsonElement(quiz.answersJson),
+            "result" to (quiz.resultJson?.let(json::parseToJsonElement) ?: JsonNull), "startedAtMs" to primitive(quiz.startedAtMs),
+            "submittedAtMs" to primitive(quiz.submittedAtMs), "reviewLogId" to primitive(quiz.reviewLogId),
+            "newReservation" to primitive(quiz.newReservation), "closedAtMs" to primitive(quiz.closedAtMs),
+        ))
+    }
 
     private fun ZipOutputStream.entry(name: String, element: JsonElement) {
         putNextEntry(ZipEntry(name))

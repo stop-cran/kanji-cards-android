@@ -141,13 +141,15 @@ object ContentParser {
             }
         }
         val counters = resolveCounters(counterFiles, problems)
+        val reading = io.github.stopcran.kanji.core.readingtext.ReadingContent.read(manifest.reading, manifest.readingImages, files, imageValidator)
+        problems += reading.problems
         val retainedCounterIds = counters.mapTo(hashSetOf()) { it.id }
         val rejectedCounterQuestions = counterFiles.filter { it.id in retainedCounterIds }.sumOf { it.reverse.size } -
             counters.sumOf { it.reverse.size }
         return ParsedContent(
             manifest, unique, words, text.articles, text.strokes, problems,
             counters, images, vocabularySets, grammarProblems,
-            listening.records, listening.audio, listening.problems, curriculum, tasks, rejectedCounterQuestions,
+            listening.records, listening.audio, listening.problems, curriculum, tasks, rejectedCounterQuestions, reading,
         )
     }
 

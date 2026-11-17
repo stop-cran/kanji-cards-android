@@ -107,5 +107,6 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(testFixtures(project(":core")))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
 }

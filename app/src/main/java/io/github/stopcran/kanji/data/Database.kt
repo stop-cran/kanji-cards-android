@@ -194,6 +194,9 @@ data class SyncMetaEntity(
     @ColumnInfo(defaultValue = "'en'") val baseLanguage: String = "en",
     @ColumnInfo(defaultValue = "'ja'") val targetLanguage: String = "ja",
     @ColumnInfo(defaultValue = "0") val kanjiMeaningParserEpoch: Int = 0,
+    @ColumnInfo(defaultValue = "0") val readingParserEpoch: Int = 0,
+    val readingProblem: String? = null,
+    val contentRevision: String? = null,
 )
 
 /** Durable source authority for the last accepted candidate or intentional built-in selection. */
@@ -233,6 +236,8 @@ data class ContentRows(
     val scenes: List<WordSceneEntity> = emptyList(),
     val listening: List<ListeningEntity> = emptyList(),
     val audio: List<ListeningAudioEntity> = emptyList(),
+    val reading: List<ReadingEntity> = emptyList(),
+    val readingImages: List<ReadingImageEntity> = emptyList(),
 )
 
 @Dao
@@ -365,6 +370,18 @@ interface ContentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertListeningAudio(items: List<ListeningAudioEntity>)
 
+    @Query("DELETE FROM reading_texts WHERE sourceId = :sourceId")
+    suspend fun clearReading(sourceId: String)
+
+    @Query("DELETE FROM reading_images WHERE sourceId = :sourceId")
+    suspend fun clearReadingImages(sourceId: String)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertReading(items: List<ReadingEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertReadingImages(items: List<ReadingImageEntity>)
+
     @Query("SELECT * FROM counters WHERE sourceId = :sourceId ORDER BY position")
     suspend fun counters(sourceId: String): List<CounterEntity>
 
@@ -412,6 +429,8 @@ interface ContentDao {
         clearImages(sourceId)
         clearScenes(sourceId)
         clearListening(sourceId)
+        clearReading(sourceId)
+        clearReadingImages(sourceId)
         insertKanji(rows.kanji)
         insertWords(rows.words)
         insertArticles(rows.articles)
@@ -421,6 +440,8 @@ interface ContentDao {
         insertScenes(rows.scenes)
         insertListening(rows.listening)
         insertListeningAudio(rows.audio)
+        insertReading(rows.reading)
+        insertReadingImages(rows.readingImages)
         putMeta(meta)
         invalidateGrammarFocus(sourceId)
         invalidateGrammarReadiness(sourceId)
@@ -657,8 +678,10 @@ interface ReviewDao {
         ListeningTaskEncounterEntity::class, ListeningAssessmentEntity::class,
         ReviewStateEntity::class, ReviewLogEntity::class, JlptTransitionCheckEntity::class, StudySessionEntity::class, SyncMetaEntity::class,
         AcceptedSourceEntity::class,
+        ReadingEntity::class, ReadingImageEntity::class, ReadingReaderEntity::class, ReadingReaderImageEntity::class, ReadingReaderWordEntity::class,
+        ReadingWordIntentEntity::class, ReadingProgressEntity::class, ReadingQuizEntity::class,
     ],
-    version = 21,
+    version = 24,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -667,6 +690,73 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun listening(): ListeningDao
     abstract fun listeningTasks(): ListeningTaskDao
     abstract fun sourceAcceptance(): SourceAcceptanceDao
+    abstract fun reading(): ReadingDao
+}
+
+val MIGRATION_22_23 = object : androidx.room.migration.Migration(22, 23) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE sync_meta ADD COLUMN contentRevision TEXT")
+        db.execSQL(
+            "CREATE TABLE reading_readers_v23 (sourceId TEXT NOT NULL, textId TEXT NOT NULL, branch TEXT NOT NULL, " +
+                "revision TEXT, contentVersion TEXT NOT NULL, contentJson TEXT NOT NULL, contentHash TEXT NOT NULL, wordsJson TEXT NOT NULL, " +
+                "openedAtMs INTEGER NOT NULL, sectionIndex INTEGER NOT NULL, scrollOffset INTEGER NOT NULL, furigana INTEGER NOT NULL, " +
+                "completedAtMs INTEGER, captureId TEXT NOT NULL, PRIMARY KEY(sourceId, textId, captureId))",
+        )
+        db.execSQL(
+            "INSERT INTO reading_readers_v23 SELECT sourceId, textId, branch, revision, contentVersion, contentJson, contentHash, " +
+                "wordsJson, openedAtMs, sectionIndex, scrollOffset, furigana, completedAtMs, contentHash FROM reading_readers",
+        )
+        db.execSQL(
+            "CREATE TABLE reading_reader_images_v23 (sourceId TEXT NOT NULL, textId TEXT NOT NULL, captureId TEXT NOT NULL, path TEXT NOT NULL, " +
+                "sha256 TEXT NOT NULL, bytes BLOB NOT NULL, PRIMARY KEY(sourceId, textId, captureId, path))",
+        )
+        db.execSQL(
+            "INSERT INTO reading_reader_images_v23 SELECT i.sourceId, i.textId, r.contentHash, i.path, i.sha256, i.bytes " +
+                "FROM reading_reader_images i JOIN reading_readers r ON i.sourceId = r.sourceId AND i.textId = r.textId",
+        )
+        db.execSQL("DROP TABLE reading_reader_images")
+        db.execSQL("DROP TABLE reading_readers")
+        db.execSQL("ALTER TABLE reading_readers_v23 RENAME TO reading_readers")
+        db.execSQL("ALTER TABLE reading_reader_images_v23 RENAME TO reading_reader_images")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS reading_word_intents (sourceId TEXT NOT NULL, word TEXT NOT NULL, token TEXT NOT NULL, " +
+                "requestedAtMs INTEGER NOT NULL, PRIMARY KEY(sourceId, word))",
+        )
+        db.execSQL(
+            "CREATE TABLE reading_progress (sourceId TEXT NOT NULL, textId TEXT NOT NULL, unlockedTier INTEGER NOT NULL, " +
+                "PRIMARY KEY(sourceId, textId))",
+        )
+        db.execSQL(
+            "CREATE TABLE reading_quizzes (id TEXT NOT NULL PRIMARY KEY, sourceId TEXT NOT NULL, textId TEXT NOT NULL, " +
+                "captureId TEXT NOT NULL, planJson TEXT NOT NULL, answersJson TEXT NOT NULL, startedAtMs INTEGER NOT NULL, newReservation INTEGER NOT NULL, " +
+                "submittedAtMs INTEGER, resultJson TEXT, reviewLogId INTEGER, closedAtMs INTEGER)",
+        )
+    }
+}
+
+val MIGRATION_21_22 = object : androidx.room.migration.Migration(21, 22) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE sync_meta ADD COLUMN readingParserEpoch INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE sync_meta ADD COLUMN readingProblem TEXT")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS reading_texts (sourceId TEXT NOT NULL, id TEXT NOT NULL, json TEXT NOT NULL, " +
+                "contentHash TEXT NOT NULL, title TEXT NOT NULL, jlpt INTEGER NOT NULL, position INTEGER NOT NULL, PRIMARY KEY(sourceId, id))",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS reading_images (sourceId TEXT NOT NULL, path TEXT NOT NULL, sha256 TEXT NOT NULL, " +
+                "bytes BLOB NOT NULL, PRIMARY KEY(sourceId, path))",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS reading_readers (sourceId TEXT NOT NULL, textId TEXT NOT NULL, branch TEXT NOT NULL, " +
+                "revision TEXT, contentVersion TEXT NOT NULL, contentJson TEXT NOT NULL, contentHash TEXT NOT NULL, wordsJson TEXT NOT NULL, " +
+                "openedAtMs INTEGER NOT NULL, sectionIndex INTEGER NOT NULL, scrollOffset INTEGER NOT NULL, furigana INTEGER NOT NULL, " +
+                "completedAtMs INTEGER, PRIMARY KEY(sourceId, textId))",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS reading_reader_images (sourceId TEXT NOT NULL, textId TEXT NOT NULL, path TEXT NOT NULL, " +
+                "sha256 TEXT NOT NULL, bytes BLOB NOT NULL, PRIMARY KEY(sourceId, textId, path))",
+        )
+    }
 }
 
 val MIGRATION_20_21 = object : androidx.room.migration.Migration(20, 21) {

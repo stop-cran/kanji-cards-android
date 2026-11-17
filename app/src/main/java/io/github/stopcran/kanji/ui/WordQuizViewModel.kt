@@ -38,6 +38,7 @@ import io.github.stopcran.kanji.data.SceneImageResult
 import io.github.stopcran.kanji.data.sceneImage
 import io.github.stopcran.kanji.data.toPictureScene
 import io.github.stopcran.kanji.data.WordEntity
+import io.github.stopcran.kanji.data.ReadingWordIntentEntity
 import io.github.stopcran.kanji.data.forDirection
 import io.github.stopcran.kanji.data.inWordStack
 import io.github.stopcran.kanji.data.offeredStacks
@@ -56,6 +57,7 @@ import java.time.Instant
 import kotlin.random.Random
 
 data class WordPictureUi(val question: PictureQuestion, val images: Map<String, ImageBitmap>)
+data class SelectedWordDeferral(val word: String, val messageId: Int)
 
 sealed interface WordQuizUi {
     data object Loading : WordQuizUi
@@ -103,6 +105,14 @@ class WordQuizViewModel(
         private set
     var contentLanguage by mutableStateOf("en")
         private set
+    var selectedWordDeferrals by mutableStateOf<List<SelectedWordDeferral>>(emptyList())
+        private set
+    private var selectedWordTokens: Map<String, String> = emptyMap()
+    private var selectionTokens: Map<String, String> = emptyMap()
+    private val selectionReplacements = mutableListOf<String>()
+    private val budgetedNewWords = mutableSetOf<String>()
+    private val recordedSelections = mutableSetOf<String>()
+    private var replacementNewSlots = 0
 
     var readingTip: WordReadingTip? by mutableStateOf(null)
         private set
@@ -152,6 +162,8 @@ class WordQuizViewModel(
         val stack = WordStacks.find(selectedStack, offered)
         stackId = stack.id
         val all = allWords.inWordStack(stack, levels)
+        val selected = app.db.reading().wordIntents(sourceId)
+        selectedWordDeferrals = selected.map { SelectedWordDeferral(it.word, R.string.reading_selection_pool) }
         kanjiHelp = allWords.mapNotNull { word ->
             WordKanjiHelp.build(word.word, word.reading, stack, levels)?.let { word.word to it }
         }.toMap()
@@ -168,10 +180,67 @@ class WordQuizViewModel(
         val budget = app.db.newAllowance(app.settings, sourceId, Instant.now()).remaining
         val ids = all.forDirection(direction).map { it.word }
         val minimum = app.settings.practiceMinimum()
-        val base = WordQueues.build(direction, ids, states, other, Instant.now(), budget, extra, limit = if (extra) minimum else Int.MAX_VALUE).map { it.kanji }
+        val now = Instant.now()
+        val preferred = selected.map { it.word }
+        val base = WordQueues.build(direction, ids, states, other, now, budget, extra,
+            limit = if (extra) minimum else Int.MAX_VALUE, preferred = preferred).map { it.kanji }
+        selectedWordTokens = selected.filter { it.word in base }.associate { it.word to it.token }
+        val eligible = WordQueues.eligible(direction, ids, states, other).toSet()
+        selectedWordDeferrals = selectedDeferrals(selected, allWords, ids, eligible, now)
+        prepareSelectionReplacements(selected, base, eligible, budget, now)
         val items = if (extra) base + pad(base, minimum - base.size, ids, all) else base
+        selectionReplacements.removeAll(items.toSet())
         session = trackSession(QuizSession(items, { it }), sourceId, stackId, direction.mode.name, extra)
         showNext()
+    }
+
+    private fun selectedDeferrals(
+        selected: List<ReadingWordIntentEntity>, allWords: List<WordEntity>, ids: List<String>, eligible: Set<String>, now: Instant,
+    ): List<SelectedWordDeferral> =
+        selected.filterNot { it.word in selectedWordTokens }.map {
+            val reason = when {
+                allWords.none { row -> row.word == it.word } -> R.string.reading_selection_missing
+                it.word !in words -> R.string.reading_selection_deck
+                it.word !in ids -> R.string.reading_selection_mode
+                it.word !in eligible -> R.string.reading_selection_locked
+                !extra && states[it.word]?.takeIf { state -> state.phase != CardPhase.New }?.due?.isAfter(now) == true -> R.string.reading_selection_due
+                else -> R.string.reading_selection_limit
+            }
+            SelectedWordDeferral(it.word, reason)
+        }
+
+    private fun isNew(word: String) = states[word]?.phase.let { it == null || it == CardPhase.New }
+
+    private fun prepareSelectionReplacements(
+        selected: List<ReadingWordIntentEntity>, base: List<String>, eligible: Set<String>, budget: Int, now: Instant,
+    ) {
+        selectionTokens = selected.associate { it.word to it.token }
+        budgetedNewWords += base.filter(::isNew).take(budget.coerceAtLeast(0))
+        replacementNewSlots = (budget - budgetedNewWords.size).coerceAtLeast(0)
+        selectionReplacements += (selected.map { it.word } + eligible).distinct().filter {
+            it !in base && it in eligible && (extra || isNew(it) || states.getValue(it).due <= now)
+        }
+    }
+
+    private fun replaceSkippedPicture(word: String) {
+        if (selectionTokens.isEmpty()) return
+        if (budgetedNewWords.remove(word)) replacementNewSlots++
+        if (word in selectionTokens && word !in recordedSelections) {
+            selectedWordTokens = selectedWordTokens - word
+            selectedWordDeferrals = selectedWordDeferrals.filterNot { it.word == word } +
+                SelectedWordDeferral(word, R.string.reading_selection_picture)
+        }
+        val next = selectionReplacements.firstOrNull { !isNew(it) || replacementNewSlots > 0 } ?: return
+        selectionReplacements.remove(next)
+        if (isNew(next)) {
+            replacementNewSlots--
+            budgetedNewWords += next
+        }
+        selectionTokens[next]?.let {
+            selectedWordTokens = selectedWordTokens + (next to it)
+            selectedWordDeferrals = selectedWordDeferrals.filterNot { deferred -> deferred.word == next }
+        }
+        session.defer(next, 0)
     }
 
     /** Tops a short extra session up with weak words learned in other word stacks; they keep being scheduled in their own stack. */
@@ -260,6 +329,7 @@ class WordQuizViewModel(
                     questionHelp(word, picture.question.options))
                 return
             }
+            if (word != lastPictureWord) replaceSkippedPicture(word)
             if (pictureNoticeId == null) pictureNoticeId = R.string.picture_questions_skipped
             word = session.take()
         }
@@ -325,7 +395,15 @@ class WordQuizViewModel(
         val record = recording.confirm(
             ReviewIdentity(sourceId, stack, word, direction.mode, reviewSessionId), states, grade, firstSuccessCapDays,
         )
-        recordSession { reviews.record(record) }
+        val token = selectedWordTokens[word].takeIf { stack == stackId }
+        budgetedNewWords.remove(word)
+        if (token != null) recordedSelections += word
+        recordSession {
+            app.db.withTransaction {
+                reviews.record(record)
+                if (token != null) app.db.reading().consumeWordIntent(sourceId, word, token)
+            }
+        }
     }
 
     fun openReadingTip(origin: WordQuizUi.Question) {

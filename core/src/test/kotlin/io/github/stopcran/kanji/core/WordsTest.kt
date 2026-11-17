@@ -29,6 +29,23 @@ class WordsTest {
     private fun review(stability: Double, reps: Int = 3, dueOffsetSec: Long = 0, lastDaysAgo: Long = 1) =
         SrsState(CardPhase.Review, stability, 5.0, now.plusSeconds(dueOffsetSec), now.minusSeconds(lastDaysAgo * 86400), reps)
 
+    @Test fun selectedWordsUseTheSameDeckGateDueAndNewAllowance() {
+        val words = listOf("a", "b", "c")
+        val selected = listOf("c", "outside-deck", "c")
+        val queue = WordQueues.build(WordDirection.JpToEn, words, emptyMap(), emptyMap(), now, 1, preferred = selected)
+        assertEquals(listOf("c"), queue.map { it.kanji })
+        assertTrue(WordQueues.build(WordDirection.EnToJp, words, emptyMap(), emptyMap(), now, 1, preferred = selected).isEmpty())
+        val future = mapOf("c" to review(5.0, dueOffsetSec = 86_400))
+        assertFalse(WordQueues.build(WordDirection.JpToEn, words, future, emptyMap(), now, 1, preferred = selected).any { it.kanji == "c" })
+        val extra = WordQueues.build(WordDirection.JpToEn, words, future, emptyMap(), now, 0,
+            extra = true, limit = 1, preferred = selected)
+        assertEquals(listOf("c"), extra.map { it.kanji })
+        assertFalse(extra.single().isNew)
+        val exhausted = WordQueues.build(WordDirection.JpToEn, words, emptyMap(), emptyMap(), now, 0,
+            extra = true, preferred = selected)
+        assertFalse(exhausted.any { it.kanji == "c" })
+    }
+
     @Test
     fun levelIsTheHardestKanjiAndNullWhenUnknown() {
         val levels = mapOf("開" to 4, "音" to 5, "京" to null)

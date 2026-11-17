@@ -67,9 +67,16 @@ class NavigationBoundaryTest {
             AppDestination.Document("kanji/語.md"),
             AppDestination.Document("articles/topic.md", "owner/repo", "Topic: / 語"),
             AppDestination.Document("articles/topic.md", "owner/repo", sessionBound = true),
+            AppDestination.TextReading("owner/repo", "reading-fixture-peach"),
+            AppDestination.TextReading("owner/repo", "reading-fixture-peach", "a".repeat(64)),
+            AppDestination.ReadingQuizStart(AppDestination.TextReading("owner/repo", "reading-fixture-peach", "a".repeat(64))),
+            AppDestination.ReadingQuiz("00000000-0000-0000-0000-000000000001"),
+            AppDestination.Document("articles/peaches.md", "owner/repo",
+                reading = AppDestination.TextReading("owner/repo", "reading-fixture-peach", "a".repeat(64))),
         )
         destinations.forEach { assertEquals(it, AppDestination.parse(it.route)) }
-        for (route in listOf("draw:", "draw:id:unknown", "draw:id:extra:extra", "source-doc:missing", "doc:../outside.md")) {
+        for (route in listOf("draw:", "draw:id:unknown", "draw:id:extra:extra", "source-doc:missing", "doc:../outside.md",
+            "reading-quiz:unknown", "reading-quiz-start:reading%3Aowner%2Frepo%3Areading-fixture-peach")) {
             assertEquals(route, AppDestination.Unavailable, AppDestination.parse(route))
         }
     }
@@ -102,6 +109,18 @@ class NavigationBoundaryTest {
         val sessionDocument = NavigationEntry(AppDestination.Document("articles/reference.md", "owner/repo", sessionBound = true))
         assertEquals(listOf(home), NavigationEntry.restore(listOf(home.save(), sessionDocument.save()), false))
         assertEquals(sessionDocument, NavigationEntry.restore(listOf(sessionDocument.save()), true).single())
+        val reader = NavigationEntry(AppDestination.TextReading("owner/repo", "reading-fixture-peach"))
+        val wordArticle = NavigationEntry(AppDestination.Document("words/桃.md", "owner/repo"))
+        assertEquals(listOf(home, reader, wordArticle), NavigationEntry.restore(
+            listOf(home.save(), reader.save(), wordArticle.save()), false,
+        ))
+        assertTrue(reader.scoped)
+        val captured = NavigationEntry(AppDestination.TextReading("owner/repo", "reading-fixture-peach", "a".repeat(64)))
+        val capturedDocument = NavigationEntry(AppDestination.Document("articles/peaches.md", "owner/repo",
+            reading = captured.destination as AppDestination.TextReading))
+        assertEquals(listOf(captured, capturedDocument), NavigationEntry.restore(
+            listOf(captured.save(), capturedDocument.save()), false,
+        ))
     }
 
     @Test

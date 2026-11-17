@@ -145,6 +145,14 @@ internal fun AppNav(app: KanjiApp, createDraw: (Services) -> DrawViewModel = { D
     }
     fun replace(destination: AppDestination) {
         val old = stack.last()
+        val reading = old.destination as? AppDestination.TextReading
+        val captured = (destination as? AppDestination.TextReading)?.takeIf { it.captureHash != null }
+        if (reading != null && captured != null) {
+            if (reading.sourceId == captured.sourceId && reading.textId == captured.textId) {
+                stack[stack.lastIndex] = old.copy(destination = captured)
+                return
+            }
+        }
         val next = NavigationEntry(destination)
         app.services.studySessions.leave(old.destination.route)
         owners.remove(old.id)
@@ -192,14 +200,16 @@ internal fun SourceDocScreen(app: KanjiApp, route: String, pop: () -> Unit, push
 private fun DocumentDestination(app: KanjiApp, destination: AppDestination.Document, pop: () -> Unit, push: (AppDestination) -> Unit) {
     val currentSource by app.settings.source.collectAsState()
     val sourceId = destination.sourceId ?: currentSource.id
-    io.github.stopcran.kanji.ui.ContentLanguageGate(
-        app, sourceId, pop, allowSessionLanguageMismatch = destination.sessionBound,
-    ) {
+    val body: @Composable () -> Unit = {
         DocRoute(
             app.services.documents, sourceId, destination.path, pop,
-            { push(AppDestination.Document(it, sourceId, sessionBound = destination.sessionBound)) }, destination.topic,
+            { push(destination.copy(path = it, sourceId = sourceId)) }, destination.topic,
         )
     }
+    if (destination.reading != null) io.github.stopcran.kanji.ui.ReadingCaptureGate(app, destination.reading, pop, body)
+    else io.github.stopcran.kanji.ui.ContentLanguageGate(
+        app, sourceId, pop, allowSessionLanguageMismatch = destination.sessionBound, content = body,
+    )
 }
 
 @Composable
@@ -241,6 +251,30 @@ private fun RouteContent(
             }
         }
         is AppDestination.Document -> DocumentDestination(app, destination, pop, push)
+        is AppDestination.TextReading -> io.github.stopcran.kanji.ui.ReadingCaptureGate(app, destination, pop) {
+            io.github.stopcran.kanji.ui.ReadingQuizReaderGate(app.db, app.services.readingQuizzes, destination, pop,
+                { push(AppDestination.ReadingQuiz(it)) }) {
+                io.github.stopcran.kanji.ui.TextReadingScreen(
+                    serviceViewModel(destination.copy(captureHash = null).route) {
+                        io.github.stopcran.kanji.ui.TextReadingViewModel(it.textReading, destination.sourceId, destination.textId, destination.captureHash)
+                    },
+                    pop, { push(AppDestination.Document(it, destination.sourceId, reading = destination.takeIf { it.captureHash != null })) },
+                    { hash -> replace(destination.copy(captureHash = hash)) },
+                    onQuiz = if (destination.captureHash == null) null else ({ push(AppDestination.ReadingQuizStart(destination)) }),
+                )
+            }
+        }
+        is AppDestination.ReadingQuizStart -> io.github.stopcran.kanji.ui.ContentLanguageGate(app, destination.reading.sourceId, pop) {
+            io.github.stopcran.kanji.ui.ReadingQuizEntry(app, destination.reading, pop) { replace(AppDestination.ReadingQuiz(it)) }
+        }
+        is AppDestination.ReadingQuiz -> {
+            val vm = serviceViewModel(destination.route) { io.github.stopcran.kanji.ui.ReadingQuizViewModel(it.readingQuizzes, destination.id) }
+            io.github.stopcran.kanji.ui.ReadingQuizHost(vm, app.db, app.services.readingQuizzes, pop,
+                { push(AppDestination.ReadingQuiz(it)) }) {
+                val reader = (vm.ui as? io.github.stopcran.kanji.ui.ReadingQuizUi.Ready)?.quiz?.reader
+                if (reader != null) push(AppDestination.TextReading(reader.saved.sourceId, reader.saved.textId, reader.saved.captureId))
+            }
+        }
         AppDestination.Unavailable -> UnavailableDestination(pop)
         is AppDestination.Legacy -> LegacyRouteContent(
             app, destination.route, { push(AppDestination.parse(it)) }, pop, { replace(AppDestination.parse(it)) }, browseGrammar,
@@ -294,6 +328,9 @@ private fun LegacyRouteBody(
             onOpenDoc = { push(sourceDocRoute(app.settings.source.value.id, it)) },
         )
         "listening-home" -> io.github.stopcran.kanji.ui.ListeningPage(app, pop, push)
+        "reading-home" -> io.github.stopcran.kanji.ui.TextReadingBrowser(app, pop) { sourceId, textId ->
+            push(AppDestination.TextReading(sourceId, textId).route)
+        }
         GrammarPracticeRoutes.UNAVAILABLE -> GrammarPracticeUnavailable(pop, browseGrammar)
         else -> if (route.startsWith("listening-assessment-preview:")) {
             io.github.stopcran.kanji.ui.ListeningAssessmentPreviewScreen(route, pop, replace)
@@ -393,6 +430,7 @@ private fun LegacyRouteBody(
                     onCountersPage = { push("counters-home") },
                     onGrammarPage = { push("grammar-home") },
                     onListeningPage = { push("listening-home") },
+                    onReadingPage = { push("reading-home") },
                     onOpenDoc = { push(sourceDocRoute(app.settings.source.value.id, it)) },
                     onGrammarDoc = { sourceId, path, topic -> push(sourceDocRoute(sourceId, path, topic)) },
                     onKanaPage = { push("kana-home") },

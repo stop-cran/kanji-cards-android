@@ -247,7 +247,7 @@ prerequisite-aware intake on persistent attained readiness. See [GRAMMAR-INTRODU
 
 ## Room content replacement
 
-The current Room version is **15**. The 7-to-8 migration creates `grammar_sets` (key: source + set ID) and `grammar_responses`
+The current Room version is **23**. The 7-to-8 migration creates `grammar_sets` (key: source + set ID) and `grammar_responses`
 (key: `reviewLogId`) and clears only sync metadata to force a content reimport. Existing content, review states and history are preserved;
 all older versions use the registered migration chain, with no destructive fallback.
 The additive 8-to-9 migration preserves that snapshot and all history, creates source-keyed `grammar_focus` (`revision`, cursor JSON),
@@ -282,6 +282,34 @@ and diagnostics, rather than marking last-known-good content invalid.
 `GrammarFocusPersistenceTest` covers reservation/reopen, stale tickets, rollback and source isolation. Cursor updates share the answer's
 state/log/detail transaction. The cursor retains automatic ordinal, manual selection nonce, active group/origin/seed and recorded exposure
 IDs with their facet/context keys. It is omitted from progress ZIPs; Android backup includes the database and preferences normally.
+
+## Substantial Reading JSON v1
+
+The [Reading contract](READING.md) defines the strict package structure, Unicode occurrence/evidence offsets,
+provenance and authoring gates. Flat `reading/<id>.json` files are listed in the optional `reading` manifest map
+using LF-normalized SHA-256; flat `reading-images/<slug>.webp` files use raw SHA-256 in `readingImages`.
+They do not belong in `files`, Listening maps or Word scenes. Existing EN schema-1 language binding is unchanged.
+Older clients ignore these namespaces; their compatibility must also be checked against the actual exported pilot.
+
+The 21-to-22 migration creates source-keyed `reading_texts` and `reading_images`, persistent `reading_readers`
+and `reading_reader_images`, and adds `sync_meta.readingParserEpoch` (default 0) and nullable `readingProblem`.
+Accepted catalog replacement and epoch 1 commit atomically; failed downloads leave them unchanged.
+Reading captures retain their exact package, referenced word-card bodies and required media independently
+of catalog replacement. Position, reading-support preference and completion survive reopen.
+The 22-to-23 migration rekeys readers and captured media by source/text/capture identity,
+preserving historical captures, and adds source/word selection intents. New capture identities
+include branch, accepted content version and package hash, so reopening a browser item can
+capture an update without retargeting a retained reader.
+Nullable `sync_meta.contentRevision` records the fetched commit in the same accepted content
+transaction. Reader captures use it rather than a potentially older preference mirror;
+unknown historical revisions remain unknown until a subsequent accepted import.
+It also introduces `reading_quizzes` (immutable plan, durable sequential answers and submitted
+result) and `reading_progress` (shared source/text unlocked tier). Open-book and closed-book
+use separate `ReadingOpenBook` / `ReadingClosedBook` review states in the `reading-texts` stack.
+The first quiz reserves one shared source-budget introduction for the text. Submission
+atomically commits its immutable result, shared unlock, mode-specific schedule and single
+review, replacing the reservation with recorded introduction. Discard releases an unfinished
+reservation. The comprehension UI and final integration remain in progress.
 
 ## Listening JSON v1
 
@@ -326,13 +354,13 @@ Task parser epoch 2 refreshes an unchanged source revision/version after upgrade
 after acceptance. No Room migration or N5 identity/approval rewrite is needed. All four guided
 formats support either accepted level; N4 diagnostic orchestration remains installment C.
 
-## Progress export v7
+## Progress export v8
 
-**Settings → Export progress** writes eleven UTF-8 JSON members. Database rows are read in one transaction:
+**Settings → Export progress** writes thirteen UTF-8 JSON members. Database rows are read in one transaction:
 
 | ZIP member | Meaning |
 | --- | --- |
-| `export_manifest.json` | `{"formatVersion":7}`; independent of content JSON/manifest schema versions. |
+| `export_manifest.json` | `{"formatVersion":8}`; independent of content JSON/manifest schema versions. |
 | `review_state.json` | Current SRS rows: `sourceId`, `stack`, `kanji`, `mode`, `reading`, `phase`, `stability`, `difficulty`, `dueMs`, `lastReviewMs`, `reps`, `lapses`. JLPT kanji levels use the shared `kanji-jlpt` stack. |
 | `review_log.json` | Recorded events: `id`, `sourceId`, `stack`, `kanji`, `mode`, `reading`, `grade`, `atMs` (Unix milliseconds), nullable `sessionId` and `previousReadingStarted`. The latter records the prior per-reading state for new reading events; null means historical or not a reading. Legacy JLPT level-stack events are preserved; new events use `kanji-jlpt`. Grades: Again=1, Hard=2, Good=3, Easy=4. |
 | `jlpt_transition_checks.json` | Spaced confusion-check reservations: `id`, `sourceId`, `triggerKanji`, target `kanji`, `mode`, `reading`, `dueMs`, `originalDueMs`, and nullable `completedAtMs` and `cancelledAtMs`. Completed reservations retain their original slot; cancelled reservations no longer occupy one. |
@@ -342,6 +370,8 @@ formats support either accepted level; N4 diagnostic orchestration remains insta
 | `listening_task_encounters.json` | Captured source/branch/revision/content/policy, task/exposure IDs, package/media hashes, word bodies, current stage/help state, immutable response, nullable assessment/review links, admission/debit/exposure and closure. No media bytes. |
 | `listening_assessments.json` | Source/version/blueprint/policy, captured form, durable session state, nullable final response and closure; populated by F's diagnostic orchestration, never canonical SRS evidence. |
 | `listening_exposures.json` | Source/story identity with first and last recorded exposure timestamps, including known legacy exposure; no invented historical activity. |
+| `reading_quizzes.json` | Attempt/source/text/capture identity, branch/revision, captured package/hash and word bodies, mode/question/option-order plan, durable answers, immutable nullable result, review/session link, reservation and closure. No picture bytes. |
+| `reading_progress.json` | Shared source/text unlocked tier; both book modes contribute. Independent mode schedules remain in `review_state.json`. |
 | `settings.json` | Stored preferences, including source configuration and cached sync metadata. |
 
 Diagnostic `listening_assessments.content` is an `AssessmentForm` (version 1): blueprint, seed,

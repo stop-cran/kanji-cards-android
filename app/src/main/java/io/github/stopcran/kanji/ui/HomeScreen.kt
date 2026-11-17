@@ -67,10 +67,14 @@ class HomeActions(
     val onDraw: (extra: Boolean) -> Unit,
     val onReadings: (extra: Boolean) -> Unit,
     val onWords: (WordDirection, extra: Boolean) -> Unit,
+    val onReadingPage: () -> Unit = {},
 )
 
 @Composable
-internal fun MainPage(state: HomeState, overview: HomeOverview, preferences: HomePreferencesActions, a: HomeActions, onRetry: () -> Unit) {
+internal fun MainPage(
+    state: HomeState, overview: HomeOverview, preferences: HomePreferencesActions, a: HomeActions, onRetry: () -> Unit,
+    readingSummary: String = "",
+) {
     val data = state.data
     val content = state.content
     val context = LocalContext.current
@@ -101,6 +105,7 @@ internal fun MainPage(state: HomeState, overview: HomeOverview, preferences: Hom
         Entry(stringResource(R.string.home_counters), content.summary(overview.counters), ArtSet.current.counters, a.onCountersPage)
         Entry(stringResource(R.string.home_grammar), content.summary(overview.grammar), ArtSet.current.grammar, a.onGrammarPage)
         Entry(stringResource(R.string.home_listening), content.summary(overview.listening), ArtSet.current.listening, a.onListeningPage)
+        Entry(stringResource(R.string.reading_title), content.summary(readingSummary), ArtSet.current.grammar, a.onReadingPage)
     }
 }
 

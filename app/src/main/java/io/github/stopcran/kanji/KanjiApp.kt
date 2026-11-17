@@ -25,6 +25,9 @@ import io.github.stopcran.kanji.data.MIGRATION_17_18
 import io.github.stopcran.kanji.data.MIGRATION_18_19
 import io.github.stopcran.kanji.data.MIGRATION_19_20
 import io.github.stopcran.kanji.data.MIGRATION_20_21
+import io.github.stopcran.kanji.data.MIGRATION_21_22
+import io.github.stopcran.kanji.data.MIGRATION_22_23
+import io.github.stopcran.kanji.data.MIGRATION_23_24
 import io.github.stopcran.kanji.data.rebuildGrammarReadiness
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -49,6 +52,8 @@ class Services(val db: AppDatabase, val settings: Settings, val context: Context
     val reviewStore: io.github.stopcran.kanji.data.ReviewStore = io.github.stopcran.kanji.data.RoomReviewStore(db)
     val counters: io.github.stopcran.kanji.data.CounterRepository = io.github.stopcran.kanji.data.RoomCounterRepository(db, settings, reviewStore)
     val documents: io.github.stopcran.kanji.data.DocumentRepository = io.github.stopcran.kanji.data.RoomDocumentRepository(db)
+    val textReading: io.github.stopcran.kanji.data.TextReadingRepository = io.github.stopcran.kanji.data.RoomTextReadingRepository(db, settings)
+    val readingQuizzes = io.github.stopcran.kanji.data.ReadingQuizStore(db, textReading, settings)
     internal val home: io.github.stopcran.kanji.data.HomeRepository = io.github.stopcran.kanji.data.RoomHomeRepository(db, settings)
     val listening = io.github.stopcran.kanji.data.ListeningStudy(db, settings)
     val listeningTasks = io.github.stopcran.kanji.data.ListeningTaskStudy(db, settings)
@@ -72,6 +77,9 @@ class KanjiApp : Application() {
                 MIGRATION_18_19,
                 MIGRATION_19_20,
                 MIGRATION_20_21,
+                MIGRATION_21_22,
+                MIGRATION_22_23,
+                MIGRATION_23_24,
             )
             .build()
     }

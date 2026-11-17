@@ -108,7 +108,10 @@ private fun archiveFiles(version: String, files: Map<String, ByteArray>): ByteAr
     val taskImages = files.filterKeys { it.startsWith("task-images/") }
     val listening = files.filterKeys { it.startsWith("listening/") }
     val audio = files.filterKeys { it.startsWith("audio/") }
-    val text = files - images.keys - scenes.keys - curriculum.keys - tasks.keys - taskAudio.keys - taskImages.keys - listening.keys - audio.keys
+    val reading = files.filterKeys { it.startsWith("reading/") }
+    val readingImages = files.filterKeys { it.startsWith("reading-images/") }
+    val text = files - images.keys - scenes.keys - curriculum.keys - tasks.keys - taskAudio.keys - taskImages.keys -
+        listening.keys - audio.keys - reading.keys - readingImages.keys
     val manifest = Json.encodeToString(
         Manifest.serializer(),
         Manifest(
@@ -120,6 +123,8 @@ private fun archiveFiles(version: String, files: Map<String, ByteArray>): ByteAr
             listeningTaskImages = JsonObject(taskImages.mapValues { JsonPrimitive(ContentParser.rawSha256(it.value)) }),
             listening = listening.mapValues { ContentParser.sha256(it.value) },
             audio = audio.mapValues { ContentParser.rawSha256(it.value) },
+            reading = JsonObject(reading.mapValues { JsonPrimitive(ContentParser.sha256(it.value)) }),
+            readingImages = JsonObject(readingImages.mapValues { JsonPrimitive(ContentParser.rawSha256(it.value)) }),
         ),
     ).toByteArray()
     val out = ByteArrayOutputStream()
@@ -159,6 +164,68 @@ private class FakeHttp : ContentHttp {
             override val body: InputStream = ByteArrayInputStream(bytes)
             override fun header(name: String) = if (isHead && name == "ETag") headEtag else null
             override fun close() {}
+        }
+    }
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28], manifest = Config.NONE, application = Application::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@SQLiteMode(SQLiteMode.Mode.NATIVE)
+class TextReadingSyncTest {
+    @Test fun epochRefreshImportsSameRevisionAndFailureCannotAdvanceAcceptedCapability() = runBlocking {
+        val context = RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("settings", 0).edit().clear().commit()
+        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
+        try {
+            val settings = Settings(context)
+            val http = FakeHttp()
+            val source = RepoSource("owner", "repo", "main")
+            val sync = ContentSync(db, settings.sync, http)
+            val raw = requireNotNull(javaClass.getResource("/reading-fixture.json")).readText().toByteArray()
+            http.archiveBytes = archiveFiles("reading-v1", mapOf(
+                "kanji/日.md" to kanjiMd("日", "sun").toByteArray(), "reading/reading-fixture-peach.json" to raw,
+            ))
+            val initial = sync.sync(source)
+            assertTrue(initial.toString(), initial is SyncResult.Updated && initial.reading == 1)
+            assertEquals(1, db.reading().texts(source.id).size)
+            val meta = requireNotNull(db.content().meta(source.id))
+            db.content().putMeta(meta.copy(readingParserEpoch = 0))
+            http.archiveFails = true
+            assertTrue(sync.syncOnLaunch(source) is SyncResult.Failed)
+            assertEquals(0, db.content().meta(source.id)?.readingParserEpoch)
+            assertEquals(1, db.reading().texts(source.id).size)
+            http.archiveFails = false
+            val before = http.downloads
+            assertTrue(sync.syncOnLaunch(source) is SyncResult.Updated)
+            assertEquals(before + 1, http.downloads)
+            assertEquals(1, db.content().meta(source.id)?.readingParserEpoch)
+            assertTrue(sync.sync(source) is SyncResult.UpToDate)
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test fun invalidReadingReportsDistinctRejectedFilesWithoutRejectingLegacyCards() = runBlocking {
+        val context = RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("settings", 0).edit().clear().commit()
+        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
+        try {
+            val settings = Settings(context)
+            val http = FakeHttp()
+            http.archiveBytes = archiveFiles("reading-invalid", mapOf(
+                "kanji/日.md" to kanjiMd("日", "sun").toByteArray(), "reading/broken.json" to "{}".toByteArray(),
+            ))
+            val source = RepoSource("owner", "repo", "main")
+            val result = ContentSync(db, settings.sync, http).sync(source)
+            assertTrue(result.toString(), result is SyncResult.Updated)
+            result as SyncResult.Updated
+            assertEquals(1, result.kanji)
+            assertEquals(0, result.reading)
+            assertEquals(1, result.rejected.files[ContentType.Reading])
+            assertNotNull(db.content().meta(source.id)?.readingProblem)
+        } finally {
+            db.close()
         }
     }
 }

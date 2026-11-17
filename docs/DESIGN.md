@@ -151,13 +151,48 @@ Android/native pilot acceptance is a separate gate; archive parsing and resource
   Only files listed in the manifest are imported. For duplicate kanji titles the first in sorted path order is kept.
 - Only `replaceContent` may clear/insert content tables; the synced SHA is stored after it succeeds.
 - Settings reports the stored totals after sync: kanji, words, Grammar exercises (not sets), and Listening packages
-  across legacy passages and new tasks, including worked examples. Unsupported task placeholders are excluded;
+  across legacy passages and new tasks, including worked examples, plus accepted Reading texts. Unsupported task placeholders are excluded;
   if task import keeps an earlier catalog, its actual stored count is used rather than the rejected candidate count.
   Nonzero rejected-file counts are shown by type in the theme's red error colour. A malformed Grammar/counter
   file can contain an unknowable number of cards, so these are explicitly file counts; individually removed
   counter questions are counted separately. Optional metadata/media warnings are diagnostics, not rejected cards.
   Failed imports retain their rejection report when parsing completed, without presenting candidate totals as synced.
   Result text survives rotation; a cancelled in-flight Settings sync becomes an explicit retry message.
+- **Substantial Reading texts (#138/#139):** `manifest.reading` and `readingImages` are independent optional namespaces,
+  not kanji-reading drills, ordinary Markdown files or Word scenes. The schema and editorial contract are in
+  [READING.md](READING.md). Invalid packages and malformed map entries are isolated and reported; a required invalid
+  picture rejects its owning package. Room 22 atomically replaces source-keyed accepted texts/media and stamps Reading
+  parser epoch 1, including an empty optional catalog. A failed import cannot advance that epoch or erase learner state.
+  Opening a reader captures the exact package/hash, source/branch/revision, referenced word-card bodies and required media
+  separately from the replaceable catalog. Persisted position, furigana and completion belong to that capture; later sync
+  or source changes do not replace it. Ordinary fresh navigation still passes source/language admission. Only a retained
+  route marked after successful capture can restore a locale exception; its source/text/hash and durable JSON are verified,
+  including for onward reading-document routes. Merely having a saved text does not exempt a fresh route.
+  Every reviewed occurrence opens its contextual gloss even without a card. Han-bearing spans render their reviewed ruby
+  by default; the hide/show preference is persisted, not inferred from familiarity. Captured word cards can open ordinary
+  source-bound article routes, whose Back returns to the reader. Reader list state survives both its article panel and
+  an intervening loading frame; serialized state writes preserve concurrent position, furigana and completion changes.
+  Room 23 retains distinct source/text/branch/version captures rather than reusing obsolete text on fresh browser entry.
+  Study-next persists a source/word intent; the next eligible Word quiz supplies its actual deck and direction.
+  Selection preserves gates, new allowance and due rules, with visible deferrals and token-qualified consumption
+  only in the confirmed-answer transaction. Failed picture admission may release its own reserved new slot, but
+  cannot reinsert borrowed padding or reinterpret the borrowed state as current-stack eligibility.
+  Room 24 stores each captured word body in its own source/text/capture/word row so a large
+  vocabulary cannot overflow one Android CursorWindow row when reopening a reader or quiz.
+  Migration 23→24 reads legacy aggregate JSON in bounded SQL slices before decoding, preserves
+  snapshot order and content, and clears the retained aggregate column. Export reconstructs
+  the same word-body array; source replacement never rewrites captured vocabulary.
+  Room 23 also owns immutable comprehension captures and atomic quiz submission. The user chose
+  open-/closed-book per quiz with one shared per-text unlock score. A completed quiz that includes the current highest tier
+  and achieves at least 75% there unlocks the next tier for subsequent quizzes; no daily-credit gate is imposed.
+  SRS scheduling stays separate from that unlock decision, with independent open-book and closed-book schedules.
+  One completed passage quiz records one FSRS event, not one per correlated question.
+  Explanations/evidence appear only after final submission. Starting the first quiz reserves one shared source-budget
+  introduction for the text; completion converts it to a recorded introduction, while discard releases an unfinished
+  reservation. Retakes and switching book modes do not consume another introduction.
+  An unfinished closed-book quiz blocks passage-bearing readers and older results for that source/text until completion
+  or explicit discard. Returning to a retained quiz reloads its durable cursor, including answers saved through a resumed
+  navigation entry; rejected stale callbacks refresh rather than leaving an unanswerable old question.
 - **Grammar curriculum contract (#59):** optional `curriculum/grammar.json` is hash-bound in the separate
   `manifest.curriculum` namespace. Older clients ignore it; it adds no fields to strict introduction-group objects.
   One mapped group has one chapter, while valid authored groups may remain deliberately unmapped. All real leaf prerequisites

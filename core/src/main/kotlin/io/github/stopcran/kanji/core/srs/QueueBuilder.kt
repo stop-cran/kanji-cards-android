@@ -6,7 +6,7 @@ import kotlin.random.Random
 
 enum class StudyMode {
     Quiz, Draw, WordJpEn, WordEnJp, WordReading, WordType, KanjiOn, KanjiKun, CounterChoose, CounterType, CounterNoun,
-    WordPicture, Grammar, WordToPicture, Listening, CounterExpression, CounterReading,
+    WordPicture, Grammar, WordToPicture, Listening, CounterExpression, CounterReading, ReadingOpenBook, ReadingClosedBook,
 }
 
 data class QueueItem(val kanji: String, val state: SrsState, val isNew: Boolean)

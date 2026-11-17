@@ -2,7 +2,7 @@ package io.github.stopcran.kanji.core.content
 
 import kotlinx.serialization.json.JsonObject
 
-enum class ContentType { Kanji, Words, Grammar, Counters, Listening, Other }
+enum class ContentType { Kanji, Words, Grammar, Counters, Listening, Reading, Other }
 
 data class ContentRejections(
     val files: Map<ContentType, Int> = emptyMap(),
@@ -20,6 +20,7 @@ fun ParsedContent.rejectedContent(additionalListening: Set<String> = emptySet())
         addAll(grammar.map { "grammar/${it.id}.json" })
         addAll(listening.map { "listening/${it.passage.id}.json" })
         addAll(listeningTasks.records.map { "listening-tasks/${it.task.id}.json" })
+        addAll(reading.records.map { "reading/${it.content.id}.json" })
     }
     val rejected = (manifest.files.keys - accepted).groupBy { path ->
         when (path.substringBefore('/')) {
@@ -34,6 +35,9 @@ fun ParsedContent.rejectedContent(additionalListening: Set<String> = emptySet())
     val taskPaths = (manifest.listeningTasks as? JsonObject)?.keys.orEmpty()
     rejected.getOrPut(ContentType.Listening) { mutableSetOf() }.addAll(
         (manifest.listening.keys - accepted) + (taskPaths - accepted) + additionalListening,
+    )
+    rejected.getOrPut(ContentType.Reading) { mutableSetOf() }.addAll(
+        (manifest.reading as? JsonObject)?.keys.orEmpty() - accepted,
     )
     return ContentRejections(rejected.mapValues { it.value.size }.filterValues { it > 0 }, rejectedCounterQuestions)
 }

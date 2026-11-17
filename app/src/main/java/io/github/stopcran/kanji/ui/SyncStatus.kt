@@ -103,7 +103,7 @@ internal data class SyncStatus(
         fun from(result: SyncResult): SyncStatus = when (result) {
             is SyncResult.Updated -> SyncStatus(
                 "Sync complete. Stored content: ${result.kanji} kanji, ${result.words} words, " +
-                    "${result.grammar} grammar exercises, ${result.listening} listening packages.",
+                    "${result.grammar} grammar exercises, ${result.listening} listening packages, ${result.reading} reading texts.",
                 result.rejected.describe(),
                 result.problems.firstOrNull()?.let { "${result.problems.size} content issue(s): $it" }.orEmpty(),
             )
@@ -119,7 +119,7 @@ internal data class SyncStatus(
                     result.words,
                     result.grammar,
                     result.listening,
-                ),
+                ) + " " + context.getString(R.string.sync_reading_count, result.reading),
                 result.rejected.describe(context),
                 result.problems.size.takeIf { it > 0 }?.let { context.getString(R.string.sync_content_issues, it) }.orEmpty(),
             )
@@ -199,6 +199,7 @@ private fun ContentRejections.describe(context: Context): String {
                 ContentType.Grammar -> R.string.sync_rejected_grammar
                 ContentType.Counters -> R.string.sync_rejected_counters
                 ContentType.Listening -> R.string.sync_rejected_listening
+                ContentType.Reading -> R.string.sync_rejected_reading
                 ContentType.Other -> R.string.sync_rejected_other
             }
             context.getString(R.string.sync_rejected_files, context.getString(label), count)
@@ -217,6 +218,7 @@ private fun ContentRejections.describe(): String {
                 ContentType.Grammar -> "Grammar"
                 ContentType.Counters -> "Numbers & counters"
                 ContentType.Listening -> "Listening"
+                ContentType.Reading -> "Reading"
                 ContentType.Other -> "Other"
             }
             "$label: $count rejected file(s)"

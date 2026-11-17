@@ -72,6 +72,7 @@ internal fun HomeRoute(app: KanjiApp, route: String, onBack: () -> Unit, actions
         } else {
             val kana = rememberKanaOverview(app)
             val guideVisible by app.settings.startingGuideVisible.collectAsState()
+            val readings by remember(source.id) { app.db.reading().observeTexts(source.id) }.collectAsState(null)
             MainPage(
                 safeState,
                 HomeOverview(
@@ -79,6 +80,8 @@ internal fun HomeRoute(app: KanjiApp, route: String, onBack: () -> Unit, actions
                     rememberListeningHome(app).value.localizedSummary(), kana.allowance, guideVisible,
                 ),
                 preferences, actions, retry,
+                readings?.let { androidx.compose.ui.res.stringResource(io.github.stopcran.kanji.R.string.reading_count, it.size) }
+                    ?: androidx.compose.ui.res.stringResource(io.github.stopcran.kanji.R.string.loading),
             )
         }
     }

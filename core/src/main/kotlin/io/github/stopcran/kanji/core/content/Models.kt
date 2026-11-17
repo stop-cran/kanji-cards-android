@@ -25,6 +25,8 @@ data class Manifest(
     val listeningTaskImages: JsonElement = JsonObject(emptyMap()),
     val baseLanguage: String = "en",
     val targetLanguage: String = "ja",
+    val reading: JsonElement = JsonObject(emptyMap()),
+    val readingImages: JsonElement = JsonObject(emptyMap()),
 )
 
 data class KanjiCard(
@@ -228,4 +230,5 @@ data class ParsedContent(
     val listeningTasks: io.github.stopcran.kanji.core.listening.ListeningTaskCatalog =
         io.github.stopcran.kanji.core.listening.ListeningTaskCatalog(),
     val rejectedCounterQuestions: Int = 0,
+    val reading: io.github.stopcran.kanji.core.readingtext.ReadingCatalog = io.github.stopcran.kanji.core.readingtext.ReadingCatalog(),
 )

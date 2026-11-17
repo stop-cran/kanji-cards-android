@@ -180,6 +180,27 @@ class GrammarAnalysisTest(unittest.TestCase):
         with self.assertRaises(ExportError):
             self.read(bundle)
 
+    def test_v8_requires_reading_arrays_without_disclosing_their_text(self):
+        bundle = session_fixture()
+        expected = self.read(bundle)
+        expected["export_format_version"] = 8
+        bundle["export_manifest.json"]["formatVersion"] = 8
+        for name in ("listening_encounters.json", "listening_task_encounters.json",
+                     "listening_assessments.json", "listening_exposures.json", "jlpt_transition_checks.json"):
+            bundle[name] = []
+        bundle["reading_quizzes.json"] = [{"content": "PRIVATE_READING_TEXT"}]
+        bundle["reading_progress.json"] = []
+        self.assertEqual(expected, self.read(bundle))
+        self.assertNotIn("PRIVATE_READING_TEXT", json.dumps(self.read(bundle)))
+        for name in ("reading_quizzes.json", "reading_progress.json"):
+            original = bundle.pop(name)
+            with self.assertRaises(ExportError):
+                self.read(bundle)
+            bundle[name] = {}
+            with self.assertRaises(ExportError):
+                self.read(bundle)
+            bundle[name] = original
+
     def test_v7_shared_kanji_reviews_link_to_the_selected_level_session(self):
         bundle = session_fixture()
         bundle["export_manifest.json"]["formatVersion"] = 7

@@ -18,7 +18,7 @@ object SafeZip {
     )
 
     private val allowedFolders = setOf("kanji", "words", "articles", "strokes", "counters", "grammar", "scenes", "listening",
-        "curriculum", "listening-tasks")
+        "curriculum", "listening-tasks", "reading")
 
     /** Returns repo-relative path -> bytes for manifest.json and the content folders; the archive's top-level folder is stripped. */
     fun read(input: InputStream, limits: Limits = Limits()): Map<String, ByteArray> {
@@ -38,7 +38,7 @@ object SafeZip {
                 val relative = name.substringAfter('/', missingDelimiterValue = "")
                 val wanted = relative.isNotEmpty() && isWanted(relative)
                 val limit = when {
-                    relative.startsWith("images/") || relative.startsWith("task-images/") -> limits.maxImageBytes
+                    relative.startsWith("images/") || relative.startsWith("task-images/") || relative.startsWith("reading-images/") -> limits.maxImageBytes
                     relative.startsWith("audio/") || relative.startsWith("task-audio/") -> limits.maxAudioBytes
                     else -> limits.maxFileBytes
                 }
@@ -59,7 +59,7 @@ object SafeZip {
         if (relative == "manifest.json") return true
         val parts = relative.split('/')
         if (parts.size != 2 || parts[1].isEmpty()) return false
-        return parts[0] in allowedFolders || (parts[0] in setOf("images", "task-images") && parts[1].endsWith(".webp")) ||
+        return parts[0] in allowedFolders || (parts[0] in setOf("images", "task-images", "reading-images") && parts[1].endsWith(".webp")) ||
             (parts[0] in setOf("audio", "task-audio") && parts[1].endsWith(".ogg"))
     }
 

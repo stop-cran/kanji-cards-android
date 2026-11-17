@@ -294,7 +294,7 @@ class CumulativeJlptDataTest {
                 }
             }
             val json = Json
-            assertEquals("7", json.parseToJsonElement(entries.getValue("export_manifest.json")).jsonObject.getValue("formatVersion").jsonPrimitive.content)
+            assertEquals("8", json.parseToJsonElement(entries.getValue("export_manifest.json")).jsonObject.getValue("formatVersion").jsonPrimitive.content)
             val exported = json.parseToJsonElement(entries.getValue("jlpt_transition_checks.json")).jsonArray.single().jsonObject
             assertEquals(source, exported.getValue("sourceId").jsonPrimitive.content)
             assertEquals("体", exported.getValue("triggerKanji").jsonPrimitive.content)

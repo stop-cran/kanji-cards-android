@@ -17,6 +17,7 @@ V3_ENTRIES = V2_ENTRIES | {"study_sessions.json"}
 V5_ENTRIES = V3_ENTRIES | {"listening_encounters.json"}
 V6_ENTRIES = V5_ENTRIES | {"listening_task_encounters.json", "listening_assessments.json", "listening_exposures.json"}
 V7_ENTRIES = V6_ENTRIES | {"jlpt_transition_checks.json"}
+V8_ENTRIES = V7_ENTRIES | {"reading_quizzes.json", "reading_progress.json"}
 LIMITATIONS = [
     "These are recorded reviews, not all screen answers: successful practice confirmations are not logged.",
     "First-observed means first in this export for (source, stack, exercise), not first-ever learning.",
@@ -54,8 +55,8 @@ def _load(path):
         names = {entry.filename for entry in entries}
         if len(names) != len(entries):
             raise ExportError("Duplicate ZIP entry")
-        if names not in (LEGACY_ENTRIES, V2_ENTRIES, V3_ENTRIES, V5_ENTRIES, V6_ENTRIES, V7_ENTRIES):
-            raise ExportError("Expected a complete legacy or v2-v7 export")
+        if names not in (LEGACY_ENTRIES, V2_ENTRIES, V3_ENTRIES, V5_ENTRIES, V6_ENTRIES, V7_ENTRIES, V8_ENTRIES):
+            raise ExportError("Expected a complete legacy or v2-v8 export")
         if sum(entry.file_size for entry in entries) > MAX_TOTAL_BYTES:
             raise ExportError("Export exceeds the 32 MiB total JSON limit")
         result = {}
@@ -263,8 +264,8 @@ def analyze(path):
         manifest = bundle["export_manifest.json"]
         if not isinstance(manifest, dict):
             raise ExportError("Unsupported export manifest")
-        version = _integer(manifest, "formatVersion", 2, 7)
-        expected = (V7_ENTRIES if version == 7 else V6_ENTRIES if version == 6 else V5_ENTRIES if version == 5
+        version = _integer(manifest, "formatVersion", 2, 8)
+        expected = (V8_ENTRIES if version == 8 else V7_ENTRIES if version == 7 else V6_ENTRIES if version == 6 else V5_ENTRIES if version == 5
                     else V2_ENTRIES if version == 2 else V3_ENTRIES)
         if set(bundle) != expected:
             raise ExportError("Export members do not match the declared format version")
@@ -275,6 +276,9 @@ def analyze(path):
             _rows(bundle, name)
     if version >= 7:
         _rows(bundle, "jlpt_transition_checks.json")
+    if version >= 8:
+        for name in V8_ENTRIES - V7_ENTRIES:
+            _rows(bundle, name)
     _rows(bundle, "review_state.json")
     settings = bundle["settings.json"]
     if not isinstance(settings, dict):

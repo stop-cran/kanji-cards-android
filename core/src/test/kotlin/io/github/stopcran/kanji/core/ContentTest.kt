@@ -648,6 +648,9 @@ class ContentTest {
         assertEquals(setOf("grammar/pilot.json"), SafeZip.read(ByteArrayInputStream(withGrammar)).keys)
         val withScenes = zip("repo/scenes/a.json" to "{}", "repo/scenes/sub/ignored.json" to "{}")
         assertEquals(setOf("scenes/a.json"), SafeZip.read(ByteArrayInputStream(withScenes)).keys)
+        val reading = zip("repo/reading/fixture.json" to "{}", "repo/reading-images/fixture.webp" to "image",
+            "repo/reading/nested/ignored.json" to "{}", "repo/reading-images/ignored.svg" to "not WebP")
+        assertEquals(setOf("reading/fixture.json", "reading-images/fixture.webp"), SafeZip.read(ByteArrayInputStream(reading)).keys)
     }
 
 }
