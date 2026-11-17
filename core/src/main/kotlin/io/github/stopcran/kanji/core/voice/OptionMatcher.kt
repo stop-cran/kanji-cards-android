@@ -61,11 +61,11 @@ object OptionMatcher {
         var depth = 0
         for (char in text) {
             when {
-                char == '(' -> {
+                char == '(' || char == '\uFF08' -> {
                     if (depth == 0) append(' ')
                     depth++
                 }
-                char == ')' && depth > 0 -> depth--
+                (char == ')' || char == '\uFF09') && depth > 0 -> depth--
                 depth == 0 -> append(char)
             }
         }

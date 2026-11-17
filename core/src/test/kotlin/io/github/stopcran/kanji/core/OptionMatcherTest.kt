@@ -76,6 +76,43 @@ class OptionMatcherTest {
         assertNull(OptionMatcher.match(listOf("о людях"), listOf("все, каждый (уважительно, о людях", "вода"), "ru"))
     }
 
+    @Test fun fullwidthQualifierIsNotASpokenMeaning() {
+        val title = "все\uFF08уважительно, о людях\uFF09"
+        val words = listOf("дверь", "позади", "старший брат", title)
+        assertEquals(listOf("все"), OptionMatcher.variants(title, "ru"))
+        assertNull(OptionMatcher.match(listOf("о людях"), words, "ru"))
+        assertEquals(3, OptionMatcher.match(listOf("все"), words, "ru"))
+    }
+
+    @Test fun nestedFullwidthQualifiersPreserveOutsideMeanings() {
+        val titles = listOf(
+            "cooked rice\uFF08food, not raw; often served (warm, plain)\uFF09; meal, dinner",
+            "cooked rice (food, not raw; often served\uFF08warm, plain\uFF09); meal, dinner",
+            "cooked rice\uFF08food, not raw; often served\uFF08warm, plain\uFF09\uFF09; meal, dinner",
+        )
+        for (title in titles) {
+            assertEquals(listOf("cooked rice meal dinner", "cooked rice", "meal", "dinner"), OptionMatcher.variants(title))
+            assertEquals(0, OptionMatcher.match(listOf("cooked"), listOf(title, "water")))
+            assertEquals(0, OptionMatcher.match(listOf("meal"), listOf(title, "water")))
+            assertEquals(0, OptionMatcher.match(listOf("dinner"), listOf(title, "water")))
+            assertNull(OptionMatcher.match(listOf("plain"), listOf(title, "water")))
+        }
+    }
+
+    @Test fun unfinishedFullwidthQualifiersDoNotLeakTheirContents() {
+        val titles = listOf(
+            "все, каждый\uFF08уважительно, о людях",
+            "все, каждый\uFF08уважительно (о людях), внутри",
+            "все, каждый (уважительно\uFF08о людях\uFF09, внутри",
+        )
+        for (title in titles) {
+            assertEquals(listOf("все каждый", "все", "каждый"), OptionMatcher.variants(title, "ru"))
+            assertEquals(0, OptionMatcher.match(listOf("каждый"), listOf(title, "вода"), "ru"))
+            assertNull(OptionMatcher.match(listOf("о людях"), listOf(title, "вода"), "ru"))
+            assertNull(OptionMatcher.match(listOf("внутри"), listOf(title, "вода"), "ru"))
+        }
+    }
+
     @Test fun curatedWordDistractorsAppearAndRespectExclusionsAndLeaveASlotForScoring() {
         fun word(id: String, title: String, distractors: List<String> = emptyList(), exclusions: List<String> = emptyList()) =
             WordCard(id, id, title, "noun", emptyList(), quizExclusions = exclusions, quizDistractors = distractors)
