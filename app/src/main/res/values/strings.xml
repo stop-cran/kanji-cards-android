@@ -62,6 +62,12 @@
     <string name="word_tag_verb">verb</string>
     <string name="word_tag_voiced">voiced</string>
     <string name="study_due_new">%1$d due, %2$d new</string>
+    <string name="level_progress_accessibility">%1$s, %2$d%% solid progress, %3$d of %4$d skill-item entries</string>
+    <string name="level_progress_summary">Solid progress: %1$d%% (%2$d of %3$d skill-item entries)</string>
+    <string name="level_progress_skill">%1$s: %2$d%% (%3$d of %4$d)</string>
+    <string name="level_progress_unavailable">%1$s, no level-specific progress available</string>
+    <string name="level_skill_on_reading">On’yomi</string>
+    <string name="level_skill_kun_reading">Kun’yomi</string>
     <string name="daily_counts_show">Daily counts &amp; shared limits</string>
     <string name="daily_counts_hide">Hide daily-count help</string>
     <string name="daily_counts_settings">The limit applies separately to Kana and to content study. Each allowance follows your weekly rhythm and slows new introductions when reviews build up. Due reviews have no daily cap.</string>
@@ -1076,4 +1082,17 @@
     <string name="reading_quiz_mode_due">Review due</string>
     <string name="reading_quiz_mode_scheduled">Next review: %1$s. Starting earlier is extra practice.</string>
     <string name="reading_quiz_schedule">%1$s: %2$s</string>
+    <string name="advancement_title">Try %1$s?</string>
+    <string name="advancement_explanation">Your %1$s skills have sustained progress. You can start the next level while continuing your reviews.</string>
+    <string name="advancement_start">Start %1$s</string>
+    <string name="crash_report_settings">Last crash report</string>
+    <string name="crash_report_title">App crash report</string>
+    <string name="crash_report_privacy">The app saved this report on this device. It may contain personal information, file paths or other sensitive details. Review it before copying or sharing. Nothing is sent automatically.</string>
+    <string name="crash_report_none">No crash report is available.</string>
+    <string name="crash_report_copy">Copy</string>
+    <string name="crash_report_share">Share</string>
+    <string name="crash_report_dismiss">Dismiss</string>
+    <string name="crash_report_copied">Crash report copied.</string>
+    <string name="crash_report_share_unavailable">No app is available to share the report.</string>
+    <string name="crash_report_error">Could not access the crash report. Try again from Settings.</string>
 </resources>

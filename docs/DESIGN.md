@@ -23,6 +23,18 @@ usage, confusable kanji and word families, kept in a GitHub repo that the app pu
 6. **Never trust simulated tuning alone.** Matcher thresholds were first tuned on simulated hands; real exported drawings are fixtures
    (`RealDrawingsTest`). Prefer adding real fixtures over adjusting numbers blindly.
 
+### Local crash reports
+
+The main process installs a synchronous uncaught-exception handler in `Application.attachBaseContext`, before providers and normal
+application initialization. It atomically stores up to three size-bounded reports in private, no-backup storage, then delegates to
+Android's previous handler even if saving fails. For the immediate device diagnostic, Android 10+ also saves a copy to
+`Download/Enso Nihongo/Crash reports` before termination, so it can be retrieved over MTP without a working app or USB debugging.
+This shared folder can be read by the device user and apps with access to Downloads; reports contain a stack trace and device/build
+metadata and may contain sensitive details. The app does not upload reports. There is no automatic dialog during this diagnostic; Settings can
+open the latest private report for explicit Copy, Share or Dismiss if the app opens. Crashes before the handler is installed, native
+crashes, force-kills and low-memory termination cannot be captured. Public export is best effort; private persistence remains independent
+of a failure to write shared storage. Android 8–9 do not export to Downloads without a storage permission.
+
 ### EN/RU edition and repository-language binding
 
 The [shared language/source design](https://github.com/stop-cran/learning-japanese-ru/blob/main/docs/DESIGN.md)
@@ -172,6 +184,14 @@ Android/native pilot acceptance is a separate gate; archive parsing and resource
   by default; the hide/show preference is persisted, not inferred from familiarity. Captured word cards can open ordinary
   source-bound article routes, whose Back returns to the reader. Reader list state survives both its article panel and
   an intervening loading frame; serialized state writes preserve concurrent position, furigana and completion changes.
+  Ruby reserves measured pixel dimensions as em relative to the paragraph's actual paint size; paragraph lines grow
+  naturally around the tallest annotation. Converting those dimensions through sp is not reversible with Compose
+  1.9.2's linear placeholder backend and Android's nonlinear large-font scaling. A fixed paragraph line height can
+  also override the annotation's ascent. The reader puts its furigana action below the Back/title row, preserving
+  a usable title width at enlarged text without changing list indices or hiding/scaling down typography.
+  API-35 real-density regressions at normal and double font scale check actual child/glyph bounds, short and long
+  readings, compact reserves, complete unellipsized text, tapping and the narrow reader header. Paragraph allocation
+  width alone is not ink overflow; the actual native screenshots remain a separate visual acceptance gate.
   Room 23 retains distinct source/text/branch/version captures rather than reusing obsolete text on fresh browser entry.
   Study-next persists a source/word intent; the next eligible Word quiz supplies its actual deck and direction.
   Selection preserves gates, new allowance and due rules, with visible deferrals and token-qualified consumption
@@ -675,6 +695,34 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   Kanji reviews/options include easier levels while new kanji skills are selected-level only. Words/Listening N4 and counters N4/N3
   include easier levels, Grammar filters cumulative new material separately from exact-level browsing, and diagnostics select an exact
   level. The JLPT kanji state migration does not alter the other selectors' membership or schedules.
+- **Level progress (#141):** each selector's partial left-to-right fill and accessible description use that choice's exact
+  authored level inventory, even when the selected study scope is cumulative. A progress entry is one item in one skill; it is
+  solid only when its own persisted SRS state is in Review, has at least 7 days of stability, and at least 85% FSRS
+  retrievability. Counts are therefore skill-item evidence, not unique cards, correct answers in one session, due work, or an
+  allowance. Per-skill counts are shown for the selected choice. Empty inventories have no percentage; items without a
+  level-specific membership remain unclassified and cannot increase an exact-level numerator or denominator.
+- Kanji progress uses the selector's unique `jlpt-nN` tag membership (not the nullable entity-level field), and keeps meaning,
+  drawing, on'yomi and kun'yomi separate; conflicting/missing level tags are unclassified, and a kanji without strokes
+  contributes no drawing entry.
+  Word level uses the same explicit-level/kanji fallback as `inWordStack`, with each displayed level measured in that stack's
+  own SRS history. Counter modes are separate skills, and exact file levels are distinct from their cumulative N4/N3 scopes.
+  Grammar uses the exercise's authored `jlpt` and its single shared Grammar state; choose/type are not independent evidence.
+  Listening passage and task evidence remains separate and requires completed graded SRS state; exposure or a partial encounter
+  alone is not progress. Kana has no JLPT level, so script/mode progress is shown separately from its existing stability-based
+  unlock counts.
+- Optional recommendations are separate for Kanji, Words and Counters. They require a nonempty next-level inventory,
+  at least 20 exact-level skill-item entries, at least 85% solid overall and 60% in every nonempty skill. Each credited
+  solid entry must also have two successful recorded reviews at least 24 hours apart for that same source, stack, item,
+  mode and reading. This additional history requirement avoids treating same-session repetition as durable readiness;
+  old or incomplete histories are conservatively not credited. Kanji offers the next available adjacent JLPT level;
+  Words offers N4 from its own N5 stack, including all available directions; Counters offers N4 or N3 from the full
+  section rather than a selected group. Acceptance changes only the chosen section's selection; reviews are retained.
+  Later is persisted by source, section and current level for seven days, with the old global N4 dismissal honored
+  for its remaining interval. Neither empty target inventories nor "all caught up" imply advancement.
+- Grammar recommendations are deferred: its shared exercise schedule cannot distinguish choice from productive typing,
+  while group familiarity is not a level-wide skill criterion. Listening recommendations are deferred: a scored state does
+  not by itself distinguish independent comprehension from repeated or assisted exposure. Progress remains visible without
+  claiming next-level readiness; validated section-specific evidence and thresholds are needed before prompting.
 - Word stacks are cumulative in *membership* (`words-n4` includes N5 words) but keyed independently in SRS state, so switching from `words-n5`
   to `words-n4` starts those words afresh. Never share state across stacks.
 - **Onomatopoeia stack** (`words-onomatopoeia`, a `WordStack` with `tag = "onomatopoeia"`): membership is the word's tag alone, independent of
@@ -682,8 +730,8 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   `MIN_TAG_STACK_WORDS` (4) tagged words exist, even before N4 is unlocked, so a quiz always has distractors. It uses the normal word quiz
   directions, its own SRS state (a word studied here and in "All" has two schedules, as for N5/N4) and the shared daily new-card
   allowance. Distractors come only from the stack's own words, so options are all onomatopoeia. `offeredStacks()` keeps home, quizzes and
-  reminders in agreement; an unavailable saved stack falls back to N5. The N4 advancement offer needs the N5 word states, which exist only for
-  the selected stack, so `shouldOfferN4` makes no offer while any other stack (including this one) is selected.
+  reminders in agreement; an unavailable saved stack falls back to N5. The Words N4 offer uses the N5 stack's own history
+  and is shown only while that stack is selected.
 - **Named scenes and picture practice** (#45): optional `scenes/<word>.json` catalogs declare stable word-scoped scene IDs, taught-sense
   labels, English descriptions, image paths and explicit `quizEligible` booleans. Scene JSON uses a separate LF-normalized manifest
   `scenes` map; images use the raw-byte-hashed `images` map. Both contribute to the content version without creating errors on older
@@ -925,6 +973,31 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
    user taps (any `https://` link opens the browser; repo links must be exactly `kanji|words|articles/<file>.md`).
 8. Room schema changes need a migration; there is no destructive fallback and `exportSchema` is on (schemas in `app/schemas`), so a missing migration crashes.
 9. Source files have mixed LF/CRLF: check before multi-line text replacements.
+
+`docs/DB-VERSIONS.md` reserves Room versions across branches and records known identity collisions. Android unit tests
+compare each checked-out export's version and identity with the registry; this guard does not replace migration validation.
+
+An experimental Reading build used Room 22 before that feature was merged. Released Room 25 preserves its four Reading tables and
+sync metadata without exposing Reading. The accepted local Reading candidate allocates Room 26 (unpublished and locally
+provisional; see the registry),
+upgrading the retained 22/25 reader to capture-keyed snapshots and normalized words. Source sync now refreshes the Reading
+cache and metadata but never its captured readers, vocabulary, media, quizzes or progress. Version 21 follows the existing
+21-to-25 creation path; both recorded v22 identities follow main's identity-dispatched 22-to-25 path before the final upgrade.
+Reading 23 variant a additionally gains revision metadata and quiz tables; variant b already has them. Both then use the
+bounded legacy vocabulary migration. Reading 24 already has the target layout and retains its data unchanged.
+A second v22 identity, `c15c3d949cdafd3afc602dec4a00e947`, was observed in the phone's
+schema-only report and traced to a queued-learning build on top of `10d98d0`; its schema is preserved in `66ab6c73`,
+which does not prove installation of a binary from that commit. Its exported schema is v21 plus a
+`learning_queue` table and index. For this identity the migration adds the missing Reading schema without
+touching the queue; Room validates its managed tables transactionally and rejects incompatible schemas. The queue is retained
+as an unmanaged table, not exposed or modified by this build. Before Room opens an existing database, a read-only check admits
+only the exact recorded identities for versions 22 through 25; migration checks the identity again inside the transaction.
+Room updates the identity and `user_version` only after the whole chain, so a chained 25-to-26 step validates the original
+22 identity rather than expecting an intermediate 25 identity to have been written. The exported 23 variant-a fixture is
+retained separately from variant b; no arbitrary schema is admitted based on version alone. An unsupported
+identity produces a local crash report containing only version, identity and table/column metadata, never table rows. Both the read-only inspector and
+Room's open helper use non-deleting corruption callbacks; Android's default corruption handlers otherwise delete database files
+even when the initial inspection requested read-only access.
 
 The Kotlin/JVM `:core` module enforces the platform-independent boundary; `:app` owns Android, Room/KSP and UI.
 Existing Kotlin package names are unchanged. Shared test builders and media use JVM test fixtures rather than a core-to-app dependency.

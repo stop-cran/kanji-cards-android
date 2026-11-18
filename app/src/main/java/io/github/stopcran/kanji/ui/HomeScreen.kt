@@ -7,6 +7,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -41,6 +42,7 @@ import io.github.stopcran.kanji.core.words.WordDirection
 import io.github.stopcran.kanji.core.words.WordStacks
 import io.github.stopcran.kanji.core.unlock.UnlockRule
 import io.github.stopcran.kanji.data.inStack
+import io.github.stopcran.kanji.data.AdvancementSection
 
 /** Where the user can go from the home pages; sessions are started by the caller. */
 @Suppress("LongParameterList")
@@ -90,7 +92,6 @@ internal fun MainPage(
         if (content.usable) LoadingBar(data)
         val defaultId = remember { RepoSource.parse(Defaults.CONTENT_REPO_URL, Defaults.CONTENT_BRANCH)?.id }
         if (data.sourceId != defaultId) Text(stringResource(R.string.cards_from, data.sourceId))
-        N4Offer(preferences, data)
         PacingHint(data)
         StartingGuide(overview.startingGuideVisible, preferences.showStartingGuide, a.onKanaPage, a.onWordsPage, a.onGrammarPage)
         DailyCountsHelp(overview.kanaAllowance, data.pacing)
@@ -118,9 +119,18 @@ internal fun KanjiPage(data: HomeData, preferences: HomePreferencesActions, onBa
         if (data.stacks.size > 1) {
             LevelFilter(data.stacks, data.stack, { preferences.selectStack(it.id) }, { context.getString(stackLabel(it.id)) },
                 description = if (Stacks.jlptLevel(data.stack.id) != null)
-                    stringResource(R.string.level_filter_kanji_cumulative, context.getString(stackLabel(data.stack.id))) else null)
+                    stringResource(R.string.level_filter_kanji_cumulative, context.getString(stackLabel(data.stack.id))) else null,
+                progress = { data.kanjiProgress[it.id] }, skillLabel = { homeProgressSkillLabel(it) })
             if (Stacks.jlptLevel(data.stack.id) == null) {
                 Text(stringResource(R.string.each_stack_keeps_its_own), style = MaterialTheme.typography.bodySmall)
+            }
+            data.kanjiOffer?.let { next ->
+                val level = requireNotNull(Stacks.jlptLevel(data.stack.id))
+                AdvancementOffer(
+                    context.getString(stackLabel(data.stack.id)), context.getString(stackLabel(next)),
+                    onStart = { preferences.selectStack(next) },
+                    onLater = { preferences.dismissLevel(AdvancementSection.Kanji, level) },
+                )
             }
         }
         KanjiFocusGuidance(data.focus)
@@ -146,7 +156,8 @@ internal fun WordsPage(
         N4Offer(preferences, data)
         if (data.wordStacks.size > 1) {
             LevelFilter(data.wordStacks, data.wordStack, { preferences.selectWordStack(it.id) }, { context.getString(wordStackLabel(it.id)) },
-                description = if (data.wordStack == WordStacks.n4) stringResource(R.string.level_filter_includes_easier) else null)
+                description = if (data.wordStack == WordStacks.n4) stringResource(R.string.level_filter_includes_easier) else null,
+                progress = { data.wordProgress[it.id] }, skillLabel = { homeProgressSkillLabel(it) })
         }
         WordUnlockHelp()
         WordModeRow(data, stringResource(R.string.mode_japanese_english), HomeMode.WordJp, WordDirection.JpToEn) { onStart(WordDirection.JpToEn, it) }
@@ -165,6 +176,21 @@ internal fun WordsPage(
             Text(stringResource(R.string.browse_words))
         }
     }
+}
+
+@Composable
+private fun homeProgressSkillLabel(skill: String): String = when (skill) {
+    "meaning" -> stringResource(R.string.mode_meaning)
+    "drawing" -> stringResource(R.string.mode_drawing)
+    "onReading" -> stringResource(R.string.level_skill_on_reading)
+    "kunReading" -> stringResource(R.string.level_skill_kun_reading)
+    "JpToEn" -> stringResource(R.string.mode_japanese_english)
+    "EnToJp" -> stringResource(R.string.mode_english_japanese)
+    "Reading" -> stringResource(R.string.mode_reading)
+    "Type" -> stringResource(R.string.mode_type_it)
+    "Picture" -> stringResource(R.string.mode_picture_word)
+    "WordToPicture" -> stringResource(R.string.mode_word_picture)
+    else -> skill
 }
 
 @Composable
@@ -275,13 +301,21 @@ internal fun pacingExplanation(p: NewAllowance, context: android.content.Context
 @Composable
 private fun N4Offer(preferences: HomePreferencesActions, data: HomeData) {
     if (!data.n4Offer) return
+    AdvancementOffer(
+        stringResource(R.string.level_n5), stringResource(R.string.level_n4),
+        onStart = preferences.acceptN4, onLater = preferences.dismissN4,
+    )
+}
+
+@Composable
+internal fun AdvancementOffer(current: String, next: String, onStart: () -> Unit, onLater: () -> Unit) {
     Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.you_know_n5_well), style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(R.string.most_n5_kanji_and_words))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = preferences.acceptN4) { Text(stringResource(R.string.add_n4_words)) }
-                TextButton(onClick = preferences.dismissN4) { Text(stringResource(R.string.not_yet)) }
+            Text(stringResource(R.string.advancement_title, next), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.advancement_explanation, current))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onStart) { Text(stringResource(R.string.advancement_start, next)) }
+                TextButton(onClick = onLater) { Text(stringResource(R.string.not_yet)) }
             }
         }
     }

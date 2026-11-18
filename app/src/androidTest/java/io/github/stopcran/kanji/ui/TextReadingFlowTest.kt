@@ -3,6 +3,7 @@ package io.github.stopcran.kanji.ui
 import android.graphics.Bitmap
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.StateRestorationTester
@@ -34,14 +35,24 @@ class TextReadingFlowTest {
     @get:Rule val rule = createComposeRule()
 
     @Test fun capturedArticleAndReaderPositionSurviveALoadingRestorationFrame() {
-        val repository = MemoryRepository(reader())
+        ReadingNativeProcessEvidence.capture("saved-state-restoration")
+        val initialLoad = CompletableDeferred<Unit>()
+        val repository = MemoryRepository(reader()).apply { openGate = initialLoad }
+        var current: TextReadingViewModel? = null
         val restoration = StateRestorationTester(rule)
         restoration.setContent {
             MaterialTheme {
                 val vm = remember { TextReadingViewModel(repository, "fixture/reading", "reading-fixture-peach") }
+                SideEffect { current = vm }
                 TextReadingScreen(vm, {}, {})
             }
         }
+        rule.waitForIdle()
+        rule.runOnIdle {
+            assertEquals(TextReadingUi.Loading, current?.ui)
+            initialLoad.complete(Unit)
+        }
+        awaitReaderReady { current?.ui }
         rule.onNodeWithTag("reading-sections").performScrollToIndex(3)
         rule.waitUntil { repository.saved.saved.sectionIndex == 3 }
         rule.onNodeWithTag("reading-word:section-a:3").performClick()
@@ -51,17 +62,37 @@ class TextReadingFlowTest {
         val gate = CompletableDeferred<Unit>()
         rule.runOnIdle { repository.openGate = gate }
         restoration.emulateSavedInstanceStateRestore()
+        rule.waitForIdle()
+        rule.runOnIdle { assertEquals(TextReadingUi.Loading, current?.ui) }
         rule.onNodeWithText("Captured peach article").assertDoesNotExist()
         rule.runOnIdle { gate.complete(Unit) }
+        awaitReaderReady { current?.ui }
         rule.onNodeWithText("Captured peach article").assertExists()
         screenshot("reading-restored-article")
         rule.onNodeWithContentDescription("Back").performClick()
         rule.onNodeWithTag("reading-word:section-a:3").assertExists()
         rule.runOnIdle { assertEquals(3, repository.saved.saved.sectionIndex) }
         rule.onNodeWithText("Hide readings").performClick()
+        rule.waitUntil(20_000) {
+            rule.runOnIdle {
+                (current?.ui as? TextReadingUi.Ready)?.reader?.saved?.furigana == false &&
+                    !repository.saved.saved.furigana
+            }
+        }
         rule.onNodeWithText("Show readings").assertExists()
         rule.runOnIdle { assertFalse(repository.saved.saved.furigana) }
         screenshot("reading-restored-position")
+    }
+
+    private fun awaitReaderReady(current: () -> TextReadingUi?) {
+        rule.waitUntil(20_000) {
+            rule.runOnIdle {
+                val state = current()
+                assertFalse("Captured Reading fixture became unavailable", state is TextReadingUi.Unavailable)
+                state is TextReadingUi.Ready
+            }
+        }
+        rule.waitForIdle()
     }
 
     private fun reader(): ReadingReader {

@@ -128,6 +128,8 @@ data class ReviewStateEntity(
     @ColumnInfo(defaultValue = "''") val reading: String = "",
 )
 
+data class DurableReviewKey(val stack: String, val kanji: String, val mode: String, val reading: String)
+
 @Entity(
     tableName = "review_log",
     indices = [
@@ -585,6 +587,12 @@ interface ReviewDao {
     @Query("SELECT * FROM review_log ORDER BY atMs, id")
     suspend fun allLog(): List<ReviewLogEntity>
 
+    @Query(
+        "SELECT stack, kanji, mode, reading FROM review_log WHERE sourceId = :sourceId AND grade > 1 AND atMs <= :nowMs " +
+            "GROUP BY stack, kanji, mode, reading HAVING MAX(atMs) - MIN(atMs) >= 86400000",
+    )
+    suspend fun durableReviewKeys(sourceId: String, nowMs: Long): List<DurableReviewKey>
+
     @Query("SELECT * FROM grammar_responses ORDER BY reviewLogId")
     suspend fun allGrammarResponses(): List<GrammarResponseEntity>
 
@@ -681,7 +689,7 @@ interface ReviewDao {
         ReadingEntity::class, ReadingImageEntity::class, ReadingReaderEntity::class, ReadingReaderImageEntity::class, ReadingReaderWordEntity::class,
         ReadingWordIntentEntity::class, ReadingProgressEntity::class, ReadingQuizEntity::class,
     ],
-    version = 24,
+    version = 26,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -722,15 +730,7 @@ val MIGRATION_22_23 = object : androidx.room.migration.Migration(22, 23) {
             "CREATE TABLE IF NOT EXISTS reading_word_intents (sourceId TEXT NOT NULL, word TEXT NOT NULL, token TEXT NOT NULL, " +
                 "requestedAtMs INTEGER NOT NULL, PRIMARY KEY(sourceId, word))",
         )
-        db.execSQL(
-            "CREATE TABLE reading_progress (sourceId TEXT NOT NULL, textId TEXT NOT NULL, unlockedTier INTEGER NOT NULL, " +
-                "PRIMARY KEY(sourceId, textId))",
-        )
-        db.execSQL(
-            "CREATE TABLE reading_quizzes (id TEXT NOT NULL PRIMARY KEY, sourceId TEXT NOT NULL, textId TEXT NOT NULL, " +
-                "captureId TEXT NOT NULL, planJson TEXT NOT NULL, answersJson TEXT NOT NULL, startedAtMs INTEGER NOT NULL, newReservation INTEGER NOT NULL, " +
-                "submittedAtMs INTEGER, resultJson TEXT, reviewLogId INTEGER, closedAtMs INTEGER)",
-        )
+        createReadingQuizTables(db)
     }
 }
 
@@ -756,6 +756,25 @@ val MIGRATION_21_22 = object : androidx.room.migration.Migration(21, 22) {
             "CREATE TABLE IF NOT EXISTS reading_reader_images (sourceId TEXT NOT NULL, textId TEXT NOT NULL, path TEXT NOT NULL, " +
                 "sha256 TEXT NOT NULL, bytes BLOB NOT NULL, PRIMARY KEY(sourceId, textId, path))",
         )
+    }
+}
+
+val MIGRATION_22_25 = object : androidx.room.migration.Migration(22, 25) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        val identity = db.query("SELECT identity_hash FROM room_master_table WHERE id = 42").use {
+            if (it.moveToFirst()) it.getString(0) else null
+        }
+        when (identity) {
+            READING_22_IDENTITY -> Unit
+            QUEUE_22_IDENTITY -> MIGRATION_21_25.migrate(db)
+            else -> error("Unsupported version 22 database identity; migration refused")
+        }
+    }
+}
+
+val MIGRATION_21_25 = object : androidx.room.migration.Migration(21, 25) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        MIGRATION_21_22.migrate(db)
     }
 }
 

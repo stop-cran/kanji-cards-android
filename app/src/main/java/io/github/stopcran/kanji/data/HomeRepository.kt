@@ -24,6 +24,7 @@ internal data class HomeStudyPreferences(
 internal data class HomeSelection(
     val source: RepoSource, val stackId: String, val wordStackId: String,
     val n4Unlocked: Boolean, val dismissedMs: Long, val study: HomeStudyPreferences,
+    val advancementDismissals: Map<AdvancementKey, Long> = emptyMap(),
 )
 
 internal class HomeInventory(val selection: HomeSelection, val kanji: List<KanjiEntity>, val words: List<WordEntity>) {
@@ -45,6 +46,8 @@ internal data class HomeSnapshot(
     val introducedReadings: Int,
     val padModes: Set<StudyMode>,
     val focus: FocusStatus?,
+    val statesByStack: Map<String, Map<StudyMode, Map<String, SrsState>>> = emptyMap(),
+    val durableStatesByStack: Map<String, Map<StudyMode, Map<String, SrsState>>> = emptyMap(),
 )
 
 internal interface HomeRepository {
@@ -61,10 +64,12 @@ internal class RoomHomeRepository(private val db: AppDatabase, private val setti
     ) { daily, week, unlock, focus, size -> HomeStudyPreferences(daily, week, unlock, focus, size) }
     override val selection = combine(
         settings.source, settings.stack, settings.wordStack,
-        combine(settings.n4Unlocked, settings.advanceDismissedMs) { unlocked, dismissed -> unlocked to dismissed },
+        combine(settings.n4Unlocked, settings.advanceDismissedMs, settings.advancementDismissals) { unlocked, dismissed, dismissals ->
+            Triple(unlocked, dismissed, dismissals)
+        },
         study,
     ) { source, stack, words, advancement, preferences ->
-        HomeSelection(source, stack, words, advancement.first, advancement.second, preferences)
+        HomeSelection(source, stack, words, advancement.first, advancement.second, preferences, advancement.third)
     }
 
     override fun ready(source: RepoSource) = db.content().observeContentReady(source.id)
@@ -79,11 +84,30 @@ internal class RoomHomeRepository(private val db: AppDatabase, private val setti
         val inventory = HomeInventory(selection, db.content().kanjiLite(source), db.content().wordsLite(source))
         val reviews = db.reviews()
         val kanjiModes = listOf(StudyMode.Quiz, StudyMode.Draw, StudyMode.KanjiOn, StudyMode.KanjiKun)
-        val states = (kanjiModes + WordDirection.entries.map { it.mode }).associateWith { mode ->
-            val stack = if (mode in kanjiModes) Stacks.stateId(inventory.stack.id) else inventory.wordStack.id
-            val rows = reviews.states(source, stack, mode.name)
-            if (mode == StudyMode.KanjiOn || mode == StudyMode.KanjiKun) rows.toReadingStates()
-            else rows.associate { it.kanji to it.toSrs() }
+        val modes = kanjiModes + WordDirection.entries.map { it.mode }
+        val rowsByMode = modes.associateWith { mode -> reviews.statesAcrossStacks(source, mode.name) }
+        val stackIds = (inventory.stacks.map { Stacks.stateId(it.id) } + inventory.wordStacks.map { it.id }).distinct()
+        val statesByStack = stackIds.associateWith { stack ->
+            rowsByMode.mapValues { (mode, rows) ->
+                val matching = rows.filter { it.stack == stack }
+                if (mode == StudyMode.KanjiOn || mode == StudyMode.KanjiKun) matching.toReadingStates()
+                else matching.associate { it.kanji to it.toSrs() }
+            }
+        }
+        val durableKeys = reviews.durableReviewKeys(source, now.toEpochMilli()).toSet()
+        val durableStatesByStack = stackIds.associateWith { stack ->
+            rowsByMode.mapValues { (mode, rows) ->
+                val matching = rows.filter { row ->
+                    row.stack == stack && DurableReviewKey(stack, row.kanji, mode.name, row.reading) in durableKeys
+                }
+                if (mode == StudyMode.KanjiOn || mode == StudyMode.KanjiKun) matching.toReadingStates()
+                else matching.associate { it.kanji to it.toSrs() }
+            }
+        }
+        val kanjiStates = statesByStack[Stacks.stateId(inventory.stack.id)].orEmpty()
+        val wordStates = statesByStack[inventory.wordStack.id].orEmpty()
+        val states = modes.associateWith { mode ->
+            if (mode in kanjiModes) kanjiStates[mode].orEmpty() else wordStates[mode].orEmpty()
         }
         val pad = kanjiModes.filterTo(HashSet()) { mode ->
             val pool = if (mode == StudyMode.Draw) inventory.kanji.filter { it.strokesJson != null } else inventory.kanji
@@ -108,7 +132,7 @@ internal class RoomHomeRepository(private val db: AppDatabase, private val setti
             reviews.readingCardsIntroducedSince(
                 source, Stacks.stateId(inventory.stack.id), now.atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli(),
             ),
-            pad, focus,
+            pad, focus, statesByStack, durableStatesByStack,
         )
     }
 }

@@ -163,7 +163,7 @@ class HomePresentationTest {
             emptyMap(), HomeGuidance(true),
         )
         rule.setContent { MaterialTheme { WordsPage(preferences, data, {}, {}) { _, _ -> } } }
-        rule.onNodeWithText("Add N4 words").assertIsDisplayed().performClick()
+        rule.onNodeWithText("Start N4").assertIsDisplayed().performClick()
         assertTrue(accepted)
     }
 }

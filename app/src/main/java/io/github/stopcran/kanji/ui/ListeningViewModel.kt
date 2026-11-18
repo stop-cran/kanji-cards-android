@@ -17,6 +17,8 @@ import io.github.stopcran.kanji.Services
 import io.github.stopcran.kanji.core.listening.ListeningAttempt
 import io.github.stopcran.kanji.core.listening.ListeningPassage
 import io.github.stopcran.kanji.core.listening.ListeningTiming
+import io.github.stopcran.kanji.core.listening.ListeningScope
+import io.github.stopcran.kanji.core.srs.StudyProgress
 import io.github.stopcran.kanji.core.srs.PacingNote
 import io.github.stopcran.kanji.data.*
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +41,7 @@ internal data class ListeningHomeState(
     val overview: ListeningOverview? = null, val error: String? = null,
     val queue: ListeningQueue? = null, val resumes: List<ListeningResume> = emptyList(),
     val assessmentPending: Boolean = false, val taskNotice: String? = null,
+    val progress: Map<ListeningScope, StudyProgress> = emptyMap(),
 ) {
     @Composable
     fun localizedSummary(): String = overview?.let { data ->

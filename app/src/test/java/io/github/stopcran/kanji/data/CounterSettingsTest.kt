@@ -13,6 +13,23 @@ import org.robolectric.annotation.Config
 @Config(sdk = [28], manifest = Config.NONE, application = Application::class)
 class CounterSettingsTest {
     @Test
+    fun advancementDismissalsArePersistentAndScopedBySourceSectionAndLevel() {
+        val context = RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("settings", 0).edit().clear().commit()
+        val first = AdvancementKey("owner/repo", AdvancementSection.Counters, 5)
+        val otherLevel = first.copy(level = 4)
+        val otherSection = first.copy(section = AdvancementSection.Words)
+        val otherSource = first.copy(sourceId = "owner/fork")
+        val settings = Settings(context)
+        settings.dismissAdvancement(first, 1234)
+        val restored = Settings(context).advancementDismissals.value
+        assertEquals(1234L, restored[first])
+        assertEquals(null, restored[otherLevel])
+        assertEquals(null, restored[otherSection])
+        assertEquals(null, restored[otherSource])
+    }
+
+    @Test
     fun selectionPersistsAcrossProcessAndSourceChangesWithoutChangingOtherStudySettings() {
         val context = RuntimeEnvironment.getApplication()
         context.getSharedPreferences("settings", 0).edit().clear().commit()

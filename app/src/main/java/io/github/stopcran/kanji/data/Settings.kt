@@ -31,6 +31,9 @@ data class GrammarBrowserPreferences(val kind: GrammarTargetKind = GrammarTarget
 
 data class PendingSourceCandidate(val token: String, val url: String, val branch: String, val source: RepoSource)
 
+enum class AdvancementSection { Kanji, Words, Counters }
+data class AdvancementKey(val sourceId: String, val section: AdvancementSection, val level: Int)
+
 class Settings(context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     val sync = SyncPreferences(prefs, ::updateGrammarEpoch)
@@ -343,6 +346,26 @@ class Settings(context: Context) {
         prefs.edit().putLong(KEY_ADVANCE_DISMISSED, nowMs).apply()
         _advanceDismissedMs.value = nowMs
     }
+
+    private val _advancementDismissals = MutableStateFlow(loadAdvancementDismissals())
+    val advancementDismissals: StateFlow<Map<AdvancementKey, Long>> = _advancementDismissals
+
+    fun dismissAdvancement(key: AdvancementKey, nowMs: Long) {
+        require(key.level in 1..5 && '|' !in key.sourceId)
+        prefs.edit().putLong("advancement:${key.sourceId}|${key.section.name}|${key.level}", nowMs).apply()
+        _advancementDismissals.update { it + (key to nowMs) }
+    }
+
+    private fun loadAdvancementDismissals(): Map<AdvancementKey, Long> =
+        prefs.all.mapNotNull { (name, value) ->
+            if (!name.startsWith("advancement:") || value !is Long) return@mapNotNull null
+            val parts = name.removePrefix("advancement:").split('|')
+            if (parts.size != 3 || parts[0].isEmpty()) return@mapNotNull null
+            val section = AdvancementSection.entries.firstOrNull { it.name == parts.getOrNull(1) }
+            val level = parts.getOrNull(2)?.toIntOrNull()
+            if (section == null || level == null || level !in 1..5) null
+            else AdvancementKey(parts[0], section, level) to value
+        }.toMap()
 
     private val _reminderEnabled = MutableStateFlow(prefs.getBoolean(KEY_REMIND, false))
     val reminderEnabled: StateFlow<Boolean> = _reminderEnabled

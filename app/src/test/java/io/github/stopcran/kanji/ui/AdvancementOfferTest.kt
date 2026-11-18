@@ -1,10 +1,7 @@
 package io.github.stopcran.kanji.ui
 
-import io.github.stopcran.kanji.core.srs.CardPhase
-import io.github.stopcran.kanji.core.srs.SrsState
-import io.github.stopcran.kanji.core.words.WordStacks
-import io.github.stopcran.kanji.data.KanjiEntity
-import io.github.stopcran.kanji.data.WordEntity
+import io.github.stopcran.kanji.core.srs.ProgressCount
+import io.github.stopcran.kanji.core.srs.StudyProgress
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -12,23 +9,25 @@ import java.time.Instant
 
 class AdvancementOfferTest {
     private val now = Instant.parse("2026-01-10T00:00:00Z")
-    private val solid = SrsState(CardPhase.Review, 30.0, 5.0, now, now.minusSeconds(86400), 3)
-    private val kanji = (1..20).map { KanjiEntity("s", "k$it", "t", 5, "", null, null, null, "", "", "", "", null, it) }
-    private val words = (1..20).map { WordEntity("s", "w$it", "w$it", "m", null, "", "", "", 5) }
+    private val target = StudyProgress(mapOf("next" to ProgressCount(0, 1)))
 
-    private fun states(ids: List<String>) = ids.associateWith { solid }
-
-    private fun offer(stack: io.github.stopcran.kanji.core.words.WordStack): Boolean {
-        val set = StateSet(
-            states(kanji.map { it.kanji }), emptyMap(), emptyMap(), emptyMap(),
-            states(words.map { it.word }), states(words.map { it.word }), states(words.map { it.word }),
+    @Test
+    fun thresholdRequiresOverallAndEachSkillAndAnActualNextInventory() {
+        fun progress(choose: Int, type: Int) = StudyProgress(
+            mapOf("Choose" to ProgressCount(choose, 15), "Type" to ProgressCount(type, 5)),
         )
-        return shouldOfferN4(kanji, words, emptyMap(), stack, set, n4Unlocked = false, dismissedMs = 0, now = now, nowMs = now.toEpochMilli())
+        assertTrue(offerNextLevel(progress(14, 3), target, 0, now))
+        assertFalse(offerNextLevel(progress(13, 3), target, 0, now))
+        assertFalse(offerNextLevel(progress(15, 2), target, 0, now))
+        assertFalse(offerNextLevel(progress(15, 5), StudyProgress(emptyMap()), 0, now))
+        assertFalse(offerNextLevel(null, target, 0, now))
     }
 
     @Test
-    fun offerIsMadeOnlyFromTheN5WordStack() {
-        assertTrue(offer(WordStacks.n5))
-        assertFalse(offer(WordStacks.onomatopoeia))
+    fun dismissalExpiresAtSevenDays() {
+        val progress = StudyProgress(mapOf("skill" to ProgressCount(17, 20)))
+        val dismissed = now.toEpochMilli()
+        assertFalse(offerNextLevel(progress, target, dismissed, now.plusSeconds(7 * 86_400 - 1)))
+        assertTrue(offerNextLevel(progress, target, dismissed, now.plusSeconds(7 * 86_400)))
     }
 }

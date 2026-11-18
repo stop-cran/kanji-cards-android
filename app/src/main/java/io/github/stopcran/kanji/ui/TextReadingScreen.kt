@@ -109,7 +109,7 @@ private fun ReadingReaderBody(
             snapshotFlow { scroll.firstVisibleItemIndex to scroll.firstVisibleItemScrollOffset }
                 .distinctUntilChanged().collect { (index, offset) -> vm.position(index, offset) }
         }
-        Page(reader.content.title, onBack, scrollable = false, actions = {
+        Page(reader.content.title, onBack, scrollable = false, actionsBelowTitle = true, actions = {
             TextButton(onClick = vm::toggleFurigana) {
                 Text(stringResource(if (reader.saved.furigana) R.string.reading_hide_furigana else R.string.reading_show_furigana))
             }

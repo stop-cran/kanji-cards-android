@@ -34,6 +34,9 @@ The current module inventory lives in `settings.gradle.kts`; build tasks and int
   Pilot A expectations. Rerun `:core:cleanTest :core:test` with the selected cases when only the
   external archive changes, and check XML for actual executions rather than assumption skips.
 - Emulator (Pixel 9, API 35), adb driving, screenshots and copying an APK to the phone: see the `android-emulator` skill in `.github/skills/`.
+- Crash investigation and private phone reports: load the `android-crash-triage` skill.
+- Reserve new Room versions in `docs/DB-VERSIONS.md` before changing or exporting a schema; record every identity and resolve
+  branch collisions explicitly. The registry check runs with Android unit tests.
 - Gradle treats `RealContentTest.parsesRealContentRepoWhenPresent` as up to date when only the sibling content clone changed; re-run it with
   `.\gradlew.bat :core:cleanTest :core:test cleanTestDebugUnitTest testDebugUnitTest --tests '*ContentTest*'` after pulling or editing the sibling
   content checkout (`..\learning-japanese` from the repository root, `..\..\learning-japanese` from `app` or `core`).
@@ -63,6 +66,14 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 
 ## Gotchas
 
+- Crash reports are written before delegation and mirrored best-effort to app-owned MediaStore Downloads on Android 10+.
+  Repeated native startup probes need `am start -S`: otherwise an existing top activity can receive the intent without
+  recreating the provider, so repeated starts do not prove repeated crashes.
+- Experimental Reading used Room 22, 23 and 24 on a separate branch. Main's 25 preserves the recorded v22 Reading
+  tables and metadata; reconcile the branch's later schemas explicitly rather than reusing version numbers or dropping data.
+  Use the non-deleting corruption handlers for both read-only SQLite inspection and Room: Android's defaults can delete corrupt files.
+  The phone's other v22 identity came from an uncommitted queued-learning build based on `10d98d0`: v21 plus `learning_queue`.
+  Preserve that unmanaged table and its index, and gate its migration by identity plus Room's transactional schema validation.
 - JLPT kanji selectors share `kanji-jlpt` state but retain exact-level new-card eligibility in all three modes,
   including extra practice. Preserve legacy level logs for unlock/pacing and never borrow higher-level cards to pad a JLPT session.
 
@@ -239,8 +250,19 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   and stability all matter; started modes remain eligible. Candidate-pool size is not the unlocked-target count.
 - Large word text must not inherit body line height: use proportional spacing and renderer-based fitting, with readable wrapping at the
   size floor. Preserve annotated reading links and test their bold metrics/clicks under narrow widths and enlarged text.
+- Reading ruby uses actual-paint-relative em reserves and natural paragraph height. Compose 1.9.2's SP placeholder backend is
+  linear, unlike API-35 large-font conversion; fixed line height can override ruby ascent. Test real-density 1x/2x child/glyph
+  fit, varied long readings and complete text, not only placeholder rectangles or `hasVisualOverflow`'s allocation-width flag.
+  Keep the reader's furigana control out of the Back/title width budget and inspect actual native images separately.
 - Level chips use bare N5-N1/All labels; explain cumulative versus exact scope outside the shared `LevelFilter` row.
   Never infer membership or saved identity from a chip's text or position; concise labels do not unify scope semantics.
+- Advancement recommendations use exact-level per-skill solid states plus two successful same-key reviews at least 24 hours apart;
+  visible progress alone is not proof of spaced evidence. Dismissals are source/section/level-scoped.
+- Progress fill for a cumulative level chip is computed from its exact authored-level inventory and that section's own
+  persisted skill states, not the current cumulative queue. Keep each skill's evidence separate, exclude unclassified items
+  from exact JLPT levels, and do not treat empty/due-free queues or transient answers as durable progress.
+- Kanji exact-level progress follows a unique `jlpt-nN` membership tag, matching `Stacks` selectors; conflicting or absent
+  level tags remain unclassified even if other fields suggest a level.
 - Native browser tests must reveal the outer Page's chip row/list before scrolling the inner viewport.
   Returning from a vocabulary article restores its lookup dialog; close that dialog before testing question controls.
 - Candidate Grammar chapters can span several article sets. Derive expected membership from the catalog and authored groups;
@@ -330,6 +352,9 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   the declared curriculum/leaf-edge provenance. Plain `GrammarSet` deserialization intentionally ignores that transport field;
   comparing it unchanged with imported groups worked only while the real corpus had no new gates.
 - **Room:** list columns are joined with `SEP` (`\u001F`); use `joinSep()`/`splitSep()`. `review_log.id` is auto-generated, so pass `0`.
+  Chained Room migrations retain the original `user_version` and identity until the entire chain succeeds. Validate
+  historical identities against the original version, not an intermediate migration target; preserve queued-v22 extras
+  and main's non-deleting corruption factory when adapting the Reading snapshots.
   Kanji quiz-reading columns distinguish NULL (legacy full list) from empty (no questions); never replace empty with full.
   Keep full readings for wrong-option exclusion. The reading parser epoch lives in Room sync metadata and advances in the
   accepted content transaction, not in SharedPreferences; migrations preserve both metadata and every excluded key's history.

@@ -34,6 +34,15 @@ import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.data.ListeningOverview
 import io.github.stopcran.kanji.core.listening.*
 import io.github.stopcran.kanji.core.srs.Grade
+import io.github.stopcran.kanji.core.srs.SrsState
+import io.github.stopcran.kanji.core.srs.StudyProgress
+import io.github.stopcran.kanji.core.words.Advancement
+import io.github.stopcran.kanji.core.listening.ListeningScope
+import io.github.stopcran.kanji.core.listening.ListeningTaskPolicy
+import io.github.stopcran.kanji.core.listening.TaskUsage
+import io.github.stopcran.kanji.data.ListeningEntity
+import io.github.stopcran.kanji.data.ListeningTaskEntity
+import io.github.stopcran.kanji.data.toSrs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -42,6 +51,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import java.util.Locale
+import java.time.Instant
 
 @Composable
 internal fun listeningCooldownLocalizedText(until: java.time.Instant): String {
@@ -102,16 +112,71 @@ internal fun rememberListeningHome(services: Services, format: String = "all"): 
                     flow { while (true) { emit(Unit); delay(30_000) } },
                 )) { Unit }.collectLatest {
                     value = services.db.withTransaction {
+                        val passages = services.db.listening().passages(source.id)
+                        val tasks = services.db.listeningTasks().tasks(source.id)
+                        val durableStates = services.db.reviews().states(source.id, LISTENING_STACK, LISTENING_MODE)
+                            .filter { it.reading.isEmpty() }
+                            .associate { it.kanji to it.toSrs() }
                         ListeningHomeState(services.listening.overview(source.id, format),
                             queue = services.listeningTasks.overview(source.id, format),
                             resumes = services.db.listening().open() + services.db.listeningTasks().open() +
                                 services.db.listeningTasks().openAssessments(),
                             assessmentPending = services.db.listeningTasks().activeAssessment(source.id) != null,
-                            taskNotice = services.db.listeningTasks().sync(source.id)?.problem)
+                            taskNotice = services.db.listeningTasks().sync(source.id)?.problem,
+                            progress = listeningProgress(passages, tasks, durableStates, Instant.now()))
                     }
                 }
             }
         }
+    }
+}
+
+internal fun listeningProgress(
+    passages: List<ListeningEntity>,
+    tasks: List<ListeningTaskEntity>,
+    states: Map<String, SrsState>,
+    now: Instant,
+): Map<ListeningScope, StudyProgress> {
+    val playablePassages = playableListeningPassages(passages)
+    val playableTasks = playableScoredTasks(tasks)
+    return ListeningScope.entries.associateWith { scope ->
+        val level = when (scope) {
+            ListeningScope.N5 -> 5
+            ListeningScope.N4 -> 4
+        }
+        Advancement.progress(
+            mapOf(
+                "passages" to playablePassages.filter { it.second == level }.map { states[it.first] },
+                "tasks" to playableTasks.filter { it.second == level }.map { states[it.first] },
+            ),
+            now,
+        )
+    }
+}
+
+private fun playableListeningPassages(passages: List<ListeningEntity>): List<Pair<String, Int?>> =
+    passages.mapNotNull { row ->
+        if (!row.ready) return@mapNotNull null
+        runCatching { ListeningContent.parse("listening/${row.id}.json", row.json) }
+            .getOrNull()
+            ?.takeIf { it.ready && it.contentHash == row.contentHash && it.passage.audio?.sha256 == row.audioHash }
+            ?.let { row.id to it.passage.jlpt }
+    }
+
+private fun playableScoredTasks(tasks: List<ListeningTaskEntity>): List<Pair<String, Int?>> {
+    val supportedTypes = ListeningTaskPolicy.supportedTypes.map { it.wire }
+    return tasks.mapNotNull { row ->
+        if (!row.ready || row.usage != TaskUsage.Scored.name || row.taskType !in supportedTypes) {
+            return@mapNotNull null
+        }
+        val json = row.json ?: return@mapNotNull null
+        runCatching { ListeningTaskContent.parse("listening-tasks/${row.id}.json", json) }
+            .getOrNull()
+            ?.takeIf {
+                it.ready && it.contentHash == row.contentHash && it.task.taskType.wire == row.taskType &&
+                    it.task.exposureId == row.exposureId && it.task.usage == TaskUsage.Scored
+            }
+            ?.let { row.id to it.task.jlpt }
     }
 }
 

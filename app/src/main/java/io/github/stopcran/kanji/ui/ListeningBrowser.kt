@@ -61,7 +61,15 @@ internal fun ListeningBrowser(
         LevelFilter(ListeningScope.entries, level, { services.settings.setListeningScope(source.id, it); error = null }, { it.label },
             description = if (level == ListeningScope.N4)
                 stringResource(R.string.level_filter_includes_easier) else null,
-            enabled = !busy)
+            enabled = !busy,
+            progress = { home.progress[it] },
+            skillLabel = {
+                when (it) {
+                    "passages" -> stringResource(R.string.listening_legacy_filter)
+                    else -> stringResource(R.string.listening_task_default_title)
+                }
+            },
+        )
         ListeningFormatFilter(filter, !busy) { filter = it; error = null }
         (error ?: home.error)?.let { Text(stringResource(R.string.listening_generic_error), color = MaterialTheme.colorScheme.error) }
         val data = home.overview

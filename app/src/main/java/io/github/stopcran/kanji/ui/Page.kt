@@ -40,6 +40,7 @@ fun Page(
     ime: Boolean = false,
     scrollToTopOnBack: Boolean = false,
     footer: (@Composable ColumnScope.() -> Unit)? = null,
+    actionsBelowTitle: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val scroll = rememberScrollState()
@@ -55,7 +56,12 @@ fun Page(
                 modifier = Modifier.semantics { contentDescription = backDescription },
             ) { Text(stringResource(R.string.back)) }
             Text(title, style = androidx.compose.material3.MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).padding(start = if (onBack == null) 8.dp else 0.dp).semantics { heading() })
-            actions()
+            if (!actionsBelowTitle) actions()
+        }
+        if (actionsBelowTitle) {
+            Row(Modifier.widthIn(max = maxWidth).fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
+                actions()
+            }
         }
         val body = Modifier.widthIn(max = maxWidth).fillMaxWidth().weight(1f)
         Column(

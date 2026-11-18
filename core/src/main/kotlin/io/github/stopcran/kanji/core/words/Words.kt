@@ -4,6 +4,8 @@ import io.github.stopcran.kanji.core.srs.CardPhase
 import io.github.stopcran.kanji.core.srs.Fsrs
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.StudyMode
+import io.github.stopcran.kanji.core.srs.ProgressCount
+import io.github.stopcran.kanji.core.srs.StudyProgress
 import java.time.Instant
 import kotlin.random.Random
 
@@ -276,15 +278,24 @@ object Advancement {
     fun isSolid(s: SrsState?, now: Instant, fsrs: Fsrs = Fsrs()): Boolean =
         s != null && s.phase == CardPhase.Review && s.stability >= SOLID_DAYS && fsrs.retrievability(s, now) >= SOLID_RECALL
 
+    fun progress(items: Map<String, List<SrsState?>>, now: Instant): StudyProgress =
+        StudyProgress(items.filterValues { it.isNotEmpty() }.mapValues { (_, states) ->
+            ProgressCount(states.count { isSolid(it, now) }, states.size)
+        })
+
     /** [items] lists, per mode, the state of every item in the current level (null when never studied). */
-    fun ready(items: List<List<SrsState?>>, now: Instant): Boolean {
-        val modes = items.filter { it.isNotEmpty() }
-        val total = modes.sumOf { it.size }
-        if (total < MIN_ITEMS) return false
-        val solid = modes.map { m -> m.count { isSolid(it, now) } }
-        if (solid.sum().toDouble() / total < OVERALL_SHARE) return false
-        return modes.indices.all { solid[it].toDouble() / modes[it].size >= PER_MODE_SHARE }
+    fun ready(items: List<List<SrsState?>>, now: Instant): Boolean =
+        ready(progress(items.mapIndexed { index, states -> index.toString() to states }.toMap(), now))
+
+    fun ready(progress: StudyProgress): Boolean {
+        val skills = progress.skills.values
+        val total = progress.total
+        if (total.total < MIN_ITEMS || !meetsShare(total, OVERALL_SHARE)) return false
+        return skills.all { meetsShare(it, PER_MODE_SHARE) }
     }
+
+    private fun meetsShare(progress: ProgressCount, threshold: Double): Boolean =
+        progress.solid.toLong() * 100 >= (threshold * 100).toLong() * progress.total
 
     fun shouldOffer(ready: Boolean, unlocked: Boolean, dismissedAtMs: Long, nowMs: Long): Boolean =
         ready && !unlocked && nowMs - dismissedAtMs >= REOFFER_DAYS * 24 * 3600 * 1000

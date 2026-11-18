@@ -1,9 +1,5 @@
 package io.github.stopcran.kanji.ui
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -12,7 +8,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -39,6 +34,7 @@ internal fun KanaPage(
 ) {
     var selectedId by rememberSaveable { mutableStateOf(KanaScript.Hiragana.id) }
     val script = KanaScript.entries.first { it.id == selectedId }
+    val scriptLabels = KanaScript.entries.associateWith { stringResource(kanaScriptLabel(it)) }
     Page(stringResource(R.string.kana_title), onBack) {
         Text(pluralStringResource(
             R.plurals.kana_script_cards,
@@ -50,15 +46,14 @@ internal fun KanaPage(
             stringResource(R.string.kana_intro),
             style = MaterialTheme.typography.bodyMedium,
         )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            KanaScript.entries.forEach { option ->
-                FilterChip(
-                    selected = option == script,
-                    onClick = { selectedId = option.id },
-                    label = { Text(stringResource(kanaScriptLabel(option))) },
-                )
-            }
-        }
+        LevelFilter(
+            KanaScript.entries,
+            script,
+            { selectedId = it.id },
+            { scriptLabels.getValue(it) },
+            progress = { overview.progress(it) },
+            skillLabel = { stringResource(kanaModeLabel(KanaMode.valueOf(it))) },
+        )
         KanaProgressionHelp()
         KanaMode.entries.forEach { mode ->
             val locked = overview.lockedCount(script, mode)

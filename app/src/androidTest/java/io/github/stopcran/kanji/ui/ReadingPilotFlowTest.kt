@@ -9,7 +9,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -42,12 +44,16 @@ import java.io.File
 
 class ReadingPilotFlowTest {
     @get:Rule val rule = createComposeRule()
+    private var renderedFontScale = Float.NaN
 
     @Test fun reviewedArchiveQuizSurvivesProcessRestart() {
         val args = InstrumentationRegistry.getArguments()
         val phase = args.getString("readingPhase")
         assumeTrue("Supply the local unpublished archive and prepare/restore phase", phase in listOf("prepare", "restore"))
+        val minimumFontScale = args.getString("readingMinimumFontScale")?.toFloat() ?: 1f
+        require(minimumFontScale in 1f..2f) { "Expected font scale must be between 1 and 2" }
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        ReadingNativeProcessEvidence.capture(requireNotNull(phase))
         val archive = File(context.getExternalFilesDir(null), "reading-pilot-acceptance.zip")
         assertTrue("Push the pinned, unpublished archive to the target's external files directory", archive.isFile)
         assertEquals(ARCHIVE_HASH, ContentParser.rawSha256(archive.readBytes()))
@@ -96,27 +102,51 @@ class ReadingPilotFlowTest {
             }
             var activeId by mutableStateOf(initial.saved.id)
             var reading by mutableStateOf(false)
+            var readerVm: TextReadingViewModel? = null
             lateinit var vm: ReadingQuizViewModel
             rule.setContent {
+                val fontScale = LocalDensity.current.fontScale
+                SideEffect { renderedFontScale = fontScale }
                 MaterialTheme {
                     if (mounted) {
                         vm = remember(activeId) { ReadingQuizViewModel(store, activeId) }
                         if (reading) {
-                            val readerVm = remember {
+                            val currentReader = remember {
                                 TextReadingViewModel(readers, source.id, TEXT, initial.saved.captureId)
                             }
-                            TextReadingScreen(readerVm, { reading = false }, {})
+                            SideEffect { readerVm = currentReader }
+                            TextReadingScreen(currentReader, { reading = false }, {})
                         } else ReadingQuizHost(vm, db, store, {}, { activeId = it }, { reading = true })
                     }
                 }
             }
-            await { vm.ui is ReadingQuizUi.Ready && !vm.busy }
+            awaitQuizReady { vm }
+            rule.runOnIdle {
+                val configurationScale = context.resources.configuration.fontScale
+                assertTrue("Composed font scale $renderedFontScale is below $minimumFontScale", renderedFontScale >= minimumFontScale)
+                assertTrue("Configuration font scale $configurationScale is below $minimumFontScale", configurationScale >= minimumFontScale)
+                File(context.getExternalFilesDir(null), "reading-font-$phase.json").writeText(
+                    org.json.JSONObject()
+                        .put("phase", phase)
+                        .put("minimumFontScale", minimumFontScale.toDouble())
+                        .put("renderedFontScale", renderedFontScale.toDouble())
+                        .put("configurationFontScale", configurationScale.toDouble())
+                        .toString(),
+                )
+            }
             if (phase == "prepare") {
                 touch(context.getString(R.string.reading_quiz_read_text))
+                rule.waitForIdle()
+                await {
+                    val state = rule.runOnIdle { readerVm?.ui }
+                    assertFalse("Captured Reading text became unavailable after Read text", state is TextReadingUi.Unavailable)
+                    state is TextReadingUi.Ready
+                }
+                rule.waitForIdle()
                 rule.onNodeWithTag("reading-sections").performScrollToIndex(8)
                 screenshot(context, "reading-pilot-long-passage")
                 rule.runOnIdle { reading = false }
-                await { !vm.busy }
+                awaitQuizReady { vm }
                 answer(vm, correct = true)
                 screenshot(context, "reading-pilot-before-restart")
             } else {
@@ -129,7 +159,7 @@ class ReadingPilotFlowTest {
                 await { rule.onAllNodesWithText(context.getString(R.string.reading_quiz_resume)).fetchSemanticsNodes().size == 1 }
                 rule.onNodeWithText(completed.plan.questions.first().question.explanation).assertDoesNotExist()
                 touch(context.getString(R.string.reading_quiz_resume))
-                await { (vm.ui as? ReadingQuizUi.Ready)?.quiz?.saved?.id == closed.saved.id && !vm.busy }
+                awaitQuizReady(closed.saved.id) { vm }
                 rule.onNodeWithText(context.getString(R.string.reading_quiz_read_text)).assertDoesNotExist()
                 completeWithOneHighestTierMiss(context, vm)
                 assertEquals(3, runBlocking { db.reading().progress(source.id, TEXT)?.unlockedTier })
@@ -145,32 +175,56 @@ class ReadingPilotFlowTest {
     }
 
     private fun answer(vm: ReadingQuizViewModel, correct: Boolean) {
-        val ready = vm.ui as ReadingQuizUi.Ready
+        val ready = awaitQuizReady { vm }
         val question = ready.quiz.plan.questions[ready.quiz.answers.size].question
         rule.onNodeWithText(question.explanation).assertDoesNotExist()
         if (correct) {
             touch(question.options.single { it.id == question.correctOptionId }.text)
             touch(InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.reading_quiz_save_answer))
         } else touch(InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.reading_quiz_unknown))
-        await { (vm.ui as? ReadingQuizUi.Ready)?.quiz?.answers?.size == ready.quiz.answers.size + 1 && !vm.busy }
+        await {
+            rule.runOnIdle {
+                (vm.ui as? ReadingQuizUi.Ready)?.quiz?.answers?.size == ready.quiz.answers.size + 1 && !vm.busy
+            }
+        }
+        rule.waitForIdle()
     }
 
     private fun completeWithOneHighestTierMiss(context: Context, vm: ReadingQuizViewModel) {
-        val initial = (vm.ui as ReadingQuizUi.Ready).quiz
+        val initial = awaitQuizReady { vm }.quiz
         var correctRemaining = 3 - initial.answers.count { answer ->
             initial.plan.questions.single { it.question.id == answer.questionId }.question.let {
                 it.tier == initial.plan.highestTier && answer.optionId == it.correctOptionId
             }
         }
         while (true) {
-            val quiz = (vm.ui as ReadingQuizUi.Ready).quiz
+            val quiz = awaitQuizReady { vm }.quiz
             val question = quiz.plan.questions.getOrNull(quiz.answers.size)?.question ?: break
             val highest = question.tier == quiz.plan.highestTier
             answer(vm, !highest || correctRemaining-- > 0)
         }
+        awaitQuizReady { vm }
         touch(context.getString(R.string.reading_quiz_submit))
-        await { (vm.ui as? ReadingQuizUi.Ready)?.quiz?.result != null && !vm.busy }
-        assertEquals(true, (vm.ui as ReadingQuizUi.Ready).quiz.result?.passed)
+        await { rule.runOnIdle { (vm.ui as? ReadingQuizUi.Ready)?.quiz?.result != null && !vm.busy } }
+        assertEquals(true, awaitQuizReady { vm }.quiz.result?.passed)
+    }
+
+    private fun awaitQuizReady(expectedId: String? = null, current: () -> ReadingQuizViewModel): ReadingQuizUi.Ready {
+        rule.waitForIdle()
+        await {
+            rule.runOnIdle {
+                val vm = current()
+                val state = vm.ui
+                assertFalse("Captured Reading quiz became unavailable", state is ReadingQuizUi.Unavailable)
+                state is ReadingQuizUi.Ready && !vm.busy && (expectedId == null || state.quiz.saved.id == expectedId)
+            }
+        }
+        rule.waitForIdle()
+        return rule.runOnIdle {
+            val vm = current()
+            check(!vm.busy) { "Reading quiz reloaded before the next interaction" }
+            vm.ui as ReadingQuizUi.Ready
+        }
     }
 
     private fun touch(text: String) {
@@ -188,8 +242,8 @@ class ReadingPilotFlowTest {
     private companion object {
         const val DATABASE = "reading-native-acceptance.db"
         const val TEXT = "momotaro-n5"
-        const val REVISION = "fa5884e9d7257af95bed2b2a3735b0a38fb7cb9b"
-        const val PACKAGE_HASH = "87e30b125f176f4a7d9a7b5e0b200787033c0edf9283e009931c887aa884adef"
-        const val ARCHIVE_HASH = "2fd2e1411049050a3d0163f94a911b1891355d8cda15c997b180489d2074aeb7"
+        const val REVISION = "db72eaedf6f122b5a54ce33381d987b3fd8ba9bc"
+        const val PACKAGE_HASH = "61394c7245746ebd077a6939a70f80a4d48bd282ba97ea4f84e3179f5f62f13c"
+        const val ARCHIVE_HASH = "93a6a976503de723f6ab84b3fb2da6f3bfa702d42455ff54c81356a2a886fb22"
     }
 }

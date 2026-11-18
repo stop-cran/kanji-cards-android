@@ -21,7 +21,8 @@ import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.Constraints
 import io.github.stopcran.kanji.core.readingtext.ReadingOccurrence
 import io.github.stopcran.kanji.core.readingtext.ReadingSection
@@ -31,6 +32,7 @@ internal fun ReadingSectionText(section: ReadingSection, furigana: Boolean, onLo
     val style = MaterialTheme.typography.titleLarge
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
+    val fontPx = with(density) { style.fontSize.toPx() }
     val linkStyle = TextLinkStyles(SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline))
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val available = with(density) { maxWidth.toPx() }
@@ -43,8 +45,8 @@ internal fun ReadingSectionText(section: ReadingSection, furigana: Boolean, onLo
                 append(section.text.substring(previous, start))
                 val ruby = furigana && occurrence.text.codePoints().anyMatch(Character::isIdeographic)
                 if (ruby) {
-                    val baseStyle = style.copy(color = MaterialTheme.colorScheme.primary, lineHeight = style.fontSize * 1.25f)
-                    val readingStyle = style.copy(fontSize = style.fontSize * 0.5f, lineHeight = style.fontSize * 0.65f)
+                    val baseStyle = style.copy(color = MaterialTheme.colorScheme.primary, lineHeight = 1.25.em)
+                    val readingStyle = style.copy(fontSize = style.fontSize * 0.5f, lineHeight = 1.3.em)
                     val availableConstraints = Constraints(maxWidth = available.toInt().coerceAtLeast(1))
                     val base = measurer.measure(occurrence.text, baseStyle, constraints = availableConstraints)
                     val reading = measurer.measure(occurrence.reading, readingStyle, constraints = availableConstraints)
@@ -54,9 +56,9 @@ internal fun ReadingSectionText(section: ReadingSection, furigana: Boolean, onLo
                     val height = measurer.measure(occurrence.text, baseStyle, constraints = constraints).size.height +
                         measurer.measure(occurrence.reading, readingStyle, constraints = constraints).size.height
                     val key = "reading:${occurrence.start}"
-                    val widthSp = with(density) { width.toSp() }
-                    val heightSp = with(density) { height.toSp() }
-                    inline[key] = InlineTextContent(Placeholder(widthSp, heightSp, PlaceholderVerticalAlign.AboveBaseline)) {
+                    // Placeholder em units track the actual paint size, including nonlinear system font scaling.
+                    inline[key] = InlineTextContent(Placeholder((width / fontPx).em, (height / fontPx).em,
+                        PlaceholderVerticalAlign.AboveBaseline)) {
                         Column(
                             Modifier.testTag("reading-word:${section.id}:${occurrence.start}").clickable { onLookup(occurrence) },
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -76,6 +78,6 @@ internal fun ReadingSectionText(section: ReadingSection, furigana: Boolean, onLo
             append(section.text.substring(previous))
         }
         Text(annotated, modifier = Modifier.testTag("reading-section:${section.id}"),
-            style = style.copy(lineHeight = (style.fontSize.value * 2f).sp), inlineContent = inline)
+            style = style.copy(lineHeight = TextUnit.Unspecified), inlineContent = inline)
     }
 }

@@ -35,7 +35,7 @@ class TextReadingImportTest {
             )
         }
         val db = Room.databaseBuilder(context, AppDatabase::class.java, name)
-            .addMigrations(MIGRATION_22_23, MIGRATION_23_24).allowMainThreadQueries().build()
+            .addMigrations(MIGRATION_22_25, MIGRATION_25_26).allowMainThreadQueries().build()
         try {
             val saved = requireNotNull(db.reading().reader("owner/repo", "reading-fixture-peach", hash))
             assertEquals(raw, saved.contentJson)
@@ -60,7 +60,7 @@ class TextReadingImportTest {
             )
         }
         val db = Room.databaseBuilder(context, AppDatabase::class.java, name)
-            .addMigrations(MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24).allowMainThreadQueries().build()
+            .addMigrations(MIGRATION_21_25, MIGRATION_25_26).allowMainThreadQueries().build()
         try {
             val raw = requireNotNull(javaClass.getResource("/reading-fixture.json")).readText()
             val hash = ContentParser.sha256(raw.toByteArray())
@@ -103,7 +103,7 @@ class TextReadingImportTest {
             )
         }
         val db = Room.databaseBuilder(context, AppDatabase::class.java, name)
-            .addMigrations(MIGRATION_23_24).allowMainThreadQueries().build()
+            .addMigrations(MIGRATION_23_26).allowMainThreadQueries().build()
         try {
             val saved = requireNotNull(db.reading().reader("owner/repo", "reading-fixture-peach", hash))
             assertEquals("[]", saved.wordsJson)
