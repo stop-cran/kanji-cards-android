@@ -978,8 +978,7 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
 compare each checked-out export's version and identity with the registry; this guard does not replace migration validation.
 
 An experimental Reading build used Room 22 before that feature was merged. Released Room 25 preserves its four Reading tables and
-sync metadata without exposing Reading. The accepted local Reading candidate allocates Room 26 (unpublished and locally
-provisional; see the registry),
+sync metadata without exposing Reading. Main publishes Room 26 in source and its schema export (see the registry),
 upgrading the retained 22/25 reader to capture-keyed snapshots and normalized words. Source sync now refreshes the Reading
 cache and metadata but never its captured readers, vocabulary, media, quizzes or progress. Version 21 follows the existing
 21-to-25 creation path; both recorded v22 identities follow main's identity-dispatched 22-to-25 path before the final upgrade.

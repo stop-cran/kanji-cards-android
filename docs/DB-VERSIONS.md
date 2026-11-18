@@ -43,12 +43,12 @@ Historical rows below are not claims that every version was shipped.
 | 23 | 51223af7be5dcde053f7428cc9952cc1 | Reading checkpoint, variant b | b52aad8 | released | yes |
 | 24 | ecadf2177c260909da03914c88b08759 | Reading checkpoint | 2132a02 | reserved | yes |
 | 25 | bb4bd6ed0ae5d551d26ef9d695be95b2 | Main, Reading schema retained | c4314c6 | released | yes |
-| 26 | ecadf2177c260909da03914c88b08759 | Reading main-base allocation (local, unpublished) | local-candidate-v23 | reserved | yes |
+| 26 | ecadf2177c260909da03914c88b08759 | Main, Reading captures and quizzes | 03cd1d91 | released | yes |
 
-Version 26 is a **local, unpublished allocation**, absent from reviewed main `4db1297`. V23's debug/test APK native
-integration and preservation acceptance passed; the signed release remains uninstalled and no build containing this
-allocation has been distributed. This is not a globally confirmed reservation: reconcile other active Android owners'
-allocations before integration; unpublished reservations remain unknown.
+Version 26 is published in **main's source and schema export**, including Reading integration `03cd1d91`.
+V23's debug/test APK native integration and preservation acceptance passed; the signed release remains uninstalled
+and no APK containing this allocation has been distributed. Source publication does not establish phone installation
+or catalog approval. Other active Android branches must reconcile their allocations with main before integration.
 
 Commit `66ab6c73` preserves the historical queued-learning v22 schema, not proof that a binary built from that commit
 was installed on the phone.

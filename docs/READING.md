@@ -1,11 +1,11 @@
 # Reading exercises - shared contract
 
 Status: transport agreed for #138; reader/import, automatic Study-next and durable quizzes
-are implemented locally. V23's selected API 35 native integration and preservation gates
+are implemented on main. V23's selected API 35 native integration and preservation gates
 passed, including real process restart, captured-document/position restoration and direct
 review of all six screenshots at font scale 2.0. This is debug/test APK emulator coverage;
 the separately verified signed release remains uninstalled and undistributed. Room 26 is
-a local, unpublished allocation, not yet integrated into main. Native/parser acceptance
+published in main's source and schema export. Native/parser acceptance
 does not establish editorial, rights, physical-device or learner-efficacy approval, or
 authorize catalog publication.
 Content counterpart: [stop-cran/learning-japanese#64](https://github.com/stop-cran/learning-japanese/issues/64).
@@ -88,7 +88,7 @@ Nested captured articles retain the same source and restore the reader position.
 browsing still passes current language/source admission; a durable capture is not a
 generic language-mismatch exemption for fresh starts.
 
-The Room 24 checkpoint (retained by the local Room 26 main-base allocation) stores captured word bodies in separate source/text/capture/word rows, not one
+The Room 24 checkpoint (retained by Room 26 on main) stores captured word bodies in separate source/text/capture/word rows, not one
 aggregate reader field. The 23→24 migration reads old vocabulary JSON in bounded slices
 before splitting it, preserving captured wording, order, positions, media and history.
 The retained `wordsJson` column is cleared to `[]`; progress exports reconstruct the
