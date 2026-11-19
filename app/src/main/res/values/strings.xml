@@ -1078,6 +1078,7 @@
     <string name="reading_quiz_mode_help">Choose for this quiz. Open-book allows revisiting the captured text; closed-book hides it until the quiz is completed or discarded. Question pictures appear in both. The schedules are separate, but tier unlocks are shared.</string>
     <string name="reading_quiz_start_failed">The quiz could not start. Reopen the current text and check the remaining daily allowance.</string>
     <string name="reading_quiz_no_allowance">No shared daily-new allowance remains for introducing this text. Reading and word lookup are still available.</string>
+    <string name="reading_quiz_availability_failed">Could not check whether this quiz can start. Retry, or reopen the text.</string>
     <string name="reading_quiz_mode_new">Not yet practised in this mode</string>
     <string name="reading_quiz_mode_due">Review due</string>
     <string name="reading_quiz_mode_scheduled">Next review: %1$s. Starting earlier is extra practice.</string>

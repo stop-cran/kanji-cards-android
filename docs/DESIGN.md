@@ -221,6 +221,12 @@ Android/native pilot acceptance is a separate gate; archive parsing and resource
   An unfinished closed-book quiz blocks passage-bearing readers and older results for that source/text until completion
   or explicit discard. Returning to a retained quiz reloads its durable cursor, including answers saved through a resumed
   navigation entry; rejected stale callbacks refresh rather than leaving an unanswerable old question.
+  The reader's quiz action and the mode chooser share `ReadingQuizStore.availability` (#144), the same
+  introduced-or-allowance predicate `create` admits with: an unfinished quiz offers Resume even at zero
+  allowance, an exhausted allowance disables the reader action with the localized reason, and `create`
+  remains authoritative for capture/completion. The observed availability refreshes on resume, on Room
+  invalidation of every table `newAllowance` reads, on pacing settings and on the 60-second clock tick;
+  it clears to loading before each fresh check, and a query failure is logged and shown with Retry.
 - **Grammar curriculum contract (#59):** optional `curriculum/grammar.json` is hash-bound in the separate
   `manifest.curriculum` namespace. Older clients ignore it; it adds no fields to strict introduction-group objects.
   One mapped group has one chapter, while valid authored groups may remain deliberately unmapped. All real leaf prerequisites

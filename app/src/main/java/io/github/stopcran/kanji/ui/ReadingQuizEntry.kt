@@ -7,7 +7,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.collectAsState
@@ -16,12 +18,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import io.github.stopcran.kanji.KanjiApp
 import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.readingtext.ReadingBookMode
 import io.github.stopcran.kanji.core.readingtext.ReadingQuizPlan
+import io.github.stopcran.kanji.data.ReadingQuizAvailability
 import io.github.stopcran.kanji.data.ReadingQuizEntity
-import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.ReviewStateEntity
 import io.github.stopcran.kanji.data.READING_TEXT_STACK
 import io.github.stopcran.kanji.data.studyMode
@@ -60,47 +65,86 @@ internal fun ReadingQuizReaderGate(
             Text(stringResource(R.string.reading_quiz_closed_pending))
             val pending = requireNotNull(current.pending)
             Button(onClick = { onResume(pending.id) }) { Text(stringResource(R.string.reading_quiz_resume)) }
-            ReadingQuizDiscard(quizzes, pending)
+            ReadingQuizDiscard(quizzes, pending.id)
         }
     }
+}
+
+/** UI view of [ReadingQuizStore.observeAvailability]: `null` availability while loading or after a failed check. */
+class ReadingQuizAvailabilityState internal constructor(
+    val availability: ReadingQuizAvailability?, val failed: Boolean, internal val retry: () -> Unit,
+)
+
+/**
+ * Shared by the reader and the mode chooser. Re-collected on each resume (and on Retry); [ReadingQuizStore.create]
+ * stays authoritative.
+ */
+@Composable
+internal fun rememberReadingQuizAvailability(
+    quizzes: ReadingQuizStore, sourceId: String, textId: String,
+): ReadingQuizAvailabilityState {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var attempt by remember(sourceId, textId) { mutableIntStateOf(0) }
+    var availability by remember(sourceId, textId) { mutableStateOf<ReadingQuizAvailability?>(null) }
+    var failed by remember(sourceId, textId) { mutableStateOf(false) }
+    LaunchedEffect(lifecycle, sourceId, textId, attempt) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            // A fresh check after resume or Retry must not briefly offer a start computed before it.
+            availability = null
+            failed = false
+            try {
+                quizzes.observeAvailability(sourceId, textId).collect {
+                    availability = it
+                    failed = false
+                }
+            } catch (error: SQLiteException) {
+                Log.e("ReadingQuiz", "Could not check Reading quiz availability", error)
+                availability = null
+                failed = true
+            }
+        }
+    }
+    return ReadingQuizAvailabilityState(availability, failed) { attempt++ }
+}
+
+@Composable
+internal fun ReadingQuizAvailabilityFailure(state: ReadingQuizAvailabilityState) {
+    Text(stringResource(R.string.reading_quiz_availability_failed), color = MaterialTheme.colorScheme.error)
+    OutlinedButton(onClick = state.retry) { Text(stringResource(R.string.content_retry)) }
 }
 
 @Composable
 internal fun ReadingQuizEntry(
     app: KanjiApp, destination: AppDestination.TextReading, onBack: () -> Unit, onOpen: (String) -> Unit,
 ) {
-    val pending by produceState<ReadingQuizGateState?>(null, destination.sourceId, destination.textId) {
-        app.db.reading().observeOpenQuiz(destination.sourceId, destination.textId).collect { value = ReadingQuizGateState(it, false) }
-    }
+    val state = rememberReadingQuizAvailability(app.services.readingQuizzes, destination.sourceId, destination.textId)
     Page(stringResource(R.string.reading_quiz_title), onBack) {
-        val current = pending
-        if (current == null) Text(stringResource(R.string.loading))
-        else if (current.pending != null) {
-            Text(stringResource(R.string.reading_quiz_unfinished))
-            Button(onClick = { onOpen(current.pending.id) }) { Text(stringResource(R.string.reading_quiz_resume)) }
-            ReadingQuizDiscard(app.services.readingQuizzes, current.pending)
-        } else ReadingQuizModeChoice(app, destination, onOpen)
+        when (val current = state.availability) {
+            null -> if (state.failed) ReadingQuizAvailabilityFailure(state) else Text(stringResource(R.string.loading))
+            is ReadingQuizAvailability.Resume -> {
+                Text(stringResource(R.string.reading_quiz_unfinished))
+                Button(onClick = { onOpen(current.id) }) { Text(stringResource(R.string.reading_quiz_resume)) }
+                ReadingQuizDiscard(app.services.readingQuizzes, current.id)
+            }
+            else -> ReadingQuizModeChoice(app, destination, current == ReadingQuizAvailability.Available, onOpen)
+        }
     }
 }
 
 @Composable
-private fun ReadingQuizModeChoice(app: KanjiApp, destination: AppDestination.TextReading, onOpen: (String) -> Unit) {
+private fun ReadingQuizModeChoice(app: KanjiApp, destination: AppDestination.TextReading, allowed: Boolean, onOpen: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
-    val allowed by produceState<Boolean?>(null, destination) {
-        value = app.db.reading().introduced(destination.sourceId, destination.textId) ||
-            app.db.newAllowance(app.settings, destination.sourceId, Instant.now()).remaining > 0
-    }
     Text(stringResource(R.string.reading_quiz_mode_help))
     if (failed) Text(stringResource(R.string.reading_quiz_start_failed), color = MaterialTheme.colorScheme.error)
-    if (allowed == false) Text(stringResource(R.string.reading_quiz_no_allowance))
+    if (!allowed) Text(stringResource(R.string.reading_quiz_no_allowance))
     ReadingBookMode.entries.forEach { mode ->
         val states by remember(destination.sourceId, mode) {
             app.db.reviews().observeStates(destination.sourceId, READING_TEXT_STACK, mode.studyMode().name)
         }.collectAsState(null)
         ReadingQuizSchedule(mode, states?.singleOrNull { it.kanji == destination.textId }, states == null)
-        OutlinedButton(enabled = allowed == true && !busy, onClick = {
+        OutlinedButton(enabled = allowed && !busy, onClick = {
             busy = true
             scope.launch {
                 try {
@@ -140,7 +184,7 @@ internal fun ReadingQuizSchedule(mode: ReadingBookMode, state: ReviewStateEntity
 }
 
 @Composable
-private fun ReadingQuizDiscard(quizzes: ReadingQuizStore, pending: ReadingQuizEntity) {
+private fun ReadingQuizDiscard(quizzes: ReadingQuizStore, pendingId: String) {
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
@@ -149,7 +193,7 @@ private fun ReadingQuizDiscard(quizzes: ReadingQuizStore, pending: ReadingQuizEn
         busy = true
         scope.launch {
             try {
-                quizzes.close(pending.id)
+                quizzes.close(pendingId)
             } catch (error: IllegalArgumentException) {
                 Log.w("ReadingQuiz", "Could not discard Reading quiz", error)
                 failed = true

@@ -9,6 +9,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -26,6 +28,7 @@ import io.github.stopcran.kanji.data.ContentRows
 import io.github.stopcran.kanji.data.ReadingEntity
 import io.github.stopcran.kanji.data.ReadingImageEntity
 import io.github.stopcran.kanji.data.ReadingQuizStore
+import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.RoomTextReadingRepository
 import io.github.stopcran.kanji.data.Settings
 import io.github.stopcran.kanji.data.SyncMetaEntity
@@ -113,6 +116,78 @@ class ReadingQuizUiTest {
         }
     }
 
+    @Test fun readerQuizActionAgreesWithModeAvailabilityAndKeepsAnUnfinishedQuizResumable() {
+        val (db, settings) = database()
+        try {
+            settings.setDailyNewCards(0)
+            val store = ReadingQuizStore(db, RoomTextReadingRepository(db, settings), settings)
+            val reader = runBlocking { installCompleted(db, settings) }
+            var opened = 0
+            rule.setContent {
+                MaterialTheme {
+                    val vm = remember { TextReadingViewModel(RoomTextReadingRepository(db, settings), "owner/repo", reader.saved.textId) }
+                    TextReadingScreen(vm, {}, {}, onQuiz = { opened++ },
+                        quiz = rememberReadingQuizAvailability(store, "owner/repo", reader.saved.textId))
+                }
+            }
+            val noAllowance = "No shared daily-new allowance remains for introducing this text. " +
+                "Reading and word lookup are still available."
+            await { rule.onAllNodesWithText(noAllowance).fetchSemanticsNodes().size == 1 }
+            rule.onNodeWithText("Reading quiz").performScrollTo().assertIsNotEnabled()
+
+            rule.runOnIdle { settings.setDailyNewCards(1) }
+            await { rule.onAllNodesWithText(noAllowance).fetchSemanticsNodes().isEmpty() }
+            rule.onNodeWithText("Reading quiz").performScrollTo().assertIsEnabled().performClick()
+            assertEquals(1, opened)
+
+            // Another mode introducing an item spends the shared allowance while the reader stays open.
+            runBlocking {
+                db.reviews().insertLog(ReviewLogEntity(sourceId = "owner/repo", stack = "other", kanji = "日",
+                    mode = "Quiz", grade = 3, atMs = System.currentTimeMillis()))
+            }
+            await { rule.onAllNodesWithText(noAllowance).fetchSemanticsNodes().size == 1 }
+            rule.onNodeWithText("Reading quiz").performScrollTo().assertIsNotEnabled()
+
+            rule.runOnIdle { settings.setDailyNewCards(2) }
+            await { rule.onAllNodesWithText(noAllowance).fetchSemanticsNodes().isEmpty() }
+            runBlocking { store.create(reader, ReadingBookMode.OpenBook) }
+            rule.runOnIdle { settings.setDailyNewCards(0) }
+            await { rule.onAllNodesWithText("Resume quiz").fetchSemanticsNodes().size == 1 }
+            rule.onNodeWithText(noAllowance).assertDoesNotExist()
+            rule.onNodeWithText("Reading quiz").assertDoesNotExist()
+            rule.onNodeWithText("Resume quiz").performScrollTo().assertIsEnabled().performClick()
+            assertEquals(2, opened)
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test fun readerReportsAFailedAvailabilityCheckAndRecoversOnRetry() {
+        val (db, settings) = database()
+        try {
+            settings.setDailyNewCards(1)
+            val store = ReadingQuizStore(db, RoomTextReadingRepository(db, settings), settings)
+            val reader = runBlocking { installCompleted(db, settings) }
+            db.openHelper.writableDatabase.execSQL("ALTER TABLE reading_quizzes RENAME TO reading_quizzes_hidden")
+            rule.setContent {
+                MaterialTheme {
+                    val vm = remember { TextReadingViewModel(RoomTextReadingRepository(db, settings), "owner/repo", reader.saved.textId) }
+                    TextReadingScreen(vm, {}, {}, onQuiz = {},
+                        quiz = rememberReadingQuizAvailability(store, "owner/repo", reader.saved.textId))
+                }
+            }
+            val failure = "Could not check whether this quiz can start. Retry, or reopen the text."
+            await { rule.onAllNodesWithText(failure).fetchSemanticsNodes().size == 1 }
+            rule.onNodeWithText("Reading quiz").performScrollTo().assertIsNotEnabled()
+            db.openHelper.writableDatabase.execSQL("ALTER TABLE reading_quizzes_hidden RENAME TO reading_quizzes")
+            rule.onNodeWithText("Retry").performScrollTo().performClick()
+            await { rule.onAllNodesWithText(failure).fetchSemanticsNodes().isEmpty() }
+            rule.onNodeWithText("Reading quiz").performScrollTo().assertIsEnabled()
+        } finally {
+            db.close()
+        }
+    }
+
     private fun database(): Pair<AppDatabase, Settings> {
         val context: Application = RuntimeEnvironment.getApplication()
         context.getSharedPreferences("settings", 0).edit().clear().commit()
@@ -175,7 +250,10 @@ class ReadingQuizUiTest {
         rule.waitUntil(10_000) { shadowOf(Looper.getMainLooper()).idle(); condition() }
     }
 
-    private suspend fun install(db: AppDatabase, settings: Settings, store: ReadingQuizStore, mode: ReadingBookMode): String {
+    private suspend fun install(db: AppDatabase, settings: Settings, store: ReadingQuizStore, mode: ReadingBookMode): String =
+        store.create(installCompleted(db, settings), mode).saved.id
+
+    private suspend fun installCompleted(db: AppDatabase, settings: Settings): io.github.stopcran.kanji.data.ReadingReader {
         val original = ReadingContent.parse("reading/reading-fixture-peach.json",
             requireNotNull(javaClass.getResource("/reading-fixture.json")).readText()).content
         val bytes = sceneWebp(0)
@@ -191,6 +269,6 @@ class ReadingQuizUiTest {
         val readers = RoomTextReadingRepository(db, settings)
         val reader = readers.open("owner/repo", content.id)
         readers.complete(reader)
-        return store.create(reader, mode).saved.id
+        return reader
     }
 }

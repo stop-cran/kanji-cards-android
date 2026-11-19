@@ -13,6 +13,12 @@ import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.core.srs.StudyMode
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -34,6 +40,13 @@ data class CapturedReadingQuiz(
     val result: ReadingQuizResult?,
 )
 
+/** Whether a Reading quiz for a text can be resumed, newly started in either mode, or neither. */
+sealed interface ReadingQuizAvailability {
+    data class Resume(val id: String) : ReadingQuizAvailability
+    data object Available : ReadingQuizAvailability
+    data object NoAllowance : ReadingQuizAvailability
+}
+
 class ReadingQuizStore(
     private val db: AppDatabase,
     private val readers: TextReadingRepository,
@@ -50,7 +63,7 @@ class ReadingQuizStore(
         require(db.reading().openQuiz(saved.sourceId, saved.textId) == null) { "Resume or discard the unfinished Reading quiz first" }
         val now = clock()
         val reserve = !db.reading().introduced(saved.sourceId, saved.textId)
-        require(!reserve || db.newAllowance(settings, saved.sourceId, now).remaining > 0) { "No shared new-item allowance remains for this text" }
+        require(!reserve || canIntroduce(saved.sourceId, now)) { "No shared new-item allowance remains for this text" }
         val tier = db.reading().progress(saved.sourceId, saved.textId)?.unlockedTier ?: 1
         val plan = ReadingQuiz.capture(current.content, saved.contentHash, tier, mode)
         val row = ReadingQuizEntity(
@@ -63,6 +76,32 @@ class ReadingQuizStore(
             prior?.let { it.phase != "New" && it.dueMs > now.toEpochMilli() } == true, now.toEpochMilli()))
         CapturedReadingQuiz(row, current, plan, emptyList(), null)
     }
+
+    /** The same admission [create] applies, so entry points never offer a start that both modes would refuse. */
+    suspend fun availability(sourceId: String, textId: String): ReadingQuizAvailability = db.withTransaction {
+        val pending = db.reading().openQuiz(sourceId, textId)
+        when {
+            pending != null -> ReadingQuizAvailability.Resume(pending.id)
+            db.reading().introduced(sourceId, textId) || canIntroduce(sourceId, clock()) -> ReadingQuizAvailability.Available
+            else -> ReadingQuizAvailability.NoAllowance
+        }
+    }
+
+    private suspend fun canIntroduce(sourceId: String, now: Instant) = db.newAllowance(settings, sourceId, now).remaining > 0
+
+    /**
+     * [availability], re-evaluated when the unfinished quiz, reviews, reservations or pacing settings change, and on each
+     * [ticks] emission: the allowance also depends on the local day and on cards falling due.
+     */
+    fun observeAvailability(
+        sourceId: String, textId: String, ticks: Flow<Unit> = flow { while (true) { emit(Unit); delay(60_000) } },
+    ): Flow<ReadingQuizAvailability> = combine(
+        // The open quiz plus every table newAllowance reads.
+        db.invalidationTracker.createFlow(
+            "reading_quizzes", "review_log", "review_state", "listening_encounters", "listening_task_encounters",
+        ),
+        settings.dailyNewCards, settings.weekPlan, ticks,
+    ) { _, _, _, _ -> }.map { availability(sourceId, textId) }.distinctUntilChanged()
 
     suspend fun load(id: String): CapturedReadingQuiz = db.withTransaction { capture(id) }
 

@@ -32,6 +32,7 @@ import io.github.stopcran.kanji.R
 import io.github.stopcran.kanji.core.readingtext.ReadingOccurrence
 import io.github.stopcran.kanji.core.readingtext.ReadingBookMode
 import io.github.stopcran.kanji.data.READING_TEXT_STACK
+import io.github.stopcran.kanji.data.ReadingQuizAvailability
 import io.github.stopcran.kanji.data.studyMode
 import io.github.stopcran.kanji.data.ReadingReader
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -72,6 +73,7 @@ fun TextReadingScreen(
     onOpenDoc: (String) -> Unit,
     onCaptured: (String) -> Unit = {},
     onQuiz: (() -> Unit)? = null,
+    quiz: ReadingQuizAvailabilityState? = null,
 ) {
     val savedState = rememberSaveableStateHolder()
     when (val state = vm.ui) {
@@ -84,7 +86,7 @@ fun TextReadingScreen(
             LaunchedEffect(state.reader.saved.captureId) { onCaptured(state.reader.saved.captureId) }
             savedState.SaveableStateProvider(
                 "${state.reader.saved.sourceId}:${state.reader.saved.textId}:${state.reader.saved.captureId}",
-            ) { ReadingReaderBody(state.reader, vm, onBack, onOpenDoc, onQuiz) }
+            ) { ReadingReaderBody(state.reader, vm, onBack, onOpenDoc, onQuiz, quiz) }
         }
     }
 }
@@ -92,6 +94,7 @@ fun TextReadingScreen(
 @Composable
 private fun ReadingReaderBody(
     reader: ReadingReader, vm: TextReadingViewModel, onBack: () -> Unit, onOpenDoc: (String) -> Unit, onQuiz: (() -> Unit)?,
+    quiz: ReadingQuizAvailabilityState?,
 ) {
     var lookupSection by rememberSaveable { mutableStateOf<Int?>(null) }
     var lookupStart by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -135,9 +138,7 @@ private fun ReadingReaderBody(
                         if (reader.saved.completedAtMs == null) Button(onClick = vm::complete, modifier = Modifier.fillMaxWidth()) {
                             Text(stringResource(R.string.reading_finished))
                         } else Text(stringResource(R.string.reading_complete))
-                        if (reader.saved.completedAtMs != null && onQuiz != null) {
-                            Button(onClick = onQuiz, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.reading_quiz_title)) }
-                        }
+                        if (onQuiz != null) ReadingQuizAction(reader.saved.completedAtMs != null, quiz, onQuiz)
                         Text(reader.content.provenance.credits.joinToString("\n"), style = MaterialTheme.typography.bodySmall)
                         Text(reader.content.provenance.rights.note, style = MaterialTheme.typography.bodySmall)
                         Text(reader.content.provenance.distribution.note, style = MaterialTheme.typography.bodySmall)
@@ -152,6 +153,23 @@ private fun ReadingReaderBody(
         onArticle = { article = lookup.word; lookupSection = null; lookupStart = null },
         onSelect = { lookup.word?.let(vm::toggleSelectedWord) },
     )
+}
+
+/** Mirrors the quiz entry's admission: an unfinished quiz stays resumable even when no new start is allowed. */
+@Composable
+private fun ReadingQuizAction(completed: Boolean, state: ReadingQuizAvailabilityState?, onQuiz: () -> Unit) {
+    when (val quiz = state?.availability) {
+        is ReadingQuizAvailability.Resume -> Button(onClick = onQuiz, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.reading_quiz_resume))
+        }
+        else -> if (completed) {
+            if (quiz == ReadingQuizAvailability.NoAllowance) Text(stringResource(R.string.reading_quiz_no_allowance))
+            if (state?.failed == true) ReadingQuizAvailabilityFailure(state)
+            Button(onClick = onQuiz, enabled = quiz == ReadingQuizAvailability.Available, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.reading_quiz_title))
+            }
+        }
+    }
 }
 
 @Composable

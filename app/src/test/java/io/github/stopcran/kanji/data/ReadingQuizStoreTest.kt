@@ -7,7 +7,12 @@ import io.github.stopcran.kanji.core.readingtext.ReadingBookMode
 import io.github.stopcran.kanji.core.readingtext.ReadingContent
 import io.github.stopcran.kanji.core.readingtext.ReadingPackage
 import io.github.stopcran.kanji.core.readingtext.ReadingQuizPlan
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -113,6 +118,43 @@ class ReadingQuizStoreTest {
         }
         assertThrows(IllegalArgumentException::class.java) {
             runBlocking { store.answer(first.saved.id, first.plan.questions.first().question.id, null) }
+        }
+    }
+
+    @Test fun availabilityMatchesCreateAdmissionAndKeepsUnfinishedQuizzesResumable() = runBlocking<Unit> {
+        val reader = readers.open(source, text)
+        readers.complete(reader)
+        settings.setDailyNewCards(0)
+        assertEquals(ReadingQuizAvailability.NoAllowance, store.availability(source, text))
+        assertThrows(IllegalArgumentException::class.java) { runBlocking { store.create(reader, ReadingBookMode.OpenBook) } }
+        settings.setDailyNewCards(1)
+        assertEquals(ReadingQuizAvailability.Available, store.availability(source, text))
+        val first = store.create(reader, ReadingBookMode.OpenBook)
+        settings.setDailyNewCards(0)
+        assertEquals(ReadingQuizAvailability.Resume(first.saved.id), store.availability(source, text))
+        answer(first)
+        store.submit(first.saved.id)
+        assertEquals(0, db.newAllowance(settings, source, Instant.parse("2026-06-01T10:00:00Z")).remaining)
+        assertEquals(ReadingQuizAvailability.Available, store.availability(source, text))
+        store.create(reader, ReadingBookMode.ClosedBook)
+    }
+
+    @Test fun observedAvailabilityFollowsTheClockOnEachTick() = runBlocking<Unit> {
+        var now = Instant.parse("2026-06-01T10:00:00Z")
+        val clocked = ReadingQuizStore(db, readers, settings) { now }
+        readers.complete(readers.open(source, text))
+        db.reviews().insertLog(ReviewLogEntity(sourceId = source, stack = "other", kanji = "日", mode = "Quiz", grade = 3,
+            atMs = now.toEpochMilli()))
+        val ticks = MutableSharedFlow<Unit>(replay = 1).apply { tryEmit(Unit) }
+        val seen = Channel<ReadingQuizAvailability>(Channel.UNLIMITED)
+        val job = launch(Dispatchers.Default) { clocked.observeAvailability(source, text, ticks).collect { seen.send(it) } }
+        try {
+            assertEquals(ReadingQuizAvailability.NoAllowance, withTimeout(10_000) { seen.receive() })
+            now = Instant.parse("2026-06-02T10:00:00Z")
+            ticks.emit(Unit)
+            assertEquals(ReadingQuizAvailability.Available, withTimeout(10_000) { seen.receive() })
+        } finally {
+            job.cancel()
         }
     }
 

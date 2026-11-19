@@ -261,6 +261,9 @@ private fun RouteContent(
                     pop, { push(AppDestination.Document(it, destination.sourceId, reading = destination.takeIf { it.captureHash != null })) },
                     { hash -> replace(destination.copy(captureHash = hash)) },
                     onQuiz = if (destination.captureHash == null) null else ({ push(AppDestination.ReadingQuizStart(destination)) }),
+                    quiz = io.github.stopcran.kanji.ui.rememberReadingQuizAvailability(
+                        app.services.readingQuizzes, destination.sourceId, destination.textId,
+                    ),
                 )
             }
         }
