@@ -93,8 +93,10 @@ internal fun MainPage(
         val defaultId = remember { RepoSource.parse(Defaults.CONTENT_REPO_URL, Defaults.CONTENT_BRANCH)?.id }
         if (data.sourceId != defaultId) Text(stringResource(R.string.cards_from, data.sourceId))
         PacingHint(data)
-        StartingGuide(overview.startingGuideVisible, preferences.showStartingGuide, a.onKanaPage, a.onWordsPage, a.onGrammarPage)
-        DailyCountsHelp(overview.kanaAllowance, data.pacing)
+        HomeHelp(
+            overview.startingGuideVisible, preferences.showStartingGuide, a.onKanaPage, a.onWordsPage, a.onGrammarPage,
+            overview.kanaAllowance, data.pacing,
+        )
         Entry(stringResource(R.string.home_kana), overview.kana, R.drawable.kana_sumi, a.onKanaPage)
         val kanjiSummary = data.summary(HomeMode.Meaning, HomeMode.Drawing, HomeMode.Readings)
             ?: context.getString(R.string.loading)

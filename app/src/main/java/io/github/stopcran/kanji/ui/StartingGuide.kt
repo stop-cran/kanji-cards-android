@@ -12,10 +12,39 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.stopcran.kanji.R
+import io.github.stopcran.kanji.core.srs.NewAllowance
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun HomeHelp(
+    guideVisible: Boolean,
+    onGuideVisibility: (Boolean) -> Unit,
+    onKana: () -> Unit,
+    onWords: () -> Unit,
+    onGrammar: () -> Unit,
+    kana: NewAllowance?,
+    content: NewAllowance?,
+) {
+    var countsExpanded by rememberSaveable { mutableStateOf(false) }
+    FlowRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (!guideVisible) StartingGuide(false, onGuideVisibility, onKana, onWords, onGrammar)
+        DailyCountsHelpToggle(countsExpanded) { countsExpanded = !countsExpanded }
+    }
+    if (guideVisible) StartingGuide(true, onGuideVisibility, onKana, onWords, onGrammar)
+    if (countsExpanded) DailyCountsHelpContent(kana, content)
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

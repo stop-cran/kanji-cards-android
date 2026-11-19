@@ -16,10 +16,19 @@ import io.github.stopcran.kanji.core.srs.PacingNote
 @Composable
 internal fun DailyCountsHelp(kana: NewAllowance? = null, content: NewAllowance? = null) {
     var expanded by rememberSaveable { mutableStateOf(false) }
-    TextButton(onClick = { expanded = !expanded }) {
+    DailyCountsHelpToggle(expanded) { expanded = !expanded }
+    if (expanded) DailyCountsHelpContent(kana, content)
+}
+
+@Composable
+internal fun DailyCountsHelpToggle(expanded: Boolean, onToggle: () -> Unit) {
+    TextButton(onClick = onToggle) {
         Text(stringResource(if (expanded) R.string.daily_counts_hide else R.string.daily_counts_show))
     }
-    if (!expanded) return
+}
+
+@Composable
+internal fun DailyCountsHelpContent(kana: NewAllowance?, content: NewAllowance?) {
     Text(stringResource(R.string.daily_counts_kana))
     AllowanceStatus(R.string.kana_allowance_remaining, kana)
     Text(stringResource(R.string.daily_counts_content))

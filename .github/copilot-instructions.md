@@ -156,6 +156,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   success result, not only the shell exit code; retain failed attempts and settle/capture focus before retrying input.
 - **Resource formatting:** Android may trim trailing spaces from string resources. Use `%1$s`/`%2$s` arguments (and localized
   plural resources) for separators and punctuation. Check both locales for duplicate IDs and placeholder/plural parity.
+  Home help geometry tests need Robolectric native graphics and the real Page padding. For button labels, compare actual
+  line bounds and complete, non-ellipsized text: `hasVisualOverflow` can flag a wider paragraph allocation even when glyphs fit.
 - **Method findings during localization:** reproduce and adjudicate failures before changing app behavior (the API-29
   autofocus test host needed manifest resize, not a production layout rewrite). In the same fix batch, record reusable
   verified mechanisms in the relevant app/content instructions with the finding/evidence; correct/review code and run
