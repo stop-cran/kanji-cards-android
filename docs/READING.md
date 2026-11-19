@@ -101,8 +101,12 @@ exceeding Android's CursorWindow on reopen; it does not raise content/package li
   plain section texts, retaining eight sections. This supersedes the earlier authoring
   band; it is not a parser minimum or JLPT certification. Reading-load and readability
   evidence remain pilot-review work.
-- Furigana: occurrence-based ruby on Han-bearing annotated forms, default visible, with a
-  persisted show/hide control; readings remain in the lookup even when hidden.
+- Furigana: hidden for new captures so tap-for-reading/meaning is the primary aid. The
+  show/hide control persists per capture; existing saved choices are retained. When shown,
+  ruby shares the ordinary text baseline and covers only kanji runs, not kana prefixes,
+  internal kana or okurigana. Whole-word reviewed readings are split using matching kana
+  anchors; compounds keep a grouped reading (not a guessed per-kanji split). Ambiguous or
+  mismatching anchors leave the occurrence plain; its full reading remains in lookup.
 - Reading during questions: the user chooses open-book or closed-book per quiz. Capture
   that choice in results. Both modes share one per-text unlock score, as chosen by the user.
   Question-owned images remain visible in both modes; evidence spans appear in feedback.

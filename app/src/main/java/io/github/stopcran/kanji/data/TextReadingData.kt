@@ -35,7 +35,7 @@ data class ReadingReaderEntity(
     val openedAtMs: Long,
     val sectionIndex: Int = 0,
     val scrollOffset: Int = 0,
-    val furigana: Boolean = true,
+    val furigana: Boolean = false,
     val completedAtMs: Long? = null,
     val captureId: String = contentHash,
 )

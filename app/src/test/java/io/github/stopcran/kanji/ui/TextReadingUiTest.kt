@@ -5,6 +5,8 @@ import android.content.res.Configuration
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -16,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -56,17 +59,23 @@ class TextReadingUiTest {
     @get:Rule val rule = createComposeRule()
 
     @Test fun annotatedWordWithoutCardStillPeeksAndFuriganaTogglePersists() {
-        val repository = FakeReadingRepository(reader(false))
+        val initial = reader(false).let { it.copy(saved = it.saved.copy(furigana = false)) }
+        val repository = FakeReadingRepository(initial)
         rule.setContent {
             MaterialTheme {
                 val vm = remember { TextReadingViewModel(repository, "owner/repo", "reading-fixture-peach") }
                 TextReadingScreen(vm, {}, {})
             }
         }
-        rule.onNodeWithTag("reading-word:river:3").performClick()
+        rule.onNodeWithText("Show readings").assertExists()
+        val paragraph = rule.onNodeWithTag("reading-section:river")
+        val wordPosition = paragraph.textLayout().getBoundingBox(3).center
+        paragraph.performTouchInput { click(wordPosition) }
         rule.onNodeWithText("peach").assertExists()
         rule.onNodeWithText("This word has a local explanation but no linked word card.").assertExists()
         rule.onNodeWithText("Close").performClick()
+        rule.onNodeWithText("Show readings").performClick()
+        rule.runOnIdle { assertEquals(true, repository.visible) }
         rule.onNodeWithText("Hide readings").performClick()
         rule.onNodeWithText("Show readings").assertExists()
         rule.runOnIdle { assertEquals(false, repository.visible) }
@@ -228,9 +237,7 @@ class TextReadingUiTest {
         val origin = node.fetchSemanticsNode().positionInRoot
         assertTextFits(layout)
         val placeholders = layout.placeholderRects.map { requireNotNull(it) }
-        val characters = layout.layoutInput.text.indices.mapNotNull {
-            if (layout.layoutInput.placeholders.any { range -> it in range.start until range.end }) null else layout.getBoundingBox(it)
-        }.filter { it.width > 0f && it.height > 0f }
+        val characters = plainCharacterBounds(layout)
         for ((index, placeholder) in placeholders.withIndex()) {
             assertTrue("Ruby exceeds paragraph width", placeholder.left >= -1f && placeholder.right <= layout.size.width + 1f)
             assertTrue("Ruby exceeds paragraph height", placeholder.top >= -1f && placeholder.bottom <= layout.size.height + 1f)
@@ -244,12 +251,20 @@ class TextReadingUiTest {
                 val child = rule.onNode(hasText(text) and hasAnyAncestor(hasTestTag("reading-word:$sectionId:${starts[index]}")),
                     useUnmergedTree = true)
                 val semantics = child.fetchSemanticsNode()
-                val bounds = Rect(semantics.positionInRoot, semantics.size.toSize())
-                assertTrue("Ruby child escapes reserved placeholder: $bounds / $reserved",
-                    bounds.left >= reserved.left - 1f && bounds.right <= reserved.right + 1f &&
-                        bounds.top >= reserved.top - 1f && bounds.bottom <= reserved.bottom + 1f)
                 val childLayout = child.textLayout()
+                val bounds = Rect(semantics.positionInRoot, childLayout.size.toSize())
+                val line = layout.getLineForOffset(layout.layoutInput.placeholders[index].start)
+                val bottom = if (text == base) origin.y + layout.getLineBottom(line) else reserved.bottom
+                assertTrue("Ruby child escapes reserved placeholder: $bounds / $reserved / bottom=$bottom / base=$base / text=$text",
+                    bounds.left >= reserved.left - 1f && bounds.right <= reserved.right + 1f &&
+                        bounds.top >= reserved.top - 1f && bounds.bottom <= bottom + 1f)
+                assertTrue("Painted ruby child escapes full paragraph", bounds.bottom <= origin.y + layout.size.height + 1f)
                 assertTextFits(childLayout)
+                if (text == base) {
+                    assertEquals("Ruby base must share the adjacent plain-text baseline: child=${childLayout.size}, " +
+                        "baseline=${childLayout.firstBaseline}, reserved=$placeholder, lineBottom=${layout.getLineBottom(line)}",
+                        origin.y + layout.getLineBaseline(line), semantics.positionInRoot.y + childLayout.lastBaseline, 1f)
+                }
                 wrapped = wrapped || childLayout.lineCount > 1
                 widestText = maxOf(widestText, (0 until childLayout.lineCount).maxOf {
                     childLayout.getLineRight(it) - childLayout.getLineLeft(it)
@@ -260,6 +275,10 @@ class TextReadingUiTest {
         }
         assertLinesDoNotOverlap(layout)
     }
+
+    private fun plainCharacterBounds(layout: TextLayoutResult) = layout.layoutInput.text.indices.mapNotNull {
+        if (layout.layoutInput.placeholders.any { range -> it in range.start until range.end }) null else layout.getBoundingBox(it)
+    }.filter { it.width > 0f && it.height > 0f }
 
     private fun assertLinesDoNotOverlap(layout: TextLayoutResult) {
         for (line in 1 until layout.lineCount) {
@@ -308,6 +327,23 @@ class TextReadingUiTest {
         rule.runOnIdle { assertTrue(picked) }
     }
 
+    @Test fun draggingAnnotatedTextStillScrollsWithoutOpeningLookup() {
+        val original = reader(false).content.sections.first()
+        val section = original.copy(text = original.text.repeat(30))
+        var picked = false
+        lateinit var scroll: ScrollState
+        rule.setContent {
+            MaterialTheme {
+                scroll = rememberScrollState()
+                Column(Modifier.requiredWidth(240.dp).requiredHeight(240.dp).verticalScroll(scroll)) {
+                    ReadingSectionText(section, true) { picked = true }
+                }
+            }
+        }
+        rule.onNodeWithTag("reading-section:river").performTouchInput { swipeUp() }
+        rule.runOnIdle { assertTrue(scroll.value > 0); assertFalse(picked) }
+    }
+
     @Test fun overlappingWritesPreservePositionFuriganaAndCompletionTogether() {
         val gate = CompletableDeferred<Unit>()
         val repository = FakeReadingRepository(reader(false), gate)
@@ -344,7 +380,7 @@ class TextReadingUiTest {
         val raw = requireNotNull(javaClass.getResource("/reading-fixture.json")).readText()
         val parsed = ReadingContent.parse("reading/reading-fixture-peach.json", raw)
         val saved = ReadingReaderEntity("owner/repo", parsed.content.id, "main", "revision", "version",
-            raw, parsed.hash, "[]", 1)
+            raw, parsed.hash, "[]", 1, furigana = true)
         val words = if (withWord) mapOf("桃" to ReadingWordSnapshot("桃", "もも", "peach",
             "Captured peach article\n\n[More about peaches](../articles/peaches.md)")) else emptyMap()
         return ReadingReader(saved, parsed.content, words)

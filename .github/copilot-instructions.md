@@ -254,6 +254,11 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   linear, unlike API-35 large-font conversion; fixed line height can override ruby ascent. Test real-density 1x/2x child/glyph
   fit, varied long readings and complete text, not only placeholder rectangles or `hasVisualOverflow`'s allocation-width flag.
   Keep the reader's furigana control out of the Back/title width budget and inspect actual native images separately.
+  Baseline equality needs the measured base baseline, not its box bottom: CJK fallback descent can differ from the
+  paragraph font even with TextBottom. Reserve that descent in the metric span too, and check full child containment
+  and next-line non-overlap alongside baseline equality at large fonts; a baseline-only fix can overflow below the line.
+  Native 2x wrapping also exposed kana-link hit rectangles intercepting neighbouring ruby: verify actual exact-word
+  touches (base, ruby and descent), hidden-reading taps and drag-to-scroll, not just direct semantics callbacks.
 - Level chips use bare N5-N1/All labels; explain cumulative versus exact scope outside the shared `LevelFilter` row.
   Never infer membership or saved identity from a chip's text or position; concise labels do not unify scope semantics.
 - Advancement recommendations use exact-level per-skill solid states plus two successful same-key reviews at least 24 hours apart;

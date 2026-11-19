@@ -180,18 +180,26 @@ Android/native pilot acceptance is a separate gate; archive parsing and resource
   or source changes do not replace it. Ordinary fresh navigation still passes source/language admission. Only a retained
   route marked after successful capture can restore a locale exception; its source/text/hash and durable JSON are verified,
   including for onward reading-document routes. Merely having a saved text does not exempt a fresh route.
-  Every reviewed occurrence opens its contextual gloss even without a card. Han-bearing spans render their reviewed ruby
-  by default; the hide/show preference is persisted, not inferred from familiarity. Captured word cards can open ordinary
+  Every reviewed occurrence opens its contextual gloss even without a card. New captures hide ruby by default to preserve
+  reading flow; beginners can opt in using the persisted per-capture show/hide control. Existing saved choices are retained,
+  not inferred from familiarity. Ruby covers Han runs only, using kana anchors in the reviewed occurrence reading; ambiguous
+  splits stay plain with the complete reading in lookup. Compounds retain grouped readings. Captured word cards can open ordinary
   source-bound article routes, whose Back returns to the reader. Reader list state survives both its article panel and
   an intervening loading frame; serialized state writes preserve concurrent position, furigana and completion changes.
   Ruby reserves measured pixel dimensions as em relative to the paragraph's actual paint size; paragraph lines grow
-  naturally around the tallest annotation. Converting those dimensions through sp is not reversible with Compose
+  naturally around the tallest annotation. Inline content ends at its measured base baseline, with a lowered metric span
+  reserving the base descent below it. Text-bottom alignment alone is insufficient when CJK fallback descent differs from
+  the paragraph font; reserving the full box above the baseline raises the word. BasicText retains the measured style
+  without inheriting a Material body line height. Converting those dimensions through sp is not reversible with Compose
   1.9.2's linear placeholder backend and Android's nonlinear large-font scaling. A fixed paragraph line height can
   also override the annotation's ascent. The reader puts its furigana action below the Back/title row, preserving
   a usable title width at enlarged text without changing list indices or hiding/scaling down typography.
   API-35 real-density regressions at normal and double font scale check actual child/glyph bounds, short and long
   readings, compact reserves, complete unellipsized text, tapping and the narrow reader header. Paragraph allocation
   width alone is not ink overflow; the actual native screenshots remain a separate visual acceptance gate.
+  At enlarged text, a wrapped kana link's hit rectangle can intercept a neighbouring ruby word. Reader touch lookup
+  resolves the actual placeholder/character geometry before link overlays; accessible link/inline actions remain intact.
+  Tap cancellation still yields to scrolling, and hidden readings keep the same whole-occurrence lookup.
   Room 23 retains distinct source/text/branch/version captures rather than reusing obsolete text on fresh browser entry.
   Study-next persists a source/word intent; the next eligible Word quiz supplies its actual deck and direction.
   Selection preserves gates, new allowance and due rules, with visible deferrals and token-qualified consumption
