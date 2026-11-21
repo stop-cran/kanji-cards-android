@@ -240,6 +240,7 @@
     <string name="back">← Back</string>
     <string name="what_does_it_mean">What does it mean?</string>
     <string name="new_kanji">New kanji</string>
+    <string name="new_word">New word</string>
     <string name="take_a_moment_with_it">Take a moment with it, then you will be asked what it means.</string>
     <string name="got_it_quiz_me">Got it — quiz me</string>
     <string name="you_chose_that_is">You chose “%1$s” — that is %2$s.</string>

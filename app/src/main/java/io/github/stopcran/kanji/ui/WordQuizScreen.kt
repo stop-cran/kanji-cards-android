@@ -85,6 +85,20 @@ fun WordQuizScreen(sessionKey: String, onBack: () -> Unit, onOpenDoc: (String) -
         when (val s = vm.ui) {
             WordQuizUi.Loading -> Text(stringResource(R.string.loading), Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
             is WordQuizUi.Empty -> Text(stringResource(s.messageId))
+            is WordQuizUi.Study -> {
+                SessionRemaining(s.remaining)
+                Text(stringResource(R.string.new_word), style = MaterialTheme.typography.labelMedium)
+                WordQuizPrompt(s.word, WordDirection.JpToEn, s.font, big = true, help = s.help, onRead = { vm.openReadingTip(s) })
+                Text(s.word.reading, style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                Text(s.word.title, style = MaterialTheme.typography.headlineSmall,
+                    textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().semantics { heading() })
+                s.word.type?.takeIf { it.isNotBlank() }?.let {
+                    Text(localizedWordPromptTag(it), style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                }
+                Button(onClick = { vm.startQuestion(s) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.got_it_quiz_me)) }
+            }
             is WordQuizUi.TypeQuestion -> TypeQuestion(s, vm)
             is WordQuizUi.TypeAnswer -> TypeAnswer(s, vm, onOpenDoc)
             is WordQuizUi.Done -> {

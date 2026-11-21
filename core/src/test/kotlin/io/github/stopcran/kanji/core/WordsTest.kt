@@ -14,6 +14,7 @@ import io.github.stopcran.kanji.core.words.WordQueues
 import io.github.stopcran.kanji.core.words.WordQuizBuilder
 import io.github.stopcran.kanji.core.words.WordStacks
 import io.github.stopcran.kanji.core.words.hasReadingToLearn
+import io.github.stopcran.kanji.core.words.canInferWordMeaning
 import io.github.stopcran.kanji.core.words.wordLevel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -24,6 +25,15 @@ import java.time.Instant
 import kotlin.random.Random
 
 class WordsTest {
+    @Test fun wordMeaningInferenceRequiresEveryWrittenIdeograph() {
+        assertFalse(canInferWordMeaning("ありがとう", setOf("電")))
+        assertTrue(canInferWordMeaning("電車", setOf("電", "車")))
+        assertFalse(canInferWordMeaning("電車", setOf("電")))
+        assertTrue(canInferWordMeaning("お茶", setOf("茶")))
+        assertTrue(canInferWordMeaning("\uD840\uDC00", setOf("\uD840\uDC00")))
+        assertFalse(canInferWordMeaning("\uD840\uDC00", emptySet()))
+    }
+
     private val now = Instant.parse("2026-01-10T00:00:00Z")
     private val meaningDirections = listOf(WordDirection.JpToEn, WordDirection.EnToJp)
     private fun review(stability: Double, reps: Int = 3, dueOffsetSec: Long = 0, lastDaysAgo: Long = 1) =

@@ -31,6 +31,7 @@ import io.github.stopcran.kanji.core.words.WordKanjiHelp
 import io.github.stopcran.kanji.core.words.WordQuizBuilder
 import io.github.stopcran.kanji.core.words.WordQueues
 import io.github.stopcran.kanji.core.words.WordStacks
+import io.github.stopcran.kanji.core.words.canInferWordMeaning
 import io.github.stopcran.kanji.core.srs.ReviewIdentity
 import io.github.stopcran.kanji.core.srs.ReviewRecording
 import io.github.stopcran.kanji.data.ReviewStore
@@ -52,6 +53,7 @@ import io.github.stopcran.kanji.data.toCard
 import io.github.stopcran.kanji.data.toEntity
 import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.toSrs
+import io.github.stopcran.kanji.data.wordMeaningUnlocked
 import kotlinx.coroutines.launch
 import java.time.Instant
 import kotlin.random.Random
@@ -62,6 +64,9 @@ data class SelectedWordDeferral(val word: String, val messageId: Int)
 sealed interface WordQuizUi {
     data object Loading : WordQuizUi
     data class Empty(val messageId: Int) : WordQuizUi
+    data class Study(
+        val word: WordEntity, val remaining: Int, val font: KanjiFont, val help: WordKanjiHelp?,
+    ) : WordQuizUi
     data class Question(
         val word: WordEntity, val direction: WordDirection, val options: List<WordOption>, val remaining: Int, val font: KanjiFont,
         val picture: WordPictureUi? = null,
@@ -85,7 +90,7 @@ sealed interface WordQuizUi {
     ) : WordQuizUi
 }
 
-class WordReadingTip(val question: WordQuizUi.Question, val help: WordKanjiHelp)
+class WordReadingTip(val origin: WordQuizUi, val help: WordKanjiHelp)
 
 /** Word quiz session in one direction; only that direction's scheduling state is updated. */
 class WordQuizViewModel(
@@ -131,6 +136,8 @@ class WordQuizViewModel(
     private val selectedScenes = mutableMapOf<String, String>()
     private var lastPictureWord: String? = null
     private val states = mutableMapOf<String, SrsState>()
+    private val studied = mutableSetOf<String>()
+    private var meaningUnlocked: Set<String> = emptySet()
     private var session = QuizSession<String>(emptyList(), { it })
     private var started = false
     private var extra = false
@@ -149,6 +156,7 @@ class WordQuizViewModel(
         val selectedStack = app.settings.wordStack.value
         val n4Unlocked = app.settings.n4Unlocked.value
         sourceId = source.id
+        if (direction == WordDirection.JpToEn) meaningUnlocked = app.db.wordMeaningUnlocked(app.settings, sourceId)
         contentLanguage = app.settings.sync.baseLanguage(sourceId) ?: app.db.content().meta(sourceId)?.baseLanguage ?: "en"
         val (allWords, storedScenes, levels) = app.db.withTransaction {
             Triple(
@@ -284,9 +292,27 @@ class WordQuizViewModel(
             viewModelScope.launch { showPicture(word) }
             return
         }
+        val font = nextFont(word)
+        if (direction == WordDirection.JpToEn && needsStudy(word)) {
+            studied += word
+            ui = WordQuizUi.Study(entity, session.pending + 1, font, kanjiHelp[word])
+            return
+        }
+        ask(entity, session.pending + 1, font)
+    }
+
+    private fun needsStudy(word: String) =
+        isNew(word) && word !in studied && !canInferWordMeaning(word, meaningUnlocked)
+
+    private fun ask(entity: WordEntity, remaining: Int, font: KanjiFont) {
         val options = WordQuizBuilder.options(entity.toCard(), cards, direction, random)
-        ui = WordQuizUi.Question(entity, direction, options, session.pending + 1, nextFont(word),
-            kanjiHelp = questionHelp(word, options))
+        ui = WordQuizUi.Question(entity, direction, options, remaining, font,
+            kanjiHelp = questionHelp(entity.word, options))
+    }
+
+    fun startQuestion(origin: WordQuizUi.Study) {
+        if (ui !== origin || readingTip != null) return
+        ask(origin.word, origin.remaining, origin.font)
     }
 
     private fun questionHelp(word: String, options: List<WordOption>): Map<String, WordKanjiHelp> {
@@ -409,6 +435,13 @@ class WordQuizViewModel(
     fun openReadingTip(origin: WordQuizUi.Question) {
         if (ui !== origin || origin.direction !in setOf(WordDirection.JpToEn, WordDirection.WordToPicture)) return
         val help = origin.kanjiHelp[origin.word.word] ?: return
+        voiceGeneration++
+        readingTip = WordReadingTip(origin, help)
+    }
+
+    fun openReadingTip(origin: WordQuizUi.Study) {
+        if (ui !== origin) return
+        val help = origin.help ?: return
         voiceGeneration++
         readingTip = WordReadingTip(origin, help)
     }

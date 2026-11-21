@@ -185,7 +185,8 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
   (Android #127, comment 6626137486). Cleanup verification must check exact task-created paths on the scoped device:
   Native13's unscoped `find .` traversed the device filesystem and failed, so it did not prove task-file absence.
   An empty AVD-name property with exit0 is not identification; use the scoped emulator-console name and require
-  the expected nonempty value before app commands. Native14's launch metadata names the owned AVD, but its property
+  the expected nonempty value before app commands. `adb emu avd name` also returns a separate `OK` line: compare
+  its first trimmed line, not the whole PowerShell array. Native14's launch metadata names the owned AVD, but its property
   probe was empty. A Checking frame or configured network delay also does not prove interrupted validation:
   Native14's post-stop Room authority already accepted the candidate. Verify pre-acceptance state and actual request
   blocking before claiming pending-candidate recovery (Android #127, comment 6626796021).

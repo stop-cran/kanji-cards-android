@@ -15,6 +15,12 @@ import io.github.stopcran.kanji.core.unlock.MeaningUnlock
 suspend fun AppDatabase.meaningLearned(settings: Settings, sourceId: String, stack: String): Set<String> =
     MeaningUnlock.learned(reviews().unlockLog(sourceId, Stacks.stateId(stack)), settings.unlockRule.value)
 
+/** Each kanji identity must independently satisfy the unlock rule before its results are combined. */
+suspend fun AppDatabase.wordMeaningUnlocked(settings: Settings, sourceId: String): Set<String> =
+    listOf(Stacks.JLPT_STATE, Stacks.ALL, "starter").flatMapTo(mutableSetOf()) {
+        meaningLearned(settings, sourceId, it)
+    }
+
 /**
  * Stroke data is stored only when it parsed at import (`ContentSync` writes `StrokeData` it decoded), so presence means drawable.
  * Home loads a lite projection without the JSON, so this is the one definition all of them can share.

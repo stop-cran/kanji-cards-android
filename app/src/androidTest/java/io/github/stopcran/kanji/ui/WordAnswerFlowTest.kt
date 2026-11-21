@@ -54,6 +54,22 @@ class WordAnswerFlowTest {
         }
     }
 
+    @Test fun newWordStudyShowsContentBeforeAskingWithoutRecording() = session(2) { vm, db ->
+        rule.waitUntil(10_000) { vm.ui is WordQuizUi.Study }
+        val study = rule.runOnIdle { vm.ui as WordQuizUi.Study }
+        rule.onNodeWithText("New word").assertIsDisplayed()
+        rule.onNodeWithText(study.word.word).assertIsDisplayed()
+        rule.onNodeWithText(study.word.reading).assertIsDisplayed()
+        rule.onNodeWithText(study.word.title).assertIsDisplayed()
+        assertEquals(0, recorded(db))
+        rule.onNodeWithText("Got it — quiz me").performScrollTo().performClick()
+        val question = question(vm)
+        assertEquals(study.word, question.word)
+        assertEquals(study.remaining, question.remaining)
+        assertEquals(study.font, question.font)
+        assertEquals(0, recorded(db))
+    }
+
     @Test fun failedAnswerRepeatsLaterAndSuccessfulConfirmationIsNotAnotherReview() = session(6) { vm, db ->
         val seen = mutableListOf<String>()
         listOf(6, 6, 5, 4, 3, 3, 2, 1).forEachIndexed { index, count ->
@@ -87,7 +103,7 @@ class WordAnswerFlowTest {
         rule.onNodeWithText(first.word.title).performScrollTo().performClick()
         assertEquals(0, recorded(db))
         rule.onNodeWithText("I guessed").performScrollTo().performClick()
-        rule.waitUntil(10_000) { vm.ui is WordQuizUi.Question && recorded(db) == 1 }
+        rule.waitUntil(10_000) { (vm.ui is WordQuizUi.Question || vm.ui is WordQuizUi.Study) && recorded(db) == 1 }
         val last = question(vm)
         assertTrue(first.word.word != last.word.word)
         assertEquals(1, last.remaining)
@@ -202,6 +218,10 @@ class WordAnswerFlowTest {
     }
 
     private fun question(vm: WordQuizViewModel): WordQuizUi.Question {
+        rule.waitUntil(10_000) { vm.ui is WordQuizUi.Question || vm.ui is WordQuizUi.Study }
+        if (vm.ui is WordQuizUi.Study) {
+            rule.onNodeWithText("Got it — quiz me").performScrollTo().performClick()
+        }
         rule.waitUntil(10_000) { vm.ui is WordQuizUi.Question }
         return rule.runOnIdle { vm.ui as WordQuizUi.Question }
     }

@@ -241,6 +241,7 @@
     <string name="back">← Назад</string>
     <string name="what_does_it_mean">Что это значит?</string>
     <string name="new_kanji">Новый кандзи</string>
+    <string name="new_word">Новое слово</string>
     <string name="take_a_moment_with_it">Рассмотрите знак: затем вас спросят о его значении.</string>
     <string name="got_it_quiz_me">Понятно — проверить</string>
     <string name="you_chose_that_is">Вы выбрали «%1$s» — это %2$s.</string>

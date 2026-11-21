@@ -21,6 +21,7 @@ import io.github.stopcran.kanji.data.WordSceneEntity
 import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.joinSep
 import io.github.stopcran.kanji.data.sceneWebp
+import io.github.stopcran.kanji.data.wordMeaningUnlocked
 import io.github.stopcran.kanji.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -98,7 +99,89 @@ class WordKanjiHelpViewModelTest {
 
     private fun question(vm: WordQuizViewModel): WordQuizUi.Question = runBlocking {
         withTimeout(10_000) { while (vm.ui is WordQuizUi.Loading) delay(10) }
+        (vm.ui as? WordQuizUi.Study)?.let { vm.startQuestion(it) }
         vm.ui as WordQuizUi.Question
+    }
+
+    @Test
+    fun unlockedKanjiAreUnionedOnlyAfterEachIdentityAndSourceIsEvaluated() = runBlocking {
+        val day = 86_400_000L
+        suspend fun log(src: String, stack: String, word: String, at: Long) {
+            db.reviews().putLog(ReviewLogEntity(0, src, stack, word, "Quiz", 3, at))
+        }
+        for ((stack, word) in listOf("jlpt-n5" to "電", "all" to "車", "starter" to "茶")) {
+            log(source, stack, word, day)
+            log(source, stack, word, day * 3)
+        }
+        log(source, "all", "分", day)
+        log(source, "starter", "分", day * 3)
+        log("other/source", "all", "外", day)
+        log("other/source", "all", "外", day * 3)
+        assertEquals(setOf("電", "車", "茶"), db.wordMeaningUnlocked(services.settings, source))
+        assertEquals(setOf("外"), db.wordMeaningUnlocked(services.settings, "other/source"))
+    }
+
+    @Test
+    fun studyAcknowledgementPreservesTakenWordAndDoesNotRecordOrConsumeSelection() = runBlocking {
+        install()
+        db.reading().putWordIntent(ReadingWordIntentEntity(source, "京音", "selected", 1))
+        val vm = WordQuizViewModel(services)
+        vm.ensureStarted(WordDirection.JpToEn, false)
+        withTimeout(10_000) { while (vm.ui is WordQuizUi.Loading) delay(10) }
+        val study = vm.ui as WordQuizUi.Study
+        assertEquals("京音", study.word.word)
+        vm.ensureStarted(WordDirection.JpToEn, false)
+        assertSame(study, vm.ui)
+        val allowance = db.newAllowance(services.settings, source, Instant.now()).remaining
+        vm.startQuestion(study)
+        val q = vm.ui as WordQuizUi.Question
+        assertSame(study.word, q.word)
+        assertEquals(study.remaining, q.remaining)
+        assertEquals(study.font, q.font)
+        vm.startQuestion(study)
+        assertSame(q, vm.ui)
+        db.withTransaction {}
+        assertTrue(db.reviews().allLog().isEmpty())
+        assertTrue(db.reviews().allStates().isEmpty())
+        assertEquals("selected", db.reading().wordIntents(source).single().token)
+        assertEquals(allowance, db.newAllowance(services.settings, source, Instant.now()).remaining)
+        vm.pick(NO_ANSWER, origin = q)
+        advance(vm)
+        repeat(3) {
+            val next = question(vm)
+            vm.pick(next.word.word, origin = next)
+            advance(vm)
+        }
+        val retry = vm.ui as WordQuizUi.Question
+        assertEquals(study.word.word, retry.word.word)
+    }
+
+    @Test
+    fun inferableAndStartedWordsSkipStudyAndExtraNewWordsDoNot() = runBlocking {
+        install()
+        val day = 86_400_000L
+        for (kanji in listOf("京", "音")) {
+            db.reviews().putLog(ReviewLogEntity(0, source, "all", kanji, "Quiz", 3, day))
+            db.reviews().putLog(ReviewLogEntity(0, source, "all", kanji, "Quiz", 3, day * 3))
+        }
+        db.reading().putWordIntent(ReadingWordIntentEntity(source, "京音", "selected", 1))
+        val inferable = WordQuizViewModel(services)
+        inferable.ensureStarted(WordDirection.JpToEn, false)
+        withTimeout(10_000) { while (inferable.ui is WordQuizUi.Loading) delay(10) }
+        assertTrue(inferable.ui is WordQuizUi.Question)
+        db.reading().putWordIntent(ReadingWordIntentEntity(source, "卵音", "selected2", 0))
+        db.reviews().putState(ReviewStateEntity(source, stack, "卵音", "WordJpEn", "Review", 3.0, 5.0, 999, 500, 2, 0))
+        val started = WordQuizViewModel(services)
+        started.ensureStarted(WordDirection.JpToEn, false)
+        withTimeout(10_000) { while (started.ui is WordQuizUi.Loading) delay(10) }
+        assertEquals("卵音", (started.ui as WordQuizUi.Question).word.word)
+        db.reading().consumeWordIntent(source, "卵音", "selected2")
+        db.reading().consumeWordIntent(source, "京音", "selected")
+        db.reading().putWordIntent(ReadingWordIntentEntity(source, "難音", "selected3", 1))
+        val extra = WordQuizViewModel(services)
+        extra.ensureStarted(WordDirection.JpToEn, true)
+        withTimeout(10_000) { while (extra.ui is WordQuizUi.Loading) delay(10) }
+        assertEquals("難音", (extra.ui as WordQuizUi.Study).word.word)
     }
 
     private fun advance(vm: WordQuizViewModel, guessed: Boolean = false) = runBlocking {
@@ -186,7 +269,7 @@ class WordKanjiHelpViewModelTest {
         vm.openReadingTip(q)
         vm.pick(q.word.word, origin = q)
         assertNull(vm.readingTip)
-        assertTrue(vm.ui is WordQuizUi.Question)
+        assertTrue(question(vm).word.word != q.word.word)
     }
 
     @Test

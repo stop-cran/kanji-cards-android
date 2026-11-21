@@ -83,6 +83,12 @@ data class WordCard(
 fun hasReadingToLearn(word: String, reading: String) =
     word != reading && word.codePoints().anyMatch(Character::isIdeographic)
 
+/** A first meaning question is inferable only when every written ideograph is unlocked. */
+fun canInferWordMeaning(word: String, meaningUnlocked: Set<String>): Boolean {
+    val ideographs = word.codePoints().filter(Character::isIdeographic).toArray()
+    return ideographs.isNotEmpty() && ideographs.all { String(Character.toChars(it)) in meaningUnlocked }
+}
+
 /**
  * An explicit vocabulary JLPT level wins, independently of the written kanji. Otherwise use the hardest kanji
  * (N5 = 5 is easiest, so the lowest number). Unlabelled words without kanji, or with an unknown kanji level,
