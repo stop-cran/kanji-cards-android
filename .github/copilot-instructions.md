@@ -489,6 +489,10 @@ ambiguous wording, reword the user-facing text instead of flipping the logic.
 - `DrawingPad` consumes pointer events so the screen does not scroll while drawing. Test on the emulator with `adb shell input swipe` (draw order matters).
 - Matcher tolerances are tuned on simulated hands only; re-tune with real device fixtures.
 - Short reference strokes (dots, ticks) get a looser shape limit (MatcherConfig.shortStrokeBonus, tapering from 15 to 50 units) because real hands vary most there; dotPlacedAndSizedLooselyIsAccepted covers a real 下 dot.
+- Dakuten partner repair uses geometric cost, not canonical order: retain genuine swapped/reversed tick failures.
+  Handakuten cyclic matching must bypass chord leaning/reversal and endpoint hooks only for verified compact loops;
+  signed area is clockwise-positive on the y-down canvas. Test all start phases and both directions against bundled references.
+  Kana diagnostics reuse `DrawingLog`'s legacy `kanji` field for the full Kana string; retain opt-in, no-trace and empty-input guards.
 - Drawn strokes are regularised before matching (Douglas-Peucker with MatcherConfig.smoothing = 2% of drawing size, then resampled), so tiny kinks are ignored. Gotcha: after matcher changes reinstall the APK before asking for emulator re-checks.
 - shapeLimit is 0.13: real hands drew 亻's slash ~30% short and the 0.10 limit rejected it (shorterSlashIsAccepted). Prefer relaxing shape tolerance over strictness; order, direction and join/break checks stay strict.
 - MarkdownView is wrapped in SelectionContainer (copy/search works, links still clickable). The answer overlay shows the regularised drawing (core/draw/Regularize.kt, shared with the matcher).

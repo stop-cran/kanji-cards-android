@@ -177,6 +177,7 @@ class StrokeMatcher(private val cfg: MatcherConfig = MatcherConfig()) {
         val found = ArrayList<StrokeIssue>()
         for (l in links) {
             if (l !is Link.One) continue
+            if (loopArea(reference[l.r].resample(cfg.samples)) != null) continue
             val scaled = simple[l.d].map { Pt(it.x * scale, it.y * scale) }
             val type = hookIssue(endTurn(reference[l.r]), endHook(scaled), endHook(scaled, HOOK_LONG_WINDOW)) ?: continue
             found += StrokeIssue(type, l.r, l.d)
@@ -202,18 +203,28 @@ class StrokeMatcher(private val cfg: MatcherConfig = MatcherConfig()) {
         val drR = drawn.map { it.resample(n) }
         val refLen = reference.map { it.length() }
         val drLen = drawn.map { it.length() }
+        val refLoops = refR.map { loopArea(it) }
+        val drawnLoops = drR.map { loopArea(it) }
         val cands = ArrayList<Link>()
 
         for (d in drawn.indices) for (r in reference.indices) {
-            val fwd = meanDist(drR[d], refR[r]) / cfg.box
-            val rev = meanDist(drR[d].reversed(), refR[r]) / cfg.box
+            val refArea = refLoops[r]
+            val drawnArea = drawnLoops[d]
+            val loop = refArea != null
+            val fwd = (if (loop) loopDist(drR[d], refR[r]) else meanDist(drR[d], refR[r])) / cfg.box
+            val rev = (if (loop) loopDist(drR[d].reversed(), refR[r]) else meanDist(drR[d].reversed(), refR[r])) / cfg.box
             val cost = min(fwd, rev)
             if (cost >= cfg.matchLimit) continue
-            val reversed = (rev < fwd * 0.7 && fwd - rev > 0.015) || (chordCosine(drawn[d], reference[r]) < -0.3 && refLen[r] > 10.0)
+            val reversed = if (refArea != null) {
+                drawnArea != null && drawnArea * refArea < 0
+            } else {
+                (rev < fwd * 0.7 && fwd - rev > 0.015) || (chordCosine(drawn[d], reference[r]) < -0.3 && refLen[r] > 10.0)
+            }
             val ratio = drLen[d] / max(refLen[r], 1e-6)
             // A dot or stroke leaning the other way is a different stroke, even when it is short and so close in distance.
-            val leaning = refLen[r] > 10.0 && abs(chordCosine(drawn[d], reference[r])) < LEAN_COS
-            val badLength = leaning || refLen[r] > cfg.shortStroke && (ratio < cfg.minLengthRatio || ratio > cfg.maxLengthRatio)
+            val leaning = !loop && refLen[r] > 10.0 && abs(chordCosine(drawn[d], reference[r])) < LEAN_COS
+            val badLength = (loop && drawnLoops[d] == null) || leaning ||
+                refLen[r] > cfg.shortStroke && (ratio < cfg.minLengthRatio || ratio > cfg.maxLengthRatio)
             cands += Link.One(d, r, cost, reversed, badLength, shapeLimitFor(refLen[r]))
         }
         for (d in drawn.indices) for (r in 0 until reference.size - 1) {
@@ -241,7 +252,62 @@ class StrokeMatcher(private val cfg: MatcherConfig = MatcherConfig()) {
             rs.forEach { usedR[it] = true }
             chosen += l
         }
+        repairShortPairs(chosen, cands, usedD, usedR, refLen)
         return chosen
+    }
+
+    /** Repair greedy competition between short neighbours, never preferring stroke order over geometric fit. */
+    private fun repairShortPairs(chosen: MutableList<Link>, candidates: List<Link>, usedD: BooleanArray, usedR: BooleanArray, lengths: List<Double>) {
+        val short = candidates.filterIsInstance<Link.One>().filter { lengths[it.r] <= cfg.dotLength }
+            .associateBy { it.d to it.r }
+        if (short.isEmpty()) return
+        for (i in chosen.indices.toList()) {
+            val a = chosen[i] as? Link.One ?: continue
+            if (a.d to a.r !in short) continue
+            val pair = bestRecovery(a, short, usedD.indices.filter { !usedD[it] }, usedR.indices.filter { !usedR[it] }) ?: continue
+            chosen[i] = pair.first
+            chosen += pair.second
+            usedR[pair.first.r] = true
+            usedD[pair.second.d] = true
+        }
+        var changed: Boolean
+        do {
+            changed = improveShortPair(chosen, short)
+        } while (changed)
+    }
+
+    private fun bestRecovery(a: Link.One, short: Map<Pair<Int, Int>, Link.One>, unusedD: List<Int>, unusedR: List<Int>): Pair<Link.One, Link.One>? {
+        var best: Pair<Link.One, Link.One>? = null
+        val unmatched = unusedD.flatMap { d -> unusedR.map { r -> d to r } }
+        for ((d, r) in unmatched) {
+            val x = short[a.d to r] ?: continue
+            val y = short[d to a.r] ?: continue
+            if (!viable(x) || !viable(y)) continue
+            val cost = x.cost + y.cost
+            if (cost < a.cost + cfg.matchLimit && cost < (best?.let { it.first.cost + it.second.cost } ?: Double.MAX_VALUE)) best = x to y
+        }
+        return best
+    }
+
+    private fun viable(link: Link.One): Boolean = !link.badLength && !link.reversed && link.cost <= link.limit
+
+    private fun improveShortPair(chosen: MutableList<Link>, short: Map<Pair<Int, Int>, Link.One>): Boolean {
+        for (i in chosen.indices) for (j in i + 1 until chosen.size) {
+            val a = chosen[i] as? Link.One ?: continue
+            val b = chosen[j] as? Link.One ?: continue
+            val pair = improvedPair(a, b, short) ?: continue
+            chosen[i] = pair.first
+            chosen[j] = pair.second
+            return true
+        }
+        return false
+    }
+
+    private fun improvedPair(a: Link.One, b: Link.One, short: Map<Pair<Int, Int>, Link.One>): Pair<Link.One, Link.One>? {
+        val x = short[a.d to b.r] ?: return null
+        val y = short[b.d to a.r] ?: return null
+        if (!viable(x) || !viable(y)) return null
+        return if (x.cost + y.cost + 1e-9 < a.cost + b.cost) x to y else null
     }
 
     /** Short strokes (dots, ticks) vary a lot in real handwriting, so they get a looser shape limit that tapers off with length. */

@@ -820,6 +820,16 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
 - Shape matching uses regularised strokes (Douglas-Peucker at 2% of drawing size, resampled to 24 points), so tiny kinks are ignored. Small
   details, including a tiny hook, are removed and not counted. Hook detection deliberately uses the Douglas-Peucker-simplified but
   **not resampled** points (resampling would erase the corners); never feed `regularize()` output into `endHook`.
+- Nearby short strokes (up to 15 reference units, including dakuten ticks) retain greedy matching with bounded two-stroke repairs.
+  A pair is reassigned only when viable alternative partners strictly reduce combined geometric cost, in either order direction;
+  canonical order is not a tie-breaker, so genuinely swapped ticks (including displaced pairs) remain wrong-order mistakes.
+  An unmatched short stroke may recover a partner from another
+  short stroke only when both replacement links satisfy shape, length and direction checks and improve the cost including the unmatched
+  penalty. Join/split links are not rewritten, and the same matching runs during bounding-box refits.
+- Simple compact near-closed loops (handakuten) compare shape across cyclic starting points. Their signed enclosed area determines
+  direction (positive is clockwise on the y-down canvas), rather than the unstable pen-down/pen-up chord. Both reference and drawing
+  must enclose a loop; open C shapes, thin out-and-back strokes and self-crossing loops cannot become clean by using the small-stroke
+  shape allowance. Verified reference loops do not undergo endpoint-hook checks; ordinary open strokes retain those checks.
 - Issues: `Reversed`, `WrongOrder`, `WrongShape`, `Joined`, `Broken`, `Missing`, `Extra`, plus `MissingHook` / `ExtraHook` (stroke-end hooks,
   `EndHook.kt`; checked only when the whole drawing has no other issues, and only on single-stroke links; extra-hook thresholds are deliberately high to avoid false alarms).
 - `WrongShape` carries `faults` (`ShapeDiagnosis.kt`): the drawn stroke, as fitted to the reference box, is compared with its reference for
@@ -828,6 +838,10 @@ Normal runtime admission remains exact-approval gated; see [N4 contracts](LISTEN
   Note a pair made from leftover strokes can name the neighbouring stroke (both inner bars of 有 drawn low pair ref 5 with drawn 6).
 - Accepted alternative orders come from `orderVariants` in the strokes file. The app already applies them; the authored data is what is missing (issue #2).
 - The displayed "correct strokes" are jittered for display only; grading always uses the unmodified reference and the raw points.
+- Opt-in diagnostic drawing logs include checked Kanji and Kana from-memory attempts, independently of advancing the SRS answer.
+  Practice-only traces and empty give-ups remain unlogged. The existing JSON `kanji` field holds the complete target string (including
+  two-glyph Kana), with raw canvas-pixel `[x,y,t]` strokes, canvas size, outcome, issues and nullable recognizer candidates. The same
+  private drawings directory and explicit ZIP export include both; logging remains off by default and never uploads data.
 - Short strokes (dots, ticks) get a looser shape limit; hands vary most there.
 
 ### Voice input (opt-in, on-device only)

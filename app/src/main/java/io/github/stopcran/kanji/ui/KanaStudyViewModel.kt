@@ -23,6 +23,7 @@ import io.github.stopcran.kanji.core.srs.QueueBuilder
 import io.github.stopcran.kanji.core.srs.SrsState
 import io.github.stopcran.kanji.data.ReviewLogEntity
 import io.github.stopcran.kanji.data.ReviewStateEntity
+import io.github.stopcran.kanji.data.DrawingLog
 import io.github.stopcran.kanji.data.newAllowance
 import io.github.stopcran.kanji.data.practiceMinimum
 import io.github.stopcran.kanji.data.toSrs
@@ -57,10 +58,9 @@ sealed interface KanaStudyUi {
 
 enum class KanaEmptyReason { NoPractice, PracticeMore, NothingDue }
 
-class KanaStudyViewModel(private val app: Services) : StudyViewModel(app.sessionStore) {
+class KanaStudyViewModel(private val app: Services, private val recognizer: InkRecognition = InkRecognizer()) : StudyViewModel(app.sessionStore) {
     private val fsrs = Fsrs()
     private val matcher = StrokeMatcher()
-    private val recognizer = InkRecognizer()
     private val references = mutableMapOf<String, List<Stroke>>()
     private val states = mutableMapOf<String, SrsState>()
     private var open: Set<String> = emptySet()
@@ -231,6 +231,9 @@ class KanaStudyViewModel(private val app: Services) : StudyViewModel(app.session
             val match = matcher.match(reference, points)
             val candidates = if (strokes.isEmpty()) emptyList() else recognizer.candidates(strokes)
             val outcome = DrawGrader.outcome(candidates, question.card.kana, match)
+            if (app.settings.saveDrawings.value && !question.trace) {
+                DrawingLog.save(app.context, question.card.kana, canvasPx, strokes, outcome, match, candidates)
+            }
             ui = KanaStudyUi.DrawAnswer(
                 question.card,
                 reference,
