@@ -41,6 +41,32 @@ The current module inventory lives in `settings.gradle.kts`; build tasks and int
   `.\gradlew.bat :core:cleanTest :core:test cleanTestDebugUnitTest testDebugUnitTest --tests '*ContentTest*'` after pulling or editing the sibling
   content checkout (`..\learning-japanese` from the repository root, `..\..\learning-japanese` from `app` or `core`).
 - Check the exit status/test results before committing; a chained `test; commit; push` publishes a red build.
+- `RareHanTest.contentRareCharactersAreCoveredByBundledFont` lives in `:app` (`-PcoreOnly` does not run it). It scans `kanji/`, `words/`
+  and `articles/` `*.md` in the sibling content checkout (`../../learning-japanese` from `app`; it skips silently through `assumeTrue` when
+  that directory is missing) for code points where `RareHan.isRare` holds and fails unless each is in its hard-coded `covered` set. It
+  never reads the fonts, so content growth can turn Android red with no Android change. Observed: it failed in all nine `main` CI runs from
+  2026-11-15 to 2026-11-21 although `RareHanTest.kt` had not changed since 2026-10-27, and at content `97282e43` (2026-11-25) 13 code
+  points are not in `covered` (#147, which also records what is and is not established). As of 2026-11-25 the fix is an open owner decision,
+  neither option approved (#147 has the current state): extend the subset with `tools/make_rare_font.py` *and* `covered` (mechanism #12,
+  extended in #83; needs an Android test run), or revise the cards in the content repository (needs content review). Keep `RareHan.isRare`,
+  the `RANGES` in `tools/make_rare_font.py` and the content repository's N1 rare-glyph rule in sync. CI prints only
+  `AssertionError at RareHanTest.kt:26` and never the message with the code points (`Rare characters without a glyph: [U+...]`); run the
+  test locally to read it, or use the scan in #147. The `'*ContentTest*'` re-run filter above does not select this test; add
+  `--tests '*RareHanTest*'`. A static scan shows which code points content uses, not what a phone renders: do not claim tofu on a
+  device without testing one. `tools/make_rare_font.py` writes into `app/src/main/res/font` of the checkout that holds it and has no output
+  option: for a dry run, run a copy from `<scratch>/tools/`.
+- CI (`.github/workflows/ci.yml`) runs on pushes to `main` and on pull requests in this repository, and clones the content repository's
+  `main` (`--depth 1`) at run time. Content pushes never re-run it and the log does not record the cloned commit, so a content-dependent
+  failure can come from content newer than the commit under test. To find a candidate for the cloned content, take the content `main` tip
+  at the run time from `gh api --paginate "repos/stop-cran/learning-japanese/activity?ref=refs/heads/main"` (push times; committer dates
+  can precede the push; without `--paginate` only the newest 30 entries come back, so an older run has no tip to match) and check that
+  `git ls-tree -r --name-only <sha>` lists as many files as N in the log's `Updating files: 100% (N/N)` line. A matching count makes the
+  tip a candidate, not a proof.
+- `PublishableContentFixture` lists files with
+  `git -C <content root> ls-files -c -o --exclude-standard -z -- ":(exclude,attr:export-ignore)"`: the root must be inside a Git work tree
+  (a plain directory such as an extracted ZIP fails with `git ls-files failed for publication fixture`), untracked, non-ignored files count
+  as publishable content, and paths marked `export-ignore` in the content repository's `.gitattributes` (`.github`, `docs`, `tools`) do
+  not. Use a clean checkout or worktree of the exact content commit under test, not a scratch copy.
 - Native `OK (N tests)` can include `assumeTrue` skips. Use raw instrumentation output (`-w -r`) and require a
   status-code 0 for each selected case; provide the external acceptance archives those cases require.
 - Signed-release ADB/UI smoke is not instrumentation or debug-host coverage. Record the installed APK hash/signer,
